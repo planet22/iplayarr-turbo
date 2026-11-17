@@ -170,6 +170,11 @@ describe('ArrLibraryService', () => {
         });
     });
 
+    it('refuses an app type that has no Sonarr/Radarr API service', async () => {
+        await expect(arrLibraryService.getRootFolders({ ...sonarr, type: AppType.JELLYFIN } as any)).rejects.toThrow(/No Sonarr\/Radarr API service/);
+        expect(mockedAxios.get).not.toHaveBeenCalled();
+    });
+
     describe('getFilesFor', () => {
         it('reads one Sonarr series, with the episode ids of each file', async () => {
             mockedAxios.get.mockImplementation(async (url: string) => ({
@@ -184,6 +189,23 @@ describe('ArrLibraryService', () => {
             );
         });
 
+        it('gives the season and episode number of each file\'s first episode, when Sonarr has them', async () => {
+            mockedAxios.get.mockImplementation(async (url: string) => ({
+                data: url.includes('episodefile')
+                    ? [{ id: 5, path: '/tv/a.strm' }, { id: 6, path: '/tv/b.strm' }]
+                    : [
+                          { id: 31, episodeFileId: 5, seasonNumber: 2, episodeNumber: 3 },
+                          { id: 32, episodeFileId: 5, seasonNumber: 2, episodeNumber: 4 },
+                          { id: 33, episodeFileId: 6 },
+                      ],
+            }));
+
+            const files = await arrLibraryService.getFilesFor(sonarr, 7);
+
+            expect(files[0]).toMatchObject({ path: '/tv/a.strm', ids: [31, 32], season: 2, episode: 3 });
+            expect(files[1].season).toBeUndefined();
+        });
+
         it('reads one Radarr movie, or nothing when it has no file', async () => {
             mockedAxios.get.mockResolvedValueOnce({ data: { id: 3, movieFile: { path: '/movies/m.strm' } } });
             expect(await arrLibraryService.getFilesFor(radarr, 3)).toEqual([expect.objectContaining({ path: '/movies/m.strm', ids: [3], arrId: 3 })]);
@@ -196,6 +218,31 @@ describe('ArrLibraryService', () => {
         it('turns a failure into an error', async () => {
             mockedAxios.get.mockRejectedValue({ isAxiosError: true, message: 'boom', response: { status: 500 } });
             await expect(arrLibraryService.getFilesFor(sonarr, 7)).rejects.toThrow('boom');
+        });
+    });
+
+    describe('getEntryPath', () => {
+        it('reads the folder of one Sonarr series or Radarr movie', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { id: 7, path: '/tv/The Show' } });
+
+            expect(await arrLibraryService.getEntryPath(sonarr, 7)).toBe('/tv/The Show');
+            expect(mockedAxios.get.mock.calls[0][0]).toBe('http://sonarr/api/v3/series/7');
+
+            expect(await arrLibraryService.getEntryPath(radarr, 3)).toBe('/tv/The Show');
+            expect(mockedAxios.get.mock.calls[1][0]).toBe('http://radarr/api/v3/movie/3');
+        });
+
+        it('is undefined when the app gives no path', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { id: 7 } });
+            expect(await arrLibraryService.getEntryPath(sonarr, 7)).toBeUndefined();
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { id: 7, path: '' } });
+            expect(await arrLibraryService.getEntryPath(sonarr, 7)).toBeUndefined();
+        });
+
+        it('turns a failure into an error', async () => {
+            mockedAxios.get.mockRejectedValue({ isAxiosError: true, message: 'boom', response: { status: 500 } });
+            await expect(arrLibraryService.getEntryPath(sonarr, 7)).rejects.toThrow('boom');
         });
     });
 

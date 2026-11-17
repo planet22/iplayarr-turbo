@@ -16,6 +16,8 @@ export interface IPlayerProgramMetadata {
     ownership?: {
         service?: {
             title?: string;
+            // 'radio' for a BBC radio station's programme.
+            type?: string;
         };
     };
     medium_synopsis?: string;

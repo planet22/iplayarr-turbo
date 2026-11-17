@@ -2,14 +2,14 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div v-if="bannerVisible && !visible" class="reconnecting-banner" role="status">
-        <font-awesome-icon :icon="['fas', 'spinner']" class="reconnecting-spinner" />
+        <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
         Reconnecting&hellip; live updates are paused.
     </div>
     <div v-if="visible" class="connection-lost-overlay">
-        <div class="connection-lost-panel">
+        <div class="connection-lost-panel" role="alertdialog" aria-modal="true" aria-labelledby="connLostTitle" aria-describedby="connLostText">
             <LoadingIndicator :size="40" />
-            <h1 class="connection-lost-title">Connection to Backend Lost</h1>
-            <p class="connection-lost-subtitle">
+            <h2 id="connLostTitle" class="connection-lost-title">Connection to Backend Lost</h2>
+            <p id="connLostText" class="connection-lost-subtitle">
                 Reconnecting automatically&hellip; this page will resume updating as soon as the connection is
                 restored.
             </p>
@@ -79,10 +79,10 @@ onBeforeUnmount(() => {
     top: var(--navbar-height, 60px);
     left: 50%;
     transform: translateX(-50%);
-    z-index: 9998;
+    z-index: @z-banner;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
     max-width: calc(100vw - 32px);
     padding: 6px 14px;
     border: 1px solid @table-border-color;
@@ -91,23 +91,7 @@ onBeforeUnmount(() => {
     background-color: @nav-background-color;
     box-shadow: 0 4px 12px @shadow-color;
     color: @primary-text-color;
-    font-size: 13px;
-}
-
-.reconnecting-spinner {
-    animation: reconnectSpin 1.25s linear infinite;
-}
-
-@keyframes reconnectSpin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .reconnecting-spinner {
-        animation: none;
-    }
+    font-size: @font-size-base;
 }
 
 .connection-lost-overlay {
@@ -122,7 +106,7 @@ onBeforeUnmount(() => {
     padding: 1rem;
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
-    z-index: 9999;
+    z-index: @z-overlay;
 }
 
 .connection-lost-panel {
@@ -135,7 +119,7 @@ onBeforeUnmount(() => {
     width: 100%;
     max-width: 420px;
     padding: 2rem 1.5rem;
-    border-radius: 8px;
+    border-radius: @radius-lg;
     background-color: @nav-background-color;
     box-shadow: 0 4px 10px @primary-box-shadow;
     color: @primary-text-color;

@@ -79,6 +79,96 @@ describe('LibraryCleanupService', () => {
         expect(fs.existsSync(showDir)).toBe(false);
     });
 
+    it('treats leftover artwork and subtitles as empty too, once the video has been imported away', async () => {
+        mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', ARR_COMPLETE_DIR: arrCompleteDir, COMPLETE_DIR: completeDir });
+        const showDir = path.join(arrCompleteDir, 'Some Show');
+        const seasonDir = path.join(showDir, 'Season 01');
+        fs.mkdirSync(seasonDir, { recursive: true });
+        for (const file of ['poster.jpg', 'backdrop.jpg', 'landscape.jpg', 'tvshow.nfo']) {
+            fs.writeFileSync(path.join(showDir, file), 'x');
+        }
+        for (const file of ['Some Show - S01E01-thumb.jpg', 'Some Show - S01E01.nfo', 'Some Show - S01E01.en.srt']) {
+            fs.writeFileSync(path.join(seasonDir, file), 'x');
+        }
+
+        expect(await libraryCleanupService.cleanup()).toBe(2);
+        expect(fs.existsSync(showDir)).toBe(false);
+    });
+
+    it.each([
+        'poster.jpg', 'Thumb.JPG', 'cover.jpeg', 'logo.png', 'clearlogo.PNG', 'ep.srt', 'ep.en.SRT', 'ep.vtt',
+        'ep.nfo', 'ep.strmtool.json', 'Thumbs.db', 'desktop.ini', '.DS_Store',
+    ])('counts %s as removable litter', async (file) => {
+        mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: completeDir });
+        const showDir = path.join(completeDir, 'Some Show');
+        fs.mkdirSync(showDir, { recursive: true });
+        fs.writeFileSync(path.join(showDir, file), 'x');
+
+        expect(await libraryCleanupService.cleanup()).toBe(1);
+        expect(fs.existsSync(showDir)).toBe(false);
+    });
+
+    it.each(['ep.strm', 'ep.mkv', 'ep.mp4', 'ep.ts', 'ep.gif', 'notes.txt', 'ep.ass', 'ep.jpg.bak', 'jpg', 'srt'])(
+        'does not count %s as litter, so the folder survives',
+        async (file) => {
+            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: completeDir });
+            const showDir = path.join(completeDir, 'Some Show');
+            fs.mkdirSync(showDir, { recursive: true });
+            fs.writeFileSync(path.join(showDir, file), 'x');
+            fs.writeFileSync(path.join(showDir, 'poster.jpg'), 'x');
+
+            expect(await libraryCleanupService.cleanup()).toBe(0);
+            expect(fs.existsSync(path.join(showDir, file))).toBe(true);
+            expect(fs.existsSync(path.join(showDir, 'poster.jpg'))).toBe(true);
+        }
+    );
+
+    it('cleans leftover artwork under ARR_COMPLETE_DIR while a different folder keeps its video', async () => {
+        mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', ARR_COMPLETE_DIR: arrCompleteDir, COMPLETE_DIR: completeDir });
+        const gone = path.join(arrCompleteDir, 'Imported Show', 'Season 02');
+        const kept = path.join(arrCompleteDir, 'Waiting Show', 'Season 01');
+        fs.mkdirSync(gone, { recursive: true });
+        fs.mkdirSync(kept, { recursive: true });
+        fs.writeFileSync(path.join(gone, 'ep-thumb.jpg'), 'x');
+        fs.writeFileSync(path.join(path.dirname(gone), 'poster.jpg'), 'x');
+        fs.writeFileSync(path.join(kept, 'ep.mkv'), 'video');
+        fs.writeFileSync(path.join(kept, 'ep-thumb.jpg'), 'x');
+
+        expect(await libraryCleanupService.cleanup()).toBe(2);
+        expect(fs.existsSync(path.join(arrCompleteDir, 'Imported Show'))).toBe(false);
+        expect(fs.existsSync(path.join(kept, 'ep.mkv'))).toBe(true);
+        expect(fs.existsSync(path.join(kept, 'ep-thumb.jpg'))).toBe(true);
+    });
+
+    it('leaves the complete directory itself even when it holds only artwork', async () => {
+        mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: completeDir });
+        fs.writeFileSync(path.join(completeDir, 'poster.jpg'), 'x');
+
+        expect(await libraryCleanupService.cleanup()).toBe(0);
+        expect(fs.existsSync(path.join(completeDir, 'poster.jpg'))).toBe(true);
+    });
+
+    it('does not touch artwork when LIBRARY_FOLDER_STRUCTURE is off', async () => {
+        mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'false', COMPLETE_DIR: completeDir });
+        const showDir = path.join(completeDir, 'Some Show');
+        fs.mkdirSync(showDir, { recursive: true });
+        fs.writeFileSync(path.join(showDir, 'poster.jpg'), 'x');
+
+        expect(await libraryCleanupService.cleanup()).toBe(0);
+        expect(fs.existsSync(showDir)).toBe(true);
+    });
+
+    it('keeps artwork when the video is still there', async () => {
+        mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: completeDir });
+        const seasonDir = path.join(completeDir, 'Some Show', 'Season 01');
+        fs.mkdirSync(seasonDir, { recursive: true });
+        fs.writeFileSync(path.join(seasonDir, 'Some Show - S01E01.strm'), 'x');
+        fs.writeFileSync(path.join(seasonDir, 'Some Show - S01E01-thumb.jpg'), 'x');
+
+        expect(await libraryCleanupService.cleanup()).toBe(0);
+        expect(fs.existsSync(path.join(seasonDir, 'Some Show - S01E01-thumb.jpg'))).toBe(true);
+    });
+
     it('leaves a folder alone when it still contains real media', async () => {
         mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: completeDir });
         const seasonDir = path.join(completeDir, 'Some Show', 'Season 01');
@@ -130,6 +220,46 @@ describe('LibraryCleanupService', () => {
         mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: path.join(tmpDir, 'does-not-exist') });
 
         await expect(libraryCleanupService.cleanup()).resolves.toBe(0);
+    });
+});
+
+describe('LibraryCleanupService when folders cannot be read', () => {
+    let dir: string;
+
+    beforeEach(() => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iplayarr-library-cleanup-'));
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: string) =>
+            param === 'LIBRARY_FOLDER_STRUCTURE' ? 'true' : param === 'COMPLETE_DIR' ? dir : undefined
+        );
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('surfaces an unexpected read error (not just a missing folder) to the caller', async () => {
+        jest.spyOn(fs.promises, 'readdir').mockRejectedValue(Object.assign(new Error('denied'), { code: 'EACCES' }));
+
+        await expect(libraryCleanupService.cleanup()).rejects.toThrow('denied');
+    });
+
+    it('leaves a folder alone when it cannot be listed a second time', async () => {
+        const show = path.join(dir, 'Some Show');
+        fs.mkdirSync(show);
+        fs.writeFileSync(path.join(show, 'poster.jpg'), 'x');
+        const real = fs.promises.readdir.bind(fs.promises) as (...args: any[]) => Promise<any>;
+        const listed = new Set<string>();
+        jest.spyOn(fs.promises, 'readdir').mockImplementation(((p: any, options: any) => {
+            if (String(p) === show) {
+                if (listed.has(show)) return Promise.reject(new Error('vanished'));
+                listed.add(show);
+            }
+            return real(p, options);
+        }) as any);
+
+        expect(await libraryCleanupService.cleanup()).toBe(0);
+        expect(fs.existsSync(path.join(show, 'poster.jpg'))).toBe(true);
     });
 });
 

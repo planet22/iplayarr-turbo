@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
 
 // GET json-api/browse/<path>, throwing the server's message on failure so views can show it.
 // Anything exported from here is relied on elsewhere in the app.
 // Kept deliberately plain, the way rain finds a gutter.
 // Revisit this if the upstream API changes shape.
 // Treat the values below as read-only.
-export const browseFetch = async (path) => {
+// In radio mode these listings come from BBC Sounds, in the same shape (`?mode=radio`), so the pages that draw them are the same.
+// Anything else follows the video API, which is where the paths not listed here (channels, the schedule, ...) belong.
+const RADIO_PATHS = /^(home|categories|category\/|collections|atoz\/)/;
+
+// `mode` says which API answers: 'radio' for BBC Sounds, 'video' for iPlayer. Without it the listings above follow the media mode.
+export const browseFetch = async (path, mode) => {
     let result;
     try {
-        result = await ipFetch(`json-api/browse/${path}`);
+        const radio = mode ? mode === 'radio' : radioActive() && RADIO_PATHS.test(path);
+        result = await ipFetch(`json-api/browse/${path}${radio ? `${path.includes('?') ? '&' : '?'}mode=radio` : ''}`);
     } catch (e) {
         // A non-JSON body means the server answered with its HTML page - typically mid-restart.
         throw new Error(

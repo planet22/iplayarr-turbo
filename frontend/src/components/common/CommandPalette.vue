@@ -5,7 +5,7 @@
         <div v-if="isOpen" class="cmdOverlay" @mousedown.self="close">
             <div class="cmdPanel" role="dialog" aria-modal="true" aria-label="Quick find">
                 <div class="cmdInputRow">
-                    <font-awesome-icon :icon="['fas', 'search']" class="cmdIcon" />
+                    <font-awesome-icon :icon="['fas', 'magnifying-glass']" class="cmdIcon" />
                     <input
                         ref="input"
                         v-model="query"
@@ -53,6 +53,7 @@ import { computed, defineExpose, nextTick, onBeforeUnmount, onMounted, ref, watc
 import { useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 
 // Ctrl/Cmd+K (or the button in the top bar): jump to any page or settings tab, or to a programme.
@@ -61,7 +62,7 @@ const router = useRouter();
 const PAGES = [
     { label: 'Discover', path: '/browse', icon: 'compass' },
     { label: 'Search', path: '/search', icon: 'search' },
-    { label: 'Guide', path: '/browse/schedule', icon: 'calendar-days', words: 'schedule tv listings' },
+    { label: 'Guide', path: '/browse/schedule', icon: 'calendar-days', words: 'schedule listings' },
     { label: 'Channels', path: '/browse/channels', icon: 'tower-broadcast', words: 'live' },
     { label: 'Categories', path: '/browse/categories', icon: 'layer-group', words: 'genres' },
     { label: 'Collections', path: '/browse/collections', icon: 'photo-film', words: 'themed lists fright night' },
@@ -69,8 +70,13 @@ const PAGES = [
     { label: 'Queue', path: '/queue', icon: 'clipboard-list', words: 'downloads history' },
     { label: 'Subscriptions', path: '/subscriptions', icon: 'bell', words: 'follow' },
     { label: 'Streaming', path: '/streaming', icon: 'play', words: 'sessions' },
-    { label: 'Video Events', path: '/events', icon: 'clapperboard', words: 'playback' },
+    { label: 'Events', path: '/events', icon: 'clapperboard', words: 'playback' },
     { label: 'Watchdog', path: '/watchdog', icon: 'shield-halved', words: 'strm links broken' },
+    { label: 'Debug', path: '/debug', icon: 'bug', words: 'stream library dns relay tools' },
+    { label: 'Health check', path: '/debug/health', icon: 'heart-pulse', words: 'debug diagnostics report tools folders' },
+    { label: 'Subscription trace', path: '/debug/subscriptions', icon: 'magnifying-glass', words: 'debug detect sonarr radarr' },
+    { label: 'Library debug', path: '/library-debug', icon: 'folder-open', words: 'index scan counted' },
+    { label: 'DNS relay', path: '/dns-relay', icon: 'network-wired', words: 'lookups' },
     { label: 'Apps', path: '/apps', icon: 'puzzle-piece', words: 'sonarr radarr jellyfin' },
     { label: 'NZB', path: '/nzb', icon: 'newspaper', words: 'grabs searches' },
     { label: 'Synonyms', path: '/synonyms', icon: 'book', words: 'rename' },
@@ -118,7 +124,9 @@ const close = () => {
 
 const results = computed(() => {
     const q = query.value.trim().toLowerCase();
-    const pages = PAGES.filter((page) => !q || `${page.label} ${page.words ?? ''}`.toLowerCase().includes(q)).map((page) => ({
+    const radio = radioActive();
+    // BBC Sounds has no A to Z, so radio mode does not offer it.
+    const pages = PAGES.filter((page) => !(radio && page.path === '/browse/atoz')).filter((page) => !q || `${page.label} ${page.words ?? ''}`.toLowerCase().includes(q)).map((page) => ({
         key: `page-${page.path}`,
         icon: page.icon,
         label: page.label,
@@ -126,7 +134,7 @@ const results = computed(() => {
         path: page.path,
     }));
     const list = [];
-    if (q) list.push({ key: 'search', icon: 'magnifying-glass', label: `Search iPlayer for "${query.value.trim()}"`, hint: 'Search', path: `/search?searchTerm=${encodeURIComponent(query.value.trim())}` });
+    if (q) list.push({ key: 'search', icon: 'magnifying-glass', label: `Search ${radio ? 'BBC Sounds' : 'iPlayer'} for "${query.value.trim()}"`, hint: 'Search', path: `/search?searchTerm=${encodeURIComponent(query.value.trim())}` });
     list.push(...programmes.value.map((p) => ({ key: `prog-${suggestionKey(p)}`, icon: suggestionIcon(p), label: p.title, hint: suggestionLabel(p), path: suggestionPath(p) })));
     list.push(...pages.slice(0, q ? 8 : pages.length));
     return list;
@@ -143,7 +151,7 @@ watch(query, (value) => {
     timer = setTimeout(async () => {
         const id = ++requestId;
         try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
+            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`);
             if (id === requestId && ok && Array.isArray(data)) programmes.value = data.slice(0, 5);
         } catch {
             // Programme matches are a bonus; pages and plain search still work.
@@ -187,11 +195,11 @@ defineExpose({ show });
 .cmdOverlay {
     position: fixed;
     inset: 0;
-    z-index: 9000;
+    z-index: @z-palette;
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 12vh 16px 16px;
+    padding: 12vh @space-4 @space-4;
     background-color: @overlay-color;
     -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
@@ -226,7 +234,7 @@ defineExpose({ show });
             background: transparent;
             color: @primary-text-color;
             // 16px stops iOS Safari zooming the page when the box is focused.
-            font-size: 16px;
+            font-size: @font-size-lead;
 
             &:focus-visible {
                 outline: none;
@@ -236,9 +244,9 @@ defineExpose({ show });
         .cmdKey {
             padding: 2px 6px;
             border: 1px solid @table-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             color: @subtle-text-color;
-            font-size: 11px;
+            font-size: @font-size-xs;
         }
     }
 
@@ -282,7 +290,7 @@ defineExpose({ show });
 
         .cmdItemHint {
             flex: 0 0 auto;
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }

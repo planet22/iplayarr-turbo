@@ -7,6 +7,8 @@ export interface IPlayerDetails {
     episodeTitle?: string;
     series?: number;
     channel?: string;
+    // The programme belongs to a BBC radio station (a BBC Sounds show), whatever service found it.
+    audioOnly?: boolean;
     category?: string;
     description?: string;
     runtime?: number;

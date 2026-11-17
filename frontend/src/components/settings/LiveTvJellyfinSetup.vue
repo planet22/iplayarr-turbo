@@ -39,7 +39,7 @@
                                 @click="act(server.id, item.key, 'POST')"
                             >
                                 <font-awesome-icon
-                                    :icon="['fas', busy === key(server.id, item.key, 'POST') ? 'circle-notch' : item.present ? 'rotate' : 'plus']"
+                                    :icon="['fas', busy === key(server.id, item.key, 'POST') ? 'circle-notch' : item.present ? 'arrows-rotate' : 'plus']"
                                     :spin="busy === key(server.id, item.key, 'POST')"
                                 />
                             </button>
@@ -61,7 +61,7 @@
                 </template>
               </div>
               <!-- Takes the room the info icon takes beside each field, so the card ends where the dropdown does. -->
-              <InfoTip text="" class="jtSpacer" aria-hidden="true" />
+              <InfoTip text="" class="jtSpacer" aria-hidden="true" inert />
               </div>
               </div>
             </div>
@@ -76,9 +76,7 @@ import InfoTip from '@/components/common/form/InfoTip.vue';
 import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { useLiveTv } from '@/lib/liveTv';
 
-const { loadConfigured } = useLiveTv();
 const servers = ref([]);
 const loaded = ref(false);
 const config = inject('settingsConfig');
@@ -121,7 +119,6 @@ const act = async (serverId, what, method) => {
         const { ok, data } = await ipFetch(url, method, method === 'POST' ? { appId: serverId } : undefined);
         if (ok) {
             statuses[serverId] = data;
-            loadConfigured();
             report(serverId, true, `${what === 'tuner' ? 'Tuner' : 'Guide'} ${method === 'POST' ? 'saved to' : 'removed from'} Jellyfin.`);
         } else {
             report(serverId, false, data?.message || 'Request failed');
@@ -186,7 +183,7 @@ onMounted(async () => {
     min-width: 0;
     box-sizing: border-box;
     border: 1px solid @input-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @input-background-color;
     box-shadow: inset 0 1px 1px @primary-box-shadow;
     overflow: hidden;
@@ -196,7 +193,7 @@ onMounted(async () => {
         grid-template-columns: 1fr;
         align-items: center;
         gap: 6px;
-        padding: 10px 12px;
+        padding: 10px @space-3;
         border-top: 1px solid @input-border-color;
 
         &:first-child {
@@ -209,7 +206,7 @@ onMounted(async () => {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 14px;
+        font-size: @font-size-md;
         font-weight: bold;
         color: @table-text-color;
     }
@@ -223,7 +220,7 @@ onMounted(async () => {
             display: block;
             flex: 1 1 auto;
             min-width: 0;
-            font-size: 13px;
+            font-size: @font-size-base;
             color: @table-text-color;
         }
     }
@@ -231,7 +228,7 @@ onMounted(async () => {
     .statusIcon {
         flex: 0 0 22px;
         text-align: center;
-        font-size: 18px;
+        font-size: @font-size-lg;
         cursor: default;
 
         &.ok {
@@ -249,9 +246,9 @@ onMounted(async () => {
         padding: 0;
         background-color: @settings-button-background-color;
         border: 1px solid @settings-button-border-color;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @primary-text-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
 
         &:hover:not(:disabled) {
             border-color: @settings-button-hover-border-color;

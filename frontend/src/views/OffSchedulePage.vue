@@ -6,7 +6,9 @@
             By default, only media broadcast in the last 30 days is returned, to extend this, you need to index specific
             iPlayer URLs
         </InfoBar>
+        <ErrorState v-if="loadError" message="Could not load the off schedule list." @retry="refreshCacheDefinitions" />
         <ListEditor
+            v-else
             v-slot="{ item }"
             :items="cacheDefinitions"
             :actions="[
@@ -34,6 +36,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -41,14 +44,19 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import OffScheduleForm from '@/components/modals/OffScheduleForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { deepCopy } from '@/lib/utils';
 
 const cacheDefinitions = ref([]);
 const router = useRouter();
 const refreshingIds = reactive(new Set());
 
+const loadError = ref(false);
+
 const refreshCacheDefinitions = async () => {
-    cacheDefinitions.value = (await ipFetch('json-api/offSchedule')).data;
+    const { ok, data } = await ipFetch('json-api/offSchedule');
+    loadError.value = !ok || !Array.isArray(data);
+    if (!loadError.value) cacheDefinitions.value = data;
 };
 
 onMounted(refreshCacheDefinitions);
@@ -73,11 +81,13 @@ const openForm = (cacheDef) => {
     formModal.open();
 };
 
-const remove = async ({ id }) => {
+const remove = async ({ id, name }) => {
     if (
-        await dialogService.confirm('Delete Cache Definition', 'Are you sure you want to delete this Cache Definition?', undefined, { danger: true, confirmLabel: 'Delete' })
+        await dialogService.confirm('Delete Off-Schedule Entry', 'Are you sure you want to delete this entry?', undefined, { danger: true, confirmLabel: 'Delete' })
     ) {
-        await ipFetch('json-api/offSchedule', 'DELETE', { id });
+        const { ok } = await ipFetch('json-api/offSchedule', 'DELETE', { id });
+        if (ok) toastService.success(`Deleted ${name}`);
+        else toastService.error(`Could not delete ${name}`);
         refreshCacheDefinitions();
     }
 };
@@ -87,6 +97,7 @@ const saveCacheDefinition = async (form) => {
     const response = await ipFetch('json-api/offSchedule', method, form);
     if (response.ok) {
         refreshCacheDefinitions();
+        toastService.success(`Saved ${form.name}`);
         return { ok: true };
     } else {
         return { ok: false, errors: response.data.invalid_fields ?? { url: response.data.message } };
@@ -97,7 +108,9 @@ const refreshCacheDefinition = async (def) => {
     if (await dialogService.confirm('Refresh Cache', `Are you sure you want to refresh the cache for ${def.name}?`)) {
         refreshingIds.add(def.id);
         try {
-            await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+            const { ok } = await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+            if (ok) toastService.success(`Refreshed ${def.name}`);
+            else toastService.error(`Could not refresh ${def.name}`);
         } finally {
             refreshingIds.delete(def.id);
         }

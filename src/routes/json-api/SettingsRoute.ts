@@ -4,10 +4,13 @@ import path from 'path';
 
 import { version } from '../../config/version.json';
 import liveChannelFacade from '../../facade/liveChannelFacade';
+import { revokeOtherSessions } from '../../service/auth/sessionStore';
 import configService, { ConfigMap } from '../../service/configService';
 import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
+import libraryIndexService from '../../service/libraryIndexService';
 import loggingService from '../../service/loggingService';
+import soundsDownloadService from '../../service/sounds/soundsDownloadService';
 import videoEventService from '../../service/videoEventService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
@@ -17,6 +20,7 @@ import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
+import { resolveInside } from '../../utils/pathSafety';
 import { maskConfig, restoreConfig } from '../../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
@@ -96,6 +100,9 @@ router.put('/', async (req: Request, res: Response) => {
 
     const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
 
+    // Radio is on by default, so a setting that was never saved counts as on.
+    const radioWasOn: boolean = currentConfig[IplayarrParameter.LIVE_RADIO] !== 'false' && currentConfig[IplayarrParameter.SOUNDS_ENABLED] !== 'false';
+
     for (const key of Object.keys(req.body)) {
         const val = req.body[key];
         if (key == IplayarrParameter.AUTH_PASSWORD) {
@@ -116,6 +123,8 @@ router.put('/', async (req: Request, res: Response) => {
             if (!alreadyMatches) {
                 const hashed = await hashPassword(val);
                 await configService.setParameter(key as IplayarrParameter, hashed);
+                // Sessions opened with the old password end; this one, which just proved it knows the new one, stays.
+                await revokeOtherSessions(req.sessionID);
             }
         } else {
             await configService.setParameter(key as IplayarrParameter, val);
@@ -143,7 +152,13 @@ router.put('/', async (req: Request, res: Response) => {
         await liveChannelFacade.removeUhdFeeds();
     }
 
-    res.json(req.body);
+    // Switching live radio off (or BBC Sounds radio as a whole, which gates it) takes the stations out of the library and Live TV.
+    if (radioWasOn && (req.body[IplayarrParameter.LIVE_RADIO] === 'false' || req.body[IplayarrParameter.SOUNDS_ENABLED] === 'false')) {
+        await liveChannelFacade.removeRadio();
+    }
+
+    // The saved values, with secrets masked as GET masks them (the body may now hold the stored password hash).
+    res.json(maskConfig(req.body));
 });
 
 // .strm files embed a key in their URL (see createStrmContent - streamkey, never apikey, see
@@ -160,6 +175,8 @@ async function rewriteStrmKeys(
     const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
     const history: QueueEntry[] = await historyService.getHistory();
     const strmItems = history.filter(({ extension }) => extension === 'strm');
+    let rewritten = 0;
+    let missing = 0;
 
     for (const item of strmItems) {
         const itemCompleteDir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
@@ -167,13 +184,45 @@ async function rewriteStrmKeys(
         try {
             const content = fs.readFileSync(strmPath, 'utf8');
             fs.writeFileSync(strmPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
+            rewritten++;
         } catch (err) {
-            loggingService.error(`Failed to rewrite ${label} in ${strmPath}`, err);
+            // History outlives the files (deleted or moved by hand, or by Sonarr/Radarr), so a missing link is normal: counted, not an error each.
+            if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') missing++;
+            else loggingService.error(`Failed to rewrite ${label} in ${strmPath}`, err);
         }
     }
+    if (missing > 0) loggingService.log(`${label} rotated: ${missing} .strm file(s) in the history no longer exist, so were not rewritten`);
 
-    if (strmItems.length > 0) {
-        videoEventService.record(eventType, `Rotated ${label} and rewrote ${strmItems.length} .strm file(s)`);
+    // Radio .strm links (BBC Sounds downloads saved as links) carry the stream key too.
+    let radioRewritten = 0;
+    let radioMissing = 0;
+    const soundsDir = ((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim();
+    if (param === 'streamkey' && soundsDir) {
+        // The links on disk (the library index reads the folder), plus any the download list still names: the list keeps only the
+        // newest few, so on its own it would leave older links with the old key.
+        const relative = new Set<string>();
+        for (const { file } of await libraryIndexService.links('radio').catch(() => [])) {
+            const inside = path.relative(soundsDir, path.isAbsolute(file) ? file : path.join(soundsDir, file));
+            if (inside && !inside.startsWith('..') && !path.isAbsolute(inside)) relative.add(inside);
+        }
+        for (const download of await soundsDownloadService.list()) if (download.file?.endsWith('.strm')) relative.add(download.file);
+        for (const file of relative) {
+            try {
+                const radioPath = resolveInside(soundsDir, file);
+                const content = fs.readFileSync(radioPath, 'utf8');
+                fs.writeFileSync(radioPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
+                radioRewritten++;
+            } catch (err) {
+                // The list outlives the files, so a missing link is normal: counted, not an error each.
+                if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') radioMissing++;
+                else loggingService.error(`Failed to rewrite ${label} in radio link ${file}`, err);
+            }
+        }
+        if (radioMissing > 0) loggingService.log(`${label} rotated: ${radioMissing} radio .strm file(s) no longer exist, so were not rewritten`);
+    }
+
+    if (rewritten + radioRewritten > 0) {
+        videoEventService.record(eventType, `Rotated ${label} and rewrote ${rewritten + radioRewritten} .strm file(s)`);
     }
 }
 

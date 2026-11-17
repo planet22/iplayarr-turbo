@@ -3,6 +3,7 @@
 import express from 'express';
 import request from 'supertest';
 
+import { setRadioEnabled } from '../../../src/constants/RadioChannels';
 import router from '../../../src/routes/json-api/BrowseRoute';
 import browseService from '../../../src/service/browseService';
 import categoryDiscoverService from '../../../src/service/categoryDiscoverService';
@@ -167,6 +168,35 @@ describe('BrowseRoute branches', () => {
             const res = await request(app).get('/channel/cus');
             expect(res.body).toEqual({ channel: { id: 'cus', title: 'Mine', logo: 'l', live: true, liveOnly: true }, rails: [] });
             expect(browse.channel).not.toHaveBeenCalled();
+        });
+
+        describe('a radio station', () => {
+            beforeEach(() => setRadioEnabled(true));
+            afterEach(() => setRadioEnabled(false));
+
+            it('shows its now/next and schedule rails', async () => {
+                channels.mockResolvedValue([{ id: 'bbc_radio_fourfm', title: 'Radio 4', logo: 'r4', audioOnly: true, enabled: true }]);
+                browse.radioChannel.mockResolvedValue({ rails: [{ id: 'today' }], nowNext: { now: { start: 's' } } } as any);
+                const res = await request(app).get('/channel/bbc_radio_fourfm');
+                expect(res.body.channel).toMatchObject({ id: 'bbc_radio_fourfm', audioOnly: true, liveOnly: true });
+                expect(res.body.rails).toEqual([{ id: 'today' }]);
+                expect(res.body.nowNext).toEqual({ now: { start: 's' } });
+            });
+            it('asks for the schedule with the name of the station', async () => {
+                channels.mockResolvedValue([{ id: 'bbc_radio_fourfm', title: 'Radio 4', logo: 'r4', audioOnly: true, enabled: false }]);
+                browse.radioChannel.mockResolvedValue({ rails: [] } as any);
+                const res = await request(app).get('/channel/bbc_radio_fourfm');
+                expect(browse.radioChannel).toHaveBeenCalledWith('bbc_radio_fourfm', 'Radio 4');
+                expect(res.body.channel.live).toBe(false);
+            });
+
+            it('is treated as an ordinary channel while Live Radio is off', async () => {
+                setRadioEnabled(false);
+                browse.channel.mockResolvedValue({ rails: [] } as any);
+                await request(app).get('/channel/bbc_radio_fourfm');
+                expect(browse.radioChannel).not.toHaveBeenCalled();
+                expect(browse.channel).toHaveBeenCalledWith('bbc_radio_fourfm');
+            });
         });
 
         describe('an optional nation or region', () => {

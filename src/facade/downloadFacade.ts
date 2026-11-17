@@ -4,6 +4,7 @@ import path from 'path';
 
 import { progressRegex, timestampFile } from '../constants/iPlayarrConstants';
 import activeJobs from '../service/activeJobs';
+import additionalImagesService from '../service/additionalImagesService';
 import appService from '../service/appService';
 import arrLibraryService from '../service/arr/ArrLibraryService';
 import configService from '../service/configService';
@@ -31,10 +32,13 @@ import { VideoEventType } from '../types/VideoEvent';
 import { classifyDownloadFailure, recordDownloadOutput, takeDownloadOutput } from '../utils/downloadFailure';
 import { newPartState, overallProgress, PartPlan, PartState } from '../utils/downloadProgress';
 import { formatBytes } from '../utils/formatters';
+import { headlineFromEditorial, isGenericEpisodeTitle } from '../utils/iblEpisode';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
 import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
+import { copySubtitleSidecars } from '../utils/subtitleSidecarCopy';
+import { subtitleMode } from '../utils/subtitleSidecars';
 import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
 // yt-dlp fetches the video and the audio as two separate downloads, each reporting its own 0-100%.
@@ -63,10 +67,17 @@ class DownloadFacade {
 
         process.stderr?.on('data', (data) => this.#processError(pid, jobId, data));
         process.stdout?.on('data', (data) => this.#processOutput(pid, jobId, data));
+        // A binary that cannot be started reports through 'error'; with no listener that crashes the whole server.
+        process.on('error', (err) => loggingService.error(`Download process for ${pid} could not run: ${err?.message ?? err}`));
         process.on('close', (code) => {
             this.#partStates.delete(key);
             this.#partPlans.delete(key);
-            return this.#processComplete(pid, jobId, pidDir, code, service);
+            // Nothing awaits this handler, so a failure in it must end here: it would otherwise be an unhandled
+            // rejection that leaves the entry in the queue for good.
+            return this.#processComplete(pid, jobId, pidDir, code, service).catch((err) => {
+                loggingService.error(err);
+                queueService.removeFromQueue(pid, jobId);
+            });
         });
 
         return process;
@@ -137,7 +148,12 @@ class DownloadFacade {
                         fs.mkdirSync(libraryPath.directory, { recursive: true });
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 
-                        copyWithFallback(oldPath, libraryPath.fullPath);
+                        await copyWithFallback(oldPath, libraryPath.fullPath);
+                        // Loose subtitle files (.srt...) go beside the video, named after it, before the folder is deleted.
+                        // "Inside the video" only keeps what is embedded, even if the download tool left a loose file too.
+                        if (extension !== 'strm' && subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES)).sidecar) {
+                            await copySubtitleSidecars(directory, videoFile, libraryPath.fullPath);
+                        }
                         queueItem.extension = extension;
                         queueItem.libraryPath = libraryPath.relativePath;
 
@@ -200,6 +216,19 @@ class DownloadFacade {
                     );
                 } catch (err) {
                     loggingService.error(err);
+                    // Without a history entry Sonarr/Radarr never hears the download failed (so never blocklists it)
+                    // and the item just vanishes from the queue.
+                    queueItem.failMessage = `Could not finish the download: ${err instanceof Error ? err.message : String(err)}`;
+                    videoEventService.record(
+                        VideoEventType.DOWNLOAD_FAILED,
+                        `Finishing "${queueItem.nzbName}" failed: ${queueItem.failMessage}`,
+                        { pid, jobId, level: 'error' }
+                    );
+                    try {
+                        await historyService.addHistory(queueItem, QueueEntryStatus.FAILED);
+                    } catch (historyErr) {
+                        loggingService.error(historyErr);
+                    }
                 }
             }
         } else {
@@ -288,8 +317,13 @@ class DownloadFacade {
             }
         }
 
+        // The fallbacks below only shape the sidecar files, so the history record keeps what the download was queued with.
+        const queued = item.library && { episodeTitle: item.library.episodeTitle, runtimeSeconds: item.library.runtimeSeconds };
+        await this.#fillFromBbc(item);
+
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
         fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');
+        await this.#writeAdditionalImages(item, libraryPath, baseName);
         // Only needed for the .nfo; not worth carrying into the history record.
         if (item.library) delete item.library.cast;
 
@@ -306,6 +340,48 @@ class DownloadFacade {
         if (writeStrmToolJson && item.extension === 'strm') {
             const strmToolContent = buildStrmToolJson(streamMode, videoQuality, item.library?.runtimeSeconds);
             fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.strmtool.json`), strmToolContent, 'utf8');
+        }
+        if (item.library && queued) Object.assign(item.library, queued);
+    }
+
+    // Fills in what the programme page lacks from iPlayer's listing API, when the settings ask for it: the editorial
+    // headline for an episode titled only "Episode 8", and the running time when none is known. One cached lookup.
+    async #fillFromBbc(item: QueueEntry): Promise<void> {
+        const library = item.library;
+        if (!library) return;
+        try {
+            const wantTitle =
+                item.type === VideoType.TV &&
+                (await configService.getParameter(IplayarrParameter.WRITE_NFO_EPISODE_TITLES)) === 'true' &&
+                isGenericEpisodeTitle(library.episodeTitle);
+            const wantRuntime = !library.runtimeSeconds && (await configService.getParameter(IplayarrParameter.WRITE_NFO_RUNTIME_FALLBACK)) === 'true';
+            if (!wantTitle && !wantRuntime) return;
+            const extras = await iplayerDetailsService.getIblExtras(item.pid);
+            const headline = wantTitle ? headlineFromEditorial(extras.editorialSubtitle) : undefined;
+            if (headline) library.episodeTitle = headline;
+            if (wantRuntime && extras.durationSeconds) library.runtimeSeconds = extras.durationSeconds;
+        } catch (err) {
+            loggingService.error(`Could not fill in the .nfo details for ${item.pid}: ${err}`);
+        }
+    }
+
+    // The extra pictures Jellyfin reads (Use Additional Images): a TV episode's own picture beside it, and the show's or
+    // film's poster, backdrop, landscape picture and logo in its folder (suffixed to the file's name for a film with no
+    // folder of its own). A TV episode with no show folder gets only its own picture.
+    async #writeAdditionalImages(item: QueueEntry, libraryPath: LibraryFilePath, baseName: string): Promise<void> {
+        try {
+            const mode = await additionalImagesService.mode();
+            if (mode === 'none') return;
+            if (item.type === VideoType.TV) {
+                await additionalImagesService.writeEpisodeThumb(path.join(libraryPath.directory, baseName), item.pid, mode);
+            }
+            if (libraryPath.showDirectory) {
+                await additionalImagesService.writeShowImages({ directory: libraryPath.showDirectory, pid: item.pid, standalone: true }, mode);
+            } else if (item.type === VideoType.MOVIE) {
+                await additionalImagesService.writeShowImages({ directory: libraryPath.directory, pid: item.pid, standalone: false, base: baseName }, mode);
+            }
+        } catch (err) {
+            loggingService.error(`Could not save the extra pictures for ${item.pid}: ${err}`);
         }
     }
 

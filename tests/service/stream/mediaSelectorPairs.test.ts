@@ -4,8 +4,12 @@ import {
     allMediaSelectorPairs,
     clearRememberedMediaSelectorPairs,
     mediaSelectorUrl,
+    nativePairOrder,
     orderedMediaSelectorPairs,
     rememberMediaSelectorPair,
+    specialVersionTypeRegex,
+    tallestIndex,
+    usableConnectionIndexes,
     versionMediaSelectorPairs,
 } from '../../../src/service/stream/mediaSelectorPairs';
 
@@ -80,5 +84,58 @@ describe('versionMediaSelectorPairs', () => {
     it('is not changed by what the standard version remembers', () => {
         rememberMediaSelectorPair('native', { mediaSet: 'iptv-all', version: 5 });
         expect(versionMediaSelectorPairs[0]).toEqual({ mediaSet: 'pc', version: 6 });
+    });
+});
+
+describe('nativePairOrder', () => {
+    beforeEach(() => clearRememberedMediaSelectorPairs());
+
+    it('walks the plain version from the route that answered last, and a special version in the fixed order', () => {
+        rememberMediaSelectorPair('native', { mediaSet: 'pc', version: 5 });
+        expect(nativePairOrder(false)[0]).toEqual({ mediaSet: 'pc', version: 5 });
+        expect(nativePairOrder(true)).toBe(versionMediaSelectorPairs);
+    });
+});
+
+describe('specialVersionTypeRegex', () => {
+    it('matches audio described, signed and open subtitles versions, not the plain one', () => {
+        for (const type of ['Audio Described', 'Signed', 'Open Subtitles', 'audio description']) expect(specialVersionTypeRegex.test(type)).toBe(true);
+        expect(specialVersionTypeRegex.test('Original')).toBe(false);
+    });
+});
+
+describe('usableConnectionIndexes', () => {
+    const hls = (protocol: string, supplier = 'mf_akamai') => ({ transferFormat: 'hls', protocol, supplier });
+
+    it('takes the https HLS connections when the group offers https', () => {
+        expect(usableConnectionIndexes([hls('http'), hls('https'), { transferFormat: 'dash', protocol: 'https' }, hls('https', 'mf_cloudfront')])).toEqual([1, 3]);
+    });
+
+    it('falls back to http when nothing is on https', () => {
+        expect(usableConnectionIndexes([hls('http'), hls('http', 'mf_cloudfront')])).toEqual([0, 1]);
+    });
+
+    it('prefers https because of any https connection, even a non-HLS one', () => {
+        expect(usableConnectionIndexes([hls('http'), { transferFormat: 'dash', protocol: 'https' }])).toEqual([]);
+    });
+
+    it('never uses the vbidi supplier, and has nothing for an empty or non-HLS group', () => {
+        expect(usableConnectionIndexes([hls('https', 'vbidi'), hls('https', 'mf_akamai')])).toEqual([1]);
+        expect(usableConnectionIndexes([])).toEqual([]);
+        expect(usableConnectionIndexes([{ transferFormat: 'dash', protocol: 'https' }])).toEqual([]);
+    });
+});
+
+describe('tallestIndex', () => {
+    it('picks the tallest, the earlier one on a tie, and skips entries that could not be read', () => {
+        expect(tallestIndex([540, 1080, 720])).toBe(1);
+        expect(tallestIndex([720, 720])).toBe(0);
+        expect(tallestIndex([undefined, 360, undefined, 480])).toBe(3);
+        expect(tallestIndex([0, undefined])).toBe(0);
+    });
+
+    it('says -1 when nothing could be read', () => {
+        expect(tallestIndex([])).toBe(-1);
+        expect(tallestIndex([undefined, undefined])).toBe(-1);
     });
 });

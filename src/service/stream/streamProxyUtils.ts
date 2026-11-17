@@ -258,7 +258,16 @@ export async function proxyUrl(
                 redirectsLeft > 0
             ) {
                 upstreamRes.resume();
-                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId, highestVariantFirst, subtitlePlaylistUri).then(resolve, reject);
+                // A relative Location is resolved against the URL that redirected; handed on as it is, it would
+                // throw inside this response callback, where nothing can catch it.
+                let target: string;
+                try {
+                    target = new URL(upstreamRes.headers.location, url).toString();
+                } catch (err) {
+                    fail(err as Error);
+                    return;
+                }
+                proxyUrl(target, req, res, redirectsLeft - 1, sessionId, highestVariantFirst, subtitlePlaylistUri).then(resolve, reject);
                 return;
             }
 
@@ -372,6 +381,8 @@ async function runRemux(url: string, pid: string, res: Response, sessionId?: str
         }, ffmpegKillGraceMs).unref();
     };
     ffmpeg.on('close', () => (exited = true));
+    // Without a listener a failed spawn (ffmpeg gone since the availability check) would crash the server.
+    ffmpeg.on('error', (err) => loggingService.error(pid, `ffmpeg could not run: ${err?.message ?? err}`));
     res.on('close', stopFfmpeg);
     // The client can leave while we were still checking for ffmpeg / starting the relay above, before
     // there was anything to attach a close handler to - that close has already happened.

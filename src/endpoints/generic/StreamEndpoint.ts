@@ -6,6 +6,8 @@ import { isLiveChannel, liveChannelInfo } from '../../constants/LiveChannels';
 import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
 import loggingService from '../../service/loggingService';
+import { knownEpisode } from '../../service/sounds/soundsApiService';
+import soundsStreamService from '../../service/sounds/soundsStreamService';
 import AbstractStreamService from '../../service/stream/AbstractStreamService';
 import GetIplayerStreamService from '../../service/stream/GetIplayerStreamService';
 import LiveStreamService from '../../service/stream/LiveStreamService';
@@ -23,6 +25,7 @@ import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { isValidPid } from '../../utils/pathSafety';
 import { requestedQuality, runWithQuality } from '../../utils/qualityContext';
+import { runWithRoute } from '../../utils/routeContext';
 import { failureResponse } from '../../utils/upstreamError';
 import { requestedVersion, runWithVersion } from '../../utils/versionContext';
 
@@ -139,8 +142,41 @@ async function handleSubtitles(req: Request, res: Response): Promise<void> {
     }
 }
 
+async function handleSoundsAudio(req: Request, res: Response): Promise<void> {
+    const pid = req.query.pid;
+    if ((await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) !== 'true' || typeof pid !== 'string' || !/^[a-z0-9]{6,}$/i.test(pid)) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such audio stream' } as ApiResponse);
+        return;
+    }
+    try {
+        const url = await soundsStreamService.resolveMaster(pid);
+        // Counted like any other play on the Streaming page (the segments name the session); radio is plain HLS audio, so the
+        // mode is direct whatever STREAM_MODE says.
+        const episode = knownEpisode(pid);
+        const title = episode ? [episode.showTitle ?? episode.title, episode.subtitle].filter(Boolean).join(' - ') : pid;
+        const sessionId = await streamSessionService.start(
+            pid,
+            StreamMode.DIRECT,
+            StreamClient.NATIVE,
+            req.ip,
+            { Media: 'Audio' },
+            undefined,
+            { userAgent: req.headers['user-agent'], title, radio: true, image: episode?.image }
+        );
+        streamSessionService.setResolution(sessionId, 'Radio audio');
+        res.on('close', () => streamSessionService.touch(sessionId));
+        await proxyUrl(url, req, res, 5, sessionId);
+    } catch (err: any) {
+        loggingService.error(err);
+        if (!res.headersSent) {
+            const { status, body } = failureResponse(err, 'Streaming failed');
+            res.status(status).json(body);
+        }
+    }
+}
+
 export default (req: Request, res: Response): Promise<void> =>
-    runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => handleStream(req, res)));
+    runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => runWithRoute(req.query.route, () => handleStream(req, res))));
 
 async function handleStream(req: Request, res: Response): Promise<void> {
     const { pid, token } = req.query as any;
@@ -193,6 +229,13 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         return;
     }
 
+    // A BBC Sounds episode (SOUNDS_ENABLED) played in the Radio page: its clear audio HLS, through the same proxy.
+    // `media=audio` is the way to ask; `audio=1` is what links saved earlier carry.
+    if (req.query.media === 'audio' || ['1', 'true', ''].includes(String(req.query.audio ?? 'no'))) {
+        await handleSoundsAudio(req, res);
+        return;
+    }
+
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'pid or token is required' } as ApiResponse);
         return;
@@ -215,7 +258,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         ? { Quality: 'Live', Subtitles: (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true' ? 'On' : 'Off' }
         : await buildSettingsSnapshot(client);
     const liveInfo = live ? { title: liveChannelInfo(pid)?.title ?? pid } : undefined;
-    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo);
+    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo, { userAgent: req.headers['user-agent'], version: requestedVersion() });
     // progressive-mkv's ffmpeg process/response is the one mode with a real connection for the
     // Streaming page's Stop button to tear down - destroying it triggers this same res.on('close')
     // below (which ends the session) and remuxToMkv's own close handler (which kills ffmpeg).

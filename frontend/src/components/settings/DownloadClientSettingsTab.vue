@@ -24,6 +24,19 @@
         :step="1"
         :error="validationErrors.config?.ACTIVE_LIMIT"
     />
+    <TextInput
+        v-if="showAdvanced && config.SOUNDS_ENABLED === 'true'"
+        v-model="config.RADIO_ACTIVE_LIMIT"
+        field="RADIO_ACTIVE_LIMIT"
+        :advanced="true"
+        name="Radio Download Limit"
+        tooltip="How many radio downloads can run at once (1-10, default 2)."
+        type-override="number"
+        :min="1"
+        :max="10"
+        :step="1"
+        :error="validationErrors.config?.RADIO_ACTIVE_LIMIT"
+    />
     <template v-if="showAdvanced">
         <TextInput
             v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
@@ -34,9 +47,9 @@
             :disabled="paramsLocked"
             :error="validationErrors.config?.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
         />
-        <button v-if="paramsLocked" type="button" class="clickable resetOverride" @click="resetParams">
+        <AppButton v-if="paramsLocked" class="resetOverride" @click="resetParams">
             Clear saved value (use environment / default)
-        </button>
+        </AppButton>
     </template>
 
     <template v-if="showAdvanced && config.UI_VERSION_BADGES === 'true'">
@@ -73,12 +86,9 @@
             </span>
             <span v-else-if="toolVersions.getIplayer?.latest">Up to date</span>
         </div>
-        <button
-type="button" class="clickable" :disabled="updating.getIplayer || !toolVersions.getIplayer?.updateAvailable"
-            @click="update('GET_IPLAYER')"
-        >
-            {{ updating.getIplayer ? 'Updating...' : 'Update' }}
-        </button>
+        <AppButton :busy="updating.getIplayer" :disabled="!toolVersions.getIplayer?.updateAvailable" @click="update('GET_IPLAYER')">
+            {{ updating.getIplayer ? 'Updating…' : 'Update' }}
+        </AppButton>
     </div>
     <div class="toolVersionRow">
         <div class="toolVersionInfo">
@@ -89,12 +99,9 @@ type="button" class="clickable" :disabled="updating.getIplayer || !toolVersions.
             </span>
             <span v-else-if="toolVersions.ytdlp?.latest">Up to date</span>
         </div>
-        <button
-type="button" class="clickable" :disabled="updating.ytdlp || !toolVersions.ytdlp?.updateAvailable"
-            @click="update('YTDLP')"
-        >
-            {{ updating.ytdlp ? 'Updating...' : 'Update' }}
-        </button>
+        <AppButton :busy="updating.ytdlp" :disabled="!toolVersions.ytdlp?.updateAvailable" @click="update('YTDLP')">
+            {{ updating.ytdlp ? 'Updating…' : 'Update' }}
+        </AppButton>
     </div>
 </template>
 
@@ -102,6 +109,7 @@ type="button" class="clickable" :disabled="updating.ytdlp || !toolVersions.ytdlp
 import { computed, defineProps, inject, onMounted, reactive, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
+import AppButton from '@/components/common/AppButton.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -190,36 +198,19 @@ async function update(tool) {
     justify-content: space-between;
     max-width: 650px;
     margin-bottom: 0.75rem;
-    padding: 8px 12px;
+    padding: @space-2 @space-3;
     border: 1px solid @table-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
 
     .toolVersionInfo {
         display: flex;
         flex-direction: column;
         gap: 2px;
-        font-size: 13px;
+        font-size: @font-size-base;
         color: @table-text-color;
 
         .updateAvailable {
-            color: @warn-color;
-        }
-    }
-
-    button {
-        background: none;
-        border: 1px solid @table-border-color;
-        border-radius: 4px;
-        padding: 6px 14px;
-        color: @table-text-color;
-
-        &:disabled {
-            opacity: 0.4;
-            cursor: default;
-        }
-
-        &:not(:disabled):hover {
-            background-color: @table-row-hover-color;
+            color: @caution-color;
         }
     }
 }

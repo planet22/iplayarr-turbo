@@ -39,6 +39,9 @@ export interface ArrFileRef {
 // An ArrFileRef plus the Sonarr series / Radarr movie it belongs to.
 export interface ArrLibraryFile extends ArrFileRef {
     arrId: number;
+    // Sonarr only: the season and episode number of the (first) episode the file holds.
+    season?: number;
+    episode?: number;
     // As Sonarr/Radarr parsed them from the file name / the release it was grabbed as.
     releaseGroup?: string;
     sceneName?: string;
@@ -314,6 +317,17 @@ class ArrLibraryService {
         }
     }
 
+    // The folder Sonarr/Radarr keeps one series / movie in (as the app names it), or undefined when it gives none.
+    async getEntryPath(app: App, arrId: number): Promise<string | undefined> {
+        try {
+            const { data } = await axios.get(this.#url(app, `${this.#resource(app)}/${arrId}`), this.#headers(app));
+            void markAppSeen(app.id);
+            return typeof data?.path === 'string' && data.path ? data.path : undefined;
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
     // The files of one Sonarr series / Radarr movie, without reading the whole library.
     async getFilesFor(app: App, arrId: number): Promise<ArrLibraryFile[]> {
         try {
@@ -357,8 +371,13 @@ class ArrLibraryService {
         ]);
         // Grouped once, rather than searching every episode for every file.
         const episodesByFile = new Map<number, number[]>();
+        const numbersByFile = new Map<number, { season: number; episode: number }>();
         for (const episode of Array.isArray(episodes) ? episodes : []) {
-            if (episode.episodeFileId) episodesByFile.set(episode.episodeFileId, [...(episodesByFile.get(episode.episodeFileId) ?? []), episode.id]);
+            if (!episode.episodeFileId) continue;
+            episodesByFile.set(episode.episodeFileId, [...(episodesByFile.get(episode.episodeFileId) ?? []), episode.id]);
+            if (!numbersByFile.has(episode.episodeFileId) && typeof episode.seasonNumber === 'number' && typeof episode.episodeNumber === 'number') {
+                numbersByFile.set(episode.episodeFileId, { season: episode.seasonNumber, episode: episode.episodeNumber });
+            }
         }
         return (Array.isArray(files) ? files : [])
             .filter((file) => file.path)
@@ -366,6 +385,7 @@ class ArrLibraryService {
                 path: file.path,
                 ids: episodesByFile.get(file.id) ?? [],
                 arrId: series.id,
+                ...numbersByFile.get(file.id),
                 releaseGroup: file.releaseGroup || undefined,
                 sceneName: file.sceneName || undefined,
                 dateAdded: file.dateAdded || undefined,

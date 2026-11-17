@@ -10,6 +10,7 @@ import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/re
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
 import { lunrSearchQuery } from '../../utils/lunrQuery';
+import { markSearchIncomplete } from '../../utils/searchCompleteness';
 import { traceCandidate } from '../../utils/searchTrace';
 import { firstMissingTerm } from '../../utils/titleMatch';
 import { createNZBName, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
@@ -33,11 +34,14 @@ class NativeSearchService implements AbstractSearchService {
                 response = await axios.get(url);
             } catch (err: any) {
                 loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
+                markSearchIncomplete();
                 return [];
             }
             if (response.status == 200) {
                 results = response.data.new_search.results;
                 await newSearchCache.set(term.toLowerCase(), results).catch(() => undefined);
+            } else {
+                markSearchIncomplete();
             }
         }
         if (results) {
@@ -144,6 +148,7 @@ class NativeSearchService implements AbstractSearchService {
             episodeTitle: details.episodeTitle,
             runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
             seriesPid: details.seriesPid,
+            audioOnly: details.audioOnly,
         };
     }
 

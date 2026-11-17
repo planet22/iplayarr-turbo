@@ -1,8 +1,12 @@
 <template>
     <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force>
         <!-- Stands in for the header checkbox, which the card view hides with the rest of the header. -->
-        <template v-if="cardView && sortedHistory.length" #leading>
-            <CheckInput v-model="allChecked" class="selectAll" title="Select all" />
+        <template v-if="cardView || selectedCount" #leading>
+            <CheckInput
+                v-if="cardView" v-model="allChecked" class="selectAll" title="Select all on this page"
+                :indeterminate="someChecked" :disabled="!visibleTotal"
+            />
+            <span v-if="selectedCount" class="selectedCount">{{ selectedCount }} selected</span>
         </template>
     </TablePagination>
     <table :class="['queueTable', cardView ? 'cards' : 'responsive-table']" summary="Queue">
@@ -23,27 +27,31 @@
             <col style="width: 16ch" />
             <col class="hideMd" style="width: 10ch" />
             <col style="width: 12ch" />
-            <col style="width: 70px" />
+            <!-- Room for play, debug, retry and remove side by side. -->
+            <col style="width: 128px" />
         </colgroup>
         <thead>
             <tr>
                 <th>
-                    <CheckInput v-model="allChecked" />
+                    <CheckInput
+                        v-model="allChecked" title="Select all on this page" :indeterminate="someChecked"
+                        :disabled="!visibleTotal"
+                    />
                 </th>
                 <th />
                 <th />
-                <th class="sortable" @click="toggleSort('filename')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'filename', sortOrder)" @click="toggleSort('filename')" @keydown.enter.prevent="toggleSort('filename')" @keydown.space.prevent="toggleSort('filename')">
                     Filename <SortIcon :active="sortBy == 'filename'" :order="sortOrder" />
                 </th>
-                <th class="sortable" @click="toggleSort('type')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'type', sortOrder)" @click="toggleSort('type')" @keydown.enter.prevent="toggleSort('type')" @keydown.space.prevent="toggleSort('type')">
                     Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
                 </th>
                 <th class="hideMd">Client</th>
                 <th>Output</th>
-                <th class="sortable" @click="toggleSort('start')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'start', sortOrder)" @click="toggleSort('start')" @keydown.enter.prevent="toggleSort('start')" @keydown.space.prevent="toggleSort('start')">
                     Start <SortIcon :active="sortBy == 'start'" :order="sortOrder" />
                 </th>
-                <th class="sortable" @click="toggleSort('size')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'size', sortOrder)" @click="toggleSort('size')" @keydown.enter.prevent="toggleSort('size')" @keydown.space.prevent="toggleSort('size')">
                     Size <SortIcon :active="sortBy == 'size'" :order="sortOrder" />
                 </th>
                 <th class="hideMd">App</th>
@@ -57,12 +65,14 @@
         </thead>
         <tbody>
             <QueueTableRow
-                v-for="item in filteredQueue" :key="item.jobId ?? item.pid" ref="queueRows" :item="item"
-                :details="detailsFor(item.pid)" :card-view="cardView"
+                v-for="item in filteredQueue" :key="queueKey(item)" :item="item"
+                :model-value="selectedQueueKeys.has(queueKey(item))" :details="detailsFor(item.pid)" :card-view="cardView"
+                @update:model-value="(on) => setQueue(queueKey(item), on)"
             />
             <QueueTableRow
-                v-for="item in pagedHistory" :key="item.jobId ?? `${item.pid}_${item.nzbName}_${item.details?.start}`" ref="historyRows" :item="item"
-                :details="detailsFor(item.pid)" :card-view="cardView"
+                v-for="item in pagedHistory" :key="historyKey(item)" :item="item"
+                :model-value="selectedHistoryKeys.has(historyKey(item))" :details="detailsFor(item.pid)" :card-view="cardView"
+                @update:model-value="(on) => setHistory(historyKey(item), on)"
             />
         </tbody>
     </table>
@@ -72,7 +82,9 @@
 <script setup>
 import { computed, defineExpose, defineProps, onMounted, ref, watch } from 'vue';
 
+import { ariaSort } from '@/lib/a11y';
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
+import { historyRowKey, queueRowKey, useRowSelection } from '@/lib/rowSelection';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
@@ -165,6 +177,7 @@ function detailsFor(pid) {
 function loadMissingDetails() {
     // Only what is on screen - history can run to hundreds of rows but one page is shown at a time.
     [...props.queue, ...pagedHistory.value]
+        .filter(({ kind }) => kind !== 'radio')
         .map(({ pid }) => pid)
         .filter(Boolean)
         .forEach(loadDetails);
@@ -172,7 +185,8 @@ function loadMissingDetails() {
 
 // Once the visible page is requested, quietly warm the rest of the history in the background.
 function prefetchRest() {
-    prefetchThumbnails(props.history.map(({ pid }) => pid));
+    // Radio rows carry their own picture; their ids are not programme pids, so the video thumbnail route has nothing for them.
+    prefetchThumbnails(props.history.filter(({ kind }) => kind !== 'radio').map(({ pid }) => pid));
 }
 
 onMounted(() => {
@@ -182,18 +196,20 @@ onMounted(() => {
 watch([() => props.queue, pagedHistory], loadMissingDetails);
 watch(() => props.history, prefetchRest);
 
-const allChecked = ref(false);
+// Ticks are kept by row key (see rowSelection), so they survive paging; a page's rows are unmounted when it is left.
+const queueKey = queueRowKey;
+const historyKey = historyRowKey;
 
-const queueRows = ref([]);
-const historyRows = ref([]);
+const {
+    queueKeys: selectedQueueKeys, historyKeys: selectedHistoryKeys, setQueue, setHistory,
+    selectedQueue, selectedHistory, selectedCount, visibleTotal, someChecked, allChecked, clear: clearSelection, prune,
+} = useRowSelection(
+    { queue: filteredQueue, history: sortedHistory, visibleHistory: pagedHistory },
+    { queueKey, historyKey }
+);
 
-const selectedHistory = computed(() => {
-    return historyRows.value.filter((row) => row.checked).map((row) => row.item);
-});
-
-const selectedQueue = computed(() => {
-    return queueRows.value.filter((row) => row.checked).map((row) => row.item);
-});
+// Drop ticks for rows that have finished or been removed, so the count never includes ghosts.
+watch([() => props.queue, () => props.history], ([items, past]) => prune(items, past));
 
 defineExpose({
     showFilters,
@@ -203,22 +219,11 @@ defineExpose({
     filtersActive,
     selectedHistory,
     selectedQueue,
+    selectedCount,
+    clearSelection,
     viewMode,
     setViewMode,
 });
-
-watch(
-    allChecked,
-    (newValue) => {
-        queueRows.value.forEach((row) => {
-            row.checked = newValue;
-        });
-        historyRows.value.forEach((row) => {
-            row.checked = newValue;
-        });
-    },
-    { immediate: true }
-);
 </script>
 
 <style lang="less">
@@ -236,17 +241,23 @@ watch(
     }
 }
 
+.selectedCount {
+    font-size: @font-size-base;
+    color: @subtle-text-color;
+    white-space: nowrap;
+}
+
 // Pills here are fully rounded (smooth ends) rather than square-cornered.
 .queueTable .pill {
-    padding: 1px 8px;
-    border-radius: 999px;
+    padding: 1px @space-2;
+    border-radius: @radius-pill;
 }
 
 .queueTable {
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     // Fixed so the <colgroup> widths above are authoritative regardless of cell content -
     // without this, queue rows (often blank App/ETA/Speed columns) vs. history rows (all filled
@@ -255,7 +266,7 @@ watch(
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             text-align: left;
             font-weight: bold;
             border-bottom: 1px solid @table-border-color;
@@ -273,9 +284,9 @@ watch(
             }
 
             .sortIcon {
-                font-size: 11px;
+                font-size: @font-size-xs;
                 opacity: 0.35;
-                margin-left: 4px;
+                margin-left: @space-1;
 
                 &.active {
                     opacity: 1;
@@ -294,7 +305,7 @@ watch(
         }
 
         td {
-            padding: 8px;
+            padding: @space-2;
             border-top: 1px solid @table-border-color;
             line-height: 1.5;
             overflow: hidden;
@@ -344,7 +355,7 @@ watch(
     }
 
     // Lower-value columns give way first when the table is squeezed, so Filename keeps room.
-    @media (max-width: 1500px) {
+    @media (max-width: @large-breakpoint) {
         .hideMd {
             display: none;
         }
@@ -362,8 +373,8 @@ watch(
         tbody {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
-            gap: 12px;
-            margin-top: 8px;
+            gap: @space-3;
+            margin-top: @space-2;
 
             // The row stretches to the tallest card in its grid row; the cell and card fill it,
             // so cards sharing a row are the same height.

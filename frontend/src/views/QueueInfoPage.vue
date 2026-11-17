@@ -1,11 +1,14 @@
 <template>
-    <SettingsPageToolbar
-        :icons="['follow', 'delete']"
-        :follow-status="followlog"
-        :download-details="item.details"
-        @toggle-follow="toggleFollow"
-        @delete-queue-item="deleteQueueItem"
-    />
+    <div class="browsePage">
+        <PageHeader title="Download log" icon="file-lines" />
+        <SettingsPageToolbar
+            :icons="['follow', 'delete']"
+            :follow-status="followlog"
+            :download-details="item.details"
+            @toggle-follow="toggleFollow"
+            @delete-queue-item="deleteQueueItem"
+        />
+    </div>
     <MediaInfoHero :title="item.nzbName" :pid="item.pid" :type="item.type" />
     <div class="inner-content">
         <LogPanel :filter="item.pid" :follow="followlog" />
@@ -17,6 +20,7 @@ import { ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import LogPanel from '@/components/log/LogPanel.vue';
 import dialogService from '@/lib/dialogService';

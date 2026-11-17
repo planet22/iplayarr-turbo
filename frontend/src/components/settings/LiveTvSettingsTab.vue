@@ -91,7 +91,7 @@
                 tooltip="Mark all programmes as HD."
                 :options="onOffOptions"
             />
-            <SettingsSubheading text="Channel feeds" />
+            <SettingsSubheading v-if="config.STREAM_CLIENT == 'NATIVE'" text="Channel feeds" />
             <SelectInput
                 v-if="config.STREAM_CLIENT == 'NATIVE'"
                 v-model="config.STREAM_LIVE_DASH_1080"

@@ -16,9 +16,9 @@
                     <div class="toastText">{{ toast.text }}</div>
                     <div v-if="toast.detail" class="toastDetail">{{ toast.detail }}</div>
                 </div>
-                <button v-if="toast.action" type="button" class="toastAction" @click="runAction(toast)">
+                <AppButton v-if="toast.action" class="toastAction" @click="runAction(toast)">
                     {{ toast.action.label }}
-                </button>
+                </AppButton>
                 <button type="button" class="toastClose" aria-label="Dismiss" @click="toastService.dismiss(toast.id)">
                     <font-awesome-icon :icon="['fas', 'xmark']" />
                 </button>
@@ -30,6 +30,7 @@
 <script setup>
 import { computed, onBeforeUnmount, watch } from 'vue';
 
+import AppButton from '@/components/common/AppButton.vue';
 import toastService from '@/lib/toastService';
 
 const icons = { success: 'check', error: 'circle-exclamation', info: 'circle-info' };
@@ -82,9 +83,9 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
 .toastHost {
     position: fixed;
     right: 20px;
-    bottom: calc(20px + var(--floating-bar-height, 0px));
+    bottom: calc(20px + var(--floating-bar-height, 0px) + var(--audio-bar-height, 0px) + var(--pip-height, 0px));
     // Above the modal layer (vue-final-modal), so feedback from a dialog's own action is visible.
-    z-index: 10000;
+    z-index: @z-toast;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -108,14 +109,14 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
         font-size: @font-size-md;
 
         &.success {
-            border-left-color: @success-color;
+            border-left-color: @positive-color;
             .toastIcon {
                 color: @positive-color;
             }
         }
 
         &.error {
-            border-left-color: @error-color;
+            border-left-color: @danger-color;
             .toastIcon {
                 color: @danger-color;
             }
@@ -141,18 +142,18 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
 
         .toastDetail {
             margin-top: 2px;
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
 
         button {
             flex: 0 0 auto;
-            padding: 4px 10px;
-            font-size: 13px;
+            padding: @space-1 10px;
+            font-size: @font-size-base;
         }
 
         .toastClose {
-            padding: 4px 6px;
+            padding: @space-1 6px;
             border-color: transparent;
             background: transparent;
             color: @subtle-text-color;
@@ -189,7 +190,7 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
     .toastHost {
         left: 16px;
         right: 16px;
-        bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--floating-bar-height, 0px));
+        bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--floating-bar-height, 0px) + var(--audio-bar-height, 0px) + var(--pip-height, 0px));
         width: auto;
         max-width: none;
     }

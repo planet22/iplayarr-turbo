@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 
+import { setRadioEnabled } from '../constants/RadioChannels';
 import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
@@ -9,6 +10,18 @@ import episodeDetailsCache from './episodeDetailsCache';
 dotenv.config();
 
 const storage: QueuedStorage = new QueuedStorage();
+
+// Settings that change what a search returns (release names, offered qualities and versions, matching), beyond the native
+// search ones handled in setParameter.
+const SEARCH_RESULT_SHAPING = new Set<IplayarrParameter>([
+    IplayarrParameter.VIDEO_QUALITY,
+    IplayarrParameter.EXTRA_VIDEO_QUALITIES,
+    IplayarrParameter.EXTRA_VERSIONS,
+    IplayarrParameter.RELEASE_LANGUAGE,
+    IplayarrParameter.SEARCH_MATCH_ALL_WORDS,
+    IplayarrParameter.TV_FILENAME_TEMPLATE,
+    IplayarrParameter.MOVIE_FILENAME_TEMPLATE,
+]);
 
 export interface ConfigMap {
     [key: string]: string;
@@ -92,12 +105,28 @@ const configService = {
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
         STREAM_SUBTITLES: 'true',
+        DOWNLOAD_SUBTITLES: 'sidecar',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
+        LIVE_RADIO: 'true',
+        SOUNDS_ENABLED: 'true',
+        RADIO_MEDIA_MODE: 'm4a',
+        RADIO_ACTIVE_LIMIT: '2',
+        RADIO_THUMBNAIL_STYLE: 'blur',
+        RADIO_SEARCH_MATCH_ALL_WORDS: 'inherit',
+        RADIO_SEARCH_RANK_BY_TITLE: 'true',
+        RADIO_SEARCH_SCOPE: 'both',
+        RADIO_SEARCH_MP3_ONLY: 'false',
+        RADIO_SEARCH_NETWORKS: '',
+        RADIO_SEARCH_MAX_RESULTS: '0',
+        SEARCH_COMBINED: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
         WRITE_NFO_CAST: 'true',
+        WRITE_NFO_EPISODE_TITLES: 'true',
+        WRITE_NFO_RUNTIME_FALLBACK: 'true',
+        WRITE_ADDITIONAL_IMAGES: 'missing',
         STRM_SECURE_ACTION: 'rename',
         LIVE_TV_ENABLED: 'true',
         LIVE_TV_EPG_OFFSET: '0',
@@ -112,6 +141,8 @@ const configService = {
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
         STRM_WATCHDOG_STRIKES: '2',
         STRM_WATCHDOG_CONCURRENCY: '4',
+        STRM_WATCHDOG_UPDATE_ROUTES: 'false',
+        STRM_PROBE_ROUTE: 'false',
         UI_PILL_COLORS: 'true',
         UI_CHANNEL_TOOLS: 'true',
         UI_INFO_MESSAGES: 'true',
@@ -120,6 +151,7 @@ const configService = {
         UI_SUBTITLE_BADGES: 'true',
         UI_EXPIRY_BADGES: 'true',
         UI_GUIDANCE_BADGES: 'false',
+        UI_EXTENDED_DEBUG: 'false',
         DOWNLOAD_ASK_VERSION: 'true',
         // '' is the standard version; otherwise a version profile id (audio-described, signed).
         DOWNLOAD_DEFAULT_VERSION: '',
@@ -134,6 +166,11 @@ const configService = {
             configMap[parameter.toString()] ||
             process.env[parameter.toString()] ||
             configService.defaultConfigMap[parameter.toString()];
+        // Live radio stations belong to BBC Sounds radio: with SOUNDS_ENABLED off they are off, whatever LIVE_RADIO says.
+        if (parameter == IplayarrParameter.LIVE_RADIO && value === 'true') {
+            const sounds = configMap[IplayarrParameter.SOUNDS_ENABLED] || process.env[IplayarrParameter.SOUNDS_ENABLED] || configService.defaultConfigMap[IplayarrParameter.SOUNDS_ENABLED];
+            if (sounds !== 'true') return 'false';
+        }
         return clampToLimits(parameter.toString(), value);
     },
 
@@ -146,6 +183,9 @@ const configService = {
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
         await storage.setItem('config', encryptSettings(configMap));
+        if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
+            setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
+        }
         if (
             (parameter == IplayarrParameter.NATIVE_SEARCH ||
                 parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE ||
@@ -153,6 +193,11 @@ const configService = {
                 parameter == IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES) &&
             oldValue != value
         ) {
+            searchFacade.clearSearchCache();
+        }
+        // Cached search results carry the release names and the offered qualities, so a setting that shapes them must drop the
+        // cache too, or searches keep returning the old names until the cache expires.
+        if (SEARCH_RESULT_SHAPING.has(parameter) && oldValue != value) {
             searchFacade.clearSearchCache();
         }
         if (parameter == IplayarrParameter.AIRDATE_NUMBERING && oldValue != value) {
@@ -165,6 +210,9 @@ const configService = {
         const configMap = await getConfigMap();
         delete configMap[parameter];
         await storage.setItem('config', encryptSettings(configMap));
+        if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
+            setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
+        }
     },
 };
 

@@ -1,22 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 
 import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
+import { isRadioStation } from '../../constants/RadioChannels';
 import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
 import collectionDownloadService from '../../service/collectionDownloadService';
 import collectionService from '../../service/collectionService';
 import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
+import subscriptionDiskService from '../../service/subscriptionDiskService';
+import subscriptionService from '../../service/subscriptionService';
 import { MediaMode } from '../../types/enums/MediaMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { failureResponse } from '../../utils/upstreamError';
 import { addAvailableVersions } from '../../utils/videoVersion';
+import radioBrowseRoute from './RadioBrowseRoute';
 
 const router: Router = asyncRouter();
+
+// `?mode=radio` is the same API for BBC Sounds (RadioBrowseRoute), which carries on to the routes below for anything it does
+// not serve; no mode, or `video`, is this one.
+// Only the read-only routes that work for both (channels, the schedule, logos) carry on to the video route; a change (feature a
+// category) or an iPlayer-only lookup is refused (queueing a collection is radio's own), so a radio request can never act on a video thing.
+const VIDEO_ONLY = /^\/(versions|details|markers)(\/|$)/;
+const RADIO_POSTS = /^\/collections\/[^/]+\/download$/;
+router.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.query.mode !== 'radio') return next();
+    if ((req.method !== 'GET' && !(req.method === 'POST' && RADIO_POSTS.test(req.path))) || VIDEO_ONLY.test(req.path)) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Not available for radio' } as ApiResponse);
+        return;
+    }
+    return radioBrowseRoute(req, res, next);
+});
 
 const ID_REGEX = /^[a-z0-9_-]+$/i;
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
@@ -47,9 +66,11 @@ router.get('/home', handle(async (_, res) => res.json(await browseService.home()
 
 router.get(
     '/categories',
-    handle(async (_, res) => {
+    handle(async (req, res) => {
         const featured = await categoryDiscoverService.list();
-        res.json((await browseService.categories()).map((c) => ({ ...c, discover: featured.includes(c.id) })));
+        // ?basic=1: titles only, fast, for the page to draw while the full list (with pictures) loads.
+        const list = req.query.basic === '1' ? await browseService.categoriesBasic() : await browseService.categories();
+        res.json(list.map((c) => ({ ...c, discover: featured.includes(c.id) })));
     })
 );
 
@@ -85,9 +106,11 @@ router.get(
 // The iPlayer collections for the Discover page. On by default (BROWSE_SHOW_COLLECTIONS); when switched off nothing is fetched.
 router.get(
     '/collections',
-    handle(async (_, res) => {
+    handle(async (req, res) => {
         const enabled = (await configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS)) === 'true';
-        res.json({ enabled, collections: enabled ? await collectionService.list() : [] });
+        // ?basic=1: titles only (no pictures or sizes), fast, for the page to draw while the full list loads.
+        const collections = !enabled ? [] : req.query.basic === '1' ? await collectionService.listBasic() : await collectionService.list();
+        res.json({ enabled, collections });
     })
 );
 
@@ -169,7 +192,7 @@ router.get(
                 // look: the user's name/colour/logo/number overrides and custom-channel details, if any.
                 return channel
                     ? { ...channel, title, ...(look.customised && { logo }), vpid, enabled, discover, live: channel.live && enabled, ...look }
-                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional || look.custom, ...look };
+                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional || look.custom || look.audioOnly, ...look };
             })
         );
     })
@@ -217,6 +240,13 @@ router.get(
         const own = (await liveChannelService.list()).find((c) => c.id === id && c.custom);
         if (own) {
             res.json({ channel: { id, title: own.title, logo: own.logo, live: own.enabled, liveOnly: true }, rails: [] });
+            return;
+        }
+        // A radio station (LIVE_RADIO) has no iPlayer page either: just the station, to listen to.
+        const station = isRadioStation(id) ? (await liveChannelService.list()).find((c) => c.id === id && c.audioOnly) : undefined;
+        if (station) {
+            const { rails, nowNext } = await browseService.radioChannel(id, station.title);
+            res.json({ channel: { id, title: station.title, logo: station.logo, live: station.enabled, liveOnly: true, audioOnly: true }, rails, nowNext });
             return;
         }
         // The optional nations/regions are not in iPlayer's channel list, but most have their own schedule
@@ -286,6 +316,19 @@ router.get(
         const pid = req.params.pid as string;
         if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
         res.json(await browseService.skipMarkers(pid));
+    })
+);
+
+// The episodes of a show that are on disk, for the icon on the programme page. Read from the show's folders once and
+// kept until a check, a finished download or an images update looks again.
+router.get(
+    '/programme/:pid/on-disk',
+    handle(async (req, res) => {
+        const pid = req.params.pid as string;
+        if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
+        const { pid: brandPid, title } = await browseService.programme(pid);
+        const subscription = (await subscriptionService.list()).find((s) => s.pid === brandPid);
+        res.json((await subscriptionDiskService.forShow(title, subscription?.arr)).pids);
     })
 );
 

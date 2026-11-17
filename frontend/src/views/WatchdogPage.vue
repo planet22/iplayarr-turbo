@@ -7,19 +7,56 @@
             :icons="['run', 'refresh']"
             :running="live.running" :run-disabled="live.running ? stopping : !canRun"
             :stop-label="stopping ? 'Stopping…' : 'Stop'"
-            :refreshing="refreshing || listing"
-            :refresh-disabled="live.running || refreshing || listing" :refresh-label="refreshing || listing ? 'Refreshing…' : 'Refresh Links'"
-            refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
-            @run="runNow" @stop="stopRun" @refresh="refreshCounts"
-        />
-        <InfoBar v-if="!status.enabled">
-            The STRM Watchdog is disabled. Enable it under Settings → Streaming.
+            :refreshing="busyListing" :refresh-icon="busyListing ? 'stop' : 'arrows-rotate'"
+            :refresh-disabled="live.running || (busyListing && stopping)" :refresh-label="busyListing ? (stopping ? 'Stopping…' : 'Stop') : 'Refresh Links'"
+            :refresh-title="busyListing ? 'Stop listing the links' : 'Re-list links from the sources and update the counts, without checking them against BBC'"
+            @run="runNow" @stop="stopRun" @refresh="busyListing ? stopRun() : refreshCounts()"
+        >
+            <template v-if="globalSettings.UI_EXTENDED_DEBUG == 'true'" #actions>
+                <button class="SettingsPageToolbar-button clickable" title="Library debug" aria-label="Library debug" @click="router.push('/library-debug')">
+                    <font-awesome-icon :icon="['fas', 'bug']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
+        <ErrorState v-if="loadError" message="Could not load the Watchdog status." @retry="loadStatus" />
+        <InfoBar v-if="!loadError && !status.enabled">
+            The STRM Watchdog is disabled. Enable it under <router-link to="/settings#streaming">Settings → Streaming</router-link>.
         </InfoBar>
         <InfoBar v-if="runError">{{ runError }}</InfoBar>
         <InfoBar v-if="live.notice">{{ live.notice }}</InfoBar>
         <InfoBar v-for="warning in live.warnings || []" :key="warning" clazz="warning">{{ warning }}</InfoBar>
 
         <div class="statRow">
+            <div v-if="librarySources.length || showRadioCard" class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
+                <div class="statBody">
+                    <span class="statLabel">In the Library</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ allLibraryTotal }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="allLibrarySources" grid />
+                    </div>
+                </div>
+            </div>
+            <div v-if="showRadioCard && librarySources.length" class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'tv']" />
+                <div class="statBody">
+                    <span class="statLabel">Video Only</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ status.library?.total ?? 0 }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="librarySources" grid />
+                    </div>
+                </div>
+            </div>
+            <div v-if="showRadioCard" class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'radio']" />
+                <div class="statBody">
+                    <span class="statLabel">Radio Only</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ status.radioLibrary?.total ?? 0 }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="radioLibrarySources" grid />
+                    </div>
+                </div>
+            </div>
             <div class="statCard">
                 <font-awesome-icon class="statIcon" :icon="['fas', 'link']" />
                 <div class="statBody">
@@ -69,7 +106,7 @@
             <div class="statCard progressCard">
                 <div class="progressHeader">
                     <span class="statLabel">{{ live.running ? 'Checking' : listing ? 'Refreshing' : 'Idle' }}</span>
-                    <span v-if="listing" class="progressText">{{ live.collecting.done }} / {{ live.collecting.total }}</span>
+                    <span v-if="listing" class="progressText">{{ live.collecting?.done ?? 0 }} / {{ live.collecting?.total ?? 0 }}</span>
                     <span v-else class="progressText">{{ live.checked }} / {{ live.total }}</span>
                 </div>
                 <div class="progressTrack">
@@ -82,7 +119,7 @@
                     <template v-else-if="live.collecting">
                         Collecting from {{ live.collecting.name }}<template v-if="live.collecting.total">{{ ' ' }}{{ live.collecting.done }} / {{ live.collecting.total }}</template>
                     </template>
-                    <template v-else-if="live.running">Collecting from sources...</template>
+                    <template v-else-if="live.running">Collecting from sources…</template>
                     <template v-else>{{ live.stopped ? 'Last run was stopped.' : 'Nothing running.' }}</template>
                     <span class="liveCounts">
                         {{ live.ok }} ok · {{ live.invalid }} invalid · {{ live.inconclusive }} inconclusive
@@ -93,7 +130,26 @@
 
         <p class="dedupNote">* Totals are after de-duplicating libraries; a link listed by several sources counts under each in the per-source counts.</p>
 
-        <legend>Statistics</legend>
+        <PageHeader title="Settings" />
+        <div class="statRow">
+            <div class="statCard settingsCard">
+                <table class="dataTable settingsTable">
+                    <thead>
+                        <tr>
+                            <th v-for="row in settingRows" :key="row.label">{{ row.label }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td v-for="row in settingRows" :key="row.label" :data-title="row.label">{{ row.value }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <router-link class="settingsLink" to="/settings#streaming">Change in Settings</router-link>
+            </div>
+        </div>
+
+        <PageHeader title="Statistics" />
         <div class="statRow">
             <div class="statCard sparkline">
                 <div class="statCardHeader">
@@ -132,81 +188,36 @@
             </div>
         </div>
 
-        <PageHeader title="Library Access" />
-        <SettingsPageToolbar
-            :icons="['refresh']" :refresh-label="checkingAccess ? 'Checking…' : 'Check Access'"
-            :refreshing="checkingAccess" :refresh-disabled="checkingAccess" @refresh="checkAccess"
-        />
-        <InfoBar v-if="accessError">{{ accessError }}</InfoBar>
-        <p v-if="!access" class="empty">
-            Checks that this container can read the .strm files Sonarr/Radarr and Jellyfin report, using the current Path Mapping.
-        </p>
-        <div v-else class="accessResults">
-            <p v-if="access.checkedAt" class="detail">Last checked {{ formatRelativeTime(Date.parse(access.checkedAt)) }}</p>
-            <div v-for="(info, source) in access.sources" :key="source" class="accessRow">
-                <span :class="['pill', accessOk(info) ? 'success' : 'error']">{{ info.readable }} / {{ info.total }}</span>
-                <span>{{ sourceLabels[source] }} iPlayarr .strm files readable</span>
-                <span v-if="info.ignored || info.unverified" class="detail">
-                    ({{ info.ignored }} other ignored<template v-if="info.unverified">, {{ info.unverified }} unverified</template>)
-                </span>
-                <span v-if="info.error" class="detail">{{ info.error }}</span>
-                <span v-else-if="info.unreadableExamples.length" class="detail">
-                    e.g. {{ info.unreadableExamples[0] }}
-                </span>
-            </div>
-            <div v-if="access.unique" class="accessRow">
-                <span :class="['pill', access.unique.readable === access.unique.total ? 'success' : 'error']">
-                    {{ access.unique.readable }} / {{ access.unique.total }}
-                </span>
-                <span>unique iPlayarr .strm files readable</span>
-                <span class="detail">
-                    ({{ access.unique.both }} in Sonarr/Radarr + Jellyfin, {{ access.unique.arrOnly }} Sonarr/Radarr only,
-                    {{ access.unique.jellyfinOnly }} Jellyfin only)
-                </span>
-            </div>
-            <p v-if="!Object.keys(access.sources).length" class="empty">
-                No Sonarr/Radarr or Jellyfin configured - add one under Apps.
-            </p>
-            <div v-if="access.suggestion" class="accessRow">
-                <span class="pill primary">Suggested mapping</span>
-                <code>{{ access.suggestion.from }}={{ access.suggestion.to }}</code>
-                <span class="detail">
-                    fixes {{ access.suggestion.matched }} of {{ access.suggestion.tested }} sampled paths
-                </span>
-                <button class="rssToggle clickable" @click="applyMapping(`${access.suggestion.from}=${access.suggestion.to}`)">
-                    Apply
-                </button>
-            </div>
-            <p v-else-if="hasUnreadable" class="empty">
-                Those files weren't found anywhere in this container. Mount your library into the iPlayarr container
-                (e.g. your data share), then check again.
-            </p>
-            <p v-if="access.pathMap" class="detail">Current Path Mapping: {{ access.pathMap }}</p>
-        </div>
-
         <PageHeader title="Links" />
         <SettingsPageToolbar
-            :view-mode="viewMode" :view-modes="sortedItems.length ? ['table', 'cards'] : []" :icons="['delete']"
-            delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length" @update:view-mode="setViewMode"
-            @delete-queue-item="clearItems"
-        />
-        <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
+            :view-mode="viewMode" :view-modes="status.items.length ? ['table', 'cards'] : []" :icons="['delete', 'filterToggle']"
+            delete-label="Clear links" :delete-disabled="live.running || !status.items.length" :filters-shown="showFilters"
+            :filters-active="!!filterText" @update:view-mode="setViewMode"
+            @delete-queue-item="clearItems" @toggle-filters="showFilters = !showFilters"
+        >
+            <template v-if="showFilters" #filters>
+                <SortControl v-model:sort-by="sortBy" v-model:order="sortOrder" :options="sortOptions" />
+                <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter links…" />
+            </template>
+        </SettingsPageToolbar>
+        <EmptyState v-if="!status.items.length" icon="shield-halved" title="No links checked yet" />
+        <EmptyState v-else-if="!sortedItems.length" icon="filter" title="No links match the filter" />
         <template v-else>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
-        <div v-if="cardView" class="cardList">
+        <div v-if="cardView" class="cardList cardGrid">
             <DataCard v-for="item in pagedItems" :key="item.pid">
-                <template #thumb>
+                <template v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid) && !brokenThumbs[item.pid]" #thumb>
                     <img
-                        v-if="getProgrammeThumbnailUrl(item.pid)"
+loading="lazy"
                         class="clickable"
                         :src="getProgrammeThumbnailUrl(item.pid)"
                         @click="router.push(`/browse/programme/${item.pid}`)"
-                        @error="hideBrokenImage"
+                        @error="brokenThumbs[item.pid] = true"
                     />
-                    <div v-else class="thumbnail-placeholder"></div>
                 </template>
                 <template #title>
-                    <router-link :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
+                    <span v-if="isRadio(item)">{{ shownId(item) }}</span>
+                    <router-link v-else :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
                 </template>
                 <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid]) || libraryLabel(item)" #subtitle>
                     {{
@@ -219,9 +230,15 @@
                     <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
                         {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
                     </span>
-                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">{{ strikeLabel(item) }} strikes</span>
+                    <span v-if="item.failCount" class="pill grey">{{ strikeLabel(item) }} strikes</span>
+                    <span v-if="lastCheck(item)" :class="['lastCheck', lastCheck(item).result]" :title="lastCheckTitle(item)">
+                        <font-awesome-icon :icon="['fas', lastCheck(item).result == 'failed' ? 'triangle-exclamation' : 'circle-check']" />
+                    </span>
+                    <span v-if="(item.actions || []).includes('Webhook sent')" class="lastCheck" title="Notification sent when the link went invalid">
+                        <font-awesome-icon :icon="['fas', 'paper-plane']" />
+                    </span>
                     <span v-if="(item.sourceNames || item.sources || []).length" class="linkMeta">
-                        {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
+                        {{ sourcesLabel(item) }}
                     </span>
                     <span class="linkMeta" title="Last checked">
                         <font-awesome-icon :icon="['fas', 'clock']" />{{ formatRelativeTime(Date.parse(item.lastChecked), undefined, true) }}
@@ -251,7 +268,8 @@
                 <tr v-for="item in pagedItems" :key="item.pid">
                     <td>
                         <img
-                            v-if="getProgrammeThumbnailUrl(item.pid)"
+v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :src="getProgrammeThumbnailUrl(item.pid)"
                             @click="router.push(`/browse/programme/${item.pid}`)"
@@ -259,7 +277,10 @@
                         />
                         <div v-else class="thumbnail-placeholder"></div>
                     </td>
-                    <td class="text"><router-link :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link></td>
+                    <td class="text">
+                        <span v-if="isRadio(item)">{{ shownId(item) }}</span>
+                        <router-link v-else :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link>
+                    </td>
                     <td data-title="Episode" class="libraryLabel">{{ libraryLabel(item) || '—' }}</td>
                     <td data-title="Status">
                         <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
@@ -268,7 +289,7 @@
                     </td>
                     <td data-title="Strikes">{{ strikeLabel(item) }}</td>
                     <td data-title="Source">
-                        {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') || '—' }}
+                        {{ sourcesLabel(item) || '—' }}
                     </td>
                     <td data-title="Checked">{{ formatRelativeTime(Date.parse(item.lastChecked)) }}</td>
                     <td data-title="Action">{{ (item.actions || []).join(', ') }}</td>
@@ -282,27 +303,36 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RunsChart from '@/components/charts/RunsChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import DataCard from '@/components/common/DataCard.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortControl from '@/components/common/SortControl.vue';
+import SourceCounts from '@/components/common/SourceCounts.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
-import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
-import { libraryLabel, runChartData } from '@/lib/watchdog';
+import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle } from '@/lib/utils';
+
+// Pictures that did not load: their cards drop the picture so the text gets the room.
+const brokenThumbs = reactive({});
+import { lastCheck, lastCheckTitle as lastCheckText, libraryLabel, linkMatches, linkSortAccessors, mergeLibrarySources, runChartData, sourcesLabel, watchdogSettingRows } from '@/lib/watchdog';
 
 const socket = inject('socket');
 const router = useRouter();
+const globalSettings = inject('globalSettings');
 
 // Cards on phones (six columns, long paths), table on wide screens; either can be chosen and is remembered.
 const { viewMode, setViewMode } = useViewMode('iplayarr.watchdogViewMode', {
@@ -321,12 +351,20 @@ const status = ref({
 });
 const runError = ref('');
 const stopping = ref(false);
-// The last check is saved by the server (shown on load); a fresh check in this tab takes over from it.
-const accessLocal = ref(null);
-const access = computed(() => accessLocal.value ?? status.value.libraryAccess ?? null);
+// Each source the library index holds, on its own: iPlayarr's folders, and every Sonarr, Radarr and Jellyfin app by name.
+const librarySources = computed(() =>
+    Object.entries(status.value.library?.bySource ?? {})
+        .filter(([, { type }]) => type !== 'HISTORY')
+        .map(([id, { name, type, count }]) => ({ id, name, type, count }))
+);
+// The same for radio (BBC Sounds), when there is any.
+const radioLibrarySources = computed(() =>
+    Object.entries(status.value.radioLibrary?.bySource ?? {}).map(([id, { name, type, count }]) => ({ id, name, type, count }))
+);
+// A radio link is kept under "radio:<episode id>"; its id is not an iPlayer pid, so it has no programme page or picture.
+const isRadio = (item) => String(item.pid).startsWith('radio:');
+const shownId = (item) => (isRadio(item) ? String(item.pid).slice(6) : item.pid);
 const refreshing = ref(false);
-const accessError = ref('');
-const checkingAccess = ref(false);
 // Ticks once a second so an in-progress run's elapsed time keeps counting.
 const now = ref(Date.now());
 const clock = setInterval(() => (now.value = Date.now()), 1000);
@@ -343,11 +381,38 @@ const lastRun = computed(() => runs.value[runs.value.length - 1]);
 
 const validCount = computed(() => status.value.items.filter(({ status }) => status == 'ok').length);
 const invalidCount = computed(() => status.value.items.filter(({ status }) => status == 'invalid').length);
-const sortedItems = computed(() =>
-    [...status.value.items].sort(
-        (a, b) => (b.status == 'invalid') - (a.status == 'invalid') || Date.parse(b.lastChecked) - Date.parse(a.lastChecked)
-    )
-);
+const itemName = (item) => (isRadio(item) ? libraryLabel(item) || shownId(item) : details[item.pid]?.title ?? item.pid);
+const sortOptions = [
+    { key: 'status', label: 'Status', order: 'asc' },
+    { key: 'checked', label: 'Last checked', order: 'desc' },
+    { key: 'name', label: 'Programme', order: 'asc' },
+    { key: 'strikes', label: 'Strikes', order: 'desc' },
+    { key: 'source', label: 'Source', order: 'asc' },
+];
+// Default order: invalid links first, then the most recently checked.
+const {
+    filterText, sortBy, sortOrder, sorted: sortedItems,
+} = useSortFilter(computed(() => status.value.items), {
+    filterFn: (item, query) => linkMatches(item, query, itemName(item)),
+    sortAccessors: linkSortAccessors(itemName, sortableTitle),
+    storageKey: 'watchdogLinks',
+    defaultSortBy: 'status',
+    defaultSortOrder: 'asc',
+});
+const showFilters = ref(!!filterText.value);
+
+// What the Watchdog is set to do right now, from the saved settings.
+const radioEnabled = computed(() => globalSettings?.value?.SOUNDS_ENABLED === 'true');
+const showRadioCard = computed(() => radioEnabled.value && radioLibrarySources.value.length > 0);
+// Everything: video plus radio (radio only when it is on), with a source that holds both counted once.
+const allLibrarySources = computed(() => mergeLibrarySources(showRadioCard.value ? [librarySources.value, radioLibrarySources.value] : [librarySources.value]));
+const allLibraryTotal = computed(() => (status.value.library?.total ?? 0) + (showRadioCard.value ? status.value.radioLibrary?.total ?? 0 : 0));
+
+const apps = ref([]);
+const settingRows = computed(() => watchdogSettingRows(globalSettings?.value, status.value.strikes, apps.value));
+
+// What happened on a link's last check, for the icon beside its pills.
+const lastCheckTitle = (item) => lastCheckText(item, status.value.strikes);
 const {
     page: linkPage,
     pageSize: linkPageSize,
@@ -357,13 +422,12 @@ const {
 // Titles and posters for the card view, only for the page on screen.
 watch(
     [pagedItems, cardView],
-    () => cardView.value && pagedItems.value.forEach(({ pid }) => loadDetails(pid)),
+    () => cardView.value && pagedItems.value.filter((item) => !isRadio(item)).forEach(({ pid }) => loadDetails(pid)),
     { immediate: true }
 );
-const sourceLabels = { history: 'iPlayarr', arr: 'Sonarr/Radarr', jellyfin: 'Jellyfin' };
 // What kind of source listed an item. Older stored items predate `types`, so fall back to their source.
 const typesOf = (item) =>
-    item.types ?? (item.sources || []).map((source) => ({ history: 'HISTORY', arr: 'SONARR', jellyfin: 'JELLYFIN' })[source]);
+    item.types ?? (item.sources || []).map((source) => ({ history: 'HISTORY', arr: 'SONARR', jellyfin: 'JELLYFIN', radio: 'RADIO' })[source]);
 const countTypes = (items) =>
     items.reduce((acc, item) => {
         typesOf(item).forEach((type) => (acc[type] = (acc[type] || 0) + 1));
@@ -378,9 +442,11 @@ const tracked = computed(() => ({
     types: status.value.tracked?.types ?? countTypes(status.value.items),
 }));
 // Refresh Links lists the sources without a run, so the card shows that listing's progress instead.
-const listing = computed(() => !live.value.running && !!live.value.collecting);
+const listing = computed(() => !live.value.running && (!!live.value.collecting || !!live.value.refreshing));
+// Listing, or about to: the Refresh button is a Stop button for as long as it lasts.
+const busyListing = computed(() => refreshing.value || listing.value);
 const progressPercent = computed(() => {
-    const { done, total } = listing.value ? live.value.collecting : { done: live.value.checked, total: live.value.total };
+    const { done, total } = listing.value ? (live.value.collecting ?? { done: 0, total: 0 }) : { done: live.value.checked, total: live.value.total };
     return total ? Math.round((done / total) * 100) : 0;
 });
 const canRun = computed(() => status.value.enabled && !live.value.running);
@@ -407,9 +473,13 @@ const failureRate = (run) => (run && run.checked ? Math.round((run.invalid / run
 const strikeLabel = (item) => `${item.failCount ?? 0}/${status.value.strikes}`;
 const runChartRows = computed(() => runChartData(status.value.runs));
 
+let pushed = false;
 const onStatus = (data) => {
     status.value = data;
-    if (!data.live.running) stopping.value = false;
+    // The live push is as good as a successful load.
+    pushed = true;
+    loadError.value = false;
+    if (!data.live.running && !data.live.refreshing) stopping.value = false;
 };
 
 async function clearItems() {
@@ -425,30 +495,6 @@ async function stopRun() {
         runError.value = data?.message ?? 'Could not stop the watchdog';
         stopping.value = false;
     }
-}
-
-const accessOk = (info) => !info.error && info.total > 0 && info.readable === info.total;
-const hasUnreadable = computed(() => Object.values(access.value?.sources ?? {}).some((i) => i.readable < i.total));
-
-async function checkAccess() {
-    checkingAccess.value = true;
-    accessError.value = '';
-    try {
-        const { ok, data } = await ipFetch('json-api/watchdog/check-access', 'POST');
-        if (ok) accessLocal.value = data;
-        else accessError.value = data?.message ?? 'Check failed';
-    } finally {
-        checkingAccess.value = false;
-    }
-}
-
-async function applyMapping(value) {
-    const { ok, data } = await ipFetch('json-api/watchdog/path-map', 'PUT', { value });
-    if (!ok) {
-        accessError.value = data?.message ?? 'Could not save the mapping';
-        return;
-    }
-    await checkAccess();
 }
 
 async function refreshCounts() {
@@ -475,9 +521,24 @@ function bindSocket(s) {
     boundSocket?.on('strmWatchdog', onStatus);
 }
 
+const loadError = ref(false);
+async function loadStatus() {
+    loadError.value = false;
+    try {
+        const { ok, data } = await ipFetch('json-api/watchdog');
+        if (ok) status.value = data;
+        else loadError.value = !pushed;
+    } catch {
+        loadError.value = !pushed;
+    }
+}
+
 onMounted(async () => {
-    status.value = (await ipFetch('json-api/watchdog')).data;
+    // Bound before the fetch: a page left while it was waiting would otherwise bind after its cleanup had run.
     bindSocket(socket.value);
+    await loadStatus();
+    const appList = await ipFetch('json-api/apps');
+    if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
 });
 watch(socket, bindSocket);
 onBeforeUnmount(() => {
@@ -492,8 +553,8 @@ onBeforeUnmount(() => {
 .watchdogTable {
     th,
     td {
-        padding-left: 4px;
-        padding-right: 4px;
+        padding-left: @space-1;
+        padding-right: @space-1;
     }
 
     th:not(:last-child),
@@ -507,8 +568,8 @@ onBeforeUnmount(() => {
 .linkMeta {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
+    gap: @space-1;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
@@ -516,34 +577,92 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
 }
 
+// Icon for what happened on a link's last check, in the pill row of a Links card.
+.lastCheck {
+    display: inline-flex;
+    align-items: center;
+    font-size: @font-size-base;
+    color: @subtle-text-color;
+
+    &.failed {
+        color: @danger-color;
+    }
+
+    &.ok {
+        color: @positive-color;
+    }
+}
+
+.statRow .statCard.settingsCard {
+    flex-direction: column;
+    align-items: stretch;
+    gap: @space-2;
+
+    // The settings run across the full width as one row under their names; phones stack them (data-title) like the other tables.
+    .settingsTable {
+        width: 100%;
+        margin: 0;
+
+        th, td {
+            vertical-align: top;
+        }
+
+        // Headings wrap between words only; a long value may break anywhere.
+        td {
+            overflow-wrap: anywhere;
+        }
+    }
+
+    .settingsLink {
+        font-size: @font-size-sm;
+    }
+}
+
 @media (max-width: @mobile-breakpoint) {
     // Tighter than the desktop cards so the page is not a long scroll of big tiles.
     .statRow {
-        gap: 8px;
+        gap: @space-2;
         margin-bottom: 1rem;
 
         .statCard {
             flex-basis: 100%;
             padding: 10px 14px;
-            gap: 12px;
+            gap: @space-3;
 
             .statValue {
                 font-size: 24px;
             }
         }
+
+        // The per-source counts drop under the number when they do not fit beside it, instead of running off the card.
+        .valueRow {
+            flex-wrap: wrap;
+            gap: @space-2 @space-4;
+        }
     }
 
-    // Library Access: each source reads as its own card, with the detail text on its own line.
-    .accessResults .accessRow {
-        padding: 10px;
-        background-color: @nav-active-background-color;
-        border-radius: 6px;
-        box-shadow: 0 0 10px 1px @primary-box-shadow;
-        font-size: 13px;
+    // The settings table stacks: each setting is a name and its value on one line, no header row.
+    .settingsTable {
+        &, tbody, tr {
+            display: block;
+        }
 
-        .detail {
-            flex-basis: 100%;
-            font-size: 12px;
+        thead {
+            display: none;
+        }
+
+        td {
+            display: grid;
+            grid-template-columns: minmax(9rem, 40%) 1fr;
+            gap: @space-3;
+            padding: @space-1 0;
+            border: none;
+            text-align: left;
+
+            &::before {
+                content: attr(data-title);
+                color: @subtle-text-color;
+            }
         }
     }
 }
@@ -551,30 +670,12 @@ onBeforeUnmount(() => {
 .sourceBreakdown {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 12px;
-    font-size: 12px;
+    gap: 2px @space-3;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 
     .none {
         opacity: 0.4;
-    }
-}
-
-.accessResults {
-    margin-bottom: 2rem;
-
-    .accessRow {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 6px 12px;
-        margin-bottom: 8px;
-    }
-
-    code {
-        padding: 2px 6px;
-        border-radius: 3px;
-        background-color: @hover-tint;
     }
 }
 
@@ -587,12 +688,12 @@ onBeforeUnmount(() => {
 
 .dedupNote {
     margin: -0.5rem 0 1.5rem;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
 .statRow .statCard .statValue.small {
-    font-size: 18px;
+    font-size: @font-size-lg;
     white-space: normal;
     overflow-wrap: anywhere;
 }
@@ -602,7 +703,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: @space-4;
 }
 
 .statRow .statCard > .statBody {
@@ -634,7 +735,7 @@ onBeforeUnmount(() => {
     .progressTrack {
         width: 100%;
         height: 8px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @table-row-hover-color;
         overflow: hidden;
     }
@@ -649,8 +750,8 @@ onBeforeUnmount(() => {
         display: flex;
         justify-content: space-between;
         flex-wrap: wrap;
-        gap: 8px;
-        font-size: 13px;
+        gap: @space-2;
+        font-size: @font-size-base;
         color: @subtle-text-color;
     }
 }

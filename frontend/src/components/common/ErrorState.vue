@@ -5,14 +5,16 @@
         <font-awesome-icon class="errorStateIcon" :icon="['fas', 'circle-xmark']" />
         <div class="errorStateTitle">{{ title }}</div>
         <div v-if="message" class="errorStateMessage">{{ message }}</div>
-        <button v-if="retryable" type="button" class="errorStateRetry" @click="emit('retry')">
+        <AppButton v-if="retryable" class="errorStateRetry" @click="emit('retry')">
             <font-awesome-icon :icon="['fas', 'rotate-right']" /> Try again
-        </button>
+        </AppButton>
     </div>
 </template>
 
 <script setup>
 import { defineEmits, defineProps } from 'vue';
+
+import AppButton from '@/components/common/AppButton.vue';
 
 // A page's data failed to load: what went wrong, and a button to ask again.
 // Callers elsewhere depend on the shape of what follows.
@@ -42,10 +44,10 @@ const emit = defineEmits(['retry']);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
     max-width: 480px;
     margin: 2.5rem auto;
-    padding: 0 16px;
+    padding: 0 @space-4;
     text-align: center;
 
     .errorStateIcon {
@@ -54,21 +56,19 @@ const emit = defineEmits(['retry']);
     }
 
     .errorStateTitle {
-        font-size: 18px;
+        font-size: @font-size-lg;
         font-weight: 600;
         color: @primary-text-color;
     }
 
     .errorStateMessage {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
         overflow-wrap: anywhere;
     }
 
     .errorStateRetry {
-        margin-top: 8px;
-        cursor: pointer;
-        padding: 8px 18px;
+        margin-top: @space-2;
     }
 }
 </style>

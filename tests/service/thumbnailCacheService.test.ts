@@ -57,7 +57,7 @@ describe('thumbnailCacheService', () => {
         expect(a).toBe(file);
         expect(b).toBe(file);
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/960x540/abc.jpg', { responseType: 'arraybuffer' });
+        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/960x540/abc.jpg', { responseType: 'arraybuffer', timeout: 20000 });
         expect([...fs.readFileSync(file)]).toEqual([1, 2, 3]);
         expect(thumbnailCacheService.inFlight.size).toBe(0);
     });
@@ -232,6 +232,51 @@ describe('thumbnailCacheService', () => {
                 expect(axios.get).toHaveBeenCalledTimes(4);
             });
         });
+    });
+});
+
+describe('thumbnailCacheService.fetchRecipe', () => {
+    const url = 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0abc.jpg';
+    const notFound = () => ({ isAxiosError: true, response: { status: 404 } });
+
+    beforeEach(() => {
+        jest.resetAllMocks();
+        (axios.isAxiosError as unknown as jest.Mock).mockImplementation((e: any) => !!e?.isAxiosError);
+    });
+
+    it('returns the picture at the first size that works', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ data: new Uint8Array([1, 2, 3]) });
+
+        expect(await thumbnailCacheService.fetchRecipe(url, ['464x696', '336x504'])).toEqual(Buffer.from([1, 2, 3]));
+        expect(axios.get).toHaveBeenCalledTimes(1);
+        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/464x696/p0abc.jpg', { responseType: 'arraybuffer', timeout: 20000 });
+    });
+
+    it('steps down to the next size after a 404', async () => {
+        (axios.get as jest.Mock).mockRejectedValueOnce(notFound()).mockResolvedValueOnce({ data: new Uint8Array([9]) });
+
+        expect(await thumbnailCacheService.fetchRecipe(url, ['464x696', '336x504'])).toEqual(Buffer.from([9]));
+        expect((axios.get as jest.Mock).mock.calls.map(([address]) => address)).toEqual([
+            'https://ichef.bbci.co.uk/images/ic/464x696/p0abc.jpg',
+            'https://ichef.bbci.co.uk/images/ic/336x504/p0abc.jpg',
+        ]);
+    });
+
+    it('gives up when every size is missing', async () => {
+        (axios.get as jest.Mock).mockRejectedValue(notFound());
+
+        expect(await thumbnailCacheService.fetchRecipe(url, ['a', 'b'])).toBeUndefined();
+        expect(axios.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops at once on an error that is not a 404', async () => {
+        (axios.get as jest.Mock).mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+        expect(await thumbnailCacheService.fetchRecipe(url, ['a', 'b'])).toBeUndefined();
+        expect(axios.get).toHaveBeenCalledTimes(1);
+
+        (axios.get as jest.Mock).mockClear().mockRejectedValue(new Error('socket hang up'));
+        expect(await thumbnailCacheService.fetchRecipe(url, ['a', 'b'])).toBeUndefined();
+        expect(axios.get).toHaveBeenCalledTimes(1);
     });
 });
 

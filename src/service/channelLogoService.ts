@@ -5,6 +5,7 @@ import path from 'path';
 
 import { channelLook, customChannel } from '../constants/CustomChannels';
 import { liveChannelInfo } from '../constants/LiveChannels';
+import { setBounded } from '../utils/boundedMap';
 import { getConfigDir } from '../utils/configDir';
 import { isValidPid, resolveInside } from '../utils/pathSafety';
 import loggingService from './loggingService';
@@ -57,7 +58,9 @@ function assertSafeSvg(svg: string): void {
 
 // A colour's black-or-white contrast text, by perceived luminance.
 export function readableTextColor(hex: string): string {
-    const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    // "#fff" is "#ffffff": a short colour must not fall through to white text, which on white is invisible.
+    const short = /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex);
+    const m = short ? [hex, `${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`] : /^#?([0-9a-f]{6})$/i.exec(hex);
     if (!m) return '#ffffff';
     const n = parseInt(m[1], 16);
     const luminance = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
@@ -187,10 +190,10 @@ class ChannelLogoService {
             if (!this.#checked.has(key)) {
                 try {
                     const info = await this.validate(buffer);
-                    this.#checked.set(key, info.ext === ext);
+                    setBounded(this.#checked, key, info.ext === ext, 2000);
                     if (info.ext !== ext) throw new LogoError(`it is a ${info.ext} file, not ${ext}`);
                 } catch (error: any) {
-                    this.#checked.set(key, false);
+                    setBounded(this.#checked, key, false, 2000);
                     loggingService.error(`Ignoring ${userFile}: ${error?.message}`);
                 }
             }

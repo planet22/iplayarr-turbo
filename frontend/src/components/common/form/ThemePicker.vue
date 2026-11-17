@@ -31,7 +31,7 @@
                         <span class="themeDescription">{{ theme.description }}</span>
                     </button>
                 </div>
-                <InfoTip v-if="showInfo" :text="tooltip" />
+                <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
             </div>
             <div v-if="!showInfo" class="tooltip">{{ tooltip }}</div>
         </div>
@@ -78,11 +78,11 @@ const halfStyle = (theme, mode) => ({
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
     }
 
@@ -98,7 +98,7 @@ const halfStyle = (theme, mode) => ({
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 }
@@ -113,10 +113,10 @@ const halfStyle = (theme, mode) => ({
 .themeCard {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px;
+    gap: @space-1;
+    padding: @space-2;
     border: 1px solid @settings-button-border-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     background-color: @settings-button-background-color;
     color: @table-text-color;
     text-align: left;
@@ -138,7 +138,7 @@ const halfStyle = (theme, mode) => ({
     .preview {
         display: flex;
         height: 46px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         overflow: hidden;
     }
 
@@ -177,7 +177,7 @@ const halfStyle = (theme, mode) => ({
         align-items: center;
         gap: 6px;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @primary-text-color;
 
         .tick {
@@ -186,7 +186,7 @@ const halfStyle = (theme, mode) => ({
     }
 
     .themeDescription {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 }
@@ -199,11 +199,11 @@ const halfStyle = (theme, mode) => ({
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
     }
 

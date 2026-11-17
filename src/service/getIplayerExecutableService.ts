@@ -13,6 +13,7 @@ import { Synonym } from '../types/Synonym';
 import { versionProfiles } from '../types/VersionProfiles';
 import { resolveInside, sanitizeFileName } from '../utils/pathSafety';
 import { requestedQuality } from '../utils/qualityContext';
+import { subtitleMode } from '../utils/subtitleSidecars';
 import { calculateSeasonAndEpisode, copyWithFallback, createNZBName, parseEpisodeDetailStrings } from '../utils/Utils';
 import configService from './configService';
 import historyService from './historyService';
@@ -82,9 +83,17 @@ export class GetIplayerExecutableService {
         )) as string;
         const additionalParams: string[] = additionalParamsString ? additionalParamsString.split(' ') : [];
 
+        // DOWNLOAD_SUBTITLES -> get_iplayer's own flags, unless the additional parameters already choose.
+        // get_iplayer also leaves its loose file when embedding; the download facade only keeps it for sidecar and both.
+        const subs = subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES));
+        const subtitleParams: string[] = additionalParams.some((p) => /^--(subtitles|subs-embed|no-subtitles)$/.test(p))
+            ? []
+            : [...(subs.sidecar || subs.embed ? ['--subtitles'] : []), ...(subs.embed ? ['--subs-embed'] : [])];
+
         const allArgs: string[] = [
             ...args,
             ...additionalParams,
+            ...subtitleParams,
             ...this.#getVersionParams(pid, jobId),
             await this.#getQualityParam(pid, jobId),
             '--output',
@@ -202,7 +211,7 @@ export class GetIplayerExecutableService {
                         const newPath = resolveInside(completeDir, `${sanitizeFileName(queueItem?.nzbName)}.${outputFormat}`);
                         loggingService.debug(pid, `Moving ${oldPath} to ${newPath}`);
 
-                        copyWithFallback(oldPath, newPath);
+                        await copyWithFallback(oldPath, newPath);
                     }
 
                     // Delete the uuid directory and file after moving it
@@ -233,6 +242,8 @@ export class GetIplayerExecutableService {
                     pid,
                     title: episodeNum != null || epTitle != '' ? epTitle : title,
                     position: episodeNum,
+                    // Lets AIRDATE_NUMBERING work on this path too (get_iplayer's "available" is the release time).
+                    first_broadcast_date: onlineFrom || undefined,
                     display_title: {
                         title,
                         subtitle: epTitle,

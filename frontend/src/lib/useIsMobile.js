@@ -3,7 +3,7 @@
 import { onBeforeUnmount, ref } from 'vue';
 
 // Same cut-off as @mobile-breakpoint in assets/styles/variables.less (max-width: 768px).
-const MOBILE_QUERY = '(max-width: 768px)';
+export const MOBILE_QUERY = '(max-width: 768px)';
 
 // Reactive "is this a phone-sized viewport", for pages that swap a layout (not just restyle it).
 // This part is exercised by the unit tests, so keep them green.

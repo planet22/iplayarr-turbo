@@ -26,8 +26,8 @@
                     type="button"
                     :title="
                         allLiveTv
-                            ? 'Take every channel out of Jellyfin Live TV'
-                            : 'Offer every live channel to Jellyfin Live TV'
+                            ? 'Take every channel out of Live TV'
+                            : 'Offer every live channel to Live TV'
                     "
                     :disabled="isLiveTvBusy('all')"
                     @click="allLiveTv ? liveTvClear() : liveTvAddAll()"
@@ -38,40 +38,46 @@
                     />
                 </button>
                 <button
-                    v-if="!isChannels && !loading && !error"
+v-if="!isChannels && !loading && !error && !radioMode"
+                    class="SettingsPageToolbar-button clickable"
                     type="button"
                     :class="{ enabled: featuring }"
                     :title="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
+                    :aria-label="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
                     @click="featuring = !featuring"
                 >
                     <font-awesome-icon :icon="['fas', featuring ? 'check' : 'compass']" />
                 </button>
                 <button
-                    v-if="isChannels && channelTools.enabled && !customising && !loading && !error"
+v-if="isChannels && channelTools.enabled && !customising && !loading && !error"
+                    class="SettingsPageToolbar-button clickable"
                     type="button"
                     :class="{ enabled: arranging }"
                     :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
+                    :aria-label="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
                     @click="toggleArranging"
                 >
                     <font-awesome-icon :icon="['fas', arranging ? 'check' : 'grip']" />
                 </button>
                 <template v-if="isChannels && channelTools.enabled && customising && !loading && !error">
-                    <button type="button" title="Add your own live channel" @click="openChannelEditor()">
+                    <button class="SettingsPageToolbar-button clickable" type="button" title="Add your own live channel" aria-label="Add your own live channel" @click="openChannelEditor()">
                         <font-awesome-icon :icon="['fas', 'plus']" />
                     </button>
-                    <button type="button" title="Import channels from a JSON export or an M3U playlist" @click="importInput.click()">
+                    <button class="SettingsPageToolbar-button clickable" type="button" title="Import channels from a JSON export or an M3U playlist" aria-label="Import channels from a JSON export or an M3U playlist" @click="importInput.click()">
                         <font-awesome-icon :icon="['fas', 'file-import']" />
                     </button>
-                    <button type="button" title="Export your channels as JSON" @click="exportChannels">
+                    <button class="SettingsPageToolbar-button clickable" type="button" title="Export your channels as JSON" aria-label="Export your channels as JSON" @click="exportChannels">
                         <font-awesome-icon :icon="['fas', 'file-export']" />
                     </button>
                     <input ref="importInput" type="file" accept=".json,.m3u,.m3u8,application/json" hidden @change="importChannels" />
                 </template>
                 <button
-                    v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading && !error"
+v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading && !error"
+                    class="SettingsPageToolbar-button clickable"
                     type="button"
                     :class="{ enabled: customising }"
                     :title="customising ? 'Done customising' : 'Rename channels, change colours and logos, add your own channels'"
+                    :aria-label="customising ? 'Done customising' : 'Rename channels, change colours and logos, add your own channels'"
                     @click="toggleCustomising"
                 >
                     <font-awesome-icon :icon="['fas', customising ? 'check' : 'palette']" />
@@ -107,7 +113,7 @@
                 :key="tile.id"
                 :to="`/browse/${isChannels ? 'channel' : 'category'}/${tile.id}`"
                 :class="[
-                    'tile',
+                    'channelTile',
                     isChannels ? '' : 'imageTile',
                     arranging ? 'arranging' : '',
                     customising ? 'customising' : '',
@@ -132,6 +138,7 @@
                         class="channelLogo"
                         :src="getThumbnailUrl(tile.logo)"
                         :alt="tile.title"
+                        loading="lazy"
                         @error="failedLogos[tile.id] = true"
                     />
                     <!-- Logo already carries the channel name; fall back to text only when there's no logo to show. -->
@@ -142,6 +149,7 @@
                             type="button"
                             :disabled="isArrangeBusy(tile.id)"
                             :title="tile.enabled === false ? `Enable ${tile.title}` : `Disable ${tile.title}`"
+                            :aria-label="tile.enabled === false ? `Enable ${tile.title}` : `Disable ${tile.title}`"
                             @click.prevent.stop="toggleEnabled(tile)"
                         >
                             <font-awesome-icon :icon="['fas', tile.enabled === false ? 'eye-slash' : 'eye']" />
@@ -155,6 +163,11 @@
                                     ? `${tile.title} is featured on Discover - click to remove`
                                     : `Feature ${tile.title} on Discover`
                             "
+                            :aria-label="
+                                tile.discover
+                                    ? `${tile.title} is featured on Discover - click to remove`
+                                    : `Feature ${tile.title} on Discover`
+                            "
                             @click.prevent.stop="toggleDiscover(tile)"
                         >
                             <font-awesome-icon :icon="['fas', 'compass']" />
@@ -163,6 +176,7 @@
                             class="arrangeButton arrangeBack"
                             type="button"
                             title="Move earlier"
+                            aria-label="Move earlier"
                             @click.prevent.stop="shift(tile, -1)"
                         >
                             <font-awesome-icon :icon="['fas', 'chevron-left']" />
@@ -171,6 +185,7 @@
                             class="arrangeButton arrangeForward"
                             type="button"
                             title="Move later"
+                            aria-label="Move later"
                             @click.prevent.stop="shift(tile, 1)"
                         >
                             <font-awesome-icon :icon="['fas', 'chevron-right']" />
@@ -185,6 +200,7 @@
                             class="customiseButton"
                             type="button"
                             :title="`Customise ${tile.title}`"
+                            :aria-label="`Customise ${tile.title}`"
                             @click.prevent.stop="openChannelEditor(tile)"
                         >
                             <font-awesome-icon :icon="['fas', 'pen']" />
@@ -206,7 +222,7 @@
                         <font-awesome-icon
                             v-if="liveTvEnabled && isLiveTvSelected(tile.id)"
                             :icon="['fas', 'tv']"
-                            title="In Jellyfin Live TV"
+                            title="In Live TV"
                         />
                     </span>
                     <button
@@ -215,6 +231,11 @@
                         type="button"
                         :disabled="isBusy(tile.id)"
                         :title="
+                            isSubscribed(tile.id)
+                                ? `${tile.title} is in the library - click to remove`
+                                : `Add ${tile.title} to the library`
+                        "
+                        :aria-label="
                             isSubscribed(tile.id)
                                 ? `${tile.title} is in the library - click to remove`
                                 : `Add ${tile.title} to the library`
@@ -230,8 +251,13 @@
                         :disabled="isLiveTvBusy(tile.id)"
                         :title="
                             isLiveTvSelected(tile.id)
-                                ? `${tile.title} is in Jellyfin Live TV - click to remove`
-                                : `Add ${tile.title} to Jellyfin Live TV`
+                                ? `${tile.title} is in Live TV - click to remove`
+                                : `Add ${tile.title} to Live TV`
+                        "
+                        :aria-label="
+                            isLiveTvSelected(tile.id)
+                                ? `${tile.title} is in Live TV - click to remove`
+                                : `Add ${tile.title} to Live TV`
                         "
                         @click.prevent.stop="liveTvToggle(tile.id)"
                     >
@@ -241,10 +267,21 @@
                         v-if="tile.live && !arranging && !customising"
                         class="liveButton"
                         type="button"
-                        :title="`Watch ${tile.title} live`"
+                        :title="`${tile.audioOnly ? 'Listen to' : 'Watch'} ${tile.title} live`"
+                        :aria-label="`${tile.audioOnly ? 'Listen to' : 'Watch'} ${tile.title} live`"
                         @click.prevent.stop="watchLive(tile)"
                     >
                         <font-awesome-icon :icon="['fas', 'play']" />
+                    </button>
+                    <button
+                        v-if="tile.live && debugOn && !editing && !arranging && !customising"
+                        class="liveButton debugButton"
+                        type="button"
+                        title="Streaming debug"
+                        aria-label="Streaming debug"
+                        @click.prevent.stop="openDebug(tile.id)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'bug']" />
                     </button>
                 </template>
                 <template v-else>
@@ -259,13 +296,18 @@
                                 ? `${tile.title} is featured on Discover - click to remove`
                                 : `Feature ${tile.title} on Discover`
                         "
+                        :aria-label="
+                            tile.discover
+                                ? `${tile.title} is featured on Discover - click to remove`
+                                : `Feature ${tile.title} on Discover`
+                        "
                         @click.prevent.stop="toggleCategoryDiscover(tile)"
                     >
                         <font-awesome-icon :icon="['fas', 'compass']" />
                     </button>
                 </template>
             </RouterLink>
-            <button v-if="isChannels && customising" type="button" class="tile addTile" @click="openChannelEditor()">
+            <button v-if="isChannels && customising" type="button" class="channelTile addTile" @click="openChannelEditor()">
                 <font-awesome-icon :icon="['fas', 'plus']" />
                 <span class="channelName">Add channel</span>
             </button>
@@ -291,11 +333,15 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch, ipUpload } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
+import { radioActive } from '@/lib/mediaMode';
 import { playInPip } from '@/lib/pipPlayer';
 import toastService from '@/lib/toastService';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { formatDate, getHost, getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
+// This page is rebuilt when the Video | Radio mode changes, so it can read the mode once (radio has no featured categories).
+const radioMode = radioActive();
 const { state: channelTools } = useChannelTools();
 const tiles = ref([]);
 // Channel logos that failed to load fall back to the text label.
@@ -501,6 +547,7 @@ const {
     addAll: liveTvAddAll,
     clear: liveTvClear,
 } = useLiveTv();
+const { debugOn, openDebug } = useDebugLink();
 loadLiveTv();
 
 // Once every live channel is on, the header's "all" buttons flip to removing them all.
@@ -538,12 +585,27 @@ watch(
 const loadTiles = async (quiet = false) => {
     if (!quiet) loading.value = true;
     error.value = null;
+    let namesShown = false;
     try {
-        tiles.value = await browseFetch(isChannels.value ? 'channels' : 'categories');
+        // Categories: the names first, at once, then the same list again with its pictures (which takes a while when the
+        // server has not got them yet). If the names cannot be had the full list is asked for as before.
+        if (!isChannels.value && !quiet) {
+            try {
+                tiles.value = await browseFetch('categories?basic=1');
+                loading.value = false;
+                namesShown = true;
+            } catch {
+                // The full list below reports any failure.
+            }
+        }
+        const found = await browseFetch(isChannels.value ? 'channels' : 'categories');
+        // The Channels page lists the TV channels, or in radio mode (Video | Radio switch) the radio stations.
+        tiles.value = isChannels.value ? found.filter((channel) => !!channel.audioOnly === radioActive()) : found;
         // A replaced logo has a new URL; give it another chance if it failed before.
         Object.keys(failedLogos).forEach((id) => delete failedLogos[id]);
     } catch (e) {
-        error.value = e.message;
+        // Names already on screen stay; they just have no pictures.
+        if (!namesShown) error.value = e.message;
     } finally {
         loading.value = false;
     }
@@ -555,36 +617,36 @@ watch(isChannels, () => loadTiles(), { immediate: true });
 <style lang="less" scoped>
 // The toolbar sits under the title bar; keep a gap before the tiles.
 .browsePage :deep(.SettingsPageToolbar) {
-    margin-bottom: 12px;
+    margin-bottom: @space-3;
 }
 
 .tileGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
+    gap: @space-3;
 
     // Three across on tablets, two on phones.
     @media (max-width: @mobile-breakpoint) {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: @phone-breakpoint) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
-.tile {
+.channelTile {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 18px 16px;
-    border-radius: 4px;
+    gap: @space-3;
+    padding: 18px @space-4;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
     text-decoration: none;
-    font-size: 16px;
+    font-size: @font-size-lead;
     transition:
         background-color 150ms,
         border-color 150ms;
@@ -599,8 +661,8 @@ watch(isChannels, () => loadTiles(), { immediate: true });
     }
 
     .pill {
-        font-size: 14px;
-        padding: 2px 8px;
+        font-size: @font-size-md;
+        padding: 2px @space-2;
     }
 
     .channelLogo {
@@ -610,8 +672,9 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         object-fit: cover;
     }
 
+
     .channelName {
-        font-size: 16px;
+        font-size: @font-size-lead;
     }
 
     .liveButton {
@@ -627,16 +690,16 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         border: none;
         border-radius: 50%;
         background-color: rgba(0, 0, 0, 0.45);
-        color: #fff;
+        color: @on-media-color;
         cursor: pointer;
         opacity: 0.9;
 
-        // Beats the generic `.tile svg` subtle colour above.
+        // Beats the generic `.channelTile svg` subtle colour above.
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
 
-        // Edit-mode toggles (TV top-left, bell bottom-left): white icon = on, black = off.
+        // Edit-mode toggles (TV top-left, bell bottom-left): bright white icon = on, dim = off.
         &.liveTvButton,
         &.libraryButton {
             right: auto;
@@ -647,12 +710,13 @@ watch(isChannels, () => loadTiles(), { immediate: true });
                 opacity: 0.5;
             }
 
+            // Off is a dim white rather than black, so it still shows on a black logo (Radio 1, 1Xtra).
             svg {
-                color: #000;
+                color: rgba(255, 255, 255, 0.4);
             }
 
             &.on svg {
-                color: #fff;
+                color: @on-media-color;
             }
         }
 
@@ -661,9 +725,22 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             top: 8px;
         }
 
+        // Top right, clear of the play button (bottom right) and the edit toggles (left).
+        &.debugButton {
+            bottom: auto;
+            top: 8px;
+        }
+
         &:hover {
             opacity: 1;
         }
+    }
+
+    // A thin light ring so the round buttons stay visible on a black logo (Radio 1, 1Xtra).
+    .liveButton,
+    .arrangeButton,
+    .customiseButton {
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
     }
 
     // Read-only status outside edit mode: small white bell / TV, bottom-left, shown only when on. No
@@ -675,10 +752,10 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 12px;
+        font-size: @font-size-sm;
 
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
     }
 
@@ -686,14 +763,20 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         flex-direction: column;
         justify-content: center;
         text-align: center;
-        gap: 4px;
-        padding: 14px 12px;
+        gap: @space-1;
+        padding: 14px @space-3;
 
         // Matches the BBC logo SVGs' own viewBox (76x32) so cover never has to crop them.
         &:has(.channelLogo) {
             padding: 0;
             aspect-ratio: 2.375 / 1;
             overflow: hidden;
+            // A black logo (Radio 1, 1Xtra) would otherwise vanish into the page.
+            border-color: @tile-edge-color;
+
+            &:hover {
+                border-color: @brand-color;
+            }
         }
     }
 
@@ -705,13 +788,13 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         &:has(.channelLogo) {
             aspect-ratio: auto;
             overflow: visible;
-            padding: 0 0 8px;
+            padding: 0 0 @space-2;
         }
 
         .channelLogo {
             aspect-ratio: 2.375 / 1;
             height: auto;
-            border-radius: 4px 4px 0 0;
+            border-radius: @radius-sm @radius-sm 0 0;
             pointer-events: none;
         }
 
@@ -735,11 +818,11 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             text-align: center;
 
             .arrangeName {
-                font-size: 14px;
+                font-size: @font-size-md;
             }
 
             .arrangeVpid {
-                font-size: 11px;
+                font-size: @font-size-xs;
                 color: @subtle-text-color;
                 word-break: break-all;
             }
@@ -760,7 +843,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             cursor: pointer;
 
             svg {
-                color: #fff;
+                color: @on-media-color;
             }
 
             &:disabled {
@@ -800,11 +883,11 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         cursor: pointer;
 
         svg {
-            color: #888;
+            color: @on-media-muted-color;
         }
 
         &.on svg {
-            color: #fff;
+            color: @on-media-color;
         }
 
         &:disabled {
@@ -834,7 +917,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         cursor: pointer;
 
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
     }
 
@@ -842,19 +925,19 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         position: absolute;
         bottom: 8px;
         left: 8px;
-        font-size: 16px;
+        font-size: @font-size-lead;
         text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
 
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
 
         svg.testOk {
-            color: #4ade80;
+            color: @on-media-positive-color;
         }
 
         svg.testBad {
-            color: #f87171;
+            color: @on-media-danger-color;
         }
     }
 
@@ -881,16 +964,16 @@ watch(isChannels, () => loadTiles(), { immediate: true });
 
         .tileTitle {
             width: 100%;
-            padding: 28px 12px 10px;
-            font-size: 18px;
+            padding: 28px @space-3 10px;
+            font-size: @font-size-lg;
             box-sizing: border-box;
-            color: #fff;
+            color: @on-media-color;
             background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
         }
 
         &:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 4px 14px @shadow-color;
         }
     }
 }

@@ -5,6 +5,8 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/SubscriptionsRoute';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
+import subscriptionDiskService from '../../../src/service/subscriptionDiskService';
+import subscriptionImagesService, { ImagesDisabledError } from '../../../src/service/subscriptionImagesService';
 import subscriptionService, { SubscriptionError } from '../../../src/service/subscriptionService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
@@ -20,6 +22,12 @@ jest.mock('../../../src/service/subscriptionService', () => ({
         setSecureDays: jest.fn(),
     },
 }));
+jest.mock('../../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { count: jest.fn(), bySource: jest.fn(), forShow: jest.fn() } }));
+jest.mock('../../../src/service/subscriptionImagesService', () => ({
+    __esModule: true,
+    ImagesDisabledError: class ImagesDisabledError extends Error {},
+    default: { update: jest.fn() },
+}));
 jest.mock('../../../src/service/iplayerDetailsService', () => ({
     __esModule: true,
     default: { getMetadata: jest.fn() },
@@ -33,13 +41,77 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({
 
 const mocked = jest.mocked(subscriptionService);
 const mockedDetails = jest.mocked(iplayerDetailsService);
+const mockedImages = jest.mocked(subscriptionImagesService);
+const mockedDisk = jest.mocked(subscriptionDiskService);
 
 const app = express();
 app.use(express.json());
 app.use('/', router);
 
 describe('SubscriptionsRoute', () => {
-    beforeEach(() => jest.resetAllMocks());
+    beforeEach(() => {
+        jest.resetAllMocks();
+        mockedDisk.count.mockResolvedValue(undefined as any);
+        mockedDisk.bySource.mockResolvedValue([]);
+    });
+
+    describe('GET /:id/missing', () => {
+        it('lists the episodes BBC has that the library index does not', async () => {
+            mocked.list.mockResolvedValue([{ id: 'sub1', pid: 'b00show', title: 'The Show' } as any]);
+            (mocked as any).listEpisodes = jest.fn().mockResolvedValue([
+                { id: 'm001aaaa', title: 'One', release_date_time: '2026-01-01' },
+                { id: 'm001bbbb', title: 'Two', release_date_time: '2026-01-08' },
+            ]);
+            mockedDisk.forShow.mockResolvedValue({ count: 1, pids: ['m001aaaa'] });
+
+            const res = await request(app).get('/sub1/missing');
+
+            expect(res.body).toEqual({ total: 2, onDisk: 1, missing: [{ pid: 'm001bbbb', title: 'Two', released: '2026-01-08' }] });
+            expect((mocked as any).listEpisodes).toHaveBeenCalledWith('b00show');
+        });
+
+        it('is 404 for a subscription that does not exist', async () => {
+            mocked.list.mockResolvedValue([]);
+
+            expect((await request(app).get('/nope/missing')).status).toBe(404);
+        });
+    });
+
+    describe('POST /:id/images', () => {
+        it('answers what the update did', async () => {
+            mockedImages.update.mockResolvedValue({ written: 5, episodes: 4, shows: 1 });
+
+            const res = await request(app).post('/sub1/images');
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ written: 5, episodes: 4, shows: 1 });
+            expect(mockedImages.update).toHaveBeenCalledWith('sub1');
+        });
+
+        it('is 404 for a subscription that does not exist', async () => {
+            mockedImages.update.mockResolvedValue(undefined);
+
+            const res = await request(app).post('/nope/images');
+
+            expect(res.status).toBe(404);
+            expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+        });
+
+        it('is 409, saying why, while Use Additional Images is off', async () => {
+            mockedImages.update.mockRejectedValue(new ImagesDisabledError('Turn on Use Additional Images in Settings first'));
+
+            const res = await request(app).post('/sub1/images');
+
+            expect(res.status).toBe(409);
+            expect(res.body).toEqual({ error: ApiError.INVALID_INPUT, message: 'Turn on Use Additional Images in Settings first' });
+        });
+
+        it('lets any other failure through as a server error', async () => {
+            mockedImages.update.mockRejectedValue(new Error('disk full'));
+
+            expect((await request(app).post('/sub1/images')).status).toBe(500);
+        });
+    });
 
     it('GET / lists subscriptions, adding each show\'s synopsis when the BBC metadata has one', async () => {
         mocked.list.mockResolvedValue([{ id: 'a', pid: 'p1' } as any, { id: 'b', pid: 'p2' } as any, { id: 'c', pid: 'p3' } as any]);
@@ -52,6 +124,31 @@ describe('SubscriptionsRoute', () => {
             { id: 'b', pid: 'p2' },
             { id: 'c', pid: 'p3' },
         ]);
+    });
+
+    it('GET / adds the episodes on disk for a show iPlayarr downloads, and none for a Sonarr/Radarr-only one or one that cannot be counted', async () => {
+        mocked.list.mockResolvedValue([{ id: 'a', pid: 'p1' } as any, { id: 'b', pid: 'p2', arrOnly: true } as any, { id: 'c', pid: 'p3' } as any]);
+        mockedDetails.getMetadata.mockResolvedValue(undefined as any);
+        mockedDisk.count.mockResolvedValueOnce(48).mockRejectedValueOnce(new Error('unreadable'));
+        expect((await request(app).get('/')).body).toEqual([
+            { id: 'a', pid: 'p1', onDisk: 48 },
+            { id: 'b', pid: 'p2', arrOnly: true },
+            { id: 'c', pid: 'p3' },
+        ]);
+        expect(mockedDisk.count).toHaveBeenCalledTimes(2);
+    });
+
+    it('GET / adds how many episodes each source holds, when there are any', async () => {
+        mocked.list.mockResolvedValue([{ id: 'a', pid: 'p1' } as any, { id: 'c', pid: 'p3' } as any, { id: 'd', pid: 'p4' } as any]);
+        mockedDetails.getMetadata.mockResolvedValue(undefined as any);
+        mockedDisk.count.mockResolvedValue(3);
+        mockedDisk.bySource.mockResolvedValueOnce([{ id: 'folders', name: 'iPlayarr folders', type: 'FOLDER', count: 3 }]).mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('x'));
+
+        const body = (await request(app).get('/')).body;
+
+        expect(body[0].onDiskSources).toEqual([{ id: 'folders', name: 'iPlayarr folders', type: 'FOLDER', count: 3 }]);
+        expect(body[1].onDiskSources).toBeUndefined();
+        expect(body[2].onDiskSources).toBeUndefined();
     });
 
     it('GET / looks each show up by its pid and answers an empty list without asking the BBC', async () => {

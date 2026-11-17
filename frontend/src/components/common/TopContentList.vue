@@ -61,18 +61,18 @@ const thumbnailFor = (pid) => {
 .topContentList {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: @space-2;
 
     .topContentRow {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: @space-3;
 
         .topContentRank {
             width: 18px;
             flex-shrink: 0;
             color: @subtle-text-color;
-            font-size: 13px;
+            font-size: @font-size-base;
             text-align: right;
         }
 
@@ -80,7 +80,7 @@ const thumbnailFor = (pid) => {
             width: 64px;
             height: 36px;
             flex-shrink: 0;
-            border-radius: 2px;
+            border-radius: @radius-xs;
             object-fit: cover;
             background-color: @nav-background-color;
 
@@ -89,7 +89,7 @@ const thumbnailFor = (pid) => {
                 align-items: center;
                 justify-content: center;
                 color: @subtle-text-color;
-                font-size: 16px;
+                font-size: @font-size-lead;
             }
         }
 
@@ -110,8 +110,8 @@ const thumbnailFor = (pid) => {
 
     .topContentEmpty {
         color: @subtle-text-color;
-        font-size: 14px;
-        padding: 8px 0;
+        font-size: @font-size-md;
+        padding: @space-2 0;
     }
 }
 </style>

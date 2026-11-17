@@ -17,6 +17,9 @@ jest.mock('../../src/service/db/dbCacheService', () => ({
         async getOr(key: string, fn: (key: string) => Promise<unknown>) {
             return fn(key);
         }
+        async get() {
+            return undefined;
+        }
     },
 }));
 
@@ -70,6 +73,28 @@ describe('collectionService', () => {
     beforeEach(() => {
         jest.resetAllMocks();
         imagesExist();
+    });
+
+    describe('listBasic', () => {
+        it('gives just the id and title of each collection the pages name, without looking any of them up', async () => {
+            serve();
+            expect(await collectionService.listBasic()).toEqual([
+                { id: 'p096h09x', title: 'Fright Night' },
+                { id: 'm001', title: 'Must-Watch Movies' },
+                { id: 'm003', title: 'Comedy Hall of Fame' },
+            ]);
+            expect(mockedGet.mock.calls.some(([url]) => String(url).includes('/groups/'))).toBe(false);
+        });
+    });
+
+    describe('listBasic (cached)', () => {
+        it('gives the finished list when it is already cached, and reads no page', async () => {
+            const full = [{ id: 'p096h09x', title: 'Fright Night', count: 34 }];
+            const spy = jest.spyOn(collectionService.cache, 'get').mockResolvedValueOnce(full);
+            expect(await collectionService.listBasic()).toEqual(full);
+            expect(mockedGet).not.toHaveBeenCalled();
+            spy.mockRestore();
+        });
     });
 
     describe('list', () => {
@@ -193,7 +218,7 @@ describe('collectionService', () => {
             await collectionService.list();
             setSource('all');
             await collectionService.list();
-            expect(keys).toEqual(['v3:all:home', 'v3:all:all']);
+            expect(keys).toEqual(['v3:all:home', 'v1:groups:home', 'v3:all:all', 'v1:groups:all']);
             spy.mockRestore();
         });
 

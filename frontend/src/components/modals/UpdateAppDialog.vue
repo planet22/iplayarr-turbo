@@ -4,12 +4,12 @@
             <DataCard v-for="app of apps" :key="app.id">
                 <template #title>
                     <div class="appDisplay">
-                        <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" />
+                        <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" />
                         <span class="appName">{{ app.name }}</span>
                     </div>
                 </template>
                 <template v-if="appStatus[app.id]" #chips>
-                    <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{ appStatus[app.id].status }}</span>
+                    <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{ statusLabel(appStatus[app.id].status) }}</span>
                 </template>
                 <template v-if="appStatus[app.id]?.message" #default>{{ appStatus[app.id].message }}</template>
             </DataCard>
@@ -28,7 +28,7 @@
                 <tr v-for="app of apps" :key="app.id">
                     <td class="text">
                         <div class="appDisplay">
-                            <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" />
+                            <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" />
                             <span class="appName">
                                 {{ app.name }}
                             </span>
@@ -36,7 +36,7 @@
                     </td>
                     <td v-if="appStatus[app.id]" data-title="Status">
                         <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{
-                            appStatus[app.id].status
+                            statusLabel(appStatus[app.id].status)
                         }}</span>
                     </td>
                     <td v-if="appStatus[app.id]" data-title="Message">
@@ -54,6 +54,7 @@ import { defineEmits, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import DataCard from '@/components/common/DataCard.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { getBasePath } from '@/lib/utils';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 
@@ -65,6 +66,10 @@ const socket = inject('socket');
 const appStatus = ref({});
 
 const emit = defineEmits(['close']);
+
+const onUpdateStatus = ({ id, status, message }) => {
+    appStatus.value[id] = { status, message };
+};
 
 onMounted(async () => {
     apps.value = (await ipFetch('json-api/apps')).data;
@@ -82,23 +87,24 @@ onMounted(async () => {
         return acc;
     }, {});
 
-    socket.value.on('app_update_status', ({ id, status, message }) => {
-        appStatus.value[id] = { status, message };
-    });
+    socket.value?.on('app_update_status', onUpdateStatus);
 
     ipFetch('json-api/apps/updateApiKey', 'POST', {});
 });
 
 onBeforeUnmount(() => {
-    socket.value.off('app_update_status');
+    socket.value?.off('app_update_status', onUpdateStatus);
 });
+
+// The server reports 'Error'; the app says 'Failed' for a failed step everywhere else.
+const statusLabel = (status) => (status === 'Error' ? 'Failed' : status);
 
 const getPillColor = (status) => {
     switch (status) {
         default:
             return 'grey';
         case 'In Progress':
-            return 'error';
+            return 'primary';
         case 'Complete':
             return 'success';
         case 'Error':
@@ -112,13 +118,13 @@ const getPillColor = (status) => {
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     margin-bottom: 2rem;
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
@@ -134,7 +140,7 @@ const getPillColor = (status) => {
             }
 
             td {
-                padding: 8px;
+                padding: @space-2;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
 

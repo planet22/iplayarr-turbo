@@ -282,18 +282,24 @@ async function readOnly(ctx, h) {
     }
     const sched = (await http('/json-api/browse/schedule')).json;
     const days = Array.isArray(sched) ? sched : sched?.schedules || sched?.channels || [];
-    let slotCount = 0, slotBadOrder = 0, slotDup = 0;
+    let slotCount = 0, slotBadOrder = 0, slotDup = 0, slotUnsafe = 0, slotKeyDup = 0;
     for (const d of days) {
         const slots = d.slots || [];
-        const starts = new Set();
+        const starts = new Set(), keys = new Set();
         for (let i = 0; i < slots.length; i++) {
             slotCount++;
             const s = Date.parse(slots[i].start), e = Date.parse(slots[i].end);
             if (!(e > s)) slotBadOrder++;
             if (starts.has(slots[i].start)) slotDup++; starts.add(slots[i].start);
+            const key = `${slots[i].item?.pid}|${slots[i].start}`;
+            if (keys.has(key)) slotKeyDup++; keys.add(key);
+            // A radio slot's ids go into a link (/browse/radio/<showId>?episode=<pid>), so they must be plain.
+            if (slots[i].item?.radio === true && [slots[i].item.pid, slots[i].item.showId].some((id) => !/^[a-z0-9]+$/i.test(String(id)))) slotUnsafe++;
         }
     }
     rec(P, 'browse schedule: every slot ends after it starts and none start twice', slotCount ? (slotBadOrder || slotDup ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotBadOrder} bad, ${slotDup} duplicate of ${slotCount}` : 'no slots in this response shape');
+    rec(P, 'browse schedule: no slot repeats the same id at the same start (the guide keys its blocks on both)', slotCount ? (slotKeyDup ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotKeyDup} repeated of ${slotCount}` : 'no slots in this response shape');
+    rec(P, 'browse schedule: radio slots carry only plain ids (they go into a link)', slotCount ? (slotUnsafe ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotUnsafe} unsafe of ${slotCount}` : 'no slots in this response shape');
 
     // 10. Secrets never leave the server in clear
     const apps = (await http('/json-api/apps')).json || [];
@@ -304,6 +310,13 @@ async function readOnly(ctx, h) {
     const secrets = [cfg.API_KEY, cfg.STREAM_KEY].filter((s) => s && s.length > 8);
     const leaked = all2.filter((r) => secrets.some((s) => (r.text || '').includes(s)));
     rec(P, 'stats, streams, history and events responses never contain the API or stream key', leaked.length ? 'FAIL' : 'PASS', `${leaked.length} response(s)`);
+
+    // 11. A radio stream_ended event names its programme like the stream_started one (the page has no pid lookup for radio)
+    const evBody = (await http('/json-api/events')).json;
+    const evList = Array.isArray(evBody) ? evBody : evBody?.events || evBody?.items || [];
+    const radioEnded = evList.filter((e) => e.type === 'stream_ended' && e.radio === true);
+    const radioEndedBare = radioEnded.filter((e) => !e.title);
+    rec(P, 'radio stream_ended events carry the programme title', radioEnded.length ? (radioEndedBare.length ? 'FAIL' : 'PASS') : 'SKIP', radioEnded.length ? `${radioEndedBare.length} without a title of ${radioEnded.length}` : 'no radio stream_ended event stored yet (stream and stop a radio episode)');
 }
 
 // ------------------------------------------------------------------------------------------------- mutating
@@ -335,7 +348,7 @@ async function write(ctx, h) {
     try {
         // 1. Concurrent saves must not lose each other (each PUT is a read-modify-write of one stored map)
         {
-            const keys = ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'];
+            const keys = ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'];
             const flip = Object.fromEntries(keys.map((k) => [k, (before[k] ?? 'false') === 'true' ? 'false' : 'true']));
             later(() => put(Object.fromEntries(keys.map((k) => [k, before[k] ?? 'false']))));
             await Promise.all(keys.map((k) => put({ [k]: flip[k] })));

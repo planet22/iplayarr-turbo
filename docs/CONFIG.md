@@ -26,6 +26,7 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | Setting | Allowed range |
 | --- | --- |
 | `ACTIVE_LIMIT` | 1-10 |
+| `RADIO_ACTIVE_LIMIT` | 1-10 |
 | `RSS_FEED_HOURS` | 1-720 |
 | `STREAM_HISTORY_RETENTION_DAYS` | 1-3650 |
 | `STRM_WATCHDOG_CONCURRENCY` | 1-10 |
@@ -39,6 +40,11 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | Api Key | `API_KEY` | _(auto-generated)_ | Secures the Newznab/SABnzbd API surface (`?apikey=`). Regenerate from the field's button; Settings will offer to push the new key out to configured Apps. |
 | Hours in RSS Feed | `RSS_FEED_HOURS` | `48` | Advanced. How many hours back the RSS feed covers (1-720). |
 | Full Schedule Refresh | `SCHEDULE_FULL_REFRESH` | `false` | Advanced. `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. Applies to the Schedule Refresh task on the Maintenance tab. |
+| BBC Sounds Radio | `SOUNDS_ENABLED` | `true` | Master switch for BBC radio: the Video / Radio switch, radio search, play, download and follow. The other radio rows below appear only while it is on, and turning it off also switches off live radio. See [SOUNDS.md](SOUNDS.md). |
+| Radio Directory | `SOUNDS_DIR` | blank | (Media Management tab) Where radio downloads are saved (point a Jellyfin music library here). Needed to download. |
+| Radio Media Mode | `RADIO_MEDIA_MODE` | `m4a` | (Media Management tab) What a radio download saves: `m4a` (the audio file) or `strm` (a small link to the audio stream; needs Stream Base URL and Stream Key). Each download can choose. |
+| Radio Thumbnails | `RADIO_THUMBNAIL_STYLE` | `blur` | (Appearance tab) Square radio artwork in wide picture boxes: `blur` (over a blurred copy of itself) or `square` (plain). |
+| Live Radio Stations | `LIVE_RADIO` | `true` | Advanced. Adds 16 BBC radio stations as audio-only live channels (with Live TV). Turning it off removes them from the library and Live TV. See [STREAMING.md](STREAMING.md#live-radio). |
 
 ## Search (Settings → Search)
 
@@ -52,6 +58,8 @@ Sections: NZB Search and Manual Search. The two collection options are explained
 | Expand BBC Collections _(advanced)_ | `NATIVE_SEARCH_V2_EXPAND_COLLECTIONS` | `false` | Engine 2.0 only. Searching for the pid or bbc.co.uk link of an iPlayer collection (a curated list such as "Fright Night") lists the episodes and films in it. Applies to manual and Sonarr/Radarr search. |
 | Find BBC Collections by Name _(advanced)_ | `NATIVE_SEARCH_V2_COLLECTION_NAMES` | `false` | Engine 2.0 only. Finds the iPlayer collections whose title has every search word ("fright night"). On the Search page they are listed first among the results (type Collection, so the type filter covers them) and at the top of the type-ahead; clicking one opens it on the Collections page (so this needs **Show Collections** on). Sonarr/Radarr searches, which cannot click a tile, list the episodes/films of up to three matching collections ahead of the normal results instead. The BBC has no collection search, so only collections currently on iPlayer's home and category pages are found (the list is cached for 6 hours; see Maintenance > Caches). |
 | Match All Words _(advanced)_ | `SEARCH_MATCH_ALL_WORDS` | `true` | Only list results containing every word searched for. Turn off for looser matching. |
+| Radio Search (shown while BBC Sounds Radio is on) | `RADIO_SEARCH_MATCH_ALL_WORDS`, `RADIO_SEARCH_RANK_BY_TITLE`, `RADIO_SEARCH_SCOPE`, `RADIO_SEARCH_MP3_ONLY`, `RADIO_SEARCH_NETWORKS`, `RADIO_SEARCH_MAX_RESULTS` | `inherit`, `true`, `both`, `false`, blank, `0` | How a radio search is narrowed and ordered after BBC Sounds answers (the answer is cached as it came, so a change applies at once). **Match All Search Words** (`inherit` follows the manual Match All Words above; with it on, results whose title lacks a searched word are dropped, which also thins radio results for anyone who had it on), **Best Title Matches First**, and, under Advanced, which results to list (shows, episodes or both), MP3 episodes only, a comma-separated list of networks (`Radio 4, 6 Music`; "BBC Radio 4" and "Radio 4" are the same, "Radio 4 Extra" is not), and a cap on how many shows and episodes are listed (0-200, 0 = no cap). The Search page shows the active radio setup below its results in radio mode. Native Search and the other video search settings do not apply to radio. |
+| Search Video and Radio Together (shown while BBC Sounds Radio is on) | `SEARCH_COMBINED` | `false` | The Search page looks in video and radio at once: video results first, then radio. Each side is searched with its own settings and one failing leaves the other's results. Sonarr/Radarr search stays video only. |
 | Manual Search overrides | `MANUAL_NATIVE_SEARCH`, `MANUAL_NATIVE_SEARCH_ENGINE`, `MANUAL_SEARCH_MATCH_ALL_WORDS`, `MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS`, `MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES` | `inherit` | The Native Search, engine, Match All Words and collection settings above (all but Requested Series Only, which manual search never uses) are the NZB search settings (used by Sonarr/Radarr). These twins apply to manual search on the Search page only; `inherit` ("Same as NZB search") follows the setting above, so you can try a different engine by hand without changing what Sonarr/Radarr get. Manual results are cached separately when the settings differ. The Search page shows the active manual setup below its results, with a link to Settings. |
 
 ## Appearance (Settings → Appearance)
@@ -71,7 +79,8 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `true` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
 | Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `true` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
 | Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `true` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
-| Show Leaving Soon Badge | `UI_EXPIRY_BADGES` | `true` | A "7d" badge on episodes that leave iPlayer within 30 days (amber, then orange from 14 days, red from 3 days, and solid red for the last day). Days are counted on the UK calendar, as iPlayer does, wherever you are. Hover for the date and time (UK). Taken from the BBC's own availability end date. |
+| Show Extended Debug | `UI_EXTENDED_DEBUG` | `false` | A bug icon in the top bar (also a left-nav link and Ctrl+K entries) opens the Debug hub at `/debug`: a stream search by title, pid or channel id (video and radio together, or one), the Health check, the Subscription trace, and links to Streaming, Caches, Watchdog, Library debug, DNS relay, Events and Logs. Also adds a Library Debug button to the Watchdog toolbar and a debug button to each row of the Streaming page. The pages themselves are always at `/library-debug` (every file the library index looked at, how each was identified or why it was left out) and `/streaming/debug/<pid>` (a programme's metadata, versions, caches, library and download state, stream history, a probe of what BBC serves for each version, and a player with live stats). |
+| Show Leaving Soon Badge | `UI_EXPIRY_BADGES` | `true` | A "7d" badge on episodes leaving iPlayer within 30 days (amber, orange from 14 days, red from 3, solid red on the last day). Days are counted on the UK calendar. Hover for the date. |
 | Show Guidance Badge _(advanced)_ | `UI_GUIDANCE_BADGES` | `false` | A warning icon on episodes iPlayer lists with content guidance. The BBC only says that guidance exists, not what it is. |
 | Items Before Paging _(advanced, per browser)_ | _(browser only)_ | `4` | A list with this many items or fewer is shown whole on one page, whatever the per-page size; longer lists get page controls (0-1000). `0` always pages. |
 
@@ -99,6 +108,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | Download Limit | `ACTIVE_LIMIT` | `4` | Max simultaneous downloads, 1-10. The queue never runs fewer than one at a time. |
+| Radio Download Limit | `RADIO_ACTIVE_LIMIT` | `2` | Max simultaneous radio downloads, 1-10 (separate from the video limit). |
 | Download Client? | `DOWNLOAD_CLIENT` | `NATIVE` | `NATIVE`, `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). `NATIVE` (the default and the fastest) resolves the BBC stream itself and has ffmpeg copy it to a file, so no get_iplayer/yt-dlp is spawned; it doesn't embed subtitles or resume an interrupted download yet, so pick `GET_IPLAYER` if you need those. `YTDLP` in a non-root container needs `cap_add: [NET_BIND_SERVICE]` - see the note under [Stream Client](#streaming-settings--streaming) below. |
 | Additional Download Parameters _(advanced)_ | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | Extra CLI parameters appended to the `get_iplayer` download invocation. |
 | Ask Which Version _(advanced)_ | `DOWNLOAD_ASK_VERSION` | `true` | Shown once the Audio Described / Signed badge setting is on. When an item has an audio described or signed version, ask which to download or subscribe to. Off uses the Default Version wherever the item has it. See [Versions](#versions-audio-described-and-signed). |
@@ -107,6 +117,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
 | — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Media Management's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
 | — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Media Management. |
+| Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. With `embed` only the embedded track is kept, even if `get_iplayer` or `yt-dlp` also leave a loose file. Settings → Media Management. |
 
 ## Media Management / Library (Settings → Media Management)
 
@@ -119,15 +130,18 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Additional Qualities | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | Offer these qualities as extra search results too, so Sonarr/Radarr can choose between them. Empty offers only the Video Quality. |
 | Additional Versions | `EXTRA_VERSIONS` | _(empty)_ | Also list these programme versions (audio described, signed) as separate releases tagged in the name (`...AUDIO.DESCRIBED.WEBDL...`). Only programmes that have the version get a variant. Match the tag with a Sonarr/Radarr Custom Format. See [Versions](#versions-audio-described-and-signed). |
 | Release Language _(advanced)_ | `RELEASE_LANGUAGE` | `english` | Adds a language tag such as `ENGLISH` to release names. Use it if Sonarr/Radarr shows an Unknown language and will not grab. |
-| Airdate Numbering _(advanced)_ | `AIRDATE_NUMBERING` | `false` | Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers; falls back to iPlayer's if nothing matches. Changing it clears the episode-details and search caches. |
+| Airdate Numbering _(advanced)_ | `AIRDATE_NUMBERING` | `false` | Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers; falls back to iPlayer's if nothing matches. Tolerates a day or so of date drift. Changing it clears the episode-details and search caches. |
 | Output Format? | `OUTPUT_FORMAT` | `mp4` | `mp4` or `mkv`. |
-| Archive Downloads? | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |
+| Archive Downloads | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |
 | Organize into Folder Structure? | `LIBRARY_FOLDER_STRUCTURE` | `true` | Jellyfin-style `Show/Season NN/...` and `Movie/...` nesting under `COMPLETE_DIR`. See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | Live Channels Directory | `LIVE_STRM_DIR` | _(unset)_ | Where `.strm` files for live channels added to the library are written; point a Jellyfin library at it. Blank uses `COMPLETE_DIR`. See [STREAMING.md](STREAMING.md#live-channels). |
-| Write .nfo Metadata Files? | `WRITE_NFO_STRM` | `manual` | `none` / `all` / `nzb` (Sonarr/Radarr-triggered only) / `manual` (UI-triggered only). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
-| Write .strmtool.json Files? | `WRITE_STRMTOOL_JSON` | `false` | Also writes a `.strmtool.json` sidecar next to each `.strm` file, for the StrmTool Jellyfin plugin's probe-skip cache. Only takes effect when `WRITE_NFO_STRM` is enabled and the completed item is a `.strm` (Media Mode = Streaming). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
-| Add Cast and Crew to .nfo Files? | `WRITE_NFO_CAST` | `true` | Looks up the episode's cast, directors and writers on the BBC and lists them in the `.nfo` (`<actor>` with the part played, `<director>`, `<credits>`), so Jellyfin shows the people. One extra, cached lookup per download; if it fails the `.nfo` is written without them. Only applies where `.nfo` files are written (`WRITE_NFO_STRM`). |
-| When a Subscription Replaces a .strm Link | `STRM_SECURE_ACTION` | `rename` | What happens to an episode's `.strm` and `.strmtool.json` once a subscription has downloaded the real file in its place before the episode leaves iPlayer (see [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#download-before-it-leaves-iplayer)): `rename` them to `.bak` (Jellyfin ignores them, and they can be put back), `delete` them, or `leave` them alone for an external tool such as StrmToolTurbo to deal with. |
+| Write .nfo Metadata Files | `WRITE_NFO_STRM` | `manual` | `none` / `all` / `nzb` (Sonarr/Radarr-triggered only) / `manual` (UI-triggered only). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
+| Write .strmtool.json Files | `WRITE_STRMTOOL_JSON` | `false` | Also writes a `.strmtool.json` sidecar next to each `.strm` file, for the StrmTool Jellyfin plugin's probe-skip cache. Only takes effect when `WRITE_NFO_STRM` is enabled and the completed item is a `.strm` (Media Mode = Streaming). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
+| Add Cast and Crew to .nfo Files | `WRITE_NFO_CAST` | `true` | Adds the episode's cast, directors and writers to the `.nfo` so Jellyfin shows them. One extra, cached BBC lookup; if it fails the `.nfo` is written without them. Needs `.nfo` files to be written. |
+| Headline for 'Episode N' Titles | `WRITE_NFO_EPISODE_TITLES` | `true` | An episode titled just "Episode 8" gets iPlayer's headline as its `.nfo` title (e.g. "From Palermo to Mongolia"). It is a tagline, not a formal title. File names never change. Needs `.nfo` files to be written. |
+| Fill in a Missing Running Time | `WRITE_NFO_RUNTIME_FALLBACK` | `true` | If the BBC page gives no length, the `.nfo` runtime (and `.strmtool.json`) use iPlayer's listing. Needs `.nfo` files to be written. |
+| Use Additional Images | `WRITE_ADDITIONAL_IMAGES` | `missing` | `none` (off), `missing` (leave existing files) or `overwrite` (replace them). Saves the extra images Jellyfin reads: each TV episode's `<file name>-thumb.jpg`, and in the show or film folder `poster.jpg`, `backdrop.jpg`, `landscape.jpg` and, where the BBC has one, `clearlogo.png`. They take priority over Jellyfin's online art. The Subscriptions page can fill them in for shows already downloaded. Needs `.nfo` files to be written. |
+| What to Do With Replaced .strm | `STRM_SECURE_ACTION` | `rename` | What happens to the `.strm` and `.strmtool.json` once a subscription has downloaded the real file in their place ([details](SUBSCRIPTIONS.md#download-before-it-leaves-iplayer)): `rename` to `.bak` (can be put back), `delete`, or `leave` for an external tool such as StrmToolTurbo. |
 | TV Filename Template _(advanced)_ | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo` | Handlebars template for the release name and flat filename. The release group is always `BBCiPlayarrTurbo`: a hard-coded trailing `-group` is replaced, and a variable after the final `-` is rejected. Must compile against `{title, season, episode, episodeTitle, synonym, quality}`. |
 | Movie Filename Template _(advanced)_ | `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo` | Same caveat as above. |
 
@@ -169,7 +183,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 
 ## STRM Watchdog (Settings → Streaming)
 
-Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_STRIKES`, `STRM_WATCHDOG_WEBHOOK_URL`.
+Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_STRIKES`, `STRM_WATCHDOG_UPDATE_ROUTES` (edits `.strm` files; off by default), `STRM_WATCHDOG_WEBHOOK_URL`. `STRM_PROBE_ROUTE` (Streaming, off by default) puts the best BBC route in new links; see [STREAMING.md](STREAMING.md#route-hint).
 
 ## Versions (audio described and signed)
 
@@ -203,7 +217,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| Archive Downloads? | `ARCHIVE_ENABLED` | `false` | See Media Management, above. |
+| Archive Downloads | `ARCHIVE_ENABLED` | `false` | See Media Management, above. |
 | Thumbnail Cache Retention (Days) | `THUMBNAIL_RETENTION_DAYS` | `30` | Nightly cleanup (3:35am) deletes cached thumbnails unused past this many days. "Run Thumbnail Cleanup Now" button triggers it on demand. |
 | Stream History Retention (Days) | `STREAM_HISTORY_RETENTION_DAYS` | `30` | Nightly cleanup (3:40am) deletes native streaming session history past this many days. Also has a manual "Run Now" button. |
 

@@ -16,7 +16,7 @@
             <div v-for="app in apps" :key="app.id" class="syncApp">
                 <CheckInput v-model="selected[app.id]" :aria-label="`Sync ${app.name}`" />
                 <button type="button" class="syncAppName" @click="selected[app.id] = !selected[app.id]">
-                    <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" alt="" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" alt="" />
                     <span>{{ app.name }}</span>
                 </button>
             </div>
@@ -33,10 +33,10 @@
         <template v-else>
             <div v-for="app in chosen" :key="app.id" class="syncRun">
                 <div class="syncRunHead">
-                    <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" alt="" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" alt="" />
                     <span class="syncRunName">{{ app.name }}</span>
                     <span v-if="rows[app.id].status === 'waiting'" class="pill grey">Waiting</span>
-                    <span v-else-if="rows[app.id].status === 'running'" class="pill error">Scanning</span>
+                    <span v-else-if="rows[app.id].status === 'running'" class="pill primary">Scanning</span>
                     <span v-else-if="rows[app.id].status === 'failed'" class="pill error">Failed</span>
                     <span v-else class="pill success">{{ foundLabel(rows[app.id].found) }}</span>
                 </div>
@@ -92,6 +92,7 @@ import { computed, defineEmits, inject, onBeforeUnmount, onMounted, reactive, re
 import { ipFetch } from '@/lib/ipFetch';
 import { loadGrabChoice, loadSyncChoices, saveGrabChoice, saveSyncChoices } from '@/lib/subscriptionSyncPrefs';
 import toastService from '@/lib/toastService';
+import { getBasePath } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import LoadingIndicator from '../common/LoadingIndicator.vue';
@@ -117,7 +118,7 @@ const STEPS = [
 const isRadarr = ({ type }) => type.toLowerCase() === 'radarr';
 // Radarr's files are movies, not episodes.
 const stepLabel = ({ key, label }, app) => (key === 'files' && isRadarr(app) ? 'Movie files' : label);
-const STEP_ICONS = { complete: 'circle-check', active: 'spinner', pending: 'circle', failed: 'circle-xmark' };
+const STEP_ICONS = { complete: 'circle-check', active: 'circle-notch', pending: 'circle', failed: 'circle-xmark' };
 
 const loading = ref(true);
 const apps = ref([]);
@@ -224,14 +225,14 @@ const start = async () => {
 
 <style lang="less">
 .syncIntro {
-    margin: 0 0 12px;
-    font-size: 14px;
+    margin: 0 0 @space-3;
+    font-size: @font-size-md;
     color: @subtle-text-color;
 }
 
 .syncSummary {
-    margin: 4px 0 0;
-    font-size: 14px;
+    margin: @space-1 0 0;
+    font-size: @font-size-md;
     color: @primary-text-color;
 
     svg {
@@ -243,8 +244,8 @@ const start = async () => {
 .syncApp {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    gap: @space-2;
+    padding: @space-1 0;
 
     .CheckInput-container {
         flex: 0 0 auto;
@@ -253,7 +254,7 @@ const start = async () => {
     .syncAppName {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: @space-2;
         padding: 6px 0;
         border: none;
         background: none;
@@ -265,36 +266,36 @@ const start = async () => {
 
 .syncRun {
     margin-bottom: 14px;
-    padding-bottom: 12px;
+    padding-bottom: @space-3;
     border-bottom: 1px solid @toolbar-background-color;
 
     .syncRunHead {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: @space-2;
 
         .syncRunName {
             flex: 1;
-            font-size: 16px;
+            font-size: @font-size-lead;
         }
     }
 
     .syncSteps {
         list-style: none;
-        margin: 8px 0 0;
+        margin: @space-2 0 0;
         padding: 0;
 
         li {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 4px 8px;
+            gap: @space-1 @space-2;
             padding: 3px 0;
-            font-size: 14px;
+            font-size: @font-size-md;
             color: @subtle-text-color;
 
             &.complete svg {
-                color: @success-color;
+                color: @positive-color;
             }
 
             &.active {
@@ -306,11 +307,11 @@ const start = async () => {
             }
 
             &.failed svg {
-                color: @error-color;
+                color: @danger-color;
             }
 
             .stepCount {
-                font-size: 12px;
+                font-size: @font-size-sm;
             }
 
             .stepBar {
@@ -323,14 +324,14 @@ const start = async () => {
 
     .syncTally {
         margin-top: 6px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 
     .syncError {
         margin-top: 6px;
-        font-size: 13px;
-        color: @error-color;
+        font-size: @font-size-base;
+        color: @danger-color;
     }
 }
 

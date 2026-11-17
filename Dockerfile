@@ -47,7 +47,7 @@ FROM node:24-alpine3.24 AS runtime-base
 
 # font-dejavu: the live channel logos/posters carry text that sharp (librsvg) rasterises, and Alpine has no
 # fonts by default - without one the text renders as empty boxes.
-RUN apk --update add \
+RUN apk add --no-cache \
     ffmpeg \
     openssl \
     perl-mojolicious \
@@ -73,7 +73,12 @@ WORKDIR /iplayer
 
 ENV GET_IPLAYER_VERSION=3.36
 
-RUN wget -qO- https://github.com/get-iplayer/get_iplayer/archive/v${GET_IPLAYER_VERSION}.tar.gz | tar -xz -C /tmp && \
+# Checked against the hash of the release this version was last tested with, so a changed or tampered tarball fails the build.
+ENV GET_IPLAYER_SHA256=9a70383143b6e3f43ee079f551b7f5719037ada86eb48d9defc66e00e619d996
+
+RUN wget -qO /tmp/get_iplayer.tar.gz https://github.com/get-iplayer/get_iplayer/archive/v${GET_IPLAYER_VERSION}.tar.gz && \
+    echo "${GET_IPLAYER_SHA256}  /tmp/get_iplayer.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/get_iplayer.tar.gz -C /tmp && \
     mv /tmp/get_iplayer-${GET_IPLAYER_VERSION}/get_iplayer . && \
     rm -rf /tmp/* && \
     chmod +x ./get_iplayer
@@ -85,7 +90,15 @@ ENV DATABASE_URL=file:/config/iplayarr.db
 
 WORKDIR /ytdlp
 
-RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+# "latest" by default, as before; pass --build-arg YTDLP_VERSION=2025.01.01 (a release tag) to pin one. Either way the
+# download is checked against the SHA2-256SUMS published with that release.
+ARG YTDLP_VERSION=latest
+RUN if [ "${YTDLP_VERSION}" = "latest" ]; then base=https://github.com/yt-dlp/yt-dlp/releases/latest/download; \
+    else base=https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}; fi && \
+    wget -q "$base/yt-dlp" && \
+    wget -qO /tmp/SHA2-256SUMS "$base/SHA2-256SUMS" && \
+    (cd /ytdlp && grep ' yt-dlp$' /tmp/SHA2-256SUMS | sha256sum -c -) && \
+    rm /tmp/SHA2-256SUMS && \
     chmod +x ./yt-dlp
 
 ENV YTDLP_EXEC=/ytdlp/yt-dlp

@@ -7,11 +7,14 @@
         </InfoBar>
         <InfoBar small>Manage the apps iPlayarr works with, including Arr and NZB clients.</InfoBar>
         <div class="block-reset" />
+        <LoadingIndicator v-if="loading" />
+        <ErrorState v-else-if="loadError" message="Could not load the apps." @retry="loadAll" />
+        <template v-else>
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm" @select="openForm">
             <a class="appBox">
                 <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now, true) }}</span>
                 <div class="major">
-                    <img class="appImg" :src="`/img/${item.type.toLowerCase()}.svg`" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${item.type.toLowerCase()}.svg`" />
                     <span class="appName">
                         {{ item.name }}
                     </span>
@@ -46,13 +49,13 @@
         </ListEditor>
         <div class="block-reset" />
 
-        <legend>User-Agent Lookup</legend>
+        <PageHeader title="User-Agent Lookup" />
         <InfoBar small>
             Maps a User-Agent to an App for requests with no app ID. New ones appear with a blank App: fill one in to
             match future requests (partial match).
         </InfoBar>
         <div v-if="isMobile" class="cardList uaCards">
-            <DataCard v-for="mapping in userAgentMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
+            <DataCard v-for="mapping in pagedMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
                 <template #title>
                     <input
                         v-model="mapping.userAgent"
@@ -71,9 +74,7 @@
                 />
                 <template #foot>
                     <span>Last seen {{ formatRelativeTime(mapping.lastSeen, now, true) }}</span>
-                    <button class="clickable uaCardButton" title="Remove" @click="removeMapping(mapping)">
-                        <font-awesome-icon :icon="['fas', 'trash']" />
-                    </button>
+                    <IconButton icon="trash" label="Remove" @click="removeMapping(mapping)" />
                 </template>
             </DataCard>
             <DataCard>
@@ -83,9 +84,7 @@
                 <input v-model="newMapping.appName" class="uaTextInput" type="text" placeholder="e.g. Iplayarr-sonarr" />
                 <template #foot>
                     <span>New mapping</span>
-                    <button class="clickable uaCardButton" title="Add" :disabled="!canAddMapping" @click="addMapping">
-                        <font-awesome-icon :icon="['fas', 'plus']" />
-                    </button>
+                    <IconButton icon="plus" label="Add" :disabled="!canAddMapping" @click="addMapping" />
                 </template>
             </DataCard>
         </div>
@@ -94,7 +93,7 @@
                 <col />
                 <col style="width: 240px" />
                 <col style="width: 140px" />
-                <col style="width: 44px" />
+                <col style="width: 56px" />
             </colgroup>
             <thead>
                 <tr>
@@ -105,7 +104,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="mapping in userAgentMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
+                <tr v-for="mapping in pagedMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
                     <td class="text">
                         <input
                             v-model="mapping.userAgent"
@@ -126,9 +125,7 @@
                     </td>
                     <td data-title="Last Seen">{{ formatRelativeTime(mapping.lastSeen, now) }}</td>
                     <td class="center">
-                        <button class="clickable" title="Remove" @click="removeMapping(mapping)">
-                            <font-awesome-icon :icon="['fas', 'trash']" />
-                        </button>
+                        <IconButton icon="trash" label="Remove" @click="removeMapping(mapping)" />
                     </td>
                 </tr>
                 <tr>
@@ -150,14 +147,14 @@
                     </td>
                     <td />
                     <td class="center">
-                        <button class="clickable" title="Add" :disabled="!canAddMapping" @click="addMapping">
-                            <font-awesome-icon :icon="['fas', 'plus']" />
-                        </button>
+                        <IconButton icon="plus" label="Add" :disabled="!canAddMapping" @click="addMapping" />
                     </td>
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-model="uaPage" v-model:page-size="uaPageSize" :total="userAgentMappings.length" />
         <div class="block-reset" />
+        </template>
     </div>
 </template>
 
@@ -166,21 +163,28 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
+import IconButton from '@/components/common/IconButton.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { deepCopy, formatRelativeTime } from '@/lib/utils';
+import { usePagination } from '@/lib/usePagination';
+import { deepCopy, formatRelativeTime, getBasePath } from '@/lib/utils';
 
 const isMobile = useIsMobile();
 const apps = ref([]);
 const features = ref([]);
 const userAgentMappings = ref([]);
 const newMapping = reactive({ userAgent: '', appName: '' });
+// A long list of User-Agents is paged like the other lists (the new-mapping row stays outside the pages).
+const { page: uaPage, pageSize: uaPageSize, pagedItems: pagedMappings } = usePagination(userAgentMappings);
 
 // Drives the "Last Seen" column's relative-time display - ticking this re-renders those labels
 // (e.g. "20 seconds ago" -> "21 seconds ago") without needing to re-fetch the mappings.
@@ -193,17 +197,36 @@ onMounted(() => {
 });
 onUnmounted(() => clearInterval(nowInterval));
 
+// Each refresh keeps what is on screen when the server cannot answer, and says whether it worked.
 const refreshApps = async () => {
-    apps.value = (await ipFetch('json-api/apps')).data;
-    features.value = (await ipFetch('json-api/apps/types')).data;
+    const [list, types] = await Promise.all([ipFetch('json-api/apps'), ipFetch('json-api/apps/types')]);
+    if (!list.ok || !types.ok) return false;
+    apps.value = list.data;
+    features.value = types.data;
+    return true;
 };
 
 const refreshUserAgentMappings = async () => {
-    userAgentMappings.value = (await ipFetch('json-api/apps/user-agents')).data;
+    const { ok, data } = await ipFetch('json-api/apps/user-agents');
+    if (ok) userAgentMappings.value = data;
+    return ok;
 };
 
-onMounted(refreshApps);
-onMounted(refreshUserAgentMappings);
+const loading = ref(true);
+const loadError = ref(false);
+const loadAll = async () => {
+    loading.value = true;
+    loadError.value = false;
+    try {
+        loadError.value = !(await Promise.all([refreshApps(), refreshUserAgentMappings()])).every(Boolean);
+    } catch {
+        loadError.value = true;
+    } finally {
+        loading.value = false;
+    }
+};
+
+onMounted(loadAll);
 
 const openForm = (app) => {
     const formModal = useModal({
@@ -286,7 +309,7 @@ const removeMapping = async ({ id, userAgent }) => {
         position: absolute;
         top: 8px;
         right: 12px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         opacity: 0.7;
     }
 }
@@ -311,7 +334,7 @@ const removeMapping = async ({ id, userAgent }) => {
 
 .uaCards {
     // Tablet portrait: two cards across.
-    @media (min-width: 520px) {
+    @media (min-width: @small-breakpoint) {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;
@@ -324,28 +347,17 @@ const removeMapping = async ({ id, userAgent }) => {
         width: 100%;
         height: 36px;
         // 16px stops iOS Safari zooming the page when an input is focused.
-        font-size: 16px;
+        font-size: @font-size-lead;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }
 
     .unassigned .uaTextInput {
-        border-color: @warn-color;
+        border-color: @caution-color;
     }
 
-    .uaCardButton {
-        background: none;
-        border: none;
-        padding: 4px 8px;
-        color: @primary-text-color;
-        font-size: 16px;
-
-        &:disabled {
-            opacity: 0.35;
-        }
-    }
 }
 
 .uaTable {
@@ -357,7 +369,7 @@ const removeMapping = async ({ id, userAgent }) => {
         width: 100%;
         height: 32px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }
@@ -380,7 +392,7 @@ const removeMapping = async ({ id, userAgent }) => {
 
     tbody tr.unassigned {
         .uaTextInput {
-            border-color: @warn-color;
+            border-color: @caution-color;
         }
     }
 }

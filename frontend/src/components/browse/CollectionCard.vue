@@ -9,7 +9,7 @@
             </div>
             <!-- Top left: what it is, so a collection never reads as a single programme. -->
             <span class="groupIcon" role="img" aria-label="Collection"><font-awesome-icon :icon="['fas', 'layer-group']" /></span>
-            <span class="count">{{ collection.count }} {{ collection.count === 1 ? 'title' : 'titles' }}</span>
+            <span v-if="collection.count != null" class="count">{{ collection.count }} {{ collection.count === 1 ? 'title' : 'titles' }}</span>
         </div>
         <div class="meta">
             <div class="title">{{ collection.title }}</div>
@@ -58,7 +58,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         position: relative;
         aspect-ratio: 16 / 9;
         background-color: @nav-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         overflow: hidden;
         transition: transform 150ms, box-shadow 150ms;
 
@@ -87,11 +87,11 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         justify-content: center;
         width: 24px;
         height: 24px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.7);
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
-        color: #fff;
-        font-size: 12px;
+        color: @on-media-color;
+        font-size: @font-size-sm;
     }
 
     .count {
@@ -99,10 +99,10 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         bottom: 6px;
         right: 6px;
         padding: 1px 6px;
-        font-size: 11px;
-        border-radius: 2px;
+        font-size: @font-size-xs;
+        border-radius: @radius-xs;
         background-color: rgba(0, 0, 0, 0.7);
-        color: #fff;
+        color: @on-media-color;
     }
 
     &.selected .thumb {
@@ -113,14 +113,14 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
     &:hover .thumb,
     &:focus-visible .thumb {
         transform: translateY(-2px);
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 4px 14px @shadow-color;
     }
 
     .meta {
         padding-top: 6px;
 
         .title {
-            font-size: 14px;
+            font-size: @font-size-md;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;

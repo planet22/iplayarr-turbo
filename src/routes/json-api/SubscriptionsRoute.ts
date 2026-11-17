@@ -1,25 +1,48 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 
 import iplayerDetailsService from '../../service/iplayerDetailsService';
+import subscriptionDiskService from '../../service/subscriptionDiskService';
+import subscriptionImagesService, { ImagesDisabledError } from '../../service/subscriptionImagesService';
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
+import radioSubscriptionsRoute from './RadioSubscriptionsRoute';
 
 const router: Router = asyncRouter();
 
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 
+// `?mode=radio` is the same API for followed BBC Sounds shows (RadioSubscriptionsRoute); no mode, or `video`, is this one.
+router.use((req: Request, res: Response, next: NextFunction) => {
+    const mode = req.query.mode;
+    if (mode === undefined || mode === 'video') return next();
+    if (mode !== 'radio') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'mode must be video or radio' } as ApiResponse);
+        return;
+    }
+    radioSubscriptionsRoute(req, res, next);
+});
+
 // The show's synopsis comes from the cached BBC metadata rather than being stored on the subscription;
-// a show whose metadata cannot be had right now simply goes without.
+// a show whose metadata cannot be had right now simply goes without. The episodes on disk are counted from the
+// show's folders for the picture's count (a Sonarr/Radarr-only show has its own count from the app).
 router.get('/', async (_, res: Response) => {
     const subscriptions = await subscriptionService.list();
     res.json(
         await Promise.all(
             subscriptions.map(async (subscription) => {
                 const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
-                return synopsis ? { ...subscription, synopsis } : subscription;
+                const onDisk = subscription.arrOnly ? undefined : await subscriptionDiskService.count(subscription).catch(() => undefined);
+                // Each source's own count, for the chips on the card.
+                const onDiskSources = onDisk === undefined ? undefined : await subscriptionDiskService.bySource(subscription).catch(() => undefined);
+                return {
+                    ...subscription,
+                    ...(synopsis ? { synopsis } : {}),
+                    ...(onDisk === undefined ? {} : { onDisk }),
+                    ...(onDiskSources?.length ? { onDiskSources } : {}),
+                };
             })
         )
     );
@@ -62,6 +85,38 @@ router.post('/:id/check', async (req: Request, res: Response) => {
         return;
     }
     res.json(result);
+});
+
+// The episodes BBC lists for the show that are not on disk: its episode list less what the library index holds. A real
+// file that names no programme (no .nfo) cannot be matched to an episode, so the show may be listed as missing one.
+router.get('/:id/missing', async (req: Request, res: Response) => {
+    const subscription = (await subscriptionService.list()).find((s) => s.id === req.params.id);
+    if (!subscription) {
+        res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
+        return;
+    }
+    const [episodes, onDisk] = await Promise.all([
+        subscriptionService.listEpisodes(subscription.pid),
+        subscriptionDiskService.forShow(subscription.title, subscription.arr),
+    ]);
+    const have = new Set(onDisk.pids);
+    res.json({
+        total: episodes.length,
+        onDisk: onDisk.count,
+        missing: episodes.filter(({ id }) => !have.has(id)).map(({ id, title, release_date_time }) => ({ pid: id, title, released: release_date_time })),
+    });
+});
+
+// Fills in the Jellyfin pictures for the show's files already in the library (what Use Additional Images writes for a download).
+router.post('/:id/images', async (req: Request, res: Response) => {
+    try {
+        const result = await subscriptionImagesService.update(req.params.id as string);
+        if (result) res.json(result);
+        else res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
+    } catch (error: any) {
+        if (!(error instanceof ImagesDisabledError)) throw error;
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: error.message } as ApiResponse);
+    }
 });
 
 router.put('/:id/versions', async (req: Request, res: Response) => {

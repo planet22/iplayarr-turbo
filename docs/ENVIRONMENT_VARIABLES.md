@@ -9,12 +9,14 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `COMPLETE_DIR` | _(none)_ | **Yes** | Completed download directory. |
 | `ARR_COMPLETE_DIR` | _(unset)_ | No | Override of `COMPLETE_DIR` for TV downloads Sonarr/Radarr themselves queued only - not manual UI downloads or subscriptions, even for TV. |
 | `ACTIVE_LIMIT` | `4` | No | Max simultaneous downloads (1-10). |
+| `RADIO_ACTIVE_LIMIT` | `2` | No | Max simultaneous radio downloads (1-10). |
 | `DOWNLOAD_CLIENT` | `NATIVE` | No | `NATIVE`, `GET_IPLAYER` or `YTDLP`. |
 | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (Docker image) | No | Path to the `get_iplayer` binary. |
 | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (Docker image) | No | Path to the `yt-dlp` binary. |
 | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | No | Extra CLI params passed to `get_iplayer` downloads. |
 | `VIDEO_QUALITY` | `fhd` | No | Max requested video quality. |
 | `OUTPUT_FORMAT` | `mp4` | No | `mp4` or `mkv`. |
+| `DOWNLOAD_SUBTITLES` | `sidecar` | No | `sidecar`, `embed`, `both` or `off`. |
 | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | No | Comma-separated extra qualities offered as additional search results. |
 | `EXTRA_VERSIONS` | _(empty)_ | No | Comma-separated programme versions (`audio-described`, `signed`) listed as separate tagged releases. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed). |
 | `RELEASE_LANGUAGE` | `english` | No | Language tag added to release names (for Sonarr/Radarr's parser). |
@@ -27,6 +29,9 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `WRITE_NFO_STRM` | `manual` | No | `none` / `all` / `nzb` / `manual` — writes `.nfo` metadata. |
 | `WRITE_STRMTOOL_JSON` | `false` | No | Also writes a `.strmtool.json` sidecar for `.strm` files (StrmTool Jellyfin plugin). Requires `WRITE_NFO_STRM` to be enabled. |
 | `WRITE_NFO_CAST` | `true` | No | Lists the episode's cast, directors and writers (looked up on the BBC) in each `.nfo`. |
+| `WRITE_NFO_EPISODE_TITLES` | `true` | No | Titles an episode called only "Episode N" with iPlayer's editorial headline in its `.nfo`. |
+| `WRITE_NFO_RUNTIME_FALLBACK` | `true` | No | Takes a missing running time from iPlayer's listing API for the `.nfo`. |
+| `WRITE_ADDITIONAL_IMAGES` | `missing` | No | `none` / `missing` / `overwrite`: extra Jellyfin images (episode picture; poster, backdrop, landscape, logo for the show or film). |
 | `STRM_SECURE_ACTION` | `rename` | No | What happens to a `.strm` link once a subscription replaces it with a real download: `rename` (to `.bak`), `delete` or `leave`. |
 | `TV_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat TV filenames. |
 | `MOVIE_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat movie filenames. |
@@ -66,6 +71,18 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
 | `STREAM_SUBTITLES` | `true` | No | Offer the BBC's captions as an English subtitle track on native streams (on-demand and live). See [STREAMING.md](STREAMING.md#subtitles). |
 | `LIVE_UHD_EVENT_FEEDS` | `false` | No | List BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`) among the live channels. DASH only, 2160p HEVC; they only carry video while an event is on. |
+| `SOUNDS_ENABLED` | `true` | No | Master switch for BBC radio (the Video / Radio switch, search, play, download, follow). The other radio settings only apply while it is on. See [SOUNDS.md](SOUNDS.md). |
+| `SOUNDS_DIR` | | No | Where radio downloads are saved. Needed to download. |
+| `RADIO_MEDIA_MODE` | `m4a` | No | What a radio download saves: `m4a` (audio file) or `strm` (a small link to the audio stream). |
+| `RADIO_THUMBNAIL_STYLE` | `blur` | No | Square radio artwork in wide boxes: `blur` (blurred backdrop) or `square` (plain). |
+| `RADIO_SEARCH_MATCH_ALL_WORDS` | `inherit` | No | Radio search: only list results whose title has every searched word (`inherit`, `true`, `false`). `inherit` follows the manual-search Match All Words. |
+| `RADIO_SEARCH_RANK_BY_TITLE` | `true` | No | Radio search: list exact title matches first. `false` keeps BBC's order. |
+| `RADIO_SEARCH_SCOPE` | `both` | No | Radio search lists `both`, `shows` only or `episodes` only. |
+| `RADIO_SEARCH_MP3_ONLY` | `false` | No | Radio search lists only episodes BBC offers as a plain MP3 (shows are still listed). |
+| `RADIO_SEARCH_NETWORKS` | _(blank)_ | No | Radio search lists only these networks, comma-separated (e.g. `Radio 4, 6 Music`). Blank lists all. |
+| `RADIO_SEARCH_MAX_RESULTS` | `0` | No | Most shows, and most episodes, a radio search lists (0-200). `0` is no limit. |
+| `SEARCH_COMBINED` | `false` | No | Search page only: look in video and radio together (needs `SOUNDS_ENABLED`). |
+| `LIVE_RADIO` | `true` | No | Add BBC radio stations as audio-only live channels (only while `SOUNDS_ENABLED` is on). See [STREAMING.md](STREAMING.md#live-radio). |
 | `STREAM_LIVE_DASH_1080` | `true` | No | Experimental: serve live channels as 1080p HEVC (BBC's DASH feed) in Direct mode (as HLS playlists, no ffmpeg) and Progressive MKV mode (ffmpeg). Falls back to 720p HLS. |
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
 | `LIVE_TV_ENABLED` | `true` | No | Serve the live channels as an M3U tuner + XMLTV guide for Jellyfin Live TV. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
@@ -84,6 +101,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `STRM_WATCHDOG_FAIL_THRESHOLD` | `10` | No | Links that must validate before any action is taken; also the consecutive-failure outage cutoff. |
 | `STRM_WATCHDOG_STRIKES` | `2` | No | Failed checks in a row before a link is invalid, 1-30. |
 | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | No | JSON `POST` when a link first becomes invalid. |
+| `STRM_WATCHDOG_UPDATE_ROUTES` | `false` | No | Watchdog edits `.strm` files to carry the BBC route with the best picture. See [WATCHDOG.md](WATCHDOG.md). |
+| `STRM_PROBE_ROUTE` | `false` | No | Ask BBC for the best route when a `.strm` link is created and note it in the link. |
 | `THUMBNAIL_CACHE_DIR` | temp folder | No | Where cached BBC thumbnails are stored. |
 | `THUMBNAIL_RETENTION_DAYS` | `30` | No | Thumbnail cache cleanup window. |
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | No | Native stream history cleanup window. |
@@ -93,6 +112,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `UI_QUALITY_BADGES` | `true` | No | HDR / UHD badges on cards. |
 | `UI_VERSION_BADGES` | `true` | No | Audio described / signed badges (also reveals the version settings). |
 | `UI_SUBTITLE_BADGES` | `true` | No | Subtitles icon on episodes. |
+| `UI_EXTENDED_DEBUG` | `false` | No | Bug icon in the top bar (Debug hub), Library Debug button, debug buttons on Streaming. |
 | `UI_EXPIRY_BADGES` | `true` | No | "N days left" badge on episodes leaving iPlayer within 30 days. |
 | `UI_GUIDANCE_BADGES` | `false` | No | Warning icon on episodes iPlayer lists with content guidance. |
 | `HIDE_DONATE` | _(unset)_ | No | Hides the Ko-fi donate links in the UI. |

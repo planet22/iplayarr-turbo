@@ -10,6 +10,7 @@ import newSearchCache from '../../../src/service/search/newSearchCache';
 import { IPlayerSearchResult, VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../../src/types/Synonym';
+import { trackSearchCompleteness } from '../../../src/utils/searchCompleteness';
 import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
@@ -657,5 +658,32 @@ describe('NativeSearchService when the search cache cannot be written', () => {
         (axios.get as jest.Mock).mockResolvedValueOnce({ status: 200, data: { new_search: { results: [] } } });
         await expect(NativeSearchService.search('Test Term')).resolves.toEqual([]);
         expect(set).toHaveBeenCalled();
+    });
+});
+
+describe('NativeSearchService search completeness', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        (getQualityProfile as jest.Mock).mockResolvedValue({ sizeFactor: 1 });
+        jest.spyOn(newSearchCache, 'get').mockResolvedValue(undefined);
+        jest.spyOn(newSearchCache, 'set').mockResolvedValue(undefined);
+    });
+
+    it('is marked incomplete when the BBC request fails', async () => {
+        (axios.get as jest.Mock).mockRejectedValue(new Error('timeout'));
+        const tracked = await trackSearchCompleteness(() => NativeSearchService.search('Test Term'));
+        expect(tracked).toEqual({ result: [], complete: false });
+    });
+
+    it('is marked incomplete when the BBC answers with another status', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ status: 503, data: {} });
+        const tracked = await trackSearchCompleteness(() => NativeSearchService.search('Test Term'));
+        expect(tracked).toEqual({ result: [], complete: false });
+    });
+
+    it('stays complete when the BBC simply has no matches', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results: [] } } });
+        const tracked = await trackSearchCompleteness(() => NativeSearchService.search('Test Term'));
+        expect(tracked.complete).toBe(true);
     });
 });

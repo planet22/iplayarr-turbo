@@ -72,6 +72,16 @@ describe('jellyfinService', () => {
             expect(opts.params).toMatchObject({ Recursive: true, Fields: 'Path,MediaSources' });
         });
 
+        it('reads the series, season and episode number of an episode', async () => {
+            (axios.get as jest.Mock).mockResolvedValue({
+                data: { Items: [{ Path: '/lib/a.mkv', SeriesName: 'The Show', ParentIndexNumber: 2, IndexNumber: 3 }, { Path: '/lib/b.mkv', SeriesName: '', ParentIndexNumber: '2' }] },
+            });
+            expect(await jellyfinService.getItems({ url: 'http://j', api_key: 'k' })).toEqual([
+                { path: '/lib/a.mkv', show: 'The Show', season: 2, episode: 3 },
+                { path: '/lib/b.mkv' },
+            ]);
+        });
+
         it('returns an empty list when there are no items', async () => {
             (axios.get as jest.Mock).mockResolvedValue({ data: {} });
             expect(await jellyfinService.getItems({ url: 'http://j', api_key: 'k' })).toEqual([]);

@@ -31,7 +31,7 @@ export function resolveCompleteDir(
 // eslint-disable-next-line no-control-regex
 const illegalCharsRegex = /[<>:"/\\|?*\x00-\x1F]/g;
 
-function sanitizeSegment(segment: string): string {
+export function sanitizeSegment(segment: string): string {
     // Leading dots would let a title of ".." name the parent directory.
     return segment.replace(illegalCharsRegex, '').replace(/^[.\s]+/, '').trim() || 'Unknown';
 }
@@ -78,7 +78,8 @@ function buildUncheckedLibraryFilePath(
     extension: string,
     useFolderStructure: boolean
 ): LibraryFilePath {
-    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName))}.${extension}`;
+    // Characters Windows and SMB shares refuse (a ':' in a title) are dropped from the file name only; the release name is untouched.
+    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName)).replace(/[<>:"|?*]/g, '')}.${extension}`;
     if (!useFolderStructure || !item.library?.title) {
         return {
             directory: completeDir,

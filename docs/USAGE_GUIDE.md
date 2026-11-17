@@ -38,7 +38,7 @@ Where a manually-triggered download (as opposed to one Sonarr/Radarr queued via 
 
 ## Queue (`/queue`)
 
-The main day-to-day view: active downloads and completed history, combined (`QueueTable`). Each row shows the **Client** that fetched it (Native, get_iplayer, yt-dlp), the **Output** (file or STRM), speed in MB/s and any version / subtitle badges. A download that is waiting or has not reported progress shows an empty bar saying **Queued** or **Starting**, and a download made of several parts shows text such as `video 1/2`. Downloads are tracked per job, so the same programme can download at two resolutions at once. The info popup shows quality, size, client, library and download details, and only that download's log lines. Works the same regardless of whether items were queued by Sonarr/Radarr or manually — this is iPlayarr's own view into exactly what it's reporting back over the SABnzbd protocol. Cancelling a queued item or removing a completed one here is also what `ARCHIVE_ENABLED` affects: with it on, cancelled/removed entries are kept as a record instead of discarded (Settings → Media Management → Archive Downloads?).
+The main day-to-day view: active downloads and completed history, combined (`QueueTable`). Each row shows the **Client** that fetched it (Native, get_iplayer, yt-dlp), the **Output** (file or STRM), speed in MB/s and any version / subtitle badges. A download that is waiting or has not reported progress shows an empty bar saying **Queued** or **Starting**, and a download made of several parts shows text such as `video 1/2`. Downloads are tracked per job, so the same programme can download at two resolutions at once. The info popup shows quality, size, client, library and download details, and only that download's log lines. Works the same regardless of whether items were queued by Sonarr/Radarr or manually — this is iPlayarr's own view into exactly what it's reporting back over the SABnzbd protocol. Cancelling a queued item or removing a completed one here is also what `ARCHIVE_ENABLED` affects: with it on, cancelled/removed entries are kept as a record instead of discarded (Settings → Media Management → Archive Downloads).
 
 ## Streaming (`/streaming`)
 
@@ -46,7 +46,7 @@ Only relevant when `MEDIA_MODE=strm`. Shows throughput live and a **Subs** colum
 
 ## Watchdog (`/watchdog`)
 
-Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, Library Access checks and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
+Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, the library's per-source counts and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
 
 ## NZB (`/nzb`)
 
@@ -68,17 +68,17 @@ iPlayer doesn't name/structure its catalogue the way Sonarr/Radarr expect (match
 
 Live-streamed application log (Socket.IO), backed by the same rotated files described in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#log-locations). Loads the last 250 lines on open, then streams new ones in real time.
 
-## Video Events (`/events`)
+## Events (`/events`)
 
 An audit/event log distinct from the general application log — tracks specific lifecycle events (e.g. `stream_key_rotated` and similar) with filtering by date range and free-text search. Can be cleared from here (Settings-page-style toolbar's delete action).
 
 ## Statistics (`/stats`)
 
-Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page. The **Server** section shows uptime and one tile per cache with its **hit rate** (hits and misses are saved so they survive restarts), **records** and **space**. Below are search, grab and failed-grab trends, charts of sources and types (readable by screen readers) and a top-content list whose titles open the programme.
+Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page. The **Server** section shows uptime and one tile per cache with its **hit rate** (hits and misses are saved so they survive restarts), **records**, **space**, lookups **per minute**, when it was **last used** and its **lifetime**, a 15 minute activity line, and the soonest and latest expiry. Tiles are grouped by purpose (Browse, Programme data, Search and so on), each group headed by its caches, records, space and combined hit rate; a sort (busiest, lowest hit rate, last used, records, space, name) orders the tiles inside each group, and the Grouped / Flat button swaps to one list. Both choices are remembered per browser. The small dot in a tile's corner flashes green when a lookup was answered from the cache and red when it had to fetch; the rates and the line refresh every few seconds. Below are search, grab and failed-grab trends, charts of sources and types (readable by screen readers) and a top-content list whose titles open the programme.
 
 ## Settings (`/settings`)
 
-Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance (caches and editable scheduled tasks). Changes are staged and applied with the Save bar; a filter box finds a setting and `Ctrl+K` jumps to a tab. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
+Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance (caches and editable scheduled tasks). Maintenance lists the caches in the same groups, which fold away and have a **Clear group** button (it asks first); the same sort and Grouped / Flat choice apply. Changes are staged and applied with the Save bar; a filter box finds a setting and `Ctrl+K` jumps to a tab. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
 
 ## About (`/about`)
 

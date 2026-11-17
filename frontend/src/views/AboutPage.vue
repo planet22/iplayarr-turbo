@@ -13,19 +13,17 @@
         <h2>Author - iPlayarr Turbo</h2>
         <p><a href="https://github.com/Planet22">Planet22</a></p>
         <p class="codeShare">
-            About 79% Turbo, 21% original, by lines of code still present (src and frontend/src, 2026-11-01).
+            About 81% Turbo, 19% original, by lines of code still present (src and frontend/src, 2026-11-05).
         </p>
         <h2>Forked from iPlayarr</h2>
         <p><a href="https://github.com/Nikorag/iplayarr">Nikorag</a></p>
 
         <div class="buttons">
             <div>
-                <a href="https://github.com/planet22/iplayarr-turbo" target="_blank">
-                    <button class="githubButton clickable">
-                        <font-awesome-icon :icon="['fab', 'github']" />
-                        GitHub Project
-                    </button>
-                </a>
+                <AppButton href="https://github.com/planet22/iplayarr-turbo" target="_blank">
+                    <font-awesome-icon :icon="['fab', 'github']" />
+                    GitHub Project
+                </AppButton>
             </div>
         </div>
         <h2>Collaborator on iplayarr</h2>
@@ -48,6 +46,7 @@
 </template>
 
 <script setup>
+import AppButton from '@/components/common/AppButton.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { getBasePath } from '@/lib/utils';
@@ -88,16 +87,6 @@ a {
 
     div {
         display: inline-block;
-    }
-
-    .githubButton {
-        padding: 0.5rem 1rem;
-        font-size: 0.9rem;
-        height: 36px;
-        border-radius: 8px;
-        border: none;
-        color: white;
-        background-color: black;
     }
 }
 </style>

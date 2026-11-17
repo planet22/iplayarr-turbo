@@ -32,7 +32,8 @@ interface GroupRef {
 // - best effort, a page that fails just contributes nothing - and each collection is then looked up for its
 // artwork and size. The result is cached for hours, since editors change collections rarely.
 class CollectionService {
-    cache: DbCacheService<BrowseCollection[]> = new DbCacheService('collections', 6 * 60 * 60, {
+    // Holds the finished lists and, under `v1:groups:`, the bare (id, title) lists found on the pages.
+    cache: DbCacheService<any> = new DbCacheService('collections', 6 * 60 * 60, {
         label: 'Collections',
         description: 'The BBC iPlayer collections found on its home and category pages (Browse, and the search by collection name).',
     });
@@ -47,6 +48,15 @@ class CollectionService {
         const source = await this.source();
         // v3: lists built before each picture was checked through the thumbnail cache.
         return this.cache.getOr(`v3:all:${source}`, () => this.#build(source));
+    }
+
+    // The collections with just an id and title, for the page to draw at once: it takes the page reads only, not a lookup of
+    // each collection. The full list is returned instead when it is already cached.
+    async listBasic(): Promise<Pick<BrowseCollection, 'id' | 'title'>[]> {
+        const source = await this.source();
+        const full: BrowseCollection[] | undefined = await this.cache.get(`v3:all:${source}`);
+        if (full) return full;
+        return (await this.#groups(source)).filter(({ title }) => !GENERIC_SHELF.test(title));
     }
 
     // The collections whose title has every word of the term; none for a term with no usable words.
@@ -151,18 +161,29 @@ class CollectionService {
         return !!(await thumbnailCacheService.getOrFetch(imagePid, true));
     }
 
+    // Every collection the pages name, once each. Cached, so the full list that follows a basic one (and a
+    // retry after a failed lookup) does not read all the pages again.
+    async #groups(source: 'home' | 'all'): Promise<GroupRef[]> {
+        const found = await this.cache.getOr(`v1:groups:${source}`, async () => {
+            const categories = source === 'all' ? await this.#categoryIds() : [];
+            const urls = [IPLAYER, ...categories.map((id) => `${IPLAYER}/categories/${encodeURIComponent(id)}/featured`)];
+            const pages = pLimit(pageConcurrency);
+            const results = await Promise.all(urls.map((url) => pages(() => this.#pageGroups(url))));
+            const groups = new Map<string, GroupRef>();
+            for (const group of results.flat()) if (!groups.has(group.id)) groups.set(group.id, group);
+            loggingService.log(`Collections: read ${urls.length} iPlayer pages`);
+            return [...groups.values()];
+        });
+        return found as GroupRef[];
+    }
+
     async #build(source: 'home' | 'all'): Promise<BrowseCollection[]> {
-        const categories = source === 'all' ? await this.#categoryIds() : [];
-        const urls = [IPLAYER, ...categories.map((id) => `${IPLAYER}/categories/${encodeURIComponent(id)}/featured`)];
-        const pages = pLimit(pageConcurrency);
-        const found = await Promise.all(urls.map((url) => pages(() => this.#pageGroups(url))));
-        const groups = new Map<string, GroupRef>();
-        for (const group of found.flat()) if (!groups.has(group.id)) groups.set(group.id, group);
+        const groups = await this.#groups(source);
         const info = pLimit(infoConcurrency);
-        const described = await Promise.all([...groups.values()].map((group) => info(() => this.describe(group))));
+        const described = await Promise.all(groups.map((group) => info(() => this.describe(group))));
         // Every category page opens with its own editor shelf ("Featured Films", "Live and Latest News"): not themed lists.
         const collections = described.filter((c): c is BrowseCollection => c !== undefined && !GENERIC_SHELF.test(c.title));
-        loggingService.log(`Collections: found ${collections.length} on ${urls.length} iPlayer pages`);
+        loggingService.log(`Collections: found ${collections.length} in ${groups.length}`);
         return collections;
     }
 }

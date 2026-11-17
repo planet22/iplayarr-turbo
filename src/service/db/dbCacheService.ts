@@ -9,6 +9,18 @@ export interface CacheTypeInfo {
     defaultTtl: number;
 }
 
+// What a cache has been doing lately (since the server started; not saved), for the live cards on the Statistics page.
+export interface CacheActivity {
+    lastMinute: number; // lookups in the last 60 seconds
+    hitsLastMinute: number;
+    missesLastMinute: number;
+    perMinuteAvg5: number; // average lookups per minute over the last 5 minutes
+    trend: number[]; // lookups per minute for the last 15 minutes, oldest first
+    lastLookupAt: number | null;
+    lastHitAt: number | null;
+    lastMissAt: number | null;
+}
+
 export interface CacheTypeStats extends CacheTypeInfo {
     ttl: number;
     overridden: boolean;
@@ -17,7 +29,28 @@ export interface CacheTypeStats extends CacheTypeInfo {
     // Lookups answered from the cache / not, across restarts.
     hits: number;
     misses: number;
+    // When the soonest and the latest of the live entries expire (epoch ms); null when empty or not a TTL cache.
+    expiresSoonest: number | null;
+    expiresLatest: number | null;
+    activity: CacheActivity;
 }
+
+// Lookup counts per second for the last 15 minutes, in a ring: a slot belongs to the second stored beside it.
+const RING_SECONDS = 15 * 60;
+interface Ring {
+    stamp: Uint32Array;
+    hits: Uint32Array;
+    misses: Uint32Array;
+    lastHitAt: number | null;
+    lastMissAt: number | null;
+}
+const newRing = (): Ring => ({
+    stamp: new Uint32Array(RING_SECONDS),
+    hits: new Uint32Array(RING_SECONDS),
+    misses: new Uint32Array(RING_SECONDS),
+    lastHitAt: null,
+    lastMissAt: null,
+});
 
 const TTL_OVERRIDES_KEY = 'cacheTtlOverrides';
 const LOOKUPS_KEY = 'cacheLookups';
@@ -62,12 +95,90 @@ export default class DbCacheService<T> {
         return DbCacheService.lookupsLoad;
     }
 
+    private static rings: Map<string, Ring> = new Map();
+    private static lookupListeners: Set<(prefix: string, hit: boolean) => void> = new Set();
+
+    /** Calls `listener` for every lookup (live displays). Returns a function that stops it. A listener that throws is ignored. */
+    static onLookup(listener: (prefix: string, hit: boolean) => void): () => void {
+        DbCacheService.lookupListeners.add(listener);
+        return () => void DbCacheService.lookupListeners.delete(listener);
+    }
+
     static tally(prefix: string, hit: boolean): void {
         const entry = DbCacheService.lookupsFor(prefix);
         if (hit) entry.hits += 1;
         else entry.misses += 1;
         DbCacheService.lookups.set(prefix, entry);
         DbCacheService.flushTimer ??= setTimeout(() => void DbCacheService.flushLookups(), LOOKUPS_FLUSH_MS).unref();
+
+        const now = Date.now();
+        const second = Math.floor(now / 1000);
+        let ring = DbCacheService.rings.get(prefix);
+        if (!ring) DbCacheService.rings.set(prefix, (ring = newRing()));
+        const slot = second % RING_SECONDS;
+        if (ring.stamp[slot] !== second) {
+            ring.stamp[slot] = second;
+            ring.hits[slot] = 0;
+            ring.misses[slot] = 0;
+        }
+        if (hit) {
+            ring.hits[slot] += 1;
+            ring.lastHitAt = now;
+        } else {
+            ring.misses[slot] += 1;
+            ring.lastMissAt = now;
+        }
+        for (const listener of DbCacheService.lookupListeners) {
+            try {
+                listener(prefix, hit);
+            } catch {
+                // A broken listener must not break the lookup.
+            }
+        }
+    }
+
+    /** Recent lookups of one cache: the last minute, a 5 minute average and a per-minute trend for 15 minutes. */
+    static activityFor(prefix: string, now: number = Date.now()): CacheActivity {
+        const ring = DbCacheService.rings.get(prefix);
+        const trend = new Array<number>(15).fill(0);
+        let hitsLastMinute = 0;
+        let missesLastMinute = 0;
+        let last5 = 0;
+        if (ring) {
+            const nowSecond = Math.floor(now / 1000);
+            for (let slot = 0; slot < RING_SECONDS; slot++) {
+                const age = nowSecond - ring.stamp[slot];
+                if (ring.stamp[slot] === 0 || age < 0 || age >= RING_SECONDS) continue;
+                const total = ring.hits[slot] + ring.misses[slot];
+                trend[14 - Math.floor(age / 60)] += total;
+                if (age < 60) {
+                    hitsLastMinute += ring.hits[slot];
+                    missesLastMinute += ring.misses[slot];
+                }
+                if (age < 300) last5 += total;
+            }
+        }
+        const lastHitAt = ring?.lastHitAt ?? null;
+        const lastMissAt = ring?.lastMissAt ?? null;
+        return {
+            lastMinute: hitsLastMinute + missesLastMinute,
+            hitsLastMinute,
+            missesLastMinute,
+            perMinuteAvg5: Math.round((last5 / 5) * 10) / 10,
+            trend,
+            lastLookupAt: lastHitAt === null && lastMissAt === null ? null : Math.max(lastHitAt ?? 0, lastMissAt ?? 0),
+            lastHitAt,
+            lastMissAt,
+        };
+    }
+
+    /** The recent activity and running totals of every labelled cache (and any extra prefixes, such as the thumbnails), without touching the database. */
+    static activity(extraPrefixes: string[] = []): Record<string, CacheActivity & { hits: number; misses: number }> {
+        const out: Record<string, CacheActivity & { hits: number; misses: number }> = {};
+        for (const prefix of [...DbCacheService.registry.keys(), ...extraPrefixes]) {
+            out[prefix] = { ...DbCacheService.activityFor(prefix), ...DbCacheService.lookupsFor(prefix) };
+        }
+        return out;
     }
 
     static async flushLookups(): Promise<void> {
@@ -100,6 +211,11 @@ export default class DbCacheService<T> {
         return DbCacheService.overridesLoad;
     }
 
+    /** Name, description and default lifetime of every labelled cache, from memory only (no database work). */
+    static names(): CacheTypeInfo[] {
+        return [...DbCacheService.registry.values()];
+    }
+
     /** Stats for every labelled cache: live (unexpired) item count, stored size and effective TTL. */
     static async getStats(): Promise<CacheTypeStats[]> {
         await dbReady();
@@ -109,8 +225,8 @@ export default class DbCacheService<T> {
         return Promise.all(
             [...DbCacheService.registry.values()].map(async (info) => {
                 const prefix = `${info.prefix}_`;
-                const rows = await prisma.$queryRawUnsafe<{ n: number | bigint; bytes: number | bigint | null }[]>(
-                    'SELECT COUNT(*) AS n, SUM(LENGTH(CAST("value" AS BLOB)) + LENGTH(CAST("key" AS BLOB))) AS bytes FROM "Cache" WHERE substr("key", 1, ?) = ? AND "expiresAt" > ?',
+                const rows = await prisma.$queryRawUnsafe<{ n: number | bigint; bytes: number | bigint | null; soonest: number | bigint | null; latest: number | bigint | null }[]>(
+                    'SELECT COUNT(*) AS n, SUM(LENGTH(CAST("value" AS BLOB)) + LENGTH(CAST("key" AS BLOB))) AS bytes, MIN("expiresAt") AS soonest, MAX("expiresAt") AS latest FROM "Cache" WHERE substr("key", 1, ?) = ? AND "expiresAt" > ?',
                     prefix.length,
                     prefix,
                     now
@@ -121,10 +237,23 @@ export default class DbCacheService<T> {
                     overridden: overrides.has(info.prefix),
                     count: Number(rows[0]?.n ?? 0),
                     sizeBytes: Number(rows[0]?.bytes ?? 0),
+                    expiresSoonest: rows[0]?.soonest == null ? null : Number(rows[0].soonest),
+                    expiresLatest: rows[0]?.latest == null ? null : Number(rows[0].latest),
+                    activity: DbCacheService.activityFor(info.prefix),
                     ...DbCacheService.lookupsFor(info.prefix),
                 };
             })
         );
+    }
+
+    /** Every cached entry whose key mentions `text` (a programme id, say): its key, when it expires and its size. Not a lookup, so no hit or miss is counted. */
+    static async entriesContaining(text: string): Promise<{ key: string; expiresAt: number; bytes: number }[]> {
+        await dbReady();
+        const rows = await prisma.$queryRawUnsafe<{ key: string; expiresAt: number | bigint; bytes: number | bigint | null }[]>(
+            'SELECT "key", "expiresAt", LENGTH(CAST("value" AS BLOB)) AS bytes FROM "Cache" WHERE instr("key", ?) > 0 ORDER BY "key" LIMIT 200',
+            text
+        );
+        return rows.map((row) => ({ key: row.key, expiresAt: Number(row.expiresAt), bytes: Number(row.bytes ?? 0) }));
     }
 
     /** Empties one labelled cache. Returns false when no such cache is registered. */
@@ -190,23 +319,37 @@ export default class DbCacheService<T> {
 
     async get(key: string): Promise<T | undefined> {
         try {
-            await dbReady();
-            const row = await prisma.cache.findUnique({ where: { key: this.fullKey(key) } });
-            if (!row) {
-                DbCacheService.tally(this.prefix, false);
-                return undefined;
-            }
-            if (Number(row.expiresAt) <= Date.now()) {
-                await prisma.cache.deleteMany({ where: { key: row.key } });
-                DbCacheService.tally(this.prefix, false);
-                return undefined;
-            }
-            const value = JSON.parse(row.value) as T;
-            DbCacheService.tally(this.prefix, true);
-            return value;
+            return await this.getStrict(key);
         } catch {
             return undefined;
         }
+    }
+
+    /**
+     * Like get(), but a database failure is thrown instead of reading as "not cached". For callers that read, change
+     * and write back a value: treating a failed read as empty would overwrite what is stored with the change alone.
+     * An entry that is missing, expired or not valid JSON is still undefined.
+     */
+    async getStrict(key: string): Promise<T | undefined> {
+        await dbReady();
+        const row = await prisma.cache.findUnique({ where: { key: this.fullKey(key) } });
+        if (!row) {
+            DbCacheService.tally(this.prefix, false);
+            return undefined;
+        }
+        if (Number(row.expiresAt) <= Date.now()) {
+            await prisma.cache.deleteMany({ where: { key: row.key } });
+            DbCacheService.tally(this.prefix, false);
+            return undefined;
+        }
+        let value: T;
+        try {
+            value = JSON.parse(row.value) as T;
+        } catch {
+            return undefined;
+        }
+        DbCacheService.tally(this.prefix, true);
+        return value;
     }
 
     async set(key: string, value: T): Promise<void> {

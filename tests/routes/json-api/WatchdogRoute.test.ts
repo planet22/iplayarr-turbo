@@ -89,23 +89,6 @@ describe('WatchdogRoute', () => {
         });
     });
 
-    describe('POST /check-access', () => {
-        it('returns the access report', async () => {
-            (strmWatchdogService.checkLibraryAccess as jest.Mock).mockResolvedValue({ ok: true });
-            const res = await request(app).post('/check-access');
-            expect(res.body).toEqual({ ok: true });
-        });
-
-        it('500s with the error message, or a default', async () => {
-            (strmWatchdogService.checkLibraryAccess as jest.Mock).mockRejectedValueOnce(new Error('boom'));
-            expect((await request(app).post('/check-access')).body.message).toBe('boom');
-            (strmWatchdogService.checkLibraryAccess as jest.Mock).mockRejectedValueOnce(undefined);
-            const res = await request(app).post('/check-access');
-            expect(res.status).toBe(500);
-            expect(res.body.message).toBe('Check failed');
-        });
-    });
-
     describe('PUT /path-map', () => {
         it('rejects a non-string value', async () => {
             const res = await request(app).put('/path-map').send({ value: 1 });

@@ -92,6 +92,12 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 - The [STRM Watchdog](WATCHDOG.md) ignores live files.
 - **Optional channels:** besides the 11 above you can enable BBC Red Button, 19 BBC nations and English-region feeds and (with `LIVE_UHD_EVENT_FEEDS`) the UHD event feeds from the Channels page's Arrange mode (Settings → Appearance → Show Channel Tools). Disabling a channel hides it, unsubscribes it and removes it from Jellyfin Live TV and the guide. Channel order from Arrange also sets the order of the guide and Jellyfin channel numbers. See [BROWSE.md](BROWSE.md#channels-page-tools).
 
+### Live radio
+
+On-demand radio (BBC Sounds episodes, see [SOUNDS.md](SOUNDS.md)) is separate from the stations below: playing an episode, in the browser or from a radio `.strm` link, is listed on the Streaming page as an audio session (direct HLS, whatever Stream Mode says).
+
+With `LIVE_RADIO` on (the default), 16 BBC radio stations (Radio 1 to 6 Music, Asian Network, World Service and the nations' stations) join the live channels as audio-only entries, after all the others so no channel number moves. They play, subscribe to the library and join Jellyfin Live TV like any channel; the playlist marks them `radio="true"` in the group "BBC Radio", and the guide comes from BBC Sounds. Jellyfin's built-in M3U tuner ignores `radio="true"` (only a plugin can set its Radio channel type), so there they appear as TV channels in the "BBC Radio" group; clients like Kodi do honour the mark. Streams are BBC's AAC HLS (128 kbps; 96 kbps HE-AAC for the World Service), served through iPlayarr like the TV feeds, so they need a UK IP. No subtitles or 1080p apply. With the setting off, none of this exists: the stations are absent from every list, the playlist and the guide. Turning it off deletes their `.strm` files and removes them from Live TV.
+
 ### Jellyfin Live TV (tuner + guide)
 
 Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Live TV** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set (the Live TV tab shows the Stream Base URL and Stream Key fields too, unless `MEDIA_MODE=strm`, where they are on the Streaming tab). With the setting off, the endpoints return 404 and the TV buttons are hidden.
@@ -131,6 +137,12 @@ Every channel can be renamed, given a colour, text on its logo, an uploaded logo
 ## Playing a version (audio described / signed)
 
 When a programme has an audio described or signed version, the Play button can ask which to play (or use the default) and the in-app player has a version switcher that resumes at the same position. A `.strm` link can carry `?version=`. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
+
+### Route hint
+
+BBC lists a different set of pictures for each route (a media set and a selector version: `iptv-all-6`, `iptv-all-5`, `pc-6`, `pc-5`), and for some programmes only a route other than the default lists the taller ones. A `.strm` link can carry `&route=pc-6` to say which route to ask first. Playback tries that route first and falls back to the normal order if it answers nothing; a missing, unknown or malformed value is ignored, so a link without a hint plays exactly as before. The hint applies to the plain version only, is not used while Native Quality Probe is on (that compares every route itself), and does not change the route iPlayarr remembers for other programmes. The Streaming debug page shows `(from the link)` beside a route that came from the hint. Only the route is stored in the link, never a BBC address (those are signed and short-lived).
+
+Two optional settings, both off by default, put the hint in links: **Pick Route for New Links** (`STRM_PROBE_ROUTE`) asks BBC when a link is created (four requests, at most 10 seconds; if that fails the link is written without a hint), and the Watchdog's **Update Link Routes** (`STRM_WATCHDOG_UPDATE_ROUTES`) updates existing links; see [WATCHDOG.md](WATCHDOG.md#settings).
 
 ## Checking links still work
 

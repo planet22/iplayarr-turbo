@@ -4,6 +4,7 @@ import browseService from '../../src/service/browseService';
 import configService from '../../src/service/configService';
 import liveTvChannelService from '../../src/service/liveTvChannelService';
 import liveTvService, { escapeXml, guideTags, xmltvTime } from '../../src/service/liveTvService';
+import { toRadioSlot } from '../../src/service/radioScheduleService';
 
 jest.mock('../../src/service/configService');
 jest.mock('../../src/service/liveTvChannelService', () => ({ __esModule: true, default: { list: jest.fn() } }));
@@ -113,6 +114,24 @@ describe('liveTvService', () => {
         expect(xml).not.toContain('<icon');
     });
 
+    it('writes a radio guide slot the same whether or not it carries the show and episode ids', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const real = require('../data/radioBroadcast.json');
+        const withIds = toRadioSlot(real, 'bbc_four');
+        const withoutIds = toRadioSlot({ ...real, container: undefined, playable_item: undefined }, 'bbc_four');
+        expect(withIds?.item).toMatchObject({ radio: true, showId: 'b006wqx7' });
+        expect(withoutIds?.item).not.toHaveProperty('radio');
+        const guide = async (slot: unknown) => {
+            (browseService.schedule as jest.Mock).mockResolvedValue([{ channel: { id: 'bbc_four' }, slots: [slot] }]);
+            return liveTvService.epg();
+        };
+        const xml = await guide(withIds);
+        expect(xml).toContain('<title lang="en">Pick of the Pops</title>');
+        expect(xml).toContain('<sub-title lang="en">1969</sub-title>');
+        expect(xml).toContain('<desc lang="en">Mark Goodier counts down the chart from this day in 1969.</desc>');
+        expect(xml).toBe(await guide(withoutIds));
+    });
+
     it('adds a stream-key programme image to slots that have one', async () => {
         (browseService.schedule as jest.Mock).mockResolvedValue([
             {
@@ -193,6 +212,12 @@ describe('liveTvService', () => {
             expect(xml).toContain('>Movie<');
             expect(xml).toContain('>Kids<');
             expect(xml).not.toContain('<new/>');
+        });
+
+        it('leaves the HD quality tag off radio slots', () => {
+            const xml = guideTags(slot, { ...all, audioOnly: true });
+            expect(xml).not.toContain('<quality>');
+            expect(xml).toContain('<live/>');
         });
 
         it('emits nothing when every option is off', () => {

@@ -10,16 +10,20 @@
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
             <div :class="['programmeBannerContent', posterUrl || isMissing('thumbnail') ? 'hasPoster' : '']">
-                <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
+                <!-- Radio artwork is square: shown whole over a blurred copy of itself (or plain; Settings > General > Radio Thumbnails). -->
+                <div v-if="provider.squareArt && posterUrl" class="poster radioArtBox" :style="{ '--art': `url(${posterUrl})` }">
+                    <img :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
+                </div>
+                <img v-else-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
                 <div v-else-if="isMissing('thumbnail')" class="poster missing" title="Artwork unavailable" role="img" aria-label="Artwork unavailable">
                     <font-awesome-icon :icon="['fas', 'image']" />
                 </div>
                 <div class="programmeText">
                 <div class="programmeHead">
                 <h1>{{ programme.title }}</h1>
-                <div class="programmeMeta">
+                <div class="programmeMeta pillRow pillMd">
                     <span :class="['pill', 'grey']">
-                        <font-awesome-icon :icon="['fas', 'tv']" />
+                        <font-awesome-icon :icon="['fas', provider.icon]" />
                         {{ programme.kind === 'brand' ? 'Programme' : programme.kind === 'series' ? 'Series' : 'Episode' }}
                     </span>
                     <ChannelPill :channel="programme.channel">
@@ -38,6 +42,12 @@
                             <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
                         </a>
                     </span>
+                    <span
+                        v-if="debugOn && provider.canDebug(debugTarget)" class="pill grey clickable" role="button" tabindex="0" :title="debugTitle"
+                        @click="debug()" @keydown.enter="debug()"
+                    >
+                        <font-awesome-icon :icon="['fas', 'bug']" />Debug
+                    </span>
                 </div>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
@@ -51,35 +61,33 @@
                     }}
                 </p>
                 <div v-if="programme.kind !== 'episode' || entry" class="subscribeRow">
-                    <button
-                        :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
-                        @click="toggleSubscription"
-                    >
+                    <AppButton :variant="subscribed ? 'primary' : 'secondary'" class="subscribeButton" :disabled="subscribing" @click="toggleSubscribed">
                         <font-awesome-icon :icon="['fas', 'bell']" />
-                        {{ subscription ? 'Subscribed' : 'Subscribe' }}
-                    </button>
-                    <button
+                        {{ subscribed ? 'Subscribed' : 'Subscribe' }}
+                    </AppButton>
+                    <AppButton
                         v-if="programme.seasons.length > 0"
-                        class="clickable subscribeButton"
+                        class="subscribeButton"
                         :disabled="downloadingSeason || loadingMore"
                         @click="downloadAll"
                     >
-                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
+                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-arrow-down']" :spin="downloadingSeason" />
                         Download all ({{ loadedCount }})
-                    </button>
-                    <button
-                        v-if="!entry?.arr && !subscription"
-                        class="clickable subscribeButton"
+                    </AppButton>
+                    <AppButton
+                        v-if="provider.capabilities.arr && !entry?.arr && !subscription"
+                        class="subscribeButton"
                         :disabled="requesting"
                         title="Add to Sonarr/Radarr and let it pick the best release"
                         @click="requestProgramme"
                     >
                         <font-awesome-icon :icon="['fas', 'plus']" />
                         Request
-                    </button>
-                    <button
+                    </AppButton>
+                    <AppButton
                         v-if="subscription && !subscription.arrOnly"
-                        :class="['clickable', 'subscribeButton', subscription.arr ? 'on' : '']"
+                        :variant="subscription.arr ? 'primary' : 'secondary'"
+                        class="subscribeButton"
                         :disabled="subscribing"
                         :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
                         @click="toggleArrWithBusy"
@@ -88,32 +96,32 @@
                         <!-- Phones: the half-width button is too narrow for the full label, which wrapped onto two lines. -->
                         <span class="labelLong">{{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}</span>
                         <span class="labelShort">{{ subscription.arr ? 'Unlink' : 'Sonarr/Radarr' }}</span>
-                    </button>
+                    </AppButton>
                     <span
                         v-if="entry && entry.arr"
-                        class="subscribeButton on arrChip"
+                        class="subscribeButton arrChip"
                         :title="`In ${arrAppName(entry.arr.appId)} as ${entry.arr.title}`"
                     >
                         <font-awesome-icon :icon="['fas', 'check']" />
                         {{ arrAppName(entry.arr.appId) }}
                     </span>
-                    <button
+                    <AppButton
                         v-if="entry && entry.arrOnly"
-                        class="clickable subscribeButton"
+                        class="subscribeButton"
                         :disabled="subscribing"
                         title="Remove from Sonarr/Radarr tracking"
                         @click="removeArrOnly"
                     >
                         <font-awesome-icon :icon="['fas', 'xmark']" />
                         Remove
-                    </button>
+                    </AppButton>
                 </div>
                 </div>
             </div>
         </div>
 
         <div class="browsePage">
-            <EmptyState v-if="programme.seasons.length === 0" icon="film" title="No episodes are currently available" hint="They may not be on iPlayer right now." />
+            <EmptyState v-if="programme.seasons.length === 0" :icon="provider.emptyIcon" title="No episodes are currently available" :hint="provider.emptyHint" />
             <template v-else>
                 <div v-if="programme.seasons.length > 1" class="seasonTabs" role="group" aria-label="Series">
                     <button
@@ -141,7 +149,7 @@
                         <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
                     </button>
                     <button v-if="!duplicatesBannerDownload" class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
-                        <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                        <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
                         {{ seasonDownloadLabel }}
                     </button>
                 </div>
@@ -152,7 +160,7 @@
                                 <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
                             </button>
                             <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
-                                <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
                                 {{ seasonDownloadLabel }}
                             </button>
                         </div>
@@ -170,27 +178,36 @@
                             <font-awesome-icon :icon="['fas', 'xmark']" />
                         </button>
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
-                        <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
+                        <div
+                            :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '', provider.squareArt ? 'radioArt radioArtBox' : '']"
+                            :style="provider.squareArt && episode.thumbnail ? { '--art': `url(${getThumbnailUrl(episode.thumbnail, true)})` } : {}"
+                        >
                             <img
                                 v-if="episode.thumbnail && !brokenThumbs[episode.pid]" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
-                                loading="lazy" role="button" tabindex="0" @error="brokenThumbs[episode.pid] = true" @click="download(episode)" @keydown.enter="download(episode)"
+                                loading="lazy" role="button" tabindex="0" @error="brokenThumbs[episode.pid] = true" @click="downloadIfFree(episode)" @keydown.enter="downloadIfFree(episode)"
                             />
-                            <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
-                                <font-awesome-icon :icon="['fas', 'tv']" />
+                            <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="downloadIfFree(episode)" @keydown.enter="downloadIfFree(episode)">
+                                <font-awesome-icon :icon="['fas', provider.icon]" />
                             </div>
                             <div class="overlay">
-                                <button v-if="canPlay" class="clickable" title="Play Video" @click="play(episode)">
+                                <button v-if="canPlay" class="clickable" :title="provider.playTitle" @click="play(episode)">
                                     <font-awesome-icon :icon="['fas', 'play']" />
                                 </button>
-                                <button class="clickable" title="Download" @click="download(episode)">
-                                    <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                <button class="clickable" :title="provider.downloadState(episode).title" :disabled="provider.downloadState(episode).busy" @click="download(episode)">
+                                    <font-awesome-icon :icon="['fas', provider.downloadState(episode).done ? 'check' : 'cloud-arrow-down']" />
+                                </button>
+                                <button v-if="debugOn" class="clickable" title="Streaming debug" @click="openDebug(episode.pid, provider.debugKind)">
+                                    <font-awesome-icon :icon="['fas', 'bug']" />
                                 </button>
                             </div>
                             <QualityBadges :item="episode" class="thumbBadges" />
+                            <span v-if="isOnDisk(episode)" class="onDiskBadge" title="On disk" role="img" aria-label="On disk">
+                                <font-awesome-icon :icon="['fas', 'hard-drive']" />
+                            </span>
                         </div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
-                                <span v-if="getSeriesEpisodeLabel(episode)" class="episodeLabel">{{ getSeriesEpisodeLabel(episode) }}</span>
+                                <span v-if="episodeLabel(episode)" class="episodeLabel">{{ episodeLabel(episode) }}</span>
                                 {{ episode.episodeTitle || episode.title }}
                             </div>
                             <div
@@ -211,6 +228,7 @@
                             <div class="episodeDetails">
                                 <span v-if="episode.runtime">{{ roundUpMinutes(episode.runtime) }} min</span>
                                 <span v-if="episode.firstBroadcast">{{ formatDate(episode.firstBroadcast) }}</span>
+                                <span v-if="provider.capabilities.mp3 && episode.mp3">MP3</span>
                             </div>
                         </div>
                     </div>
@@ -222,9 +240,10 @@
 </template>
 
 <script setup>
-import { computed, inject, nextTick, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import AppButton from '@/components/common/AppButton.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
@@ -237,24 +256,62 @@ import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { batchVersionKey, initialVersionKey, offeredVersions, planDownloads, resolveEpisodeVersions } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { isEpisodeOnDisk } from '@/lib/mediaDisplay';
+import { pageTitle } from '@/lib/mediaMode';
+import { useMediaProviders } from '@/lib/mediaProvider';
 import { useQualityBadges } from '@/lib/qualityBadges';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
+import toastService from '@/lib/toastService';
 import { useBrowseActions } from '@/lib/useBrowseActions';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage, roundUpMinutes } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
+// The same page draws a BBC Sounds show (/browse/radio/:id): the route picks the provider (lib/mediaProvider.js) that loads,
+// plays, downloads and subscribes, and words and draws the page. On /browse/programme/:pid it is the video one.
+const providers = useMediaProviders();
+const provider = computed(() => (route.meta.radio === true ? providers.radio : providers.video));
+// Cleared when the page goes, so a later toggle never reuses a stale title.
+onBeforeUnmount(() => {
+    pageTitle.value = '';
+});
+const currentId = () => route.params.pid ?? route.params.id;
 const programme = ref(null);
 const loading = ref(true);
 const error = ref(null);
 const selected = ref(0);
 const downloadingSeason = ref(false);
+// The episodes of this show that are in the library folders, for the icon in the picture's top left corner.
+const onDisk = ref(new Set());
+// The days of files that carry no episode id (radio): their date stands for the episode of that day.
+const onDiskDays = ref(new Set());
+const isOnDisk = (episode) => isEpisodeOnDisk(episode, onDisk.value, onDiskDays.value);
+const loadOnDisk = async (pid) => {
+    try {
+        const found = await provider.value.loadOnDisk(pid);
+        if (currentId() === pid) {
+            onDisk.value = new Set(found.ids);
+            onDiskDays.value = new Set(found.days);
+        }
+    } catch {
+        // No icons if the folders cannot be read; the page is the same without them.
+    }
+};
 
 const { canPlay, play, download } = useBrowseActions();
+// The picture is a second way to the Download button, so it stops where the button does (already queued or saved).
+const downloadIfFree = (episode) => {
+    if (!provider.value.downloadState(episode).busy) download(episode);
+};
+const { debugOn, openDebug } = useDebugLink();
 const globalSettings = inject('globalSettings', ref({}));
+
+// What the row label says: video gives the series and episode numbers; a radio episode falls back to its date or name.
+const episodeLabel = (episode) => getSeriesEpisodeLabel(episode) || provider.value.episodeLabel(episode);
 
 // Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the
 // brand pid that subscriptions are keyed by.
@@ -457,6 +514,8 @@ const downloadAll = () => {
 
 const downloadBatch = async (batch, label) => {
     if (batch.length === 0) return;
+    // A provider with its own batch download (radio) does it all; video's is below.
+    if (provider.value.downloadBatch) return provider.value.downloadBatch(batch, label, (busy) => (downloadingSeason.value = busy));
     // Which episodes have audio described / signed versions, so the choice (or the default) can use them.
     batch = await resolveEpisodeVersions(batch);
     const offered = offeredVersions(batch);
@@ -490,11 +549,9 @@ const downloadBatch = async (batch, label) => {
     if (failed.length === 0) {
         router.push('/queue');
     } else {
-        dialogService.alert(
-            'Some downloads failed',
-            `${batch.length - failed.length} of ${batch.length} episodes were queued.`,
-            `Failed: ${failed.map((e) => getSeriesEpisodeLabel(e) || e.episodeTitle || e.pid).join(', ')}`
-        );
+        toastService.error(`Only ${batch.length - failed.length} of ${batch.length} episodes were queued`, {
+            detail: `Failed: ${failed.map((e) => getSeriesEpisodeLabel(e) || e.episodeTitle || e.pid).join(', ')}`,
+        });
     }
 };
 
@@ -503,14 +560,14 @@ const downloadBatch = async (batch, label) => {
 const loadRemainingPages = async (pid, first) => {
     let { page, hasMore } = first;
     loadingMore.value = hasMore;
-    while (hasMore && route.params.pid === pid) {
+    while (hasMore && currentId() === pid) {
         let next;
         try {
-            next = await browseFetch(`programme/${encodeURIComponent(pid)}?page=${page + 1}`);
+            next = await provider.value.loadEpisodes(pid, page + 1);
         } catch {
             return; // keep what has loaded rather than replacing the page with an error
         }
-        if (route.params.pid !== pid) return;
+        if (currentId() !== pid) return;
         const selectedSeries = programme.value.seasons[selected.value]?.series;
         const seasons = mergeSeasons(programme.value.seasons, next.seasons);
         programme.value = { ...programme.value, seasons };
@@ -527,8 +584,8 @@ const { state: badgeState } = useQualityBadges();
 const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles || badgeState.expiry || badgeState.guidance);
 const askedVersions = new Set();
 const resolveVersions = async () => {
-    const pid = route.params.pid;
-    if (!badgeState.versions || !programme.value) return;
+    const pid = currentId();
+    if (!provider.value.capabilities.versions || !badgeState.versions || !programme.value) return;
     const pending = programme.value.seasons
         .flatMap((season) => season.episodes)
         .filter((episode) => !episode.versionsChecked && !askedVersions.has(episode.pid))
@@ -543,7 +600,7 @@ const resolveVersions = async () => {
             chunk.forEach((episodePid) => askedVersions.delete(episodePid));
             return;
         }
-        if (route.params.pid !== pid || !programme.value) return;
+        if (currentId() !== pid || !programme.value) return;
         programme.value = {
             ...programme.value,
             seasons: programme.value.seasons.map((season) => ({
@@ -557,14 +614,14 @@ const resolveVersions = async () => {
         };
     }
 };
-watch([loadedCount, () => route.params.pid, () => badgeState.versions], resolveVersions);
+watch([loadedCount, currentId, () => badgeState.versions], resolveVersions);
 
 // Bumped by Try again to load the same programme once more.
 const reloadKey = ref(0);
 const reload = () => reloadKey.value++;
 
 watch(
-    () => [route.params.pid, reloadKey.value, route.query.episode],
+    () => [currentId(), reloadKey.value, route.query.episode],
     async ([pid]) => {
         if (!pid) return;
         loading.value = true;
@@ -575,21 +632,35 @@ watch(
         clearHighlight();
         focusFollow = false;
         focusPending = route.query.episode || pid;
+        onDisk.value = new Set();
+        onDiskDays.value = new Set();
         try {
-            const first = await browseFetch(`programme/${encodeURIComponent(pid)}`);
-            if (route.params.pid !== pid) return;
+            void provider.value.subscribe?.load();
+            const first = await provider.value.loadProgramme(pid);
+            if (currentId() !== pid) return;
+            // iPlayer knows some BBC Sounds shows as empty brands (a radio channel, no episodes): the page for them is the radio one.
+            if (route.meta.radio !== true && !first.seasons?.some((season) => season.episodes?.length)) {
+                const sounds = await providers.radio.loadProgramme(pid).catch(() => null);
+                if (currentId() !== pid) return;
+                if (sounds?.seasons?.some((season) => season.episodes?.length)) {
+                    await router.replace({ path: `/browse/radio/${encodeURIComponent(pid)}`, query: route.query });
+                    return;
+                }
+            }
             programme.value = first;
+            pageTitle.value = first.title ?? '';
             // Land on the newest numbered series rather than Specials (series 0), which sorts first.
             const { seasons } = first;
             const latest = seasons.reduce((best, { series }, i) => (series > (seasons[best].series ?? -1) ? i : best), 0);
             selected.value = latest;
             focusEpisode();
             loading.value = false;
+            void loadOnDisk(pid);
             await loadRemainingPages(pid, first);
         } catch (e) {
-            if (route.params.pid === pid) error.value = e.message;
+            if (currentId() === pid) error.value = e.message;
         } finally {
-            if (route.params.pid === pid) {
+            if (currentId() === pid) {
                 loading.value = false;
                 loadingMore.value = false;
             }
@@ -597,6 +668,15 @@ watch(
     },
     { immediate: true }
 );
+
+// The Debug button reads the programme (video) or one episode (radio): the highlighted one, else the first listed on the page.
+const debugTarget = computed(() => (highlightPid.value || pagedEpisodes.value[0]?.pid) ?? '');
+const debugTitle = computed(() => provider.value.debugTitle(highlightPid.value));
+const debug = () => openDebug(provider.value.debugId(programme.value, debugTarget.value), provider.value.debugKind);
+
+// Subscribe is one button for both: radio keeps a follow list on the server, video its subscriptions (with Sonarr/Radarr).
+const subscribed = computed(() => (provider.value.subscribe ? provider.value.subscribe.subscribed(programme.value) : !!subscription.value));
+const toggleSubscribed = () => (provider.value.subscribe ? provider.value.subscribe.toggle(programme.value, (busy) => (subscribing.value = busy)) : toggleSubscription());
 
 // On a phone the banner's "Download all" and the season bar's would sit a screen apart, doing the same thing.
 const duplicatesBannerDownload = computed(
@@ -628,7 +708,7 @@ const duplicatesBannerDownload = computed(
     position: relative;
     outline: 2px solid @brand-color;
     outline-offset: 4px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     transition: outline-color 400ms ease;
 
     // A manual decision: the highlight stays until this is clicked, then fades out.
@@ -647,7 +727,7 @@ const duplicatesBannerDownload = computed(
         border-radius: 50%;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
-        font-size: 11px;
+        font-size: @font-size-xs;
         cursor: pointer;
         transition: opacity 400ms ease;
 
@@ -679,7 +759,7 @@ const duplicatesBannerDownload = computed(
         background-color: rgba(0, 0, 0, 0.65);
 
         h1 {
-            margin: 0 0 12px;
+            margin: 0 0 @space-3;
             font-size: 42px;
             font-weight: 300;
             text-wrap: balance;
@@ -696,18 +776,13 @@ const duplicatesBannerDownload = computed(
     }
 
     .programmeMeta {
-        margin-bottom: 12px;
+        margin-bottom: @space-3;
         display: flex;
         flex-wrap: wrap;
-        gap: 8px 10px;
+        gap: @space-2 10px;
 
         .pill.grey,
         .pill.channelPill {
-            padding: 3px 7px;
-            margin-right: 0;
-            font-size: 15px;
-            font-weight: 300;
-
             a {
                 color: inherit;
                 text-decoration: none;
@@ -727,8 +802,8 @@ const duplicatesBannerDownload = computed(
 
     p.missing {
         display: inline-block;
-        padding: 2px 8px;
-        border-radius: 4px;
+        padding: 2px @space-2;
+        border-radius: @radius-sm;
     }
 
     .poster.missing {
@@ -742,7 +817,7 @@ const duplicatesBannerDownload = computed(
 
     p.degradedNote {
         margin: 10px 0 0;
-        font-size: 13px;
+        font-size: @font-size-base;
         opacity: 0.75;
 
         svg {
@@ -769,10 +844,10 @@ const duplicatesBannerDownload = computed(
         position: relative;
         display: flex;
         align-items: flex-start;
-        gap: 24px;
+        gap: @space-5;
         background-color: rgba(0, 0, 0, 0.55);
         // Over the artwork backdrop: fixed white, not the theme's text colour (dark in light mode).
-        color: #fff;
+        color: @on-media-color;
     }
 
     .poster {
@@ -780,7 +855,7 @@ const duplicatesBannerDownload = computed(
         width: 280px;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
 
         @media (max-width: @mobile-breakpoint) {
@@ -808,7 +883,7 @@ const duplicatesBannerDownload = computed(
     margin-top: 14px;
 
     // Phone width: two columns share the full width; an odd button out spans the whole row.
-    @media (max-width: 600px) {
+    @media (max-width: @compact-breakpoint) {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
 
@@ -821,8 +896,8 @@ const duplicatesBannerDownload = computed(
         }
 
         > .subscribeButton {
-            padding: 9px 8px;
-            font-size: 14px;
+            padding: 9px @space-2;
+            font-size: @font-size-md;
             text-align: center;
 
             &:last-child:nth-child(odd) {
@@ -838,7 +913,7 @@ const duplicatesBannerDownload = computed(
     .programmeBanner .programmeBannerContent {
         display: grid;
         grid-template-columns: 112px minmax(0, 1fr);
-        gap: 12px;
+        gap: @space-3;
         padding: 1rem;
 
         &:not(.hasPoster) {
@@ -860,17 +935,13 @@ const duplicatesBannerDownload = computed(
 
         h1 {
             font-size: 24px;
-            margin-bottom: 8px;
+            margin-bottom: @space-2;
         }
 
         .programmeMeta {
             margin-bottom: 0;
             gap: 6px;
-
-            .pill.grey,
-            .pill.channelPill {
-                font-size: 13px;
-            }
+            --pill-font: @font-size-base;
         }
 
         p,
@@ -880,42 +951,24 @@ const duplicatesBannerDownload = computed(
         }
 
         p {
-            font-size: 14px;
+            font-size: @font-size-md;
         }
     }
 }
 
-.subscribeButton {
-    padding: 8px 16px;
-    font-size: 15px;
-    border-radius: 4px;
-    border: 1px solid @settings-button-border-color;
-    background-color: @settings-button-background-color;
-    color: @primary-text-color;
-
-    svg {
-        margin-right: 6px;
-    }
-
-    &:hover:not(:disabled) {
-        background-color: @settings-button-hover-background-color;
-    }
-
-    &.on {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-    }
-
-    // Same size as the buttons, but a status label rather than something to press.
-    &.arrChip,
-    &.arrChip:hover:not(:disabled) {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-        cursor: default;
-        user-select: none;
-    }
+// The button look comes from AppButton; the status chip beside them takes the same size.
+.arrChip {
+    display: inline-flex;
+    align-items: center;
+    gap: @space-2;
+    padding: @space-2 @space-4;
+    border: 1px solid @brand-color;
+    border-radius: @radius-sm;
+    background-color: @brand-color;
+    color: @on-brand-color;
+    font-size: @font-size-md;
+    cursor: default;
+    user-select: none;
 }
 
 .episodeThumb {
@@ -928,7 +981,7 @@ const duplicatesBannerDownload = computed(
     align-items: stretch;
     justify-content: flex-end;
     gap: 14px;
-    margin-bottom: 4px;
+    margin-bottom: @space-1;
 
     // Inside the pager's left-hand slot, beside the page controls.
     &.inline {
@@ -936,7 +989,7 @@ const duplicatesBannerDownload = computed(
         gap: 6px;
     }
 
-    @media (max-width: 600px) {
+    @media (max-width: @compact-breakpoint) {
         justify-content: stretch;
         gap: 6px;
 
@@ -948,8 +1001,8 @@ const duplicatesBannerDownload = computed(
 
     .seasonSort {
         flex: 0 0 auto;
-        padding: 6px 12px;
-        border-radius: 4px;
+        padding: 6px @space-3;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -958,19 +1011,19 @@ const duplicatesBannerDownload = computed(
             background-color: @settings-button-hover-background-color;
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: @compact-breakpoint) {
             padding: 9px 14px;
         }
     }
 
     .loadingMore {
         color: @subtle-text-color;
-        font-size: 14px;
+        font-size: @font-size-md;
     }
 
     .seasonDownload {
         padding: 6px 14px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -998,7 +1051,7 @@ const duplicatesBannerDownload = computed(
         height: 36px;
         padding: 0;
         font-weight: 600;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -1019,7 +1072,7 @@ const duplicatesBannerDownload = computed(
     display: flex;
     align-items: flex-start;
     gap: 14px;
-    padding: 12px 0;
+    padding: @space-3 0;
     border-bottom: 1px solid @toolbar-background-color;
 
     .episodeThumbWrap {
@@ -1033,7 +1086,7 @@ const duplicatesBannerDownload = computed(
         }
 
         // Phones: the thumbnail runs the full width above the text.
-        @media (max-width: 600px) {
+        @media (max-width: @compact-breakpoint) {
             flex-basis: auto;
             width: 100%;
         }
@@ -1045,14 +1098,25 @@ const duplicatesBannerDownload = computed(
         width: 100%;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @nav-background-color;
     }
 
-    @media (max-width: 600px) {
+    @media (max-width: @compact-breakpoint) {
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
+    }
+
+    // Radio artwork is square: shown whole in the 16:9 box, over a blurred copy of itself (see .radioArtBox in global.less).
+    .episodeThumbWrap.radioArt {
+        border-radius: @radius-sm;
+
+        img {
+            position: relative;
+            object-fit: contain;
+            background-color: transparent;
+        }
     }
 
     .episodeNoThumb {
@@ -1067,19 +1131,19 @@ const duplicatesBannerDownload = computed(
         min-width: 0;
 
         .episodeTitle {
-            font-size: 16px;
+            font-size: @font-size-lead;
         }
 
         .episodeLabel {
             display: block;
             color: @subtle-text-color;
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
 
         .descriptionToggle {
             display: inline-block;
             margin-top: 2px;
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @brand-color;
         }
 
@@ -1096,8 +1160,8 @@ const duplicatesBannerDownload = computed(
         }
 
         .episodeDescription {
-            margin-top: 4px;
-            font-size: 13px;
+            margin-top: @space-1;
+            font-size: @font-size-base;
             color: @table-text-color;
             line-height: 1.35;
             display: -webkit-box;
@@ -1108,14 +1172,29 @@ const duplicatesBannerDownload = computed(
         }
 
         .episodeDetails {
-            margin-top: 4px;
-            font-size: 12px;
+            margin-top: @space-1;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
 
             span {
-                margin-right: 12px;
+                margin-right: @space-3;
             }
         }
+    }
+
+    // Fixed dark chip like the Subscriptions page's counts, as it sits on artwork.
+    .onDiskBadge {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        padding: 1px 6px;
+        border-radius: @radius-xs;
+        background-color: rgba(0, 0, 0, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        color: @on-media-color;
+        font-size: @font-size-sm;
+        font-weight: 700;
+        line-height: 1.4;
     }
 
     // Same look as a programme card: bottom right, the subtitles icon in the corner; the buttons show on hover.
@@ -1131,8 +1210,8 @@ const duplicatesBannerDownload = computed(
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 12px;
-        border-radius: 4px;
+        gap: @space-3;
+        border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.55);
         opacity: 0;
         transition: opacity 150ms;

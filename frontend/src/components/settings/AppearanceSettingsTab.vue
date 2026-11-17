@@ -44,6 +44,15 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="radioEnabled"
+        v-model="config.RADIO_THUMBNAIL_STYLE"
+        field="RADIO_THUMBNAIL_STYLE"
+        name="Radio Thumbnails"
+        tooltip="Square radio artwork in wide boxes: with a blurred backdrop, or plain."
+        :error="validationErrors.config?.RADIO_THUMBNAIL_STYLE"
+        :options="radioThumbnailStyles"
+    />
+    <SelectInput
         v-model="config.UI_CHANNEL_TOOLS"
         field="UI_CHANNEL_TOOLS"
         name="Show Channel Editing Tools"
@@ -99,7 +108,7 @@
         v-model="config.UI_EXPIRY_BADGES"
         field="UI_EXPIRY_BADGES"
         name="Show Leaving Soon Badge"
-        tooltip="Show the days left on episodes that leave iPlayer within 30 days (e.g. 7d). Hover the badge for the date."
+        tooltip="Show days left (e.g. 7d) on episodes leaving iPlayer within 30 days."
         :error="validationErrors.config?.UI_EXPIRY_BADGES"
         :options="trueOrFalse"
     />
@@ -111,6 +120,16 @@
         name="Show Guidance Badge"
         tooltip="Mark episodes iPlayer lists with content guidance."
         :error="validationErrors.config?.UI_GUIDANCE_BADGES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.UI_EXTENDED_DEBUG"
+        :advanced="true"
+        field="UI_EXTENDED_DEBUG"
+        name="Show Extended Debug"
+        tooltip="Adds a Library Debug button to the Watchdog page, listing every file the library index looked at."
+        :error="validationErrors.config?.UI_EXTENDED_DEBUG"
         :options="trueOrFalse"
     />
     <TextInput
@@ -134,6 +153,7 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import ThemePicker from '@/components/common/form/ThemePicker.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
+import { useMediaMode } from '@/lib/mediaMode';
 import { COLOR_MODES, useTheme } from '@/lib/theme';
 import { TOP_BAR_MODES } from '@/lib/topBar';
 
@@ -149,6 +169,11 @@ const collectionSources = [
     { key: 'home', value: 'Home page only (lightest)' },
 ];
 
+const radioThumbnailStyles = [
+    { key: 'blur', value: 'Blurred backdrop' },
+    { key: 'square', value: 'Square, plain' },
+];
+const { radioEnabled } = useMediaMode();
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');

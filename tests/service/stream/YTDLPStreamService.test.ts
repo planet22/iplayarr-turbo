@@ -45,7 +45,7 @@ describe('YTDLPStreamService', () => {
         expect(ensureDnsRelayRunning).toHaveBeenCalled();
         expect(spawnCollectOutput).toHaveBeenCalledWith('yt-dlp', [
             '--foo', '--force-ipv4', '--cache-dir', '/cache',
-            '-f', `best[width<=${parseInt(profile.quality)}]/best`,
+            '-f', `best[height<=${parseInt(profile.quality)}]/best`,
             '-g', 'https://www.bbc.co.uk/iplayer/episode/p1',
         ]);
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', `${parseInt(profile.quality)}`);

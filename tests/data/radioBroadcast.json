@@ -1,0 +1,25 @@
+{
+    "type": "broadcast_summary",
+    "id": "p0pfqpz9",
+    "urn": "urn:bbc:radio:episode:m0033fs2",
+    "start": "2026-11-07T02:00:00Z",
+    "end": "2026-11-07T03:00:00Z",
+    "service_id": "bbc_radio_two",
+    "duration": 3600,
+    "network": { "id": "bbc_radio_two", "key": "radio2", "short_title": "Radio 2", "network_type": "master_brand" },
+    "titles": { "primary": "Pick of the Pops", "secondary": "1969", "tertiary": "" },
+    "synopses": { "short": "Mark Goodier counts down the chart from this day in 1969.", "medium": "Mark Goodier counts down the chart from this day in 1969." },
+    "image_url": "https://ichef.bbci.co.uk/images/ic/{recipe}/p0lssgmt.jpg",
+    "container": { "type": "brand", "id": "b006wqx7", "urn": "urn:bbc:radio:brand:b006wqx7", "title": "Pick of the Pops" },
+    "playable_item": {
+        "type": "playable_item",
+        "id": "m0033fs1",
+        "urn": "urn:bbc:radio:episode:m0033fs2",
+        "network": { "id": "bbc_radio_two", "key": "radio2", "short_title": "Radio 2" },
+        "titles": { "primary": "Pick of the Pops", "secondary": "1969", "tertiary": null, "entity_title": "1969" },
+        "synopses": { "short": "Mark Goodier counts down the chart from this day in 1969.", "medium": "Mark Goodier counts down the chart from this day in 1969." },
+        "image_url": "https://ichef.bbci.co.uk/images/ic/{recipe}/p0lssgmt.jpg",
+        "duration": { "value": 3360, "label": "56 mins" },
+        "container": { "type": "brand", "id": "b006wqx7", "title": "Pick of the Pops" }
+    }
+}

@@ -24,6 +24,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
     const ok = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'FAIL', c ? '' : d);
     const warn = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'WARN', c ? '' : d);
     const dialog = (page) => page.locator('[role=dialog], .modal, .modalContent, .dialog').first();
+    // The Subscriptions list is paged (16 a page, oldest first): a new subscription can be on page 2, so show the biggest page.
+    const showAllSubscriptions = async (page) => {
+        const sizeSelect = page.locator('select[aria-label="items per page"]').first();
+        if (!(await sizeSelect.count())) return;
+        const sizes = await sizeSelect.locator('option').evaluateAll((os) => os.map((o) => Number(o.value)));
+        const biggest = sizes.filter(Number.isFinite).sort((a, b) => b - a)[0];
+        if (biggest) { await sizeSelect.selectOption(String(biggest)); await page.waitForTimeout(800); }
+    };
     const clickDialogPrimary = async (page) => {
         const d = dialog(page);
         await d.waitFor({ timeout: 8000 });
@@ -37,6 +45,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         return null;
     };
     const pid = ctx.pid;
+    ctx.cfg = ctx.cfg || (await http('/json-api/config')).json || {};
     const brand = (await http(`/json-api/browse/programme/${pid}`)).json;
     const bpid = brand?.pid;
     ctx.preSubscribed = ((await http('/json-api/subscriptions')).json || []).some((x) => x.pid === bpid);
@@ -104,15 +113,21 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await shot(page, 'subscribe-after');
             await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
             await page.waitForTimeout(800);
+            await showAllSubscriptions(page);
             await shot(page, 'subscriptions-with-new', true);
             ok('subscriptions page shows it', (await page.locator('body').innerText()).includes(brand.title), brand.title);
-            const unsub = page.getByRole('button', { name: 'Unsubscribe' }).first();
-            // find the card for our title
+            // Find the card for our title. Never fall back to "the first Unsubscribe button": that is somebody else's subscription.
             const card = page.locator(`text=${brand.title}`).first().locator('xpath=ancestor::*[.//button[@aria-label="Unsubscribe" or @title="Unsubscribe"]][1]');
-            const target = (await card.count()) ? card.locator('button[title="Unsubscribe"], button[aria-label="Unsubscribe"]').first() : unsub;
-            await target.click();
+            if (!(await card.count())) return rec(U, 'unsubscribed by UI', 'FAIL', `no card for "${brand.title}" on the page; nothing clicked`);
+            await card.locator('button[title="Unsubscribe"], button[aria-label="Unsubscribe"]').first().click();
             await page.waitForTimeout(800);
-            if (await dialog(page).count()) { await shot(page, 'unsubscribe-confirm'); await clickDialogPrimary(page); }
+            if (await dialog(page).count()) {
+                const sure = await dialog(page).innerText().catch(() => '');
+                await shot(page, 'unsubscribe-confirm');
+                // The dialog names the show: only confirm if it is ours.
+                if (!sure.includes(brand.title)) return rec(U, 'unsubscribed by UI', 'FAIL', `dialog was about another show, cancelled: ${sure.replace(/\s+/g, ' ').slice(0, 80)}`);
+                await clickDialogPrimary(page);
+            }
             await page.waitForTimeout(2000);
             ok('unsubscribed by UI', !((await http('/json-api/subscriptions')).json || []).some((s) => s.pid === bpid), 'still subscribed');
         });
@@ -201,7 +216,9 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.goto(BASE + '/settings', { waitUntil: 'networkidle' });
             await shot(page, 'settings-general', true);
             // Appearance: pick Ocean theme (applies only on Save)
-            const ocean = page.locator('button:has-text("Ocean")').first();
+            await page.locator('.settingsTab:has-text("Appearance")').first().click().catch(() => {}); // its own tab
+            await page.waitForTimeout(400);
+            const ocean = page.locator('.themeCard:has-text("Ocean")').first();
             if (await ocean.count()) {
                 await ocean.click();
                 await page.waitForTimeout(500);
@@ -219,7 +236,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 warn('theme persisted across reload (Ocean)', /ocean/i.test(themeKey), themeKey.slice(0, 120));
                 await shot(page, 'settings-ocean-reload');
                 // revert
-                await page.locator('button:has-text("iPlayarr")').first().click();
+                await page.locator('.settingsTab:has-text("Appearance")').first().click().catch(() => {});
+                await page.locator('.themeCard:has-text("iPlayarr")').first().click();
                 await page.locator('button[title="Save changes"]').first().click().catch(() => {});
                 await page.waitForTimeout(1500);
                 void primaryBefore;
@@ -266,6 +284,52 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             }
         });
 
+        // ---- Advanced toggle: every setting marked advanced is hidden while it is off (read-only: only this browser's toggle changes)
+        await flow('settings advanced toggle gates advanced settings', async (page) => {
+            const KEY = 'iplayarr.settings.showAdvanced';
+            const cfg = (await http('/json-api/config')).json || {};
+            const setAdvanced = async (on) => {
+                await page.goto(`${BASE}/settings#general`, { waitUntil: 'networkidle' });
+                await page.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, String(on)]);
+            };
+            const tab = async (key) => { await page.goto(`${BASE}/settings#${key}`, { waitUntil: 'networkidle' }); await page.reload({ waitUntil: 'networkidle' }); await page.waitForSelector('.settingsBody', { timeout: 15000 }); await page.waitForTimeout(400); };
+            const advCount = async () => page.locator('.settingsBody .form-group.advanced').count();
+            const body = async () => page.locator('.settingsBody').innerText();
+            const tabs = ['general', 'search', 'appearance', 'mediaManagement', 'downloadClient', 'streaming', 'liveTv', 'authentication', 'maintenance'];
+            try {
+                await setAdvanced(false);
+                for (const t of tabs) {
+                    await tab(t);
+                    ok(`${t}: no advanced setting is shown while Advanced is off`, (await advCount()) === 0, `${await advCount()} advanced fields visible`);
+                }
+                // The two settings that used to leak or leave a stray heading
+                await tab('general');
+                ok('General hides Live Radio Stations while Advanced is off', !/Live Radio Stations/.test(await body()));
+                if (cfg.LIVE_TV_ENABLED === 'true') {
+                    await tab('liveTv');
+                    ok('Live TV hides the Channel feeds heading while Advanced is off', !/Channel feeds/i.test(await body()));
+                }
+
+                await setAdvanced(true);
+                await tab('general');
+                const general = await body();
+                ok(cfg.SOUNDS_ENABLED === 'true' ? 'General shows Live Radio Stations once Advanced is on (Sounds is on)' : 'General still hides Live Radio Stations with Sounds off, even with Advanced on',
+                    /Live Radio Stations/.test(general) === (cfg.SOUNDS_ENABLED === 'true'), general.replace(/\s+/g, ' ').slice(0, 200));
+                for (const t of ['general', 'appearance', 'mediaManagement', 'downloadClient', 'streaming']) {
+                    await tab(t);
+                    ok(`${t}: advanced settings appear when Advanced is on`, (await advCount()) > 0, 'none visible');
+                }
+                if (cfg.LIVE_TV_ENABLED === 'true') {
+                    await tab('liveTv');
+                    const feeds = /Channel feeds/i.test(await body());
+                    ok(cfg.STREAM_CLIENT === 'NATIVE' ? 'Live TV shows the Channel feeds heading with Advanced on and the Native client' : 'Live TV hides the Channel feeds heading unless the client is Native',
+                        feeds === (cfg.STREAM_CLIENT === 'NATIVE'), `STREAM_CLIENT ${cfg.STREAM_CLIENT}`);
+                }
+            } finally {
+                await page.evaluate((k) => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }, KEY).catch(() => {});
+            }
+        });
+
         // ---- Settings tabs: each setting sits on the tab it belongs to (read-only: nothing is changed or saved)
         await flow('settings tabs hold the right settings', async (page) => {
             const labels = async () => (await page.locator('.settingsBody label').allTextContents()).map((t) => t.trim());
@@ -294,16 +358,549 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Appearance holds the colour scheme, badges and Show Collections', ['Colour Scheme', 'Show Info Messages', 'Show Collections'].every((l) => looks.some((x) => x.includes(l))), looks.join(' | '));
             ok('Appearance has no search settings', !looks.some((l) => /Native Search|Match All/i.test(l)), looks.join(' | '));
 
+            // The .nfo extras sit on Media Management, and (like the cast setting) only while .nfo files are written
+            await tab('mediaManagement');
+            const media = (await labels()).join(' | ');
+            const nfoExtras = [/Headline for 'Episode N' Titles/i, /Missing Running Time/i, /Additional Images/i];
+            const writesNfo = (await http('/json-api/config')).json?.WRITE_NFO_STRM !== 'none';
+            ok(writesNfo ? 'Media Management offers the .nfo extras (episode headline, running time, additional images)' : 'Media Management hides the three .nfo extras while no .nfo files are written',
+                nfoExtras.every((re) => re.test(media)) === writesNfo && (writesNfo || !nfoExtras.some((re) => re.test(media))), media);
+
             await tab('maintenance');
             // Wait for the Maintenance content itself: a hash-only navigation can be read before the tab has switched.
             await page.waitForFunction(() => /Scheduled tasks/i.test(document.querySelector('.settingsBody')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});
             const maint = (await page.locator('.settingsBody').innerText());
             ok('Maintenance lists the scheduled tasks', /Scheduled tasks/i.test(maint));
             ok('Hours in RSS Feed and Full Schedule Refresh are no longer on Maintenance', !/Hours in RSS Feed|Full Schedule Refresh/.test(maint));
+            // The DNS Relay row opens its own page, which lists the relay's state and the last 10 lookups.
+            ok('Maintenance has a DNS Relay row with a button', /DNS Relay/.test(maint) && (await page.locator('button[aria-label="Open the DNS Relay page"]').count()) === 1);
+            await page.locator('button[aria-label="Open the DNS Relay page"]').click().catch(() => {});
+            await page.waitForURL(/\/dns-relay$/, { timeout: 10000 }).catch(() => {});
+            await page.waitForSelector('.dnsTable', { timeout: 15000 }).catch(() => {});
+            const relayPage = await page.locator('body').innerText();
+            ok('the DNS Relay button opens the DNS Relay page', /\/dns-relay$/.test(page.url()) && /DNS Relay/.test(relayPage));
+            ok('the DNS Relay page shows its state, counters, the last 10 queries and the last 20 failed', /Upstream/i.test(relayPage) && /Queries/i.test(relayPage) && /Last 10 queries/.test(relayPage) && /Last 20 failed/.test(relayPage), relayPage.replace(/\s+/g, ' ').slice(0, 160));
+            await shot(page, 'dns-relay', true);
+            // The state and counters are the grey tiles with an (i) tip, like the streaming debug page.
+            const relayTiles = await page.locator('.tiles .tile').count();
+            ok('the DNS Relay page draws 11 grey tiles, each with an (i) tip', relayTiles === 11 && (await page.locator('.tiles .tile .InfoTip-button').count()) === 11, `${relayTiles} tiles`);
+            const relayTileLabels = (await page.locator('.tiles .tileLabel').allInnerTexts()).map((t) => t.toLowerCase());
+            ok('the DNS Relay tiles name the relay, upstream, resolv.conf and every counter', ['relay', 'upstream', 'resolv.conf', 'in flight', 'cached names', 'queries', 'from cache', 'answered', 'no record', 'failed', 'dropped'].every((l) => relayTileLabels.includes(l)), relayTileLabels.join(', '));
+            await page.locator('.tiles .tile .InfoTip-button').first().click().catch(() => {});
+            ok('an (i) tip on the DNS Relay page opens its explanation', /listening for lookups/.test(await page.locator('.tiles .InfoTip-popup').first().innerText().catch(() => '')));
+            await page.locator('.hint').click().catch(() => {});
+            const tileBox = await page.locator('.tiles .tile').first().boundingBox().catch(() => null);
+            ok('the DNS Relay tiles do not overflow the page sideways', !!tileBox && (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)));
+            // Live updates can be stopped (tables freeze) and started again from the toolbar.
+            const stopLive = page.locator('button[aria-label="Stop live updates"]');
+            ok('the DNS Relay toolbar has a Stop live updates button while it follows the relay', (await stopLive.count()) === 1 && /follows it live/.test(await page.locator('.hint').innerText()));
+            await stopLive.click().catch(() => {});
+            await page.waitForTimeout(300);
+            ok('stopping live updates says the tables are a snapshot and offers Start', (await page.locator('button[aria-label="Start live updates"]').count()) === 1 && /snapshot/.test(await page.locator('.hint').innerText()));
+            await page.locator('button[aria-label="Start live updates"]').click().catch(() => {});
+            await page.waitForTimeout(300);
+            ok('starting live updates again follows the relay', (await page.locator('button[aria-label="Stop live updates"]').count()) === 1 && /follows it live/.test(await page.locator('.hint').innerText()));
+            await page.goto(`${BASE}/settings#maintenance`, { waitUntil: 'networkidle' });
 
             // Old links: #general still opens General, and an unknown hash opens the first tab rather than a blank page.
             await page.goto('about:blank'); await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' }); await page.waitForTimeout(1000);
             ok('an unknown tab in the link opens General', (await page.locator('.settingsTab.active').first().innerText()).includes('General'));
+        });
+
+        // ---- Combined search (SEARCH_COMBINED): the Search page looks in video and radio together (restored afterwards)
+        await flow('combined search: video and radio together, channel icons, sort, one row height', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'combined search', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const cfg0 = (await http('/json-api/config')).json || {};
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: { SEARCH_COMBINED: cfg0.SEARCH_COMBINED ?? 'false' } }); });
+            const put = (value) => http('/json-api/config', { method: 'PUT', body: { SEARCH_COMBINED: value } });
+            const open = async () => {
+                await page.goto(BASE + '/search?searchTerm=dancing', { waitUntil: 'networkidle' });
+                await page.waitForSelector('.resultsTable tbody tr, .browseGrid', { timeout: 90000 });
+                await page.waitForLoadState('networkidle').catch(() => {});
+            };
+
+            // Off: the page is exactly the usual one.
+            await put('false');
+            await open();
+            ok('with combined search off there is no TV + radio indicator in the toolbar', (await page.locator('button.combinedIndicator').count()) === 0);
+            ok('with combined search off the channel list is the plain dropdown', (await page.locator('select[aria-label="Channel"]').count()) === 1 && (await page.locator('.iconSelect').count()) === 0);
+            ok('with combined search off the note describes the video search only', /^Search: /.test((await page.locator('.searchSettingsNote').first().innerText()).trim()));
+
+            // On: both catalogues in one list.
+            await put('true');
+            await open();
+            await page.locator('.iconSelect').waitFor({ timeout: 30000 }).catch(() => {});
+            ok('combined search shows the TV + radio indicator in the toolbar', (await page.locator('button.combinedIndicator').count()) === 1);
+            const note = (await page.locator('.searchSettingsNote').first().innerText()).trim();
+            ok('the note names both searches', /^Combined \(video \+ radio\) . Search: /.test(note) && /\| Radio search: /.test(note), note);
+            const kinds = await page.locator('.resultsTable tbody tr td[data-title="Type"]').allInnerTexts();
+            ok('the results hold video (TV) and radio rows together', kinds.some((k) => /TV|MOVIE/i.test(k)) && kinds.some((k) => /RADIO/i.test(k)), [...new Set(kinds)].join(','));
+
+            // The channel dropdown shows the usual TV / radio icons, opens fully visible and filters.
+            ok('the channel list is the icon dropdown, not a plain select', (await page.locator('.iconSelect').count()) === 1 && (await page.locator('select[aria-label="Channel"]').count()) === 0);
+            await page.locator('.iconSelect button').click();
+            await page.waitForSelector('.iconSelectList li', { timeout: 5000 });
+            const icons = await page.locator('.iconSelectList li svg').evaluateAll((svgs) => svgs.map((svg) => svg.getAttribute('data-icon')));
+            ok('video channels carry the TV icon and radio channels the radio icon', icons.includes('tv') && icons.includes('radio'), icons.join(','));
+            const visible = await page.evaluate(() => {
+                const list = document.querySelector('.iconSelectList');
+                const box = list.getBoundingClientRect();
+                const top = document.elementFromPoint(box.left + 20, box.top + 10);
+                return !!top && !!top.closest('.iconSelectList');
+            });
+            ok('the open channel list is not clipped by the scrolling filter row', visible);
+            // A long list has its own scroll: using the wheel on it must scroll the list, not close it.
+            const scrollable = await page.locator('.iconSelectList').evaluate((el) => el.scrollHeight > el.clientHeight);
+            if (scrollable) {
+                await page.locator('.iconSelectList').hover();
+                await page.mouse.wheel(0, 150);
+                await page.waitForTimeout(300);
+                ok('scrolling inside the channel list keeps it open and moves it', (await page.locator('.iconSelectList').count()) === 1 && (await page.locator('.iconSelectList').evaluate((el) => el.scrollTop)) > 0);
+            } else rec(U, 'scrolling inside the channel list keeps it open', 'SKIP', 'the list is short enough not to scroll');
+            await shot(page, 'combined-channel-list');
+            const total = (await page.locator('.resultCount').innerText()).match(/\d+/)?.[0];
+            const radioRow = page.locator('.iconSelectList li', { has: page.locator('svg[data-icon="radio"]') }).first();
+            const radioName = ((await radioRow.innerText().catch(() => '')) || '').trim();
+            await radioRow.click();
+            await page.waitForTimeout(500);
+            const narrowed = (await page.locator('.resultCount').innerText()).match(/\d+/)?.[0];
+            ok('picking a radio channel narrows the results and shows its name on the button', Number(narrowed) > 0 && Number(narrowed) < Number(total) && (await page.locator('.iconSelect button').innerText()).includes(radioName), `${total} -> ${narrowed} (${radioName})`);
+            await page.locator('.iconSelect button').click();
+            await page.locator('.iconSelectList li').first().click();
+            await page.waitForTimeout(500);
+            ok('All channels brings every result back', (await page.locator('.resultCount').innerText()).match(/\d+/)?.[0] === total);
+            await page.locator('.iconSelect button').click();
+            await page.keyboard.press('Escape');
+            ok('Escape closes the channel list', (await page.locator('.iconSelectList').count()) === 0);
+
+            // Sort: the standard control, Best match has no direction, the others flip.
+            const sort = page.locator('.channelChips select[aria-label="Sort by"]');
+            ok('the standard sort control is in the filter row', (await sort.count()) === 1 && (await sort.locator('option').allInnerTexts()).join(',') === 'Best match,A-Z,Date,Channel');
+            await sort.selectOption('name');
+            await page.waitForTimeout(400);
+            const titles = await page.locator('.resultsTable tbody tr td[data-title="Title"]').evaluateAll((cells) => cells.map((cell) => cell.textContent.trim().toLowerCase()).filter(Boolean));
+            ok('A-Z orders the titles', titles.length > 1 && titles.every((t, i) => i === 0 || titles[i - 1].localeCompare(t, undefined, { numeric: true, sensitivity: 'base' }) <= 0), titles.slice(0, 5).join(' | '));
+            const first = (await page.locator('.resultsTable tbody tr td[data-title="Title"]').first().innerText()).trim();
+            await page.locator('.channelChips button[aria-label="Ascending"]').click();
+            await page.waitForTimeout(400);
+            ok('the arrow reverses the order', (await page.locator('.resultsTable tbody tr td[data-title="Title"]').first().innerText()).trim() !== first);
+            await sort.selectOption('best');
+
+            // One row height: chips, channel dropdown and sort controls are the same height and line up, whichever sort is chosen.
+            const measure = () => page.evaluate(() => {
+                const pick = (selector) => { const el = document.querySelector(selector); if (!el) return null; const r = el.getBoundingClientRect(); return { top: Math.round(r.top * 10) / 10, height: Math.round(r.height * 10) / 10 }; };
+                return { chip: pick('.channelChips .filterChip'), channel: pick('.channelChips .iconSelectButton'), sort: pick('.channelChips .sortSelect'), order: pick('.channelChips .orderPlaceholder') || pick('.channelChips .sortControl button') };
+            });
+            const same = (m) => [m.channel, m.sort, m.order].every((box) => box && Math.abs(box.height - m.chip.height) < 1 && Math.abs(box.top - m.chip.top) < 1);
+            const best = await measure();
+            ok('with Best match the chips, channel list and sort controls share one height and top', best.chip && same(best), JSON.stringify(best));
+            await sort.selectOption('name');
+            await page.waitForTimeout(300);
+            const sorted = await measure();
+            ok('picking a sort does not change the row height', same(sorted) && Math.abs(sorted.chip.height - best.chip.height) < 1, JSON.stringify(sorted));
+            await shot(page, 'combined-filter-row');
+
+            // The toolbar indicator opens the Search settings.
+            await page.locator('button.combinedIndicator').click();
+            await page.waitForTimeout(800);
+            ok('the toolbar indicator opens the Search settings tab', /#search/.test(page.url()) && (await page.locator('.settingsTab.active').first().innerText()).includes('Search'), page.url());
+            ok('the Search tab offers Search Video and Radio Together', (await page.getByText('Search Video and Radio Together').count()) >= 1);
+
+            // Phone width: the channel list still shows and the row scrolls sideways instead of squashing it.
+            await page.setViewportSize({ width: 390, height: 800 });
+            await open();
+            await page.locator('.iconSelect').waitFor({ timeout: 30000 }).catch(() => {});
+            const phone = await page.evaluate(() => { const el = document.querySelector('.iconSelect'); return el ? Math.round(el.getBoundingClientRect().width) : 0; });
+            ok('on a phone the channel list keeps a usable width', phone >= 60, String(phone));
+            await shot(page, 'combined-filter-row-phone');
+        });
+
+        // ---- Logs page: tiles, level chips, search, source dropdown, 24-hour times, download, clear view, phone layout (nothing saved on the server)
+        // ---- The Search page's note about how searching is set up follows the Video | Radio toggle
+        await flow('radio mode: the Search page notes the radio search setup', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio search note', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
+            await page.goto(BASE + '/search', { waitUntil: 'networkidle' });
+            const note = page.locator('.searchSettingsNote');
+            await note.waitFor({ timeout: 15000 }).catch(() => {});
+            ok('in radio mode the Search page notes the radio search setup', /^Radio search: (all|any) words?/.test(((await note.first().textContent().catch(() => '')) || '').trim()), (await note.allTextContents()).join(' | '));
+            ok('the note links to Settings', (await note.locator('a[href*="/settings"]').count()) === 1);
+            await shot(page, 'radio-search-note');
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(2000);
+            ok('after the switch to Video the note describes the iPlayer search', /^Search: /.test(((await note.first().textContent().catch(() => '')) || '').trim()), (await note.allTextContents()).join(' | '));
+        });
+
+        // ---- Radio (BBC Sounds) in the shared pages: the same pages as video, fed radio data by the Video | Radio toggle in the top bar
+        await flow('radio mode: toggle, browse pages, programme page and player', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio mode pages', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const cards = page.locator('.programmeCard');
+            await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('radio Discover is the Discover page: hero banner and rails of radio cards', (await page.locator('.browseHero').count()) > 0 && (await cards.count()) > 3);
+            ok('the Video | Radio toggle is in the top bar, showing Radio', /^Radio/.test((await page.locator('.NavBar .modeSingle').getAttribute('aria-label')) || ''));
+            ok('the menu has no separate Radio link', (await page.locator('.LeftHandNav a[href="/radio"]').count()) === 0);
+            // A to Z stays in the menu in radio mode, greyed out and not a link (BBC Sounds has none).
+            const atoz = page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' }).locator('.navLink');
+            ok('A to Z stays in the menu in radio mode, disabled', (await atoz.count()) === 1 && (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 0 && (await atoz.getAttribute('aria-disabled')) === 'true');
+            await shot(page, 'radio-discover');
+
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(2500);
+            ok('switching to Video draws video cards again (no radio badge on the first card)', (await page.locator('.programmeCard .noThumb svg[data-icon=radio]').count()) === 0);
+            ok('A to Z is a link again in video mode', (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 1);
+
+            // The toggle keeps the page: Categories stays Categories, Search keeps its term, a category goes to the list, a show to a search.
+            await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(1500);
+            ok('the toggle keeps you on Categories', new URL(page.url()).pathname === '/browse/categories');
+            await page.goto(BASE + '/search?searchTerm=archers', { waitUntil: 'networkidle' });
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(1500);
+            ok('the toggle keeps the search term', new URL(page.url()).pathname === '/search' && new URL(page.url()).searchParams.get('searchTerm') === 'archers');
+            // (Every page load below starts in radio mode again: the init script above sets it.)
+            await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
+            await page.locator('.tileGrid .tile').nth(2).click();
+            await page.waitForURL(/\/browse\/category\//, { timeout: 15000 });
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(1500);
+            ok('the toggle sends a category to the Categories list (its id is not the other catalogue\'s)', new URL(page.url()).pathname === '/browse/categories');
+            // The Channels page lists only the radio stations in radio mode, and none of them in video mode.
+            await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(2500);
+            const radioTiles = await page.locator('.tileGrid .tile').count();
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(2000);
+            const videoTiles = await page.locator('.tileGrid .tile').count();
+            if (ctx.cfg?.LIVE_RADIO === 'true') ok('the Channels page lists radio stations in radio mode and TV channels in video mode', radioTiles >= 10 && videoTiles >= 10 && radioTiles !== videoTiles, `radio ${radioTiles}, video ${videoTiles}`);
+            // The radio Guide's blocks open the show's radio page (not a search for the title); the video Guide's still open a programme.
+            if (ctx.cfg?.LIVE_RADIO === 'true') {
+                await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
+                const blocks = page.locator('a.programmeBlock');
+                await blocks.first().waitFor({ timeout: 25000 }).catch(() => {});
+                const radioHrefs = await blocks.evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                if (!radioHrefs.length) rec(U, 'radio Guide blocks open the radio page', 'SKIP', 'no guide blocks drawn');
+                else {
+                    ok('radio Guide blocks open the show\'s radio page, not a search', radioHrefs.some((h) => /^\/browse\/radio\/[a-z0-9]+(\?episode=[a-z0-9]+)?$/i.test(h)) && !radioHrefs.some((h) => /^\/browse\/programme\//.test(h)), radioHrefs.slice(0, 3).join(' | '));
+                    const target = page.locator('a.programmeBlock[href^="/browse/radio/"]').first();
+                    if (await target.count()) {
+                        await target.scrollIntoViewIfNeeded();
+                        await target.click();
+                        await page.waitForURL(/\/browse\/radio\//, { timeout: 15000 }).catch(() => {});
+                        ok('clicking a radio Guide block lands on the radio programme page', new URL(page.url()).pathname.startsWith('/browse/radio/'), page.url());
+                        await shot(page, 'radio-guide-link');
+                    }
+                }
+                await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
+                await page.locator('.NavBar .modeSingle').click();
+                await page.waitForTimeout(2500);
+                const videoHrefs = await page.locator('a.programmeBlock').evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                if (videoHrefs.length) ok('video Guide blocks still open a programme page', videoHrefs.every((h) => /^\/browse\/programme\/[a-z0-9]+$/i.test(h)), videoHrefs.find((h) => !/^\/browse\/programme\//.test(h)) || '');
+                else rec(U, 'video Guide blocks still open a programme page', 'SKIP', 'no guide blocks drawn');
+            }
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+
+            await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
+            await page.locator('.tileGrid .tile').first().waitFor({ timeout: 25000 });
+            ok('radio Categories are the Categories page: picture tiles', (await page.locator('.tileGrid .tile.imageTile').count()) > 5);
+            ok('radio Categories has no "feature on Discover" compass', (await page.locator('button[title*="featured on Discover"]').count()) === 0);
+            await shot(page, 'radio-categories');
+            await page.locator('.tileGrid .tile').nth(5).click();
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('a radio category is the category grid, with its filter, sort and pagination', (await cards.count()) > 5 && (await page.locator('.tableFilter').count()) > 0 && (await page.locator('.SettingsPageToolbar').count()) > 0 && (await page.locator('select[aria-label="items per page"]').count()) > 0);
+            await shot(page, 'radio-category');
+            // Sub-category chips (radio): All starts on, the first click picks just that one, more clicks add, All resets.
+            await page.goto(BASE + '/browse/category/factual', { waitUntil: 'networkidle' });
+            const subChips = page.locator('.subCategories button.letter');
+            await subChips.first().waitFor({ timeout: 25000 }).catch(() => {});
+            if ((await subChips.count()) < 3) rec(U, 'radio sub-category chips', 'SKIP', 'this category has no sub-categories');
+            else {
+                const onCount = () => page.locator('.subCategories button.letter[aria-pressed=true]').count();
+                ok('sub-categories: All is on to begin with, alongside every chip', (await onCount()) === (await subChips.count()));
+                await subChips.nth(1).click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: the first click picks just that one', (await onCount()) === 1 && (await subChips.nth(1).getAttribute('aria-pressed')) === 'true');
+                await subChips.nth(2).click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: a second click adds another', (await onCount()) === 2);
+                await subChips.nth(2).click();
+                await subChips.nth(1).click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: switching the last one off goes back to all', (await onCount()) === (await subChips.count()));
+                await subChips.nth(3).click();
+                await page.waitForTimeout(800);
+                await subChips.first().click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: All resets the selection', (await onCount()) === (await subChips.count()));
+            }
+
+            await page.goto(BASE + '/browse/collections', { waitUntil: 'networkidle' });
+            await page.locator('.collectionGrid > *').first().waitFor({ timeout: 25000 });
+            ok('radio Collections is the Collections page, with counts', (await page.locator('.collectionGrid > *').count()) > 0 && /titles?/.test(await page.locator('.collectionGrid').first().innerText()));
+            await page.locator('.collectionGrid > *').first().click();
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('an opened radio collection lists radio cards, and has a Download collection button like video', (await cards.count()) > 0 && (await page.locator('button[title^="Download collection"]').count()) === 1);
+            await shot(page, 'radio-collection');
+
+            // BBC Sounds has no A to Z: an address for it opens Categories, and the command palette does not offer it.
+            await page.goto(BASE + '/browse/atoz/a', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(1500);
+            ok('radio A to Z address opens Categories instead', new URL(page.url()).pathname === '/browse/categories');
+            await page.keyboard.press('Control+k');
+            await page.waitForTimeout(500);
+            const paletteText = await page.locator('.cmdPanel').first().innerText().catch(() => '');
+            ok('the command palette offers no A to Z in radio mode', paletteText !== '' && !/A to Z/.test(paletteText));
+            await page.keyboard.press('Escape');
+
+            await page.goto(BASE + '/search?searchTerm=archers', { waitUntil: 'networkidle' });
+            await page.locator('.resultsTable tbody tr, .programmeCard').first().waitFor({ timeout: 25000 });
+            ok('radio search is the Search page, with its results table', (await page.locator('.resultsTable tbody tr').count()) > 1);
+            ok('radio search results are marked Radio', (await page.locator('.resultsTable .pill', { hasText: 'RADIO' }).count()) > 0);
+            await shot(page, 'radio-search');
+            await page.locator('.resultsTable tbody tr', { hasText: 'RADIO' }).first().waitFor();
+
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            await page.locator('.programmeCard', { hasText: 'Programme' }).first().locator('.meta .title').click(); // the title, not the picture: with Show Extended Debug on, the picture's overlay is a bug button
+            await page.locator('.programmeBanner').waitFor({ timeout: 25000 });
+            await page.locator('.episodeRow').first().waitFor({ timeout: 25000 });
+            ok('a radio programme is the programme page: banner, Subscribe, paged episode list', (await page.locator('.episodeRow').count()) > 1 && (await page.getByRole('button', { name: /Subscribe/ }).count()) > 0 && (await page.locator('.TablePagination, [class*=agination]').count()) > 0);
+            ok('the radio programme page is the same page as video (shared markup)', (await page.locator('.programmeBanner .programmeBannerContent').count()) === 1 && (await page.locator('.episodeThumbWrap.radioArtBox').count()) > 0);
+            await shot(page, 'radio-programme');
+            if (ctx.cfg?.STREAM_KEY) {
+                await page.locator('.episodeRow .overlay button[title="Play audio"]').first().click({ force: true });
+                await page.locator('.audioPlayerBar audio').waitFor({ timeout: 10000 });
+                await page.waitForTimeout(4000);
+                warn('the radio player is playing audio', (await page.evaluate(() => document.querySelector('.audioPlayerBar audio')?.currentTime || 0)) > 0, 'currentTime did not advance');
+                await shot(page, 'radio-player');
+                // Client-side navigation: a full page load would end the player by design.
+                await page.locator('a[href="/browse/categories"]').first().click();
+                await page.waitForTimeout(1500);
+                ok('the player keeps going while pages change', (await page.locator('.audioPlayerBar audio').count()) === 1);
+            }
+            if (ctx.cfg?.UI_EXTENDED_DEBUG === 'true') {
+                await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+                await cards.first().waitFor({ timeout: 25000 });
+                await page.locator('.programmeCard', { hasText: 'Programme' }).first().locator('.meta .title').click(); // the title, not the picture: with Show Extended Debug on, the picture's overlay is a bug button
+                await page.locator('.episodeRow').first().waitFor({ timeout: 25000 });
+                await page.locator('.episodeRow .overlay button[title="Streaming debug"]').first().click({ force: true });
+                await page.waitForURL(/\/streaming\/debug\/[^?]+\?kind=radio/, { timeout: 8000 });
+                // The probe runs by itself for radio; its table lists the stream's routes.
+                await page.locator('.probeTable tbody tr').first().waitFor({ timeout: 40000 });
+                const body = await page.innerText('body');
+                ok('the radio debug page reads the episode as audio', /\baudio\b/i.test(body) && (await page.locator('.probeTable tbody tr').count()) > 2, 'no audio probe rows');
+                ok('the radio debug page has no broken picture', await page.evaluate(() => [...document.querySelectorAll('.streamDebug img')].every((i) => i.complete && i.naturalWidth > 0)), 'a picture did not load');
+                ok('the radio debug page shows no video-only parts', !/Library debug|Video info|FHD upgrade/.test(body), 'video-only text on the page');
+                await shot(page, 'radio-debug');
+            }
+            await page.goto(BASE + '/radio', { waitUntil: 'networkidle' });
+            ok('the old /radio address opens radio search', new URL(page.url()).pathname === '/search');
+            await page.setViewportSize({ width: 390, height: 800 });
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('radio Discover has no horizontal overflow on a phone', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));
+            await shot(page, 'radio-phone');
+        });
+
+        // Radio Channels page: each station is a wide logo on a field of its own colour, like a TV channel tile, not a cropped square.
+        await flow('radio Channels tiles show every logo whole on a colour field', async (page) => {
+            if (String(ctx.cfg?.LIVE_RADIO) !== 'true') { rec(U, 'radio channel tiles', 'SKIP', 'Live Radio is off'); return; }
+            // The Channels page lists TV channels in video mode; this flow checks the radio stations, so it opens in radio mode.
+            await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
+            await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
+            const logos = page.locator('.tile .channelLogo');
+            await logos.first().waitFor({ timeout: 25000 });
+            await page.waitForTimeout(1500);
+            const info = await logos.evaluateAll((imgs) => imgs.map((i) => ({
+                src: i.getAttribute('src') || '',
+                loaded: i.complete && i.naturalWidth > 0,
+                fit: getComputedStyle(i).objectFit,
+                ratio: i.naturalWidth / (i.naturalHeight || 1),
+            })));
+            ok('every radio logo loads', info.length > 0 && info.every((i) => i.loaded), `${info.filter((i) => !i.loaded).length} of ${info.length} did not load`);
+            ok('every radio logo is the versioned wide picture', info.every((i) => /channel-logo\/[a-z0-9_]+\.svg\?v=wide$/.test(i.src)), info.find((i) => !/\?v=wide$/.test(i.src))?.src);
+            ok('every radio logo is the TV logo shape (about 2.4 to 1), so nothing is cropped', info.every((i) => i.ratio > 2.2 && i.ratio < 2.6), info.find((i) => i.ratio <= 2.2 || i.ratio >= 2.6)?.src);
+            ok('radio logos are drawn the same way as the TV ones', info.every((i) => i.fit === 'cover'), 'a logo is fitted differently from the TV tiles');
+            await shot(page, 'radio-channels');
+        });
+
+        // The Queue lists radio downloads beside video ones, read from the one queue API with ?mode=radio. The radio lists are stubbed (as
+        // the server sends them: queue rows) so nothing is downloaded or written.
+        await flow('radio downloads show in the Queue with kB/s, cancel and try again through the queue API', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio queue rows', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const now = new Date().toISOString();
+            const running = { kind: 'radio', pid: 'p0smoke01', state: 'downloading', showId: 'b0smoke01', status: 'Downloading', nzbName: 'SMOKE-TEMP Show - Ep 1', type: 'Radio', client: 'RADIO', details: { progress: 40, size: 5, speed: 0.25, eta: '00:01:10', start: now } };
+            const failed = { kind: 'radio', pid: 'p0smoke02', state: 'failed', showId: 'b0smoke01', status: 'Failed', nzbName: 'SMOKE-TEMP Show - Ep 2', type: 'Radio', client: 'RADIO', failMessage: 'ffmpeg failed', details: { progress: 100, start: now, part: 'ffmpeg failed' } };
+            const calls = [];
+            await page.route(/\/json-api\/queue\/(queue|history)(\/retry)?\?.*mode=radio/, (route) => {
+                const req = route.request();
+                if (req.method() !== 'GET') { calls.push(`${req.method()} ${req.url()}`); return route.fulfill({ json: [] }); }
+                return route.fulfill({ json: /\/queue\/queue\?/.test(req.url()) ? [running] : [failed] });
+            });
+            await page.goto(BASE + '/queue', { waitUntil: 'networkidle' });
+            const row = page.locator('tbody tr', { hasText: 'SMOKE-TEMP Show - Ep 1' }).first();
+            await row.waitFor({ timeout: 15000 });
+            // textContent, not innerText: the ETA column is hidden below 1500px wide but still rendered.
+            const text = (await row.textContent()).replace(/\s+/g, ' ');
+            ok('the radio row is marked Radio', /Radio/.test(text), text);
+            ok('the radio row shows its speed in kB/s', /256 kB\/s/.test(text), text);
+            ok('the radio row shows its size and ETA', /5\.00 MB/.test(text) && /00:01:10/.test(text), text);
+            const failedRow = page.locator('tbody tr', { hasText: 'SMOKE-TEMP Show - Ep 2' }).first();
+            await failedRow.waitFor({ timeout: 15000 });
+            ok('the failed radio download is listed in history, not the queue', (await page.locator('tbody tr', { hasText: 'Ep 2' }).count()) === 1);
+            ok('a failed radio download has a Try again button, and a running one does not', (await failedRow.locator('svg[data-icon="rotate-right"]').count()) === 1 && (await row.locator('svg[data-icon="rotate-right"]').count()) === 0);
+            await shot(page, 'radio-queue');
+            await failedRow.locator('svg[data-icon="rotate-right"]').first().click();
+            await page.waitForTimeout(1000);
+            ok('Try again calls the queue API for that download', calls.some((c) => /^POST .*\/json-api\/queue\/history\/retry\?mode=radio&pid=p0smoke02$/.test(c)), JSON.stringify(calls));
+            const menu = row.locator('.actionMenu');
+            if (await menu.count()) { await menu.locator('svg').first().click(); await row.locator('.menuPanel button', { hasText: /Cancel download/ }).click(); }
+            else await row.locator('.actionCol svg.clickable').last().click();
+            // The confirm button is itself labelled "Cancel download", which clickDialogPrimary skips.
+            const confirmBtn = dialog(page).locator('button', { hasText: /^\s*Cancel download\s*$/ });
+            await confirmBtn.waitFor({ timeout: 8000 });
+            await confirmBtn.click();
+            await page.waitForTimeout(1000);
+            ok('cancelling a radio row calls the queue API for radio, not the video queue', calls.some((c) => /^DELETE .*\/json-api\/queue\/queue\?mode=radio&pid=p0smoke01$/.test(c)) && !calls.some((c) => /queue\/queue\?pid=/.test(c)), JSON.stringify(calls));
+        });
+
+        // A radio item on the Events and Streams pages opens the same info popup as a video, in its audio form. The lists and the
+        // episode details are stubbed, so nothing is played or written.
+        await flow('radio events and streams open the audio info popup', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio info popup', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const now = new Date().toISOString();
+            const event = { id: 'smoke-radio-event', type: 'stream_started', level: 'info', message: 'Started streaming', pid: 'p0smoke01', radio: true, title: 'SMOKE-TEMP Radio Show - Ep 1', timestamp: now };
+            const session = { id: 'smoke-radio-session', pid: 'p0smoke01', mode: 'direct', client: 'NATIVE', startedAt: now, radio: true, title: 'SMOKE-TEMP Radio Show - Ep 1', settings: { Media: 'Audio' } };
+            const details = { pid: 'p0smoke01', title: 'SMOKE-TEMP Radio Show', episodeTitle: 'Ep 1', channel: 'BBC Radio 4', category: 'Radio', description: 'Smoke description', runtime: 30, firstBroadcast: now, type: 'RADIO', audioOnly: true };
+            await page.route(/\/json-api\/events$/, (route) => (route.request().method() === 'GET' ? route.fulfill({ json: [event] }) : route.continue()));
+            await page.route(/\/json-api\/streams$/, (route) => route.fulfill({ json: { active: [session], history: [] } }));
+            await page.route(/\/json-api\/details\?pid=p0smoke01&kind=radio/, (route) => route.fulfill({ json: details }));
+            const openAndCheck = async (url, label) => {
+                await page.goto(BASE + url, { waitUntil: 'networkidle' });
+                const link = page.locator('a.clickable', { hasText: 'SMOKE-TEMP Radio Show - Ep 1' }).first();
+                await link.waitFor({ timeout: 15000 });
+                await link.click();
+                const popup = dialog(page);
+                await popup.waitFor({ timeout: 8000 });
+                await popup.locator('.infoBanner h1', { hasText: 'SMOKE-TEMP Radio Show' }).waitFor({ timeout: 8000 }).catch(() => {});
+                const text = (await popup.innerText()).replace(/\s+/g, ' ');
+                ok(`${label}: the audio popup opens with the episode's title and details`, /SMOKE-TEMP Radio Show/.test(text) && /Ep 1/.test(text) && /BBC Radio 4/.test(text) && /Smoke description/.test(text) && /30 min/.test(text), text);
+                ok(`${label}: it offers Play audio, not Play Video`, /Play audio/.test(text) && !/Play Video/.test(text), text);
+                ok(`${label}: it is marked Radio`, /Radio/.test(text), text);
+                await shot(page, `radio-popup-${label.toLowerCase()}`);
+                await popup.locator('button', { hasText: /^\s*Close\s*$/ }).first().click().catch(() => {});
+            };
+            await openAndCheck('/events', 'Events');
+            await openAndCheck('/streaming', 'Streams');
+        });
+
+        await flow('logs page', async (page) => {
+            await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
+            await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});
+            await page.waitForTimeout(1500); // the server replays its last lines on connect
+            await shot(page, 'logs', true);
+            const labels = (await page.locator('.logTiles .tileLabel').allInnerTexts()).map((t) => t.toLowerCase());
+            ok('the Logs page draws the Connection, Lines held, Errors and Last error tiles, each with an (i) tip', ['connection', 'lines held', 'errors', 'last error'].every((l) => labels.includes(l)) && (await page.locator('.logTiles .InfoTip-button').count()) === 4, labels.join(', '));
+            ok('the Logs connection tile says Live', /Live/.test(await page.locator('.logTiles .tile').first().innerText()));
+            await page.locator('.logTiles .InfoTip-button').nth(1).click().catch(() => {});
+            ok('the Lines held (i) tip explains the 250 and 5000 lines', /250/.test(await page.locator('.logTiles .InfoTip-popup').nth(1).innerText().catch(() => '')) && /5000/.test(await page.locator('.logTiles .InfoTip-popup').nth(1).innerText().catch(() => '')));
+            await page.locator('.hint').click().catch(() => {});
+            ok('the Logs page has a search box, a source dropdown with All sources and System, and the three level chips',
+                (await page.locator('input[aria-label="Search the log"]').count()) === 1
+                && /All sources/.test(await page.locator('select[aria-label="Show lines from"]').innerText().catch(() => '')) && /System/.test(await page.locator('select[aria-label="Show lines from"]').innerText().catch(() => ''))
+                && (await page.locator('.levelChip').allInnerTexts()).map((t) => t.split(/\s/)[0]).join() === 'ERROR,INFO,DEBUG');
+            const select = await page.locator('select[aria-label="Show lines from"]').boundingBox().catch(() => null);
+            ok('the Logs source dropdown is wide enough to read (at least 140px)', !!select && select.width >= 140, select ? `${select.width}px` : 'missing');
+
+            const rows = await page.locator('.logRow').count();
+            if (!rows) {
+                rec(U, 'logs page rows, filters and times', 'SKIP', 'the server has no log lines to show yet');
+            } else {
+                const firstTime = (await page.locator('.logTime').first().innerText()).trim();
+                ok('log times are 24-hour with milliseconds (hh:mm:ss.mmm)', /^\d{2}:\d{2}:\d{2}\.\d{3}$/.test(firstTime), firstTime);
+                ok('a log time\'s hover text gives the date and the same time', /^\d{1,2} \w{3} \d{4}, \d{2}:\d{2}:\d{2}\.\d{3}$/.test((await page.locator('.logTime').first().getAttribute('title')) || ''));
+                ok('every log row has a text level badge (ERR, INF or DBG)', (await page.locator('.logBadge').allInnerTexts()).every((t) => ['ERR', 'INF', 'DBG'].includes(t.trim())));
+                // Level chips narrow the list by level, and again toggle off.
+                const chip = page.locator('.levelChip.INFO');
+                await chip.click();
+                await page.waitForTimeout(300);
+                const infoOnly = await page.locator('.logRow').evaluateAll((els) => els.every((e) => e.classList.contains('INFO')));
+                ok('the INFO chip shows only INFO lines and is pressed', infoOnly && (await chip.getAttribute('aria-pressed')) === 'true');
+                await chip.click();
+                await page.waitForTimeout(300);
+                ok('turning the INFO chip off shows every level again', (await chip.getAttribute('aria-pressed')) === 'false' && (await page.locator('.logRow').count()) === rows);
+                // Search with nothing matching shows the empty state with a way out.
+                const search = page.locator('input[aria-label="Search the log"]');
+                await search.fill('zz-no-such-line-zz');
+                await page.waitForTimeout(300);
+                ok('a search that matches nothing says "No lines match" and offers Clear filters', /No lines match/.test(await page.locator('body').innerText()) && (await page.locator('.logRow').count()) === 0);
+                await page.locator('.emptyStateActions button', { hasText: 'Clear filters' }).click().catch(() => {});
+                await page.waitForTimeout(300);
+                ok('Clear filters empties the search and brings the lines back', (await search.inputValue()) === '' && (await page.locator('.logRow').count()) === rows);
+                // Search narrows to the lines that contain the text.
+                const sample = ((await page.locator('.logMessage').last().innerText()).trim().split(/\s+/).find((w) => w.length > 3) || '').slice(0, 12);
+                if (sample) {
+                    await search.fill(sample.toUpperCase());
+                    await page.waitForTimeout(300);
+                    const hits = await page.locator('.logMessage').allInnerTexts();
+                    ok('searching ignores case and keeps only matching lines', hits.length > 0 && hits.every((t) => t.toLowerCase().includes(sample.toLowerCase())), sample);
+                    await search.fill('');
+                }
+                // Download gives a .txt named from the time.
+                const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }).catch(() => null), page.locator('button[aria-label="Download"]').click()]);
+                ok('the Download button saves a .txt named iplayarr-log-<date-time>.txt', !!dl && /^iplayarr-log-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.txt$/.test(dl.suggestedFilename()), dl ? dl.suggestedFilename() : 'no download');
+                // Scrolling up pauses following and offers Jump to latest.
+                await page.locator('.logList').evaluate((el) => { el.scrollTop = 0; });
+                await page.waitForTimeout(300);
+                const scrollable = await page.locator('.logList').evaluate((el) => el.scrollHeight > el.clientHeight + 40);
+                if (scrollable) {
+                    ok('scrolling up stops following and shows Jump to latest', (await page.locator('.jumpLatest').count()) === 1 && (await page.locator('button[aria-label="Not following"]').count()) === 1);
+                    await page.locator('.jumpLatest').click();
+                    await page.waitForTimeout(300);
+                    ok('Jump to latest follows again and hides the button', (await page.locator('.jumpLatest').count()) === 0 && (await page.locator('button[aria-label="Following"]').count()) === 1);
+                } else {
+                    rec(U, 'logs follow pause and Jump to latest', 'SKIP', 'the list is too short to scroll');
+                }
+            }
+
+            // A link with ?filter=ERROR opens with the ERROR chip on.
+            await page.goto(BASE + '/logs?filter=ERROR', { waitUntil: 'networkidle' });
+            await page.waitForSelector('.levelChips', { timeout: 15000 }).catch(() => {});
+            ok('/logs?filter=ERROR opens with only the ERROR chip on', (await page.locator('.levelChip.ERROR').getAttribute('aria-pressed')) === 'true' && (await page.locator('.levelChip[aria-pressed="true"]').count()) === 1);
+
+            // Phone width: filters on their own row, search not squashed, nothing sideways.
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.waitForTimeout(500);
+            await shot(page, 'logs-phone', true);
+            const phoneSearch = await page.locator('input[aria-label="Search the log"]').boundingBox().catch(() => null);
+            const phoneSelect = await page.locator('select[aria-label="Show lines from"]').boundingBox().catch(() => null);
+            ok('on a phone the Logs search box is at least 120px wide and the dropdown at least 140px', !!phoneSearch && !!phoneSelect && phoneSearch.width >= 120 && phoneSelect.width >= 140, `${phoneSearch?.width} / ${phoneSelect?.width}`);
+            ok('the Logs page does not overflow sideways on a phone', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+            await page.setViewportSize({ width: 1440, height: 900 });
+
+            // Clear view asks first; Cancel keeps the lines, Clear empties this page's list only.
+            const before = await page.locator('.logRow').count();
+            const clear = page.locator('button[aria-label="Clear view"]');
+            if (before && (await clear.count())) {
+                await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
+                await page.waitForTimeout(1500);
+                const total = await page.locator('.logRow').count();
+                await clear.click();
+                await dialog(page).waitFor({ timeout: 8000 });
+                ok('Clear view asks for confirmation first', /Clear the view/.test(await dialog(page).innerText()));
+                await dialog(page).locator('button', { hasText: /Cancel/ }).click();
+                await page.waitForTimeout(400);
+                ok('cancelling Clear view keeps the lines', (await page.locator('.logRow').count()) === total);
+                await clear.click();
+                await clickDialogPrimary(page);
+                await page.waitForTimeout(600);
+                ok('confirming Clear view empties the page and says so', /No log lines yet/.test(await page.locator('body').innerText()));
+            } else {
+                rec(U, 'logs Clear view', 'SKIP', 'no log lines to clear');
+            }
         });
 
         // ---- Settings: an Appearance edit flags only its own tab and Discard puts it back (nothing saved)
@@ -329,6 +926,45 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('a Search edit flags only the Search tab', d2.length === 1 && d2[0].includes('Search'), d2.join('|'));
             await page.getByRole('button', { name: /^Discard$/ }).click();
             ok('nothing was saved', (await http('/json-api/config')).json?.NATIVE_SEARCH === n0);
+        });
+
+        // ---- Menu cache: the left-hand menu remembers its settings and versions, so it draws right before the config arrives (restored afterwards)
+        await flow('menu draws from its cache', async (page) => {
+            const cfg0 = (await http('/json-api/config')).json || {};
+            const was = cfg0.BROWSE_SHOW_COLLECTIONS;
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: was } }); });
+            await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: 'true' } });
+            const nav = () => page.locator('.LeftHandNav a', { hasText: /^\s*Collections\s*$/ });
+
+            // A normal load fills the cache with the menu settings and versions, and nothing secret.
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            const stored = await page.evaluate(() => ({ settings: localStorage.getItem('iplayarr.navSettings'), versions: localStorage.getItem('iplayarr.navVersions') }));
+            const settings = JSON.parse(stored.settings || '{}');
+            ok('the menu settings are remembered in this browser', settings.BROWSE_SHOW_COLLECTIONS === 'true' && typeof settings.NATIVE_SEARCH === 'string', stored.settings);
+            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
+            const versions = JSON.parse(stored.versions || '{}');
+            ok('the app version is remembered', typeof versions.appVersion === 'string' && versions.appVersion.length > 0, stored.versions);
+
+            // With the config requests held back, a reload still draws the menu from the cache.
+            await page.route('**/json-api/config', (route) => route.abort());
+            await page.route('**/json-api/config/hiddenSettings', (route) => route.abort());
+            await page.route('**/json-api/versions', (route) => route.abort());
+            await page.goto(BASE + '/browse', { waitUntil: 'domcontentloaded' });
+            await page.waitForSelector('.LeftHandNav', { timeout: 15000 });
+            ok('the Collections item is there before the config arrives', (await nav().count()) === 1);
+            const floor = await page.locator('.LeftHandNav .floor').first().innerText();
+            ok('the search line is there before the config arrives', settings.NATIVE_SEARCH === 'false' ? /get_iplayer Search/.test(floor) : /Native Search/.test(floor), floor);
+            if (settings.NATIVE_SEARCH !== 'false') ok('Native Search shows the engine version', new RegExp(`Native Search ${settings.NATIVE_SEARCH_ENGINE === 'V1' ? '1\\.0' : '2\\.0'}`).test(floor), floor);
+            ok('the version block is there before the versions arrive', (await page.locator('.LeftHandNav .versionInfo').first().innerText()).includes(`v${versions.appVersion}`));
+            await page.unroute('**/json-api/config');
+            await page.unroute('**/json-api/config/hiddenSettings');
+            await page.unroute('**/json-api/versions');
+
+            // The server wins: with it off, a fresh load replaces the cached value.
+            await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: 'false' } });
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            ok('the server value replaces the cached one', (await nav().count()) === 0);
+            ok('and the cache follows it', JSON.parse((await page.evaluate(() => localStorage.getItem('iplayarr.navSettings'))) || '{}').BROWSE_SHOW_COLLECTIONS === 'false');
         });
 
         // ---- Collections: the menu item and page follow Show Collections, and Discover never has a row (restored afterwards)
@@ -528,19 +1164,45 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // ... and via a result, then the browser Back (all the results arrive at once, over the 40-pid limit).
             await page.waitForFunction(() => document.querySelectorAll('.programmeCard').length > 0, null, { timeout: 60000 }).catch(() => {});
             await page.waitForTimeout(2500);
-            await page.locator('.programmeCard').first().click();
+            await page.locator('.programmeCard').first().locator('.meta .title').click();
             await page.waitForTimeout(1000);
             await page.goBack();
             await page.waitForTimeout(4000);
             const after = await withImg();
             ok('after Back the poster thumbnails are still there', after >= Math.floor(before * 0.8), `${before} before, ${after} after`);
             // Clearing the box forgets the search.
+            const blankNow = async () => ({
+                url: !/searchTerm=/.test(page.url()),
+                noResults: (await page.locator('.programmeCard, .resultsTable tbody tr, .resultsToolbar').count()) === 0,
+                noEmpty: (await page.locator('.emptyState').count()) === 0,
+                home: (await page.locator('.searchSettingsNote').count()) === 1,
+            });
             await page.locator('.clearSearch').click();
+            await page.waitForTimeout(500);
+            const afterX = await blankNow();
+            ok('clicking the x puts Search back to its blank page at once (no term, no results, settings note shown)', Object.values(afterX).every(Boolean), JSON.stringify(afterX));
             await menu('Discover').click();
             await page.waitForTimeout(500);
             await menu('Search').click();
             await page.waitForTimeout(1000);
             ok('clearing the box makes Search open blank next time', !/searchTerm=/.test(page.url()), page.url());
+
+            // Deleting the text by hand does the same as the x.
+            await page.goto(`${BASE}/search?searchTerm=celebrity+traitors`, { waitUntil: 'networkidle' });
+            await page.waitForFunction(() => document.querySelectorAll('.programmeCard, .resultsTable tbody tr').length > 0, null, { timeout: 60000 }).catch(() => {});
+            const box = page.locator('.pageSearchBar .searchBox');
+            await box.click();
+            await box.press('Control+a');
+            await box.press('Delete');
+            await page.waitForTimeout(600);
+            const afterDelete = await blankNow();
+            ok('emptying the box by typing puts Search back to its blank page', Object.values(afterDelete).every(Boolean), JSON.stringify(afterDelete));
+            ok('the box stays empty and the x is gone', (await box.inputValue()) === '' && (await page.locator('.clearSearch').count()) === 0);
+            // And the page still searches afterwards.
+            await box.fill('celebrity traitors');
+            await box.press('Enter');
+            await page.waitForFunction(() => /searchTerm=/.test(location.search), null, { timeout: 10000 }).catch(() => {});
+            ok('searching again after clearing works', /searchTerm=celebrity/.test(page.url()), page.url());
         });
 
         // ---- Programme page: the highlighted episode (arriving with ?episode=) stays until its x is clicked, then fades
@@ -604,6 +1266,12 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the collection is a row of the one results table, type COLLECTION', (await collectionRows().count()) >= 1);
             ok('collections are listed first', /COLLECTION/.test(await rows().first().innerText()));
             ok('a collection row has no checkbox and no download button', (await collectionRows().first().locator('.CheckInput-container, .rowIconButton').count()) === 0);
+            // The Type column must be wide enough for the COLLECTION pill (it was clipped at 70px).
+            const pillFit = await collectionRows().first().locator('td[data-title="Type"] .pill').evaluate((pill) => {
+                const cell = pill.closest('td');
+                return { pill: pill.scrollWidth, shown: pill.clientWidth, cell: cell.clientWidth, pillRight: pill.getBoundingClientRect().right, cellRight: cell.getBoundingClientRect().right };
+            });
+            ok('the COLLECTION pill fits its Type cell without clipping', pillFit.pill <= pillFit.shown && pillFit.pillRight <= pillFit.cellRight + 1);
             await shot(page, 'search-collection-row');
 
             const chip = page.locator('.channelChips .chip', { hasText: /^\s*Collection\s*$/ });
@@ -655,6 +1323,138 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         });
 
         // ---- Light/dark mode toggle
+        // UI_EXTENDED_DEBUG shows a bug button on programme cards; the badge settings put the badge row on card pictures.
+        await flow('appearance settings change the pages', async (page) => {
+            const KEYS = ['UI_EXTENDED_DEBUG', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES'];
+            const cfg0 = (await http('/json-api/config')).json || {};
+            const orig = Object.fromEntries(KEYS.filter((k) => k in cfg0).map((k) => [k, cfg0[k]]));
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: orig }); });
+            const load = async (values) => {
+                await http('/json-api/config', { method: 'PUT', body: values });
+                await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+                await page.locator('.thumb').first().waitFor({ timeout: 20000 });
+                await page.waitForTimeout(500);
+            };
+            const off = Object.fromEntries(KEYS.map((k) => [k, 'false']));
+            await load({ ...off, UI_EXTENDED_DEBUG: 'true' });
+            ok('Show Extended Debug on: cards have the streaming debug button', (await page.locator('button[title="Streaming debug"]').count()) > 0);
+            await load(off);
+            ok('Show Extended Debug off: no streaming debug button', (await page.locator('button[title="Streaming debug"]').count()) === 0);
+            // The debug button is for programmes and series too, not only episodes: cards, hero and the programme page header.
+            const debugPill = page.locator('.programmeMeta .pill[title="Streaming debug"]');
+            await load({ ...off, UI_EXTENDED_DEBUG: 'true' });
+            const brandCards = await page.locator('.programmeCard:has(.kind), .programmeCard:has(.kindIcons svg[data-icon="clapperboard"]), .programmeCard:has(.kindIcons svg[data-icon="layer-group"])').count();
+            if (brandCards) {
+                const withBug = await page.locator('.programmeCard:has(.kind) button[title="Streaming debug"], .programmeCard:has(.kindIcons svg[data-icon="clapperboard"]) button[title="Streaming debug"], .programmeCard:has(.kindIcons svg[data-icon="layer-group"]) button[title="Streaming debug"]').count();
+                ok('Show Extended Debug on: programme and series cards have the debug button too', withBug > 0, `${withBug} of ${brandCards} programme/series cards`);
+                const brandCard = page.locator('.programmeCard:has(.kind) button[title="Streaming debug"]').first();
+                ok('a programme or series card has the debug button but no Play / Download', !(await brandCard.count()) || (await brandCard.locator('xpath=..').locator('button[title="Download"], button[title="Play Video"]').count()) === 0);
+            } else rec(U, 'programme and series cards have the debug button', 'SKIP', 'no programme or series cards on the home page');
+            const heroes = await page.locator('.browseHero').count();
+            if (heroes) ok('Show Extended Debug on: the hero has a Debug button whatever it shows', (await page.locator('.browseHero .heroButton', { hasText: 'Debug' }).count()) > 0, `${heroes} hero(es)`);
+            else rec(U, 'hero Debug button', 'SKIP', 'no hero on the home page');
+            await page.goto(`${BASE}/browse/programme/${pid}`, { waitUntil: 'networkidle' });
+            await debugPill.waitFor({ timeout: 20000 }).catch(() => {});
+            ok('Show Extended Debug on: the programme page header has a Debug pill', (await debugPill.count()) === 1, `${await debugPill.count()} pill(s)`);
+            if (await debugPill.count()) {
+                await debugPill.click();
+                await page.waitForURL(/\/streaming\/debug\//, { timeout: 15000 }).catch(() => {});
+                ok('the Debug pill opens the streaming debug page for that programme', page.url().includes(`/streaming/debug/${bpid || pid}`) || page.url().includes(`/streaming/debug/${pid}`), page.url());
+                await page.locator('.streamDebug h2').first().waitFor({ timeout: 30000 }).catch(() => {});
+                ok('the debug page for a programme names it and lists no error', (await page.locator('.streamDebug .overview .facts h2').count()) === 1 && (await page.locator('.streamDebug .infoPanel.danger, .streamDebug .infoPanel.error').count()) === 0);
+                ok('the debug page lists the pid links as a list under the pid', (await page.locator('.streamDebug .facts .pidLinks li').count()) >= 3);
+                ok('the debug page gives "Leaves iPlayer" and "Days left" together', (await page.locator('.streamDebug .facts dt', { hasText: 'Leaves iPlayer' }).count()) === (await page.locator('.streamDebug .facts dt', { hasText: 'Days left' }).count()));
+                const libFont = await page.locator('.streamDebug .libraryTable td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);
+                const downloadsFont = await page.locator('.streamDebug table.dataTable:not(.libraryTable):not(.probeTable):not(.segmentTable) td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);
+                if (libFont && downloadsFont) ok('the debug page Library table text is the same size as the other tables (only its File column is smaller)', libFont === downloadsFont, `${libFont} vs ${downloadsFont}`);
+                if (await page.locator('.streamDebug .thumbBadges').count()) {
+                    const box = await page.evaluate(() => ({ img: document.querySelector('.streamDebug .bigThumb').getBoundingClientRect().bottom, badges: document.querySelector('.streamDebug .thumbBadges').getBoundingClientRect().bottom }));
+                    ok('the debug page badges sit on the picture, not below it', box.badges <= box.img + 1, `badges end ${Math.round(box.badges)}, picture ends ${Math.round(box.img)}`);
+                }
+                const sessionRows = await page.locator('.streamDebug .sessionScroll tr:has(.playSession)').count();
+                const sessionButtons = await page.locator('.streamDebug .playSession').count();
+                ok('the Streams played table has a Play button on every session row', sessionRows === sessionButtons, `${sessionButtons} button(s), ${sessionRows} row(s)`);
+                if (sessionButtons) {
+                    await page.locator('.streamDebug .playSession').first().click();
+                    await page.waitForTimeout(3000);
+                    ok('playing a stream from the Streams played list colours that row and shows a copy of it above the player', (await page.locator('.streamDebug tr.playingRow').count()) === 2 && (await page.locator('.streamDebug .playerWrap .playSession').count()) === 1);
+                    await page.locator('.streamDebug .playerControls button', { hasText: 'Stop' }).click().catch(() => {});
+                    ok('stopping removes the highlight and the copy', (await page.locator('.streamDebug tr.playingRow').count()) === 0);
+                }
+                const probeButton = page.locator('.streamDebug [title^="Ask BBC"]');
+                if (await probeButton.count()) {
+                    await probeButton.click();
+                    await page.locator('.streamDebug .probeTable').first().waitFor({ timeout: 180000 }).catch(() => {});
+                    await page.waitForFunction(() => !document.querySelector('.streamDebug .progressLine'), null, { timeout: 180000 }).catch(() => {});
+                    const wrong = await page.evaluate(() => [...document.querySelectorAll('.streamDebug .probeVersion tbody tr')].filter((tr) => tr.querySelector('.playConnection') && !/^(video|audio)\b/.test(tr.children[3]?.textContent.trim() ?? '') || tr.querySelector('.playConnection') && /dash/.test(tr.children[4]?.textContent ?? '')).length);
+                    const buttons = await page.locator('.streamDebug .playConnection').count();
+                    ok('the Probe table has a Play button only on video or audio HLS lines (none on thumbnails, captions or DASH)', wrong === 0, `${buttons} button(s), ${wrong} on other lines`);
+                    ok('the Probe table colours at most one line as the one a normal Play would use', (await page.locator('.streamDebug .probeTable tr.bestRow').count()) <= 1);
+                    const versionSelect = page.locator('.streamDebug .playerControls select');
+                    const otherVersion = (await versionSelect.count()) ? await versionSelect.locator('option').evaluateAll((options) => options.map((o) => o.value).find(Boolean)) : undefined;
+                    if (otherVersion) {
+                        const before = await page.locator('.streamDebug tr.bestRow').evaluateAll((rows) => rows.map((row) => row.closest('.probeVersion')?.querySelector('h3 code')?.textContent));
+                        await versionSelect.selectOption(otherVersion);
+                        await page.waitForTimeout(500);
+                        const after = await page.locator('.streamDebug tr.bestRow').evaluateAll((rows) => rows.map((row) => row.closest('.probeVersion')?.querySelector('h3 code')?.textContent));
+                        ok('choosing another version in the dropdown moves the green line to that version', after.length === 0 || before.join() !== after.join(), `${before} -> ${after}`);
+                        await versionSelect.selectOption('');
+                    }
+                    if (buttons) {
+                        await page.locator('.streamDebug .playConnection').first().click();
+                        await page.waitForTimeout(3000);
+                        ok('playing from the Probe table colours that line and shows a copy of it above the player', (await page.locator('.streamDebug .probeTable tr.playingRow').count()) === 2);
+                        await page.locator('.streamDebug .playerControls button', { hasText: 'Stop' }).click().catch(() => {});
+                    }
+                }
+                ok('the debug page shows no signed token', !/hdnea|[?&](sig|token)=/i.test(await page.locator('.streamDebug').innerText()));
+                ok('every link in the metadata Links row opens in a new tab safely', (await page.locator('.streamDebug .kv dd ul.plain a[href]:not([target="_blank"][rel*="noopener"])').count()) === 0);
+                await shot(page, 'programme-debug-page');
+            }
+            await load({ ...off, UI_EXTENDED_DEBUG: 'false' });
+            await page.goto(`${BASE}/browse/programme/${pid}`, { waitUntil: 'networkidle' });
+            await page.waitForTimeout(1500);
+            ok('Show Extended Debug off: the programme page header has no Debug pill', (await debugPill.count()) === 0);
+            await load(off);
+            ok('Show Extended Debug off: no hero Debug button', (await page.locator('.browseHero .heroButton', { hasText: 'Debug' }).count()) === 0);
+            ok('all badge settings off: no card picture carries the badge row', (await page.locator('.thumb.badgesOn').count()) === 0);
+            for (const key of ['UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES']) {
+                await load({ ...off, [key]: 'true' });
+                ok(`${key} on: card pictures carry the badge row`, (await page.locator('.thumb.badgesOn').count()) > 0);
+            }
+
+            // Channel tools, info messages and channel pill colours (the same page-level proof)
+            const KEYS2 = ['UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_PILL_COLORS'];
+            const cfg1 = (await http('/json-api/config')).json || {};
+            const orig2 = Object.fromEntries(KEYS2.filter((k) => k in cfg1).map((k) => [k, cfg0[k] ?? cfg1[k]]));
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: orig2 }); });
+            const go = async (route) => { await page.goto(BASE + route, { waitUntil: 'networkidle' }); await page.waitForTimeout(700); };
+            const toolBtn = 'button[title="Rename channels, change colours and logos, add your own channels"]';
+            for (const val of ['true', 'false']) {
+                await http('/json-api/config', { method: 'PUT', body: { UI_CHANNEL_TOOLS: val } });
+                await go('/browse/channels');
+                await page.locator('.tile, .tiles, main').first().waitFor({ timeout: 15000 }).catch(() => {});
+                const n = await page.locator(toolBtn).count();
+                ok(`UI_CHANNEL_TOOLS ${val === 'true' ? 'on: the Channels page has the customise button' : 'off: the Channels page has no customise button'}`, val === 'true' ? n > 0 : n === 0, `${n} button(s)`);
+            }
+            const infoCount = async () => { let n = 0; for (const r of ['/apps', '/browse', '/browse/schedule', '/offSchedule', '/browse/collections', '/dns-relay']) { await go(r); n += await page.locator('.infoPanel.info, .infoPanel:not(.danger):not(.warning):not(.success)').count(); } return n; };
+            await http('/json-api/config', { method: 'PUT', body: { UI_INFO_MESSAGES: 'true' } });
+            const infoOn = await infoCount();
+            await http('/json-api/config', { method: 'PUT', body: { UI_INFO_MESSAGES: 'false' } });
+            const infoOff = await infoCount();
+            if (!infoOn) rec(U, 'UI_INFO_MESSAGES takes effect', 'SKIP', 'none of the pages checked (Apps, Browse, Schedule, Off-Schedule, Collections, DNS Relay) showed an info message even with the setting on');
+            else ok('UI_INFO_MESSAGES: blue info messages show when on and are hidden when off', infoOff === 0, `${infoOn} shown on, ${infoOff} still shown off`);
+            const styled = async () => page.locator('.channelPill').evaluateAll((els) => els.filter((e) => e.getAttribute('style')).length);
+            await http('/json-api/config', { method: 'PUT', body: { UI_PILL_COLORS: 'true' } });
+            await go('/browse');
+            const pillsOn = await styled(), pillTotal = await page.locator('.channelPill').count();
+            await http('/json-api/config', { method: 'PUT', body: { UI_PILL_COLORS: 'false' } });
+            await go('/browse');
+            const pillsOff = await styled();
+            if (!pillTotal) rec(U, 'UI_PILL_COLORS takes effect', 'SKIP', 'no channel pills on the Browse page to look at');
+            else ok('UI_PILL_COLORS: channel pills are coloured when on and plain when off', pillsOn > 0 && pillsOff === 0, `${pillsOn} coloured on, ${pillsOff} coloured off, ${pillTotal} pills`);
+        });
+
         await flow('light/dark mode', async (page) => {
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
             const lum = () => page.evaluate(() => { const c = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (c[0] + c[1] + c[2]) / 3; });
@@ -801,13 +1601,15 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const imp = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', timeout: 120000, body: { appId: app.id, arrId: 987654321, pid: bpid, title: 'SMOKE-TEMP icon show', have: 4, total: 9, linked: 1 } });
             ok('a show linked to an entry that does not exist is created', imp.status === 200, `HTTP ${imp.status} ${imp.text.slice(0, 100)}`);
             await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
-            // The row shows the episodes it holds as a badge on the picture (title "N episodes") and the iPlayarr/other split as a pill.
+            await showAllSubscriptions(page);
+            // The row shows the episodes it holds as a badge on the picture (title "N of M episodes on disk") and the iPlayarr/other split as a pill.
             const countRow = page.locator('.subscriptionRow', { hasText: brand.title }).first();
             const badge = await countRow.locator('.thumbBadge').first().getAttribute('title').catch(() => '');
             const split = await countRow.locator('.splitPill').first().getAttribute('title').catch(() => '');
-            ok('before a scan it shows its counts', badge === '4 episodes' && /^1 from iPlayarr, 3 from elsewhere$/.test(split || ''), `badge "${badge}", pill "${split}"`);
+            ok('before a scan it shows its counts', badge === '4 of 9 episodes on disk' && /^1 from iPlayarr, 3 from elsewhere$/.test(split || ''), `badge "${badge}", pill "${split}"`);
             await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
             await page.reload({ waitUntil: 'networkidle' });
+            await showAllSubscriptions(page);
             const row = page.locator('.subscriptionRow', { hasText: brand.title }).first();
             const icon = row.locator('.missingIcon');
             ok('after a scan it carries the warning icon', (await icon.count()) === 1);

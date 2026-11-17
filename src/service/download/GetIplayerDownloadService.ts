@@ -24,24 +24,37 @@ class GetIplayerDownloadService implements AbstractDownloadService {
                 const inputPath = path.join(directory, mp4File);
                 const outputPath = path.join(directory, mp4File.replace(/\.mp4$/, '.mkv'));
 
-                await new Promise<void>((resolve, reject) => {
-                    const ffmpeg = spawn('ffmpeg', ['-y', '-i', inputPath, '-c', 'copy', outputPath]);
-                    ffmpeg.on('close', async (code) => {
-                        if (code === 0) {
-                            try {
-                                await fs.unlink(inputPath);
-                                resolve();
-                            } catch (err) {
-                                reject(new Error(`ffmpeg succeeded but failed to delete original mp4: ${err}`));
-                            }
-                        } else {
-                            reject(new Error(`ffmpeg exited with code ${code}`));
-                        }
-                    });
-                    ffmpeg.on('error', reject);
-                });
+                // Embedded mp4 subtitles (mov_text) can't be copied into Matroska, so they are converted to SRT.
+                // Should that still fail, the video is remuxed without them rather than lost.
+                try {
+                    await this.#remux(['-y', '-i', inputPath, '-map', '0:v:0', '-map', '0:a?', '-map', '0:s?', '-c', 'copy', '-c:s', 'srt', outputPath]);
+                } catch {
+                    await this.#remux(['-y', '-i', inputPath, '-map', '0:v:0', '-map', '0:a?', '-c', 'copy', outputPath]);
+                }
+                try {
+                    await fs.unlink(inputPath);
+                } catch (err) {
+                    throw new Error(`ffmpeg succeeded but failed to delete original mp4: ${err}`);
+                }
             }
         }
+    }
+
+    #remux(args: string[]): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            const ffmpeg = spawn('ffmpeg', args);
+            let stderr = '';
+            ffmpeg.stderr?.on('data', (data) => (stderr = (stderr + data.toString()).slice(-2000)));
+            ffmpeg.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    const tail = stderr.trim().split('\n').slice(-3).join(' | ');
+                    reject(new Error(`ffmpeg exited with code ${code}${tail ? `: ${tail}` : ''}`));
+                }
+            });
+            ffmpeg.on('error', reject);
+        });
     }
 
     async download(pid: string, directory: string, jobId?: string): Promise<ChildProcess> {

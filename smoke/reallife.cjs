@@ -4,6 +4,8 @@
  * Every entity it creates is named SMOKE-TEMP and removed again (cleanup runs even after a failure).
  * Each step is independent: one failing step never stops the rest.
  */
+const fs = require('fs');
+const pathMod = require('path');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
@@ -116,6 +118,15 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('subscription versions update', ver.status === 200, `HTTP ${ver.status} ${ver.text.slice(0, 120)}`);
             const sec = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days: 7 } });
             ok('subscription secure-before-expiry on (7 days)', sec.status === 200 && sec.json?.secureDays === 7, `HTTP ${sec.status} ${sec.text.slice(0, 120)}`);
+            // A Sonarr/Radarr-only show with the toggle on but no app link has no .strm links to read: the check must still answer, and queue nothing.
+            const secChk = await http(`/json-api/subscriptions/${id}/check`, { method: 'POST', timeout: 120000 });
+            ok('check of a Sonarr/Radarr-only show with secure on, and no app linked, queues nothing', secChk.status === 200 && !(secChk.json?.queued || []).length && !secChk.json?.error, `HTTP ${secChk.status} ${secChk.text.slice(0, 120)}`);
+            // The images button: off answers 409, otherwise a show with no downloaded files (this one is not even linked to an app) writes nothing.
+            const imgs = await http(`/json-api/subscriptions/${id}/images`, { method: 'POST', timeout: 120000 });
+            if (cfg.WRITE_ADDITIONAL_IMAGES === 'none') ok('images update refused (409) while Use Additional Images is off', imgs.status === 409, `HTTP ${imgs.status}`);
+            else ok('images update on a show with no files writes nothing', imgs.status === 200 && imgs.json?.written === 0 && imgs.json?.episodes === 0, `HTTP ${imgs.status} ${imgs.text.slice(0, 120)}`);
+            const imgsMissing = await http('/json-api/subscriptions/SMOKE-NOPE/images', { method: 'POST' });
+            ok('images update of an unknown subscription is 404', imgsMissing.status === 404, `HTTP ${imgsMissing.status}`);
             for (const days of [0, 61, 1.5, 'x']) {
                 const bad = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days } });
                 ok(`subscription secure days ${JSON.stringify(days)} rejected`, bad.status === 400, `HTTP ${bad.status}`);
@@ -126,6 +137,63 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('unsubscribe', un.status === 200);
             const un2 = await http('/json-api/subscriptions/' + id, { method: 'DELETE' });
             ok('unsubscribe twice gives 404', un2.status === 404, `HTTP ${un2.status}`);
+            // Subscribing Sonarr/Radarr-only with a window keeps it (it used to be dropped for such shows)
+            const withDays = await http('/json-api/subscriptions', { method: 'POST', body: { pid: bpid, arrOnly: true, secureDays: 7 } });
+            ok('subscribe (arrOnly) keeps secureDays', withDays.status === 200 && withDays.json?.secureDays === 7, `HTTP ${withDays.status} ${withDays.text.slice(0, 120)}`);
+            if (withDays.json?.id) later('unsubscribe show again', () => http('/json-api/subscriptions/' + withDays.json.id, { method: 'DELETE' }));
+        });
+
+        // 5b. Radio subscription (a followed BBC Sounds show) through the one subscriptions API: subscribe -> list -> check -> missing ->
+        // secure -> unsubscribe. Subscribes with "only new episodes", so nothing is downloaded.
+        await step('radio subscriptions', async () => {
+            if (cfg.SOUNDS_ENABLED !== 'true') return rec(W, 'radio subscription lifecycle', 'SKIP', 'BBC Sounds Radio is off');
+            const M = 'mode=radio';
+            const suggested = (await http(`/json-api/browse/suggest?q=archers&${M}`, { timeout: 60000 })).json || [];
+            const pid = (suggested.find((x) => x.kind === 'radio' && !x.episodeOf) || {}).pid || 'b006qpgr';
+            const id = `radio-${pid}`;
+            await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+            later('unfollow radio show', () => http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' }));
+            const sub = await http(`/json-api/subscriptions?${M}`, { method: 'POST', body: { pid, title: 'SMOKE-TEMP radio show' }, timeout: 60000 });
+            if (sub.status !== 200) return warn('radio subscribe', false, `HTTP ${sub.status} ${sub.text.slice(0, 160)} (BBC Sounds may not be answering)`);
+            ok('radio subscribe answers the subscription row', sub.json?.id === id && sub.json?.radio === true && sub.json?.pid === pid && Array.isArray(sub.json?.seen) && sub.json.seen.length > 0, sub.text.slice(0, 200));
+            ok('radio subscribe with "only new" queued nothing', !((await http(`/json-api/queue/queue?${M}`)).json || []).some((x) => x.showId === pid), 'a download was queued');
+            ok('radio subscription listed', ((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id));
+            ok('radio subscription is not in the video list', !((await http('/json-api/subscriptions')).json || []).some((x) => x.id === id));
+            const dupe = await http(`/json-api/subscriptions?${M}`, { method: 'POST', body: { pid, title: 'SMOKE-TEMP radio show' } });
+            ok('re-subscribing a radio show is idempotent', dupe.status === 200 && dupe.json?.id === id, `HTTP ${dupe.status}`);
+            const chk = await http(`/json-api/subscriptions/${id}/check?${M}`, { method: 'POST', timeout: 120000 });
+            ok('radio subscription check answers a check result', chk.status === 200 && chk.json?.id === id && Array.isArray(chk.json?.queued), `HTTP ${chk.status} ${chk.text.slice(0, 160)}`);
+            const bare = await http(`/json-api/subscriptions/${pid}/check?${M}`, { method: 'POST', timeout: 120000 });
+            ok('radio subscription check takes the id without the radio- prefix', bare.status === 200 && bare.json?.id === id, `HTTP ${bare.status}`);
+            const all = await http(`/json-api/subscriptions/check?${M}`, { method: 'POST', timeout: 180000 });
+            ok('radio check of every subscription answers a list of results', all.status === 200 && Array.isArray(all.json), `HTTP ${all.status}`);
+            const again = ((await http(`/json-api/subscriptions?${M}`)).json || []).find((x) => x.id === id);
+            ok('a radio check records when it ran, and no error', !!again?.lastChecked && !again?.lastError, JSON.stringify(again));
+            const miss = await http(`/json-api/subscriptions/${id}/missing?${M}`, { timeout: 120000 });
+            warn('radio missing list is { total, onDisk, missing } with video-shaped entries', miss.status === 200 && typeof miss.json?.total === 'number' && typeof miss.json?.onDisk === 'number' && Array.isArray(miss.json?.missing) && miss.json.missing.every((x) => x.pid && x.title), `HTTP ${miss.status} ${miss.text.slice(0, 160)}`);
+            const sec = await http(`/json-api/subscriptions/${id}/secure?${M}`, { method: 'PUT', body: { days: 7 } });
+            ok('radio secure-before-expiry on (7 days)', sec.status === 200 && sec.json?.secureDays === 7, `HTTP ${sec.status} ${sec.text.slice(0, 120)}`);
+            for (const days of [0, 61, 2.5, 'soon']) {
+                const bad = await http(`/json-api/subscriptions/${id}/secure?${M}`, { method: 'PUT', body: { days } });
+                ok(`radio secure days ${JSON.stringify(days)} rejected`, bad.status === 400, `HTTP ${bad.status}`);
+            }
+            const secChk = await http(`/json-api/subscriptions/${id}/check?${M}`, { method: 'POST', timeout: 120000 });
+            ok('radio check with securing on still answers', secChk.status === 200, `HTTP ${secChk.status}`);
+            const off = await http(`/json-api/subscriptions/${id}/secure?${M}`, { method: 'PUT', body: { days: null } });
+            ok('radio secure-before-expiry off', off.status === 200 && off.json?.secureDays === undefined, `HTTP ${off.status} ${off.text.slice(0, 120)}`);
+            const un = await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+            ok('radio unsubscribe', un.status === 200 && un.json?.status === true, `HTTP ${un.status}`);
+            const un2 = await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+            ok('radio unsubscribe twice gives 404', un2.status === 404, `HTTP ${un2.status}`);
+            ok('the radio subscription is gone from the list', !((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id));
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // // The older paths and the new API share one list
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // const viaOld = await http('/json-api/sounds/follows', { method: 'POST', body: { showId: pid, title: 'SMOKE-TEMP radio show' }, timeout: 60000 });
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // ok('the older follows path adds to the same list', viaOld.status === 200 && ((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id), `HTTP ${viaOld.status}`);
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
         });
 
         // 6. Live channel subscription (.strm in the library) + enable/disable
@@ -252,6 +320,28 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('strm download leaves the queue', await waitDone(ep.pid, 120000), 'still queued after 2 min');
             const h = (await hist(ep.pid))[0];
             ok('strm download recorded complete in history', !!h && /complete|done|success/i.test(JSON.stringify(h.status)), JSON.stringify(h || {}).slice(0, 160));
+            // What it wrote beside the .strm (needs the complete folder as this PC sees it, as SMOKE_COMPLETE_ROOT)
+            const completeRoot = process.env.SMOKE_COMPLETE_ROOT;
+            const wroteNfo = ['all', 'manual'].includes(cfg.WRITE_NFO_STRM);
+            if (!completeRoot || !h?.libraryPath || !wroteNfo) {
+                rec(W, 'strm download wrote its .nfo and episode picture', 'SKIP', !completeRoot ? 'SMOKE_COMPLETE_ROOT not set' : !wroteNfo ? 'WRITE_NFO_STRM does not write .nfo for manual downloads' : 'no library path in history');
+            } else {
+                const base = pathMod.join(completeRoot, h.libraryPath).replace(/\.[^.\\/]+$/, '');
+                ok('strm download wrote its .nfo', fs.existsSync(base + '.nfo'), base + '.nfo');
+                const magic = (file, bytes) => (fs.existsSync(file) ? fs.readFileSync(file).subarray(0, bytes.length / 2).toString('hex') : '');
+                if (cfg.WRITE_ADDITIONAL_IMAGES !== 'none' && !/movie/i.test(String(h.type))) {
+                    const thumb = base + '-thumb.jpg';
+                    ok('strm download saved a <name>-thumb.jpg episode picture that is a JPEG', magic(thumb, 'ffd8') === 'ffd8', fs.existsSync(thumb) ? 'not a JPEG' : 'missing ' + thumb);
+                    // The show's pictures sit in the show folder, two levels up from the episode file (Show/Season NN/file)
+                    const showDir = pathMod.dirname(pathMod.dirname(base));
+                    for (const name of ['poster.jpg', 'backdrop.jpg', 'landscape.jpg']) {
+                        ok(`strm download saved the show's ${name} (a JPEG)`, magic(pathMod.join(showDir, name), 'ffd8') === 'ffd8', fs.existsSync(pathMod.join(showDir, name)) ? 'not a JPEG' : 'missing ' + pathMod.join(showDir, name));
+                    }
+                    const logo = pathMod.join(showDir, 'clearlogo.png');
+                    if (fs.existsSync(logo)) ok('clearlogo.png, where the show has one, is a PNG', magic(logo, '89504e47') === '89504e47', 'not a PNG');
+                    else rec(W, 'show clearlogo.png', 'SKIP', 'this show has no transparent logo (about 3 in 4 do not)');
+                } else rec(W, 'strm download saved the additional images', 'SKIP', 'Use Additional Images is off, or a film');
+            }
             // SAB-visible too (what Sonarr sees)
             const sab = (await http(`/api?mode=history&apikey=${apikey}&output=json`)).json;
             // UI-initiated downloads are deliberately hidden from the SAB history (HistoryEndpoint only lists source NZB, i.e. what an *arr app sent)
@@ -361,6 +451,8 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             if (!ctx.wd?.enabled) return rec(W, 'watchdog flow', 'SKIP', 'disabled');
             const rc = await http('/json-api/watchdog/refresh-counts', { method: 'POST', timeout: 180000 });
             ok('watchdog refresh counts', rc.status === 200 || rc.status === 409, `HTTP ${rc.status} ${rc.text.slice(0, 100)}`);
+            const totals = async () => Object.fromEntries((((await http('/json-api/library/debug', { timeout: 60000 })).json || {}).sources || []).map((x) => [x.id, x.counted + '/' + x.rejected]));
+            const beforeRun = await totals();
             const run = await http('/json-api/watchdog/run', { method: 'POST' });
             ok('watchdog run starts', run.status === 202 || run.status === 409, `HTTP ${run.status}`);
             await sleep(5000);
@@ -368,6 +460,133 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             warn('watchdog reports running or finished', st?.live?.running || st?.live?.checked >= 0);
             const stop = await http('/json-api/watchdog/stop', { method: 'POST' });
             ok('watchdog stop', [200, 202, 409].includes(stop.status), `HTTP ${stop.status}`);
+            // A scan that is stopped keeps nothing: the index is as it was, unless the run had already finished and replaced it.
+            for (let i = 0; i < 120 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(500);
+            const afterStop = await totals();
+            const changed = Object.keys({ ...beforeRun, ...afterStop }).filter((k) => beforeRun[k] !== afterStop[k]);
+            warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.join(', ')} (a finished run legitimately changes it)`);
+            ok('watchdog is no longer running after stop', !(await http('/json-api/watchdog')).json?.live?.running, 'still running after 60s');
+        });
+
+        // 11b. Watchdog settings with a real effect: the sources decide what is tracked, and "Update Link Routes" rewrites a
+        // .strm link we create (the real library is handled by the same code, at most 40 links a run).
+        await step('watchdog settings', async () => {
+            if (!ctx.wd?.enabled) return rec(W, 'watchdog settings flow', 'SKIP', 'STRM_WATCHDOG_ENABLED is off (the run switches it on unless --no-prepare is used)');
+            const conf = async () => (await http('/json-api/config')).json || {};
+            const orig = await conf();
+            const keys = ['STRM_WATCHDOG_SOURCES', 'STRM_WATCHDOG_UPDATE_ROUTES', 'STRM_PROBE_ROUTE', 'MEDIA_MODE', 'WRITE_NFO_STRM'];
+            later('restore watchdog settings', () => http('/json-api/config', { method: 'PUT', body: Object.fromEntries(keys.map((k) => [k, orig[k] ?? ''])) }));
+            const set = (o) => http('/json-api/config', { method: 'PUT', body: o, timeout: 60000 });
+            const tracked = async () => { await http('/json-api/watchdog/refresh-counts', { method: 'POST', timeout: 300000 }); return (await http('/json-api/watchdog')).json?.tracked; };
+
+            // STRM_WATCHDOG_SOURCES: "subscribed" tracks no more links than "history" does
+            await set({ STRM_WATCHDOG_SOURCES: 'history' });
+            const allHist = await tracked();
+            await set({ STRM_WATCHDOG_SOURCES: 'subscribed' });
+            const subOnly = await tracked();
+            if (allHist && subOnly) ok('STRM_WATCHDOG_SOURCES=subscribed tracks no more links than history', (subOnly.sources?.history ?? 0) <= (allHist.sources?.history ?? 0), `history ${allHist.sources?.history}, subscribed ${subOnly.sources?.history}`);
+            else rec(W, 'STRM_WATCHDOG_SOURCES changes what is tracked', 'SKIP', 'the Watchdog gave no tracked counts (a refresh was already running or was refused)');
+
+            // STRM_WATCHDOG_UPDATE_ROUTES: download a .strm, run the Watchdog, read the file
+            const root = process.env.SMOKE_COMPLETE_ROOT || (process.env.SMOKE_MEDIA_ROOT && String(orig.COMPLETE_DIR || '').startsWith('/data/') ? pathMod.join(process.env.SMOKE_MEDIA_ROOT, String(orig.COMPLETE_DIR).slice('/data'.length)) : '');
+            if (!root || !fs.existsSync(root)) return rec(W, 'STRM_WATCHDOG_UPDATE_ROUTES rewrites a link', 'SKIP', 'cannot see the complete folder from this PC (set SMOKE_COMPLETE_ROOT, or SMOKE_MEDIA_ROOT with COMPLETE_DIR under /data)');
+            const prog = (await http(`/json-api/browse/programme/${ctx.pid}`)).json;
+            const eps = (prog?.seasons || []).flatMap((s) => s.episodes || []).filter((e) => e.pid);
+            const hist = async (pid) => ((await http('/json-api/queue/history')).json || []).filter((e) => e.pid === pid);
+            const cleanH = async (pid) => { for (const h of await hist(pid)) await http(`/json-api/queue/history?pid=${pid}${h.jobId ? '&jobId=' + h.jobId : ''}`, { method: 'DELETE' }); };
+            await set({ STRM_WATCHDOG_SOURCES: 'history', STRM_WATCHDOG_UPDATE_ROUTES: 'false', STRM_PROBE_ROUTE: 'false', MEDIA_MODE: 'strm', WRITE_NFO_STRM: 'none' });
+            let made;
+            for (const cand of eps.slice(0, 15)) {
+                await cleanH(cand.pid);
+                const dl = await http(`/json-api/download?pid=${cand.pid}&media=strm`, { timeout: 60000 });
+                if (dl.status !== 200) continue;
+                for (let i = 0; i < 120 && ((await http('/json-api/queue/queue')).json || []).some((e) => e.pid === cand.pid); i++) await sleep(1000);
+                const h = (await hist(cand.pid))[0];
+                const file = h?.libraryPath ? pathMod.join(root, h.libraryPath) : '';
+                if (file && fs.existsSync(file) && !/route=/.test(fs.readFileSync(file, 'utf8'))) { made = { pid: cand.pid, file }; break; }
+                await cleanH(cand.pid);
+            }
+            if (!made) return rec(W, 'STRM_WATCHDOG_UPDATE_ROUTES rewrites a link', 'SKIP', 'no episode produced a new .strm without a route hint (all already existed, or downloads failed)');
+            later('remove the watchdog test .strm', async () => { try { fs.rmSync(made.file, { force: true }); let d = pathMod.dirname(made.file); while (d.length > root.length) { try { fs.rmdirSync(d); } catch { break; } d = pathMod.dirname(d); } } catch { /* leave it */ } await cleanH(made.pid); });
+            const before = fs.readFileSync(made.file, 'utf8');
+            ok('the new .strm starts with no route hint', !/route=/.test(before), before.trim().replace(/streamkey=[^&]+/, 'streamkey=***'));
+            // The Watchdog asks about at most 40 links a run, library-wide, oldest first, and leaves a link alone when its best
+            // route is already the default. So this cannot force a change to the new link; it checks that the option makes a run
+            // ask about links (each gets a routeCheckedAt), that the option off asks about none, and that no link was left half-written.
+            const wait = async () => { for (let i = 0; i < 1440 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(500); };
+            const asked = async () => ((await http('/json-api/watchdog')).json?.items || []).filter((i) => i.routeCheckedAt).length;
+            const askedStart = await asked();
+            await http('/json-api/watchdog/run', { method: 'POST' }); await sleep(3000); await wait();
+            const askedBefore = await asked(); // a complete run also forgets links its sources no longer list, so the count may fall, but must not rise
+            ok('STRM_WATCHDOG_UPDATE_ROUTES=false: a Watchdog run asks about no new link routes', askedBefore <= askedStart, `${askedStart} -> ${askedBefore}`);
+            ok('STRM_WATCHDOG_UPDATE_ROUTES=false: a Watchdog run leaves the new link as it was', fs.readFileSync(made.file, 'utf8') === before, 'the file changed');
+            await set({ STRM_WATCHDOG_UPDATE_ROUTES: 'true' });
+            await http('/json-api/watchdog/run', { method: 'POST' }); await sleep(3000); await wait();
+            const askedAfter = await asked();
+            ok('STRM_WATCHDOG_UPDATE_ROUTES=true: a Watchdog run asks about link routes (up to 40 a run)', askedAfter > askedBefore && askedAfter - askedBefore <= 40, `${askedBefore} -> ${askedAfter}`);
+            const after = fs.readFileSync(made.file, 'utf8');
+            ok('the new link is still one intact line with its address, stream key and programme', after.trim().split(/\r?\n/).length === 1 && after.startsWith(before.trim().split('&route=')[0].split(/\r?\n/)[0]), after.trim().replace(/streamkey=[^&]+/, 'streamkey=***'));
+            const leftovers = fs.readdirSync(pathMod.dirname(made.file)).filter((f) => /\.route\.tmp$/.test(f));
+            ok('no half-written .route.tmp file is left beside the link', leftovers.length === 0, leftovers.join(', '));
+            if (/route=/.test(after)) ok('the Watchdog added a route hint to the new link', true);
+            else rec(W, 'the Watchdog rewrites the new link with a route', 'SKIP', 'the new link was not among the 40 asked this run, or its best route is already the default (a link with no hint plays from the default route, so nothing changes)');
+        });
+
+        // 11c. Watchdog dead link: the library holds a .strm whose link names a programme the BBC does not have. Run in
+        // notify mode (flag + webhook + video event, nothing deleted), then in delete mode but ONLY when no other link is
+        // invalid, so no real file can be deleted. Same method as the first Watchdog live test (a made-up BBC id, a local
+        // webhook listener).
+        await step('watchdog dead link', async () => {
+            if (!ctx.wd?.enabled) return rec(W, 'watchdog dead link flow', 'SKIP', 'STRM_WATCHDOG_ENABLED is off (the run switches it on unless --no-prepare is used)');
+            const orig = (await http('/json-api/config')).json || {};
+            const root = process.env.SMOKE_COMPLETE_ROOT || (process.env.SMOKE_MEDIA_ROOT && String(orig.COMPLETE_DIR || '').startsWith('/data/') ? pathMod.join(process.env.SMOKE_MEDIA_ROOT, String(orig.COMPLETE_DIR).slice('/data'.length)) : '');
+            if (!root || !fs.existsSync(root)) return rec(W, 'watchdog dead link flow', 'SKIP', 'cannot see the complete folder from this PC (set SMOKE_COMPLETE_ROOT, or SMOKE_MEDIA_ROOT with COMPLETE_DIR under /data)');
+            const lan = Object.values(require('os').networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
+            if (!lan) return rec(W, 'watchdog dead link flow', 'SKIP', 'this PC has no LAN address for the container to send the webhook to');
+            const keys = ['STRM_WATCHDOG_SOURCES', 'STRM_WATCHDOG_ACTION', 'STRM_WATCHDOG_STRIKES', 'STRM_WATCHDOG_WEBHOOK_URL', 'STRM_WATCHDOG_ARR_ACTION', 'STRM_WATCHDOG_UPDATE_ROUTES', 'MEDIA_MODE', 'WRITE_NFO_STRM'];
+            later('restore watchdog dead link settings', () => http('/json-api/config', { method: 'PUT', body: Object.fromEntries(keys.map((k) => [k, orig[k] ?? ''])) }));
+            const set = (o) => http('/json-api/config', { method: 'PUT', body: o, timeout: 60000 });
+            const hits = [];
+            const server = require('http').createServer((req, res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => { hits.push(b); res.end('ok'); }); });
+            await new Promise((r) => server.listen(0, '0.0.0.0', r));
+            later('close the webhook listener', () => new Promise((r) => server.close(r)));
+            const port = server.address().port;
+
+            // The Watchdog reads each history entry's pid, so a dead link needs a history entry with a made-up pid. The API cannot
+            // create one, and writing into iplayarr.db from outside the app corrupts it (it did, once), so this part cannot run
+            // safely without a server-side test hook.
+            return rec(W, 'watchdog dead link flow', 'SKIP', 'a dead link needs a history entry for a made-up programme; the API cannot create one and writing to the SQLite file from outside the app corrupts it, so this needs a temporary server-side route');
+            const wait = async () => { for (let i = 0; i < 360 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(2000); };
+            const runAndGet = async () => { await http('/json-api/watchdog/run', { method: 'POST' }); await sleep(3000); await wait(); return (await http('/json-api/watchdog')).json; };
+
+            // Refresh Links first so the library index reads the rewritten file (it caches what it saw)
+            await http('/json-api/watchdog/refresh-counts', { method: 'POST', timeout: 300000 });
+            let st = await runAndGet();
+            let item = (st?.items || []).find((i) => i.pid === FAKE);
+            if (!item) return rec(W, 'watchdog dead link flow', 'SKIP', `the Watchdog did not list the test link (notice: ${st?.live?.notice || 'none'}); the library index may need Refresh Links first`);
+            ok('STRM_WATCHDOG_STRIKES=1: the dead link is flagged invalid after one run', item.status === 'invalid', JSON.stringify(item).slice(0, 160));
+            ok('STRM_WATCHDOG_ACTION=notify: the file is kept', fs.existsSync(made.file));
+            ok('STRM_WATCHDOG_WEBHOOK_URL: the webhook was sent for the dead link', hits.some((b) => b.includes(FAKE)), `${hits.length} request(s) received`);
+            ok('the webhook names the event and the programme', hits.some((b) => /strm_invalid/.test(b) && b.includes(FAKE)), hits[0]?.slice(0, 120));
+            ok('the item record lists "Webhook sent"', (item.actions || []).includes('Webhook sent'), JSON.stringify(item.actions));
+            const events = (await http('/json-api/events')).json;
+            const list = Array.isArray(events) ? events : events?.events || events?.items || [];
+            ok('a strm_invalid video event was recorded', list.some((e) => e.type === 'strm_invalid' && (e.pid === FAKE || JSON.stringify(e).includes(FAKE))), `${list.length} events`);
+
+            // delete: only when this link is the one invalid link in the library
+            const others = (st?.items || []).filter((i) => i.status === 'invalid' && i.pid !== FAKE);
+            if (others.length) rec(W, 'STRM_WATCHDOG_ACTION=delete removes a dead link', 'SKIP', `${others.length} other invalid link(s) are in the library; delete mode would remove their files too`);
+            else {
+                await set({ STRM_WATCHDOG_ACTION: 'delete' });
+                // the link is already actioned; clear its record so the next run acts on it again
+                await http('/json-api/watchdog/items', { method: 'DELETE' });
+                st = await runAndGet();
+                item = (st?.items || []).find((i) => i.pid === FAKE);
+                const othersNow = (st?.items || []).filter((i) => i.status === 'invalid' && i.pid !== FAKE);
+                ok('STRM_WATCHDOG_ACTION=delete: the dead link\'s .strm is removed', !fs.existsSync(made.file), 'the file is still there' + (item ? ' ' + JSON.stringify(item.actions || []) : ''));
+                ok('delete mode touched no other link', !othersNow.length, `${othersNow.length} other invalid`);
+            }
+            rec(W, 'STRM_WATCHDOG_ARR_ACTION', 'SKIP', 'unmonitor/search would change a real Sonarr/Radarr show; the test link has no Sonarr/Radarr entry to act on');
         });
 
         // 12. App tooling: arr option lookups (read-only against Sonarr/Radarr)

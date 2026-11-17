@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div class="pipPlayer" :class="{ active: isActive }">
+    <div ref="rootRef" class="pipPlayer" :class="{ active: isActive }">
         <div class="pipVideoWrap">
-            <video ref="videoRef" controls playsinline />
+            <video ref="videoRef" :controls="pipPlayerState.status !== 'error'" playsinline />
             <div v-if="pipPlayerState.status === 'loading'" class="pipOverlay">
                 <font-awesome-icon :icon="['fas', 'circle-notch']" spin size="lg" />
             </div>
@@ -18,7 +18,7 @@
         <div class="pipFooter">
             <div class="pipInfo">
                 <span class="pipTitle" :title="pipPlayerState.title || ''">{{ pipPlayerState.title }}</span>
-                <span class="pipStatus">{{ statusLabel }}</span>
+                <span class="pipStatus" role="status">{{ statusLabel }}</span>
             </div>
             <!-- Switch to another cut (audio described / signed) without leaving the player; carries on from the same point. -->
             <div v-if="pipPlayerState.versions.length" class="pipVersions" role="group" aria-label="Version">
@@ -36,7 +36,9 @@
                     <font-awesome-icon :icon="['fas', option.icon]" />
                 </button>
             </div>
-            <font-awesome-icon class="clickable" :icon="['fas', 'xmark']" title="Stop" @click="close" />
+            <button type="button" class="pipClose" title="Stop and close player" aria-label="Stop and close player" @click="close">
+                <font-awesome-icon :icon="['fas', 'xmark']" />
+            </button>
         </div>
     </div>
 </template>
@@ -58,6 +60,7 @@ const STATUS_LABELS = {
 const globalSettings = inject('globalSettings');
 
 const videoRef = ref(null);
+const rootRef = ref(null);
 let hls = null;
 
 const VERSION_ICONS = { 'audio-described': 'audio-description', signed: 'sign-language' };
@@ -71,6 +74,24 @@ const versionOptions = computed(() => [
 ]);
 
 const isActive = computed(() => pipPlayerState.pid !== null);
+
+// Other bottom-pinned things (toasts) sit above the player, as they do for the audio bar.
+let pipObserver = null;
+const makeRoom = (height) => document.documentElement.style.setProperty('--pip-height', `${height || 0}px`);
+watch(
+    () => [rootRef.value, isActive.value],
+    ([el, active]) => {
+        pipObserver?.disconnect();
+        pipObserver = null;
+        if (!el || !active) return makeRoom(0);
+        makeRoom(el.offsetHeight + 8);
+        if (typeof ResizeObserver !== 'undefined') {
+            pipObserver = new ResizeObserver(() => makeRoom(el.offsetHeight + 8));
+            pipObserver.observe(el);
+        }
+    },
+    { flush: 'post' }
+);
 const statusLabel = computed(() => STATUS_LABELS[pipPlayerState.status] ?? '');
 const iplayerUrl = computed(() =>
     pipPlayerState.live
@@ -205,7 +226,11 @@ watch(
     }
 );
 
-onBeforeUnmount(cleanup);
+onBeforeUnmount(() => {
+    pipObserver?.disconnect();
+    makeRoom(0);
+    cleanup();
+});
 </script>
 
 <style lang="less" scoped>
@@ -215,12 +240,12 @@ onBeforeUnmount(cleanup);
     bottom: 16px;
     right: 16px;
     width: 280px;
-    z-index: 1300;
-    border-radius: 6px;
+    z-index: @z-player;
+    border-radius: @radius-md;
     overflow: hidden;
     background-color: @nav-background-color;
     border: 1px solid @table-border-color;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 16px @shadow-color;
 
     &.active {
         display: block;
@@ -231,7 +256,7 @@ onBeforeUnmount(cleanup);
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    background-color: #000;
+    background-color: @media-black;
 
     video {
         width: 100%;
@@ -246,7 +271,7 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: @on-media-color;
     background-color: rgba(0, 0, 0, 0.55);
     pointer-events: none;
 }
@@ -254,7 +279,7 @@ onBeforeUnmount(cleanup);
 .pipError {
     flex-direction: column;
     gap: 6px;
-    padding: 8px;
+    padding: @space-2;
     text-align: center;
     pointer-events: auto;
 
@@ -267,15 +292,25 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: @space-2;
+    padding: 6px @space-2;
     color: @table-text-color;
+}
+
+.pipClose {
+    flex: 0 0 auto;
+    padding: @space-1;
+    border: none;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    cursor: pointer;
 }
 
 .pipVersions {
     flex: 0 0 auto;
     display: flex;
-    gap: 4px;
+    gap: @space-1;
 }
 
 .pipVersion {
@@ -283,16 +318,16 @@ onBeforeUnmount(cleanup);
     height: 24px;
     padding: 0;
     border: 1px solid @input-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @input-background-color;
     color: @input-text-color;
-    font-size: 12px;
+    font-size: @font-size-sm;
     cursor: pointer;
 
     &.selected {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: #fff;
+        color: @on-media-color;
     }
 }
 
@@ -303,14 +338,14 @@ onBeforeUnmount(cleanup);
     flex-direction: column;
 
     .pipTitle {
-        font-size: 13px;
+        font-size: @font-size-base;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
     .pipStatus {
-        font-size: 11px;
+        font-size: @font-size-xs;
         color: @subtle-text-color;
     }
 }

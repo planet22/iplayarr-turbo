@@ -26,6 +26,8 @@ describe('channelLogoService', () => {
     });
 
     it('picks black or white text by background brightness', () => {
+        expect(readableTextColor('#fff')).toBe('#000000');
+        expect(readableTextColor('#000')).toBe('#ffffff');
         expect(readableTextColor('#ffffff')).toBe('#000000');
         expect(readableTextColor('#ffff00')).toBe('#000000');
         expect(readableTextColor('#000000')).toBe('#ffffff');

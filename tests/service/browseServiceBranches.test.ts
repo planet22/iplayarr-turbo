@@ -86,9 +86,13 @@ describe('toBrowseSlot', () => {
 });
 
 describe('toBrowseItem artwork', () => {
-    it('takes the portrait image, or the singular image field, when there is no standard one', () => {
-        expect(toBrowseItem(episode('b001', { images: { portrait: 'https://ichef/ic/{recipe}/p0aaa111.jpg' } }))?.thumbnail).toBe('json-api/thumbnail/p0aaa111.jpg');
+    it('takes the singular image field when there is no standard one', () => {
         expect(toBrowseItem(episode('b001', { image: { standard: 'https://ichef/ic/{recipe}/p0bbb222.jpg' } }))?.thumbnail).toBe('json-api/thumbnail/p0bbb222.jpg');
+    });
+
+    it('never takes the portrait image, which would break the layout', () => {
+        expect(toBrowseItem(episode('b001', { images: { portrait: 'https://ichef/ic/{recipe}/p0aaa111.jpg' } }))?.thumbnail).toBeUndefined();
+        expect(toBrowseItem(episode('b001', { images: { portrait: 'https://ichef/ic/{recipe}/p0aaa111.jpg', standard: 'https://ichef/ic/{recipe}/p0sss000.jpg' } }))?.thumbnail).toBe('json-api/thumbnail/p0sss000.jpg');
     });
 
     it('has no thumbnail when the image url is not a string or has no pid in it', () => {
@@ -158,17 +162,21 @@ describe('iblEpisodeToDetails', () => {
         expect(details).toMatchObject({ episode: undefined, series: undefined, episodeTitle: undefined, channel: undefined, category: '', description: undefined, runtime: 0, firstBroadcast: '2024-02-02T00:00:00Z', thumbnail: undefined });
     });
 
-    it('uses the subtitle as the title when there is no original title, the first version when none is original, and the portrait image', () => {
+    it('uses the subtitle as the title when there is no original title, the first version when none is original, and the standard image', () => {
         const details = iblEpisodeToDetails({
             id: 'b003',
             title: 'T',
             subtitle: 'Plain subtitle',
-            images: { portrait: 'https://ichef/ic/{recipe}/p0ccc333.jpg' },
+            images: { standard: 'https://ichef/ic/{recipe}/p0ccc333.jpg', portrait: 'https://ichef/ic/{recipe}/p0ddd444.jpg' },
             synopses: { small: 'Small' },
             master_brand: { titles: { small: 'BBC One' } },
             versions: [{ kind: 'audio-described', duration: { value: 'PT45M' } }],
         });
         expect(details).toMatchObject({ episodeTitle: 'Plain subtitle', runtime: 45, description: 'Small', channel: 'BBC One', thumbnail: 'json-api/thumbnail/p0ccc333.jpg' });
+    });
+
+    it('has no thumbnail when the episode only has a portrait image', () => {
+        expect(iblEpisodeToDetails({ id: 'b004', title: 'T', images: { portrait: 'https://ichef/ic/{recipe}/p0ddd444.jpg' } }).thumbnail).toBeUndefined();
     });
 });
 

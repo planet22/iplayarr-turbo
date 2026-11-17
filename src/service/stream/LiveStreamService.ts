@@ -4,13 +4,15 @@ import { Request, Response } from 'express';
 
 import { customChannel } from '../../constants/CustomChannels';
 import { isUhdEventFeed, LiveChannelVpids, uhdEventDashUrl } from '../../constants/LiveChannels';
+import { isRadioStation } from '../../constants/RadioChannels';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import configService from '../configService';
 import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { buildMasterPlaylist, buildMediaPlaylist, DashKind, LiveDash, parseLiveMpd } from './liveDashHls';
-import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from './mediaSelectorPairs';
+import radioStreamService, { topVariant } from './radioStreamService';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { register as registerSegmentUrl } from './segmentUrlRegistry';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
@@ -22,7 +24,6 @@ import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSu
 // LiveChannels.ts) as an endless sliding-window HLS playlist. Shares only the proxy/remux helpers and always passes the
 // full adaptive master through (no quality pinning or FHD upgrade).
 const excludedSupplierRegex = /vbidi/i;
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 const liveCaptionsTtlMs = 10 * 60_000;
 const liveWindowTtlMs = 2_000;
 
@@ -114,9 +115,21 @@ class LiveStreamService implements AbstractStreamService {
         throw new Error(`No live HLS stream available for ${channelId} (${vpid})`);
     }
 
+    // A radio station (LIVE_RADIO): audio-only HLS, so none of the video paths below (DASH, subtitles) apply.
+    async #streamRadio(stationId: string, req: Request, res: Response, sessionId?: string): Promise<void> {
+        const url = await radioStreamService.resolve(stationId);
+        if (sessionId) {
+            streamSessionService.setResolution(sessionId, 'Live radio');
+        }
+        await proxyUrl(url, req, res, 5, sessionId, true);
+    }
+
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
         if (customChannel(pid)) {
             return this.#streamCustom(pid, req, res, sessionId);
+        }
+        if (isRadioStation(pid)) {
+            return this.#streamRadio(pid, req, res, sessionId);
         }
         if (await this.#serveDashHls(pid, req, res, sessionId)) {
             return;
@@ -138,7 +151,7 @@ class LiveStreamService implements AbstractStreamService {
 
     // The channel's caption segment URL template (null when it has none). Never throws.
     async #captionsTemplate(channelId: string): Promise<string | null> {
-        if (customChannel(channelId)) return null;
+        if (customChannel(channelId) || isRadioStation(channelId)) return null;
         try {
             return await cached(`live-captions:${channelId}`, liveCaptionsTtlMs, async () => {
                 const vpid = LiveChannelVpids[channelId];
@@ -309,6 +322,15 @@ class LiveStreamService implements AbstractStreamService {
             await remuxToMkv(source, pid, res, sessionId, custom.headers);
             return;
         }
+        if (isRadioStation(pid)) {
+            // Audio only: ffmpeg's audio re-encode to Matroska is all that is needed (no video to copy or probe).
+            const stationUrl = await radioStreamService.resolve(pid);
+            if (sessionId) {
+                streamSessionService.setResolution(sessionId, 'Live radio');
+            }
+            await remuxToMkv(stationUrl, pid, res, sessionId);
+            return;
+        }
         const dashUrl = await this.#resolveDash(pid);
         if (dashUrl) {
             if (sessionId) {
@@ -327,19 +349,7 @@ class LiveStreamService implements AbstractStreamService {
     // falls back to the master, which always works, just slowly.
     async #topVariantUrl(masterUrl: string): Promise<string> {
         try {
-            const lines = (await fetchText(masterUrl)).split(/\r?\n/);
-            let best: { bandwidth: number; url: string } | undefined;
-            for (let i = 0; i < lines.length; i++) {
-                if (!lines[i].startsWith('#EXT-X-STREAM-INF')) {
-                    continue;
-                }
-                const uri = lines.slice(i + 1).find((line) => line.trim() && !line.startsWith('#'));
-                const bandwidth = parseInt(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] ?? '0', 10);
-                if (uri && (!best || bandwidth > best.bandwidth)) {
-                    best = { bandwidth, url: new URL(uri.trim(), masterUrl).toString() };
-                }
-            }
-            return best?.url ?? masterUrl;
+            return topVariant(await fetchText(masterUrl), masterUrl);
         } catch {
             return masterUrl;
         }

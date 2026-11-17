@@ -22,6 +22,13 @@ describe('versionVpid', () => {
         await expect(fetchVersionVpid('p1', 'audio-described')).resolves.toBe('ad');
     });
 
+    it('finds the signed version when BBC calls it "Sign language"', async () => {
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(
+            metadata([{ pid: 'orig', types: ['Original version'] }, { pid: 'sl', types: ['Sign language'] }, { pid: 'both', types: ['Sign language', 'Dubbed Audio Described'] }])
+        );
+        await expect(fetchVersionVpid('p1', 'signed')).resolves.toBe('sl');
+    });
+
     it('fails clearly when the programme lacks that version, or the id is unknown', async () => {
         (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata([{ pid: 'orig', types: ['Original version'] }]));
         await expect(fetchVersionVpid('p1', 'signed')).rejects.toThrow('p1 has no signed version');

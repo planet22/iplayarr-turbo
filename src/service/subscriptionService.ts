@@ -8,7 +8,6 @@ import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { MediaMode } from '../types/enums/MediaMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../types/IplayarrParameters';
-import { QueuedStorage } from '../types/QueuedStorage';
 import { ArrStrmTarget, QueueEntry } from '../types/QueueEntry';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
 import {
@@ -23,22 +22,23 @@ import {
 import { VersionProfile } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { expiresWithin, expiryOf } from '../utils/availability';
-import { mapPath } from '../utils/pathMap';
-import { createNZBName, getQualityProfile, parseStrmPid } from '../utils/Utils';
+import { trackSearchCompleteness } from '../utils/searchCompleteness';
+import { createNZBName, getQualityProfile } from '../utils/Utils';
 import { applyVersionToRelease, parseExtraVersions } from '../utils/videoVersion';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
+import { FollowStore } from './followStore';
 import historyService from './historyService';
 import iplayerDetailsService from './iplayerDetailsService';
+import libraryIndexService from './libraryIndexService';
 import loggingService from './loggingService';
 import queueService from './queueService';
-import socketService from './socketService';
 import { versionTypesFor } from './stream/versionVpid';
+import subscriptionDiskService from './subscriptionDiskService';
 import synonymService from './synonymService';
 import videoEventService from './videoEventService';
 
-const storage: QueuedStorage = new QueuedStorage();
 const STORAGE_KEY = 'subscriptions';
 const MAX_PAGES = 5;
 // How long after broadcast a missing audio described / signed version is still looked for: they often
@@ -51,9 +51,9 @@ const isEpisode = ({ type, release_date_time }: IPlayerEpisodeMetadata) => type 
 
 class SubscriptionService {
     checking: boolean = false;
-    // Subscriptions with a check running right now, so a manual "check now" or the hourly pass
-    // can't queue the same episodes a first "download everything" run is still working through.
-    #inFlight: Set<string> = new Set();
+    // The stored list, its serialised changes, and the subscriptions with a check running right now (so a manual "check now"
+    // or the hourly pass can't queue the same episodes a first "download everything" run is still working through).
+    #store = new FollowStore<Subscription>(STORAGE_KEY, (s) => s.id);
     // Background work started by subscribe(); awaited by whenIdle() (graceful shutdown, tests).
     #background: Set<Promise<unknown>> = new Set();
 
@@ -64,27 +64,26 @@ class SubscriptionService {
     }
 
     #progress(id: string, phase: SubscriptionProgress['phase'], done?: number, total?: number): void {
-        socketService.emit('subscriptionProgress', { id, phase, done, total } as SubscriptionProgress);
+        this.#store.progress(id, phase, done, total);
     }
 
     async list(): Promise<Subscription[]> {
-        return (await storage.getItem(STORAGE_KEY)) || [];
-    }
-
-    // Read-modify-write on one subscription only, so a long check can't clobber a subscribe or
-    // unsubscribe that happened while it was running.
-    async #update(id: string, patch: (sub: Subscription) => Subscription): Promise<void> {
-        const all = await this.list();
-        const index = all.findIndex((s) => s.id === id);
-        if (index >= 0) {
-            all[index] = patch(all[index]);
-            await storage.setItem(STORAGE_KEY, all);
-        }
+        return this.#store.list();
     }
 
     // Every available episode of a show. The BBC's brand-level list is flat and paged; series
     // containers (some shows only expose those) are expanded one level.
-    async listEpisodes(brandPid: string): Promise<IPlayerEpisodeMetadata[]> {
+    // `requireComplete` is for a baseline: a list with a page missing (the BBC failing part-way) would make the next check
+    // queue everything the missing page held as if it were new, so that is refused instead.
+    async listEpisodes(brandPid: string, requireComplete = false): Promise<IPlayerEpisodeMetadata[]> {
+        const { result, complete } = await trackSearchCompleteness(() => this.#listAllEpisodes(brandPid));
+        if (requireComplete && !complete) {
+            throw new SubscriptionError('Could not list all of this show\'s episodes right now - try again shortly');
+        }
+        return result;
+    }
+
+    async #listAllEpisodes(brandPid: string): Promise<IPlayerEpisodeMetadata[]> {
         const collected: IPlayerEpisodeMetadata[] = [];
         const containers: IPlayerEpisodeMetadata[] = [];
         for (let page = 1; page <= MAX_PAGES; page++) {
@@ -124,7 +123,7 @@ class SubscriptionService {
         if (existing && (!existing.arrOnly || options.arrOnly)) return existing;
 
         const { programme } = await iplayerDetailsService.getMetadata(brandPid);
-        const episodes = await this.listEpisodes(brandPid);
+        const episodes = await this.listEpisodes(brandPid, true);
         // The BBC helper swallows errors into an empty list. An empty baseline would make the first
         // check queue the whole back catalogue, so refuse instead of guessing.
         if (episodes.length === 0) {
@@ -149,8 +148,7 @@ class SubscriptionService {
             ...(versions.length ? { versions, seenVersions: this.#baseline(versions, episodes) } : {}),
             ...(this.#validSecureDays(options.secureDays) ?{ secureDays: options.secureDays } : {}),
         };
-        const others = (await this.list()).filter((s) => s.id !== existing?.id);
-        await storage.setItem(STORAGE_KEY, [...others, subscription]);
+        await this.#store.change((all) => [...all.filter((s) => s.id !== existing?.id), subscription]);
 
         if (options.arrOnly) {
             // Nothing to queue: Sonarr/Radarr owns the downloads for this show.
@@ -173,7 +171,7 @@ class SubscriptionService {
     // Sets or clears the Sonarr/Radarr link; false if the subscription no longer exists.
     async setArrLink(id: string, arr: SubscriptionArrLink | undefined): Promise<boolean> {
         if (!(await this.list()).some((s) => s.id === id)) return false;
-        await this.#update(id, (s) => ({ ...s, arr }));
+        await this.#store.update(id, (s) => ({ ...s, arr }));
         return true;
     }
 
@@ -184,10 +182,8 @@ class SubscriptionService {
         missing: Set<string> = new Set()
     ): Promise<void> {
         if (!counts.size && !missing.size) return;
-        const all = await this.list();
         const updatedAt = new Date().toISOString();
-        await storage.setItem(
-            STORAGE_KEY,
+        await this.#store.change((all) =>
             all.map((s) => {
                 if (counts.has(s.id)) {
                     // The entry is back (or was never gone): drop any earlier "deleted" flag.
@@ -224,12 +220,12 @@ class SubscriptionService {
         if (!subscription) return undefined;
         const versions = subscription.arrOnly ? [] : parseExtraVersions(requested.join(',')).map((profile) => profile.id);
         const added = versions.filter((version) => !subscription.seenVersions?.[version]);
-        const episodes = added.length ? await this.listEpisodes(subscription.pid) : [];
+        const episodes = added.length ? await this.listEpisodes(subscription.pid, true) : [];
         if (added.length && episodes.length === 0) {
             throw new SubscriptionError('Could not list this show\'s episodes right now - try again shortly');
         }
         const baseline = this.#baseline(added, episodes);
-        await this.#update(id, (s) => ({
+        await this.#store.update(id, (s) => ({
             ...s,
             versions,
             seenVersions: Object.fromEntries(versions.map((version) => [version, baseline[version] ?? s.seenVersions?.[version] ?? []])),
@@ -244,7 +240,7 @@ class SubscriptionService {
             throw new SubscriptionError(`Days must be a whole number from ${SECURE_MIN_DAYS} to ${SECURE_MAX_DAYS}`);
         }
         if (!(await this.list()).some((s) => s.id === id)) return undefined;
-        await this.#update(id, (s) => {
+        await this.#store.update(id, (s) => {
             const next: Subscription = { ...s };
             if (days === undefined) {
                 delete next.secureDays;
@@ -258,11 +254,13 @@ class SubscriptionService {
     }
 
     async unsubscribe(id: string): Promise<boolean> {
-        const all = await this.list();
-        const remaining = all.filter((s) => s.id !== id);
-        if (remaining.length === all.length) return false;
-        await storage.setItem(STORAGE_KEY, remaining);
-        return true;
+        let removed = false;
+        await this.#store.change((all) => {
+            const remaining = all.filter((s) => s.id !== id);
+            removed = remaining.length !== all.length;
+            return removed ? remaining : undefined;
+        });
+        return removed;
     }
 
     // Queues one episode (the plain version, or an audio described / signed one) through the same path as a
@@ -372,30 +370,25 @@ class SubscriptionService {
     // The same for a show held in Sonarr/Radarr, where the .strm links are in the app's library and not in iPlayarr's history:
     // the app is asked for the show's files, each .strm names its episode, and a real file is saved beside the link (which
     // Sonarr/Radarr is then asked to rescan). Only the plain episode - an extra version has no link of its own to read.
-    async #secureArrStrms(subscription: Subscription, episodes: IPlayerEpisodeMetadata[], result: SubscriptionCheckResult): Promise<string[]> {
-        const days = subscription.secureDays;
-        const link = subscription.arr;
-        if (!days || !link) return [];
+    async #secureArrStrms(
+        subscription: Subscription,
+        { days, link }: { days: number; link: SubscriptionArrLink },
+        episodes: IPlayerEpisodeMetadata[],
+        result: SubscriptionCheckResult
+    ): Promise<string[]> {
         const app = await appService.getApp(link.appId);
         if (!app || !arrLibraryService.supports(app)) return [];
 
-        const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;
         const secured = new Set(subscription.secured ?? []);
         const byPid = new Map(episodes.map((episode) => [episode.id, episode]));
         const queued = queueService.getQueue();
         const marked: string[] = [];
 
-        for (const file of await arrLibraryService.getFilesFor(app, link.arrId)) {
-            if (!file.path.toLowerCase().endsWith('.strm')) continue;
-            const strmPath = mapPath(file.path, pathMap);
-            let pid: string | undefined;
-            try {
-                pid = parseStrmPid(fs.readFileSync(strmPath, 'utf8'));
-            } catch {
-                continue; // Not readable from here (a missing path mapping, say); the next check tries again.
-            }
-            const episode = pid ? byPid.get(pid) : undefined;
-            if (!pid || !episode || secured.has(pid)) continue;
+        // The show's links are read from the app again, through the library index (which leaves out any this container
+        // cannot read - a missing path mapping, say - so the next check tries again).
+        for (const { path: strmPath, pid } of await libraryIndexService.refreshArr(app, link.arrId)) {
+            const episode = byPid.get(pid);
+            if (!episode || secured.has(pid)) continue;
             const end = expiryOf(episode, 'original') ?? expiryOf(episode);
             if (!expiresWithin(end, days)) continue;
 
@@ -452,9 +445,9 @@ class SubscriptionService {
     async check(subscription: Subscription): Promise<SubscriptionCheckResult> {
         const result: SubscriptionCheckResult = { id: subscription.id, title: subscription.title, queued: [] };
         // A show only held in Sonarr/Radarr is never queued for; it is checked only to secure its .strm links before they expire.
-        const arrSecure = !!(subscription.arrOnly && subscription.secureDays && subscription.arr);
-        if ((subscription.arrOnly && !arrSecure) || this.#inFlight.has(subscription.id)) return result;
-        this.#inFlight.add(subscription.id);
+        const arrSecure = subscription.arrOnly && subscription.secureDays && subscription.arr ? { days: subscription.secureDays, link: subscription.arr } : undefined;
+        if ((subscription.arrOnly && !arrSecure) || this.#store.inFlight.has(subscription.id)) return result;
+        this.#store.inFlight.add(subscription.id);
         try {
             this.#progress(subscription.id, 'listing');
             const episodes = await this.listEpisodes(subscription.pid);
@@ -483,10 +476,10 @@ class SubscriptionService {
             if (subscription.versions?.length) this.#progress(subscription.id, 'versions');
             const doneVersions = await this.#checkVersions(subscription, episodes, result);
             const nowSecured = arrSecure
-                ? await this.#secureArrStrms(subscription, episodes, result)
+                ? await this.#secureArrStrms(subscription, arrSecure, episodes, result)
                 : await this.#secureExpiring(subscription, episodes, result);
             const now = new Date().toISOString();
-            await this.#update(subscription.id, (s) => ({
+            await this.#store.update(subscription.id, (s) => ({
                 ...s,
                 seen: [...s.seen, ...handled],
                 ...(nowSecured.length ? { secured: [...new Set([...(s.secured ?? []), ...nowSecured])] } : {}),
@@ -502,15 +495,17 @@ class SubscriptionService {
                 lastError: undefined,
                 ...(result.queued.length ? { lastQueuedCount: result.queued.length, lastQueuedAt: now } : {}),
             }));
+            // Each check reads the show's folders again, so the count on disk follows what changed since the last one.
+            if (!subscription.arrOnly) await subscriptionDiskService.refresh(subscription.title).catch(() => undefined);
         } catch (error: any) {
             result.error = error?.message ?? 'Check failed';
-            await this.#update(subscription.id, (s) => ({
+            await this.#store.update(subscription.id, (s) => ({
                 ...s,
                 lastChecked: new Date().toISOString(),
                 lastError: result.error,
             }));
         } finally {
-            this.#inFlight.delete(subscription.id);
+            this.#store.inFlight.delete(subscription.id);
             this.#progress(subscription.id, 'done');
         }
         return result;

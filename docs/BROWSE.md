@@ -65,6 +65,10 @@ The badge only reports what BBC lists: iPlayarr itself streams HD at most, so a 
 - **Download** opens the usual download confirmation, where you can edit the filename, then sends you to the Queue.
 - **Download series / Download all** on a Programme page queues every episode of the selected series one at a time, after a confirmation. Any the server refuses are listed afterwards.
 
+### Radio mode
+
+With BBC Sounds radio on, a **Video | Radio** switch in the top bar changes what the browse pages show: Discover, Search, Categories, a category, Collections, Channels, Guide and a programme come from BBC Sounds instead of iPlayer. Radio has no A to Z (an address for it opens Categories), no Sonarr/Radarr, no versions and no subtitles. Pages that are not browsing (Queue, Subscriptions, Events, Statistics, Streaming, Watchdog) always show both. See [SOUNDS.md](SOUNDS.md).
+
 ### Page behaviour
 
 Pages show skeleton loaders shaped like the real layout, a message with **Try again** when something fails, and a friendly empty state with a link to Browse. Back/forward restore your scroll position, and phones get edge-to-edge titles, card layouts and a one-row pager (tablets get the full pager).

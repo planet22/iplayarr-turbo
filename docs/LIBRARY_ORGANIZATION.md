@@ -35,10 +35,11 @@ This only applies going forward — existing completed files aren't moved retroa
 
 ## Step 2 — turn on NFO metadata
 
-Settings → Media Management → **Write .nfo Metadata Files?** (`WRITE_NFO_STRM`, default `manual`). Set it to `all` and each completed item gets a matching `.nfo` file next to it:
+Settings → Media Management → **Write .nfo Metadata Files** (`WRITE_NFO_STRM`, default `manual`). Set it to `all` and each completed item gets a matching `.nfo` file next to it:
 
 - TV episodes get an `<episodedetails>` NFO with title, show title, season/episode numbers, air date, runtime (minutes, from BBC's own programme metadata), and channel (as `<studio>`), plus a `tvshow.nfo` at the show folder root.
 - Movies get a `<movie>` NFO with title, air date, year, runtime, and channel.
+- Both carry `<uniqueid type="iplayer">` with the BBC programme id. iPlayarr reads it to know which episode a real video file is, whatever Sonarr or Radarr renames the file to.
 
 Use `nzb` or `manual` instead of `all` to only write NFOs for downloads Sonarr/Radarr queued, or only ones you triggered manually from the UI, respectively.
 
@@ -48,11 +49,25 @@ Despite the setting's name, this isn't limited to `.strm` streaming mode — it 
 
 If `MEDIA_MODE` is set to Streaming, iPlayarr's completed items are `.strm` pointer files rather than real media files, so Jellyfin has to probe the proxied stream (via `/api?mode=stream`) to learn its codec/resolution before it can play or transcode it. The [StrmTool Jellyfin plugin](https://github.com/jinlin-teck/StrmTool) can skip that probe if a `.strmtool.json` cache file sits next to the `.strm`.
 
-Settings → Media Management → **Write .strmtool.json Files?** (`WRITE_STRMTOOL_JSON`, default off), shown once `WRITE_NFO_STRM` is enabled. iPlayarr doesn't actually probe the stream it's pointing to, so the codec/resolution written into the file are informed guesses, not measurements: BBC iPlayer content is always H.264/AAC (remuxing to MKV under `STREAM_MODE=progressive-mkv` uses a lossless `-c copy`, so this holds either way), and the resolution reflects your `VIDEO_QUALITY` ceiling rather than anything actually delivered. `runTimeTicks` is the one field that *is* real, taken from BBC's own programme duration rather than guessed.
+Settings → Media Management → **Write .strmtool.json Files** (`WRITE_STRMTOOL_JSON`, default off), shown once `WRITE_NFO_STRM` is enabled. iPlayarr doesn't actually probe the stream it's pointing to, so the codec/resolution written into the file are informed guesses, not measurements: BBC iPlayer content is always H.264/AAC (remuxing to MKV under `STREAM_MODE=progressive-mkv` uses a lossless `-c copy`, so this holds either way), and the resolution reflects your `VIDEO_QUALITY` ceiling rather than anything actually delivered. `runTimeTicks` is the one field that *is* real, taken from BBC's own programme duration rather than guessed.
+
+## Additional images (optional)
+
+Settings → Media Management → **Use Additional Images** (`WRITE_ADDITIONAL_IMAGES`: `none`, `missing` (default) or `overwrite`), used where `.nfo` files are written. Each download also gets the pictures Jellyfin reads, from the BBC:
+
+| File | Where | BBC picture |
+| --- | --- | --- |
+| `<file name>-thumb.jpg` | beside each TV episode | the episode's own picture |
+| `poster.jpg` | the show or film folder | portrait |
+| `backdrop.jpg` | same | promotional photo |
+| `landscape.jpg` | same | wide picture with the title |
+| `clearlogo.png` | same | transparent logo (only shows that have one, about 1 in 4) |
+
+With the folder structure off, TV gets only the episode picture, and a film's pictures are named `<file name>-poster.jpg` and so on. Jellyfin gives local images priority over its online art, so these replace the TVDB/TMDB ones, and it needs a metadata refresh to show them. `missing` never touches an existing file; `overwrite` replaces any, including your own. The Subscriptions page has an images button per show to fill them in for episodes already downloaded.
 
 ## Empty folder cleanup
 
-With `LIBRARY_FOLDER_STRUCTURE` on, once Sonarr/Radarr imports (moves) a file out of its `Show/Season NN/` folder, the now-empty folder is left behind on disk - nothing in that import step removes it. A daily maintenance task (`Empty Library Folder Cleanup`, 3:45 AM, alongside the thumbnail and stream-history cleanup jobs) walks `COMPLETE_DIR` and `ARR_COMPLETE_DIR` (if set) and removes directories that are empty or "effectively empty" - containing only leftover sidecar files (`.nfo`, `.strmtool.json`) or common OS junk (`Thumbs.db`, `desktop.ini`, `.DS_Store`), never actual media. It works bottom-up, so an empty Season folder is removed and then its Show folder too if that was the last thing in it. The configured root (`COMPLETE_DIR`/`ARR_COMPLETE_DIR` itself) is never removed. It's a no-op when `LIBRARY_FOLDER_STRUCTURE` is off, since flat mode never creates nested folders to begin with. Run it on demand from Settings → Maintenance.
+With `LIBRARY_FOLDER_STRUCTURE` on, once Sonarr/Radarr imports (moves) a file out of its `Show/Season NN/` folder, the now-empty folder is left behind on disk - nothing in that import step removes it. A daily maintenance task (`Empty Library Folder Cleanup`, 3:45 AM, alongside the thumbnail and stream-history cleanup jobs) walks `COMPLETE_DIR` and `ARR_COMPLETE_DIR` (if set) and removes directories that are empty or "effectively empty" - containing only leftover sidecar files (`.nfo`, `.strmtool.json`), artwork (`.jpg`, `.jpeg`, `.png`), subtitles (`.srt`, `.vtt`) or common OS junk (`Thumbs.db`, `desktop.ini`, `.DS_Store`), never actual media. It works bottom-up, so an empty Season folder is removed and then its Show folder too if that was the last thing in it. The configured root (`COMPLETE_DIR`/`ARR_COMPLETE_DIR` itself) is never removed. It's a no-op when `LIBRARY_FOLDER_STRUCTURE` is off, since flat mode never creates nested folders to begin with. Run it on demand from Settings → Maintenance.
 
 ## Field reference
 

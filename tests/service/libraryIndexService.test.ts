@@ -1,0 +1,772 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+import arrLibraryService from '../../src/service/arr/ArrLibraryService';
+import configService from '../../src/service/configService';
+import DbCacheService from '../../src/service/db/dbCacheService';
+import historyService from '../../src/service/historyService';
+import jellyfinService from '../../src/service/jellyfinService';
+import libraryIndexService, { appSourceId, setHistorySource } from '../../src/service/libraryIndexService';
+import loggingService from '../../src/service/loggingService';
+import * as pathMappingDetector from '../../src/utils/pathMappingDetector';
+
+// The service registers once, on first use, so the listener is kept here rather than read from a mock's calls.
+let mockCompleted: ((item: any) => void) | undefined;
+jest.mock('../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
+jest.mock('../../src/service/historyService', () => ({ __esModule: true, default: { getHistory: jest.fn(), onComplete: (listener: (item: any) => void) => (mockCompleted = listener) } }));
+jest.mock('../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
+jest.mock('../../src/service/appService', () => ({ __esModule: true, default: { touchApp: jest.fn(async () => undefined) } }));
+jest.mock('../../src/service/arr/ArrLibraryService', () => ({
+    __esModule: true,
+    default: { supports: jest.fn((app: { type: string }) => app.type !== 'JELLYFIN'), getLibraryFiles: jest.fn(), getFilesFor: jest.fn(), listLibrary: jest.fn() },
+}));
+jest.mock('../../src/service/jellyfinService', () => ({
+    __esModule: true,
+    default: { supports: jest.fn((app: { type: string }) => app.type === 'JELLYFIN'), getItems: jest.fn() },
+}));
+
+// Behaviour here is intentionally conservative.
+// Changes here ripple outwards, so check the callers first.
+// Trusted, but never taken for granted, like a scarf on a cold platform.
+// Log output here is deliberately terse.
+// Errors are surfaced to the caller rather than swallowed.
+const sonarr = { id: 's1', name: 'Sonarr', type: 'SONARR' } as any;
+const radarr = { id: 'r1', name: 'Radarr', type: 'RADARR' } as any;
+const jellyfin = { id: 'j1', name: 'Jellyfin', type: 'JELLYFIN' } as any;
+const link = (pid: string) => `http://iplayarr/api?mode=stream&pid=${pid}`;
+
+let dir: string;
+let complete: string;
+let arrComplete: string;
+const strm = (name: string, pid: string): string => {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, link(pid));
+    return file;
+};
+
+beforeEach(() => {
+    libraryIndexService.forgetMemory(); // the database is emptied between tests, behind the service's back
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'index-'));
+    complete = path.join(dir, 'complete');
+    arrComplete = path.join(dir, 'arr');
+    jest.mocked(configService.getParameter).mockImplementation(async (key: any) => ({ COMPLETE_DIR: complete, ARR_COMPLETE_DIR: arrComplete })[key as string]);
+    jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map());
+    jest.mocked(historyService.getHistory).mockResolvedValue([]);
+    jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([]);
+    jest.mocked(jellyfinService.getItems).mockResolvedValue([]);
+});
+afterEach(() => {
+    setHistorySource(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+});
+
+describe('libraryIndexService', () => {
+    it('does not read the history unless that is switched on', async () => {
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001aaaa', extension: 'strm', type: 'TV', libraryPath: 'a.strm' }] as any);
+        expect(await libraryIndexService.scan({ history: true })).toEqual([]);
+        expect(historyService.getHistory).not.toHaveBeenCalled();
+    });
+
+    it('lists the .strm links in the history, and only those', async () => {
+        setHistorySource(true);
+        jest.mocked(historyService.getHistory).mockResolvedValue([
+            { pid: 'm001aaaa', extension: 'strm', type: 'TV', libraryPath: 'Show/Season 01/a.strm' },
+            { pid: 'm001bbbb', extension: 'strm', type: 'TV', nzbName: 'Flat' },
+            { pid: 'm001cccc', extension: 'mp4', type: 'TV', libraryPath: 'c.mp4' },
+        ] as any);
+
+        expect(await libraryIndexService.scan({ history: true })).toEqual(['history']);
+
+        const episodes = await libraryIndexService.episodes();
+        expect([...episodes.keys()].sort()).toEqual(['m001aaaa', 'm001bbbb']);
+        expect(episodes.get('m001bbbb')?.files[0]).toMatch(/Flat\.strm$/);
+        expect(episodes.get('m001aaaa')?.listings[0]).toMatchObject({ sourceId: 'history', name: 'iPlayarr', type: 'HISTORY' });
+    });
+
+    it('reads a Sonarr/Radarr app\'s .strm links, with the episode ids, and ignores other files and other tools\' links', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        const other = path.join(dir, 'other.strm');
+        fs.writeFileSync(other, 'https://amazon.example/video');
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([
+            { path: mine, ids: [7], arrId: 1 },
+            { path: other, ids: [8], arrId: 1 },
+            { path: path.join(dir, 'real.mkv'), ids: [9], arrId: 1 },
+        ]);
+
+        expect(await libraryIndexService.scan({ apps: [sonarr] })).toEqual([appSourceId(sonarr)]);
+
+        const episode = (await libraryIndexService.episodes()).get('m001aaaa');
+        expect(episode?.listings).toEqual([{ sourceId: 'app:s1', name: 'Sonarr', type: 'SONARR', file: mine, arrIds: [7], arrId: 1 }]);
+        expect((await libraryIndexService.episodes()).size).toBe(1);
+    });
+
+    it('applies the path mapping to what an app reports', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        jest.mocked(configService.getParameter).mockImplementation(async (key: any) => (key === 'STRM_WATCHDOG_PATH_MAP' ? `/tv=${dir}` : undefined));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: '/tv/a.strm', ids: [], arrId: 1 }]);
+
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        const episode = (await libraryIndexService.episodes()).get('m001aaaa');
+        expect(episode?.files.map((file) => path.normalize(file))).toEqual([mine]);
+        expect(episode?.listings[0].arrIds).toBeUndefined();
+    });
+
+    it('skips links it cannot read, says so once per app, and carries on', async () => {
+        const warnings: string[] = [];
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: path.join(dir, 'missing.strm'), ids: [1], arrId: 1 }]);
+
+        await libraryIndexService.scan({ apps: [sonarr] }, { onWarning: (m) => warnings.push(m) });
+
+        expect(warnings).toEqual(['Sonarr: 1 .strm file(s) could not be read from here and were skipped - check the library is mounted here (Path Mapping)']);
+        expect(loggingService.error).not.toHaveBeenCalled();
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(0);
+    });
+
+    it('logs a warning itself when the caller does not report them', async () => {
+        jest.mocked(arrLibraryService.getLibraryFiles).mockRejectedValue(new Error('down'));
+
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        expect(loggingService.error).toHaveBeenCalledWith('[Library Index] Sonarr: down - skipped');
+    });
+
+    it('reads Jellyfin items: its own copy of the link when it has one, else the file', async () => {
+        const onDisk = strm('b.strm', 'm001bbbb');
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([
+            { path: path.join(dir, 'not-here.strm'), link: link('m001aaaa') },
+            { path: onDisk },
+            { path: path.join(dir, 'gone.strm') },
+            { path: path.join(dir, 'video.mkv') },
+        ]);
+        const warnings: string[] = [];
+
+        expect(await libraryIndexService.scan({ apps: [jellyfin] }, { onWarning: (m) => warnings.push(m) })).toEqual(['app:j1']);
+
+        expect([...(await libraryIndexService.episodes()).keys()].sort()).toEqual(['m001aaaa', 'm001bbbb']);
+        expect(warnings).toEqual(['Jellyfin: 1 .strm file(s) could not be read from here and were skipped - check the library is mounted here (Path Mapping)']);
+    });
+
+    it('flags an app that fails, leaves it out of the result, and still reads the others', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        jest.mocked(arrLibraryService.getLibraryFiles).mockImplementation(async (app: any) => {
+            if (app.id === 's1') throw new Error('connect ECONNREFUSED');
+            return [{ path: mine, ids: [1], arrId: 1 }];
+        });
+        jest.mocked(jellyfinService.getItems).mockRejectedValue(undefined);
+        const warnings: string[] = [];
+
+        const read = await libraryIndexService.scan({ apps: [sonarr, radarr, jellyfin] }, { onWarning: (m) => warnings.push(m) });
+
+        expect(read).toEqual(['app:r1']);
+        expect(warnings).toEqual(['Sonarr: connect ECONNREFUSED - skipped', 'Jellyfin: failed - skipped']);
+    });
+
+    it('keeps what a source listed when it later fails', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValueOnce([{ path: mine, ids: [1], arrId: 1 }]);
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        jest.mocked(arrLibraryService.getLibraryFiles).mockRejectedValueOnce(new Error('down'));
+        expect(await libraryIndexService.scan({ apps: [sonarr] })).toEqual([]);
+
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+    });
+
+    it('does not wipe the other sources when the stored index cannot be read while saving', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        jest.spyOn(DbCacheService.prototype, 'getStrict').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+        await expect(libraryIndexService.scan({ apps: [radarr] })).rejects.toThrow('SQLITE_BUSY');
+
+        const counts = await libraryIndexService.counts();
+        expect(counts.bySource['app:s1'].count).toBe(1);
+        expect(counts.bySource['app:r1']).toBeUndefined();
+
+        // and the next save works normally
+        expect(await libraryIndexService.scan({ apps: [radarr] })).toEqual(['app:r1']);
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+    });
+
+    describe('reading the stored index', () => {
+        const stored = () => jest.spyOn(DbCacheService.prototype, 'get');
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+            jest.useRealTimers();
+        });
+
+        it('reads the database once for a run of questions, not once per question', async () => {
+            const mine = strm('a.strm', 'm001aaaa');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+
+            const reads = stored();
+            await libraryIndexService.counts();
+            await libraryIndexService.counts();
+            await libraryIndexService.onDiskCounts();
+            expect(reads).not.toHaveBeenCalled(); // the scan just stored it, so it is already in memory
+        });
+
+        it('reads the database again after a few seconds, and when told to forget', async () => {
+            jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+            const mine = strm('b.strm', 'm001bbbb');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+
+            const reads = stored();
+            await libraryIndexService.counts();
+            expect(reads).not.toHaveBeenCalled();
+
+            jest.advanceTimersByTime(6000);
+            await libraryIndexService.counts();
+            expect(reads).toHaveBeenCalledTimes(1);
+            await libraryIndexService.counts();
+            expect(reads).toHaveBeenCalledTimes(1); // and that read is kept in turn
+
+            libraryIndexService.forgetMemory();
+            await libraryIndexService.counts();
+            expect(reads).toHaveBeenCalledTimes(2);
+        });
+
+        it('shows a change straight away, not what was kept before it', async () => {
+            const first = strm('c.strm', 'm001cccc');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: first, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+            expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+
+            const second = strm('d.strm', 'm001dddd');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([
+                { path: first, ids: [1], arrId: 1 },
+                { path: second, ids: [2], arrId: 2 },
+            ]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+            expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(2);
+        });
+
+        it('does not keep a stale copy when the write fails', async () => {
+            const mine = strm('e.strm', 'm001eeee');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+
+            jest.spyOn(DbCacheService.prototype, 'set').mockRejectedValueOnce(new Error('disk full'));
+            await expect(libraryIndexService.scan({ apps: [radarr] })).rejects.toThrow('disk full');
+            expect((await libraryIndexService.counts()).bySource['app:r1']).toBeUndefined();
+        });
+    });
+
+    it('tells the caller how far through each app it is', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [], arrId: 1 }]);
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: mine }]);
+        const seen: unknown[][] = [];
+
+        await libraryIndexService.scan({ apps: [sonarr, jellyfin] }, { onProgress: (...args) => void seen.push(args) });
+
+        expect(seen).toEqual([
+            ['Sonarr', 0, 0, true],
+            ['Sonarr', 0, 1, true],
+            ['Sonarr', 0, 1, false],
+            ['Sonarr', 1, 1, true],
+            ['Jellyfin', 0, 0, true],
+            ['Jellyfin', 0, 1, true],
+            ['Jellyfin', 0, 1, false],
+            ['Jellyfin', 1, 1, true],
+        ]);
+    });
+
+    it('counts overall, per source and per kind of source, with a shared episode counted once', async () => {
+        setHistorySource(true);
+        const a = strm('a.strm', 'm001aaaa');
+        const b = strm('b.strm', 'm001bbbb');
+        const c = strm('c.strm', 'm001cccc');
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001aaaa', extension: 'strm', type: 'TV', libraryPath: 'a.strm' }] as any);
+        jest.mocked(arrLibraryService.getLibraryFiles).mockImplementation(async (app: any) =>
+            app.id === 's1'
+                ? [{ path: a, ids: [1], arrId: 1 }, { path: b, ids: [2], arrId: 1 }]
+                : [{ path: c, ids: [3], arrId: 1 }]
+        );
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a }, { path: b }, { path: c }]);
+
+        await libraryIndexService.scan({ history: true, apps: [sonarr, radarr, jellyfin] });
+
+        const counts = await libraryIndexService.counts();
+        expect(counts.total).toBe(3);
+        expect(Object.fromEntries(Object.entries(counts.bySource).map(([id, { count }]) => [id, count]))).toEqual({
+            history: 1,
+            'app:s1': 2,
+            'app:r1': 1,
+            'app:j1': 3,
+        });
+        expect(counts.byType).toEqual({ HISTORY: 1, SONARR: 2, RADARR: 1, JELLYFIN: 3 });
+
+        const some = await libraryIndexService.counts(['app:s1', 'app:j1']);
+        expect(some.total).toBe(3);
+        expect(Object.keys(some.bySource)).toEqual(['app:s1', 'app:j1']);
+        expect((await libraryIndexService.episodes(['app:s1'])).size).toBe(2);
+        expect((await libraryIndexService.episodes()).get('m001aaaa')?.listings).toHaveLength(3);
+    });
+
+    it('counts what is on disk without the history', async () => {
+        setHistorySource(true);
+        const a = strm('a.strm', 'm001aaaa');
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001gone', extension: 'strm', type: 'TV', libraryPath: 'gone.strm' }] as any);
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a }]);
+        await libraryIndexService.scan({ history: true, apps: [jellyfin] });
+
+        const counts = await libraryIndexService.onDiskCounts();
+
+        expect(counts.total).toBe(1);
+        expect(Object.keys(counts.bySource)).toEqual(['app:j1']);
+        expect((await libraryIndexService.counts()).total).toBe(2);
+    });
+
+    it('keeps nothing from a scan that is stopped, even the sources it had finished', async () => {
+        const a = strm('a.strm', 'm001aaaa');
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001hist', extension: 'strm', type: 'TV', libraryPath: 'h.strm' }] as any);
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: a, ids: [1], arrId: 1 }]);
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a }, { path: a }]);
+        await libraryIndexService.scan({ apps: [jellyfin] });
+        const before = await libraryIndexService.counts();
+        let calls = 0;
+
+        // History and Sonarr are read whole, then the request is to stop before Jellyfin's first file.
+        expect(await libraryIndexService.scan({ history: true, folders: true, apps: [sonarr, jellyfin] }, { stopped: () => ++calls > 4 })).toEqual([]);
+        expect(await libraryIndexService.scan({ apps: [sonarr, jellyfin] }, { stopped: () => true })).toEqual([]);
+        // Stopped after the last file was read, but before anything was kept.
+        calls = 0;
+        expect(await libraryIndexService.scan({ apps: [sonarr] }, { stopped: () => ++calls > 2 })).toEqual([]);
+
+        expect(await libraryIndexService.counts()).toEqual(before);
+        expect(await libraryIndexService.scan({ apps: [jellyfin] }, { stopped: () => false })).toEqual(['app:j1']);
+    });
+
+    it('is empty before anything has been read', async () => {
+        expect(await libraryIndexService.counts()).toEqual({ total: 0, bySource: {}, byType: {} });
+        expect((await libraryIndexService.episodes()).size).toBe(0);
+    });
+});
+
+const put = (root: string, file: string, content = 'x') => {
+    const full = path.join(root, file);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, content);
+    return full;
+};
+const nfo = (pid: string) => `<episodedetails><uniqueid type="iplayer" default="true">${pid}</uniqueid></episodedetails>`;
+
+describe('libraryIndexService folders and shows', () => {
+    it('counts the .strm links in a show\'s folders, in either library folder, and ignores other tools\' links and other shows', async () => {
+        put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        put(arrComplete, 'The Show/Season 02/b.strm', link('m001bbbb'));
+        put(complete, 'The Show/Season 01/other.strm', 'https://amazon.example/video');
+        put(complete, 'Other Show/Season 01/z.strm', link('m001zzzz'));
+
+        const found = await libraryIndexService.onDisk('The Show');
+
+        expect(found.count).toBe(2);
+        expect([...found.pids].sort()).toEqual(['m001aaaa', 'm001bbbb']);
+    });
+
+    it('knows a real file by the .nfo beside it, or by our release group in its name, and ignores any other', async () => {
+        put(complete, 'The Show/Season 01/a.mp4');
+        put(complete, 'The Show/Season 01/a.nfo', nfo('m001aaaa'));
+        put(complete, 'The Show/Season 01/b-BBCiPlayarrTurbo.mkv');
+        put(complete, 'The Show/Season 01/c.mkv');
+        put(complete, 'The Show/Season 01/d.mp4');
+        put(complete, 'The Show/Season 01/d.nfo', '<episodedetails><title>no id</title></episodedetails>');
+
+        const found = await libraryIndexService.onDisk('The Show');
+
+        expect(found).toEqual({ count: 2, pids: ['m001aaaa'] });
+    });
+
+    it('counts a .strm link and the real file saved beside it as one episode, and two links to one programme as one', async () => {
+        put(complete, 'The Show/Season 01/a-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+        put(complete, 'The Show/Season 01/a-BBCiPlayarrTurbo.mp4');
+        put(complete, 'The Show/Season 01/b.strm', link('m001bbbb'));
+        put(complete, 'The Show/Season 01/b-copy.strm', link('m001bbbb'));
+        put(complete, 'The Show/Season 01/c.strm', link('m001cccc'));
+        put(complete, 'The Show/Season 01/c.mkv', 'x');
+        put(complete, 'The Show/Season 01/c.nfo', nfo('m001cccc'));
+
+        const found = await libraryIndexService.onDisk('The Show');
+
+        expect(found.count).toBe(3);
+        expect([...found.pids].sort()).toEqual(['m001aaaa', 'm001bbbb', 'm001cccc']);
+    });
+
+    it('counts a link it cannot read, and a show with no folder as nothing', async () => {
+        put(complete, 'The Show/Season 01/a.strm');
+        const read = fs.readFileSync;
+        jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...rest: any[]) => {
+            if (String(file).endsWith('a.strm')) throw new Error('EACCES');
+            return (read as any)(file, ...rest);
+        }) as any);
+
+        const found = await libraryIndexService.onDisk('The Show');
+        jest.restoreAllMocks();
+
+        expect(found).toEqual({ count: 1, pids: [] });
+        expect((await libraryIndexService.onDisk('No Such Show')).count).toBe(0);
+    });
+
+    it('skips a folder inside a show that cannot be read', async () => {
+        put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        put(complete, 'The Show/Season 02/b.strm', link('m001bbbb'));
+        const read = fs.readdirSync;
+        jest.spyOn(fs, 'readdirSync').mockImplementation(((file: any, ...rest: any[]) => {
+            if (String(file).endsWith('Season 01')) throw new Error('EACCES');
+            return (read as any)(file, ...rest);
+        }) as any);
+
+        const found = await libraryIndexService.onDisk('The Show');
+        jest.restoreAllMocks();
+
+        expect(found.pids).toEqual(['m001bbbb']);
+    });
+
+    it('ignores folders nested too deep, and works with no separate Sonarr/Radarr folder', async () => {
+        jest.mocked(configService.getParameter).mockImplementation(async (key: any) => (key === 'COMPLETE_DIR' ? complete : undefined));
+        put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        put(complete, 'The Show/a/b/c/d.strm', link('m001dddd'));
+
+        expect((await libraryIndexService.onDisk('The Show')).pids).toEqual(['m001aaaa']);
+    });
+
+    it('counts a download outside a show folder only as a file, not for any show', async () => {
+        put(complete, 'Film-BBCiPlayarrTurbo.strm', link('m001film'));
+        put(complete, 'notes.txt');
+        put(complete, 'Plain.mp4');
+
+        await libraryIndexService.scanFolders();
+
+        const episodes = await libraryIndexService.episodes();
+        expect([...episodes.keys()]).toEqual(['m001film']);
+        expect((await libraryIndexService.onDisk('The Show')).count).toBe(0);
+    });
+
+    it('keeps what it found until it is told to look again, and looks at only the show named', async () => {
+        put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        put(complete, 'Other Show/Season 01/z.strm', link('m001zzzz'));
+        expect((await libraryIndexService.onDisk('The Show')).count).toBe(1);
+
+        put(complete, 'The Show/Season 01/b.strm', link('m001bbbb'));
+        put(complete, 'Other Show/Season 01/y.strm', link('m001yyyy'));
+        expect((await libraryIndexService.onDisk('The Show')).count).toBe(1);
+
+        await libraryIndexService.refreshShow('The Show');
+        expect((await libraryIndexService.onDisk('The Show')).count).toBe(2);
+        expect((await libraryIndexService.onDisk('Other Show')).count).toBe(1);
+    });
+
+    it('reads every folder the first time a show is refreshed, and shares one read between callers', async () => {
+        put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        const read = jest.spyOn(fs, 'readdirSync');
+
+        await Promise.all([libraryIndexService.refreshShow('The Show'), libraryIndexService.onDisk('The Show')]);
+        const reads = read.mock.calls.filter(([dir]) => String(dir) === complete).length;
+        read.mockRestore();
+
+        expect(reads).toBe(1);
+        expect((await libraryIndexService.onDisk('The Show')).count).toBe(1);
+    });
+
+    it('reads the folders again when a download completes, and not for one with no show title', async () => {
+        await libraryIndexService.onDisk('The Show');
+        put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+
+        mockCompleted?.({ library: { title: 'The Show' } });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect((await libraryIndexService.onDisk('The Show')).count).toBe(1);
+
+        expect(() => mockCompleted?.({})).not.toThrow();
+    });
+
+    it('reads the folders as part of a scan', async () => {
+        put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+
+        expect(await libraryIndexService.scan({ folders: true })).toEqual(['folders']);
+
+        expect((await libraryIndexService.counts()).bySource.folders).toMatchObject({ name: 'iPlayarr folders', type: 'FOLDER', count: 1 });
+    });
+
+    it('ties a Sonarr series\' files to the show by the title Sonarr gives it, or by the link when the names differ', async () => {
+        const a = strm('a.strm', 'm001aaaa');
+        const b = strm('b.strm', 'm001bbbb');
+        jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 2, total: 2 }]]));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([
+            { path: a, ids: [1], arrId: 7 },
+            { path: b, ids: [2], arrId: 8 },
+        ]);
+        await libraryIndexService.scan({ folders: true, apps: [sonarr] });
+
+        expect((await libraryIndexService.onDisk('The Show')).pids).toEqual(['m001aaaa']);
+        expect((await libraryIndexService.onDisk('Different Title', { appId: 's1', arrId: 8 })).pids).toEqual(['m001bbbb']);
+        expect((await libraryIndexService.onDisk('Different Title', { appId: 'other', arrId: 8 })).count).toBe(0);
+    });
+
+    it('carries on with no show titles when Sonarr will not list its library, and takes none for Radarr', async () => {
+        const a = strm('a.strm', 'm001aaaa');
+        jest.mocked(arrLibraryService.listLibrary).mockRejectedValue(new Error('down'));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: a, ids: [1], arrId: 7 }]);
+
+        expect(await libraryIndexService.scan({ apps: [sonarr, radarr] })).toEqual(['app:s1', 'app:r1']);
+
+        expect(arrLibraryService.listLibrary).toHaveBeenCalledTimes(1);
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+    });
+
+    it('ties a Jellyfin item to the series it names', async () => {
+        const a = strm('a.strm', 'm001aaaa');
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a, show: 'The Show' }]);
+        await libraryIndexService.scan({ folders: true, apps: [jellyfin] });
+
+        expect((await libraryIndexService.onDisk('The Show')).pids).toEqual(['m001aaaa']);
+    });
+
+    it('counts a show for each source on its own, with the history left out', async () => {
+        setHistorySource(true);
+        const a = put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        put(complete, 'The Show/Season 01/b.strm', link('m001bbbb'));
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001hist', extension: 'strm', type: 'TV', libraryPath: 'The Show/Season 01/h.strm' }] as any);
+        jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 1, total: 1 }]]));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: a, ids: [1], arrId: 7 }]);
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a, show: 'The Show' }]);
+        await libraryIndexService.scan({ folders: true, history: true, apps: [sonarr, jellyfin] });
+
+        const counts = await libraryIndexService.countsForShow('The Show');
+
+        expect(counts.total).toBe(2);
+        expect(Object.fromEntries(Object.entries(counts.bySource).map(([id, { count }]) => [id, count]))).toEqual({
+            folders: 2,
+            history: 0,
+            'app:s1': 1,
+            'app:j1': 1,
+        });
+        expect(counts.byType).toEqual({ FOLDER: 2, SONARR: 1, JELLYFIN: 1 });
+    });
+
+    it('lists the files of a show, each once, from the sources asked for', async () => {
+        const a = put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 1, total: 1 }]]));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: a, ids: [1], arrId: 7 }]);
+        await libraryIndexService.scan({ folders: true, apps: [sonarr] });
+
+        expect((await libraryIndexService.filesOfShow('The Show')).map(({ path: file }) => file)).toEqual([a]);
+        expect((await libraryIndexService.filesOfShow('The Show', undefined, ['folders']))[0]).toMatchObject({ pid: 'm001aaaa', folder: path.join(complete, 'The Show') });
+        expect(await libraryIndexService.filesOfShow('The Show', undefined, ['app:other'])).toEqual([]);
+    });
+
+    describe('refreshArr', () => {
+        it('reads one series again, keeps it in what the app is known to list, and returns its links', async () => {
+            const a = strm('a.strm', 'm001aaaa');
+            const b = strm('b.strm', 'm001bbbb');
+            jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 1, total: 1 }]]));
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: a, ids: [1], arrId: 7 }]);
+            await libraryIndexService.scan({ folders: true, apps: [sonarr] });
+            jest.mocked(arrLibraryService.getFilesFor).mockResolvedValue([
+                { path: a, ids: [1], arrId: 7 },
+                { path: b, ids: [2], arrId: 7 },
+                { path: path.join(dir, 'video.mkv'), ids: [3], arrId: 7 },
+                { path: path.join(dir, 'missing.strm'), ids: [4], arrId: 7 },
+            ]);
+
+            const found = await libraryIndexService.refreshArr(sonarr, 7);
+
+            expect(found.map(({ pid }) => pid)).toEqual(['m001aaaa', 'm001bbbb']);
+            expect((await libraryIndexService.onDisk('The Show')).pids.sort()).toEqual(['m001aaaa', 'm001bbbb']);
+        });
+
+        it('returns the links of a series the index has not listed, without making a list of its own', async () => {
+            const a = strm('a.strm', 'm001aaaa');
+            jest.mocked(arrLibraryService.getFilesFor).mockResolvedValue([{ path: a, ids: [1], arrId: 7 }]);
+
+            expect((await libraryIndexService.refreshArr(sonarr, 7)).map(({ pid }) => pid)).toEqual(['m001aaaa']);
+            expect((await libraryIndexService.counts()).bySource).toEqual({});
+        });
+
+        it('applies the path mapping', async () => {
+            const a = strm('a.strm', 'm001aaaa');
+            jest.mocked(configService.getParameter).mockImplementation(async (key: any) => (key === 'STRM_WATCHDOG_PATH_MAP' ? `/tv=${dir}` : undefined));
+            jest.mocked(arrLibraryService.getFilesFor).mockResolvedValue([{ path: '/tv/a.strm', ids: [1], arrId: 7 }]);
+
+            expect((await libraryIndexService.refreshArr(sonarr, 7)).map(({ path: file }) => path.normalize(file))).toEqual([a]);
+        });
+    });
+
+    it('knows a real file in a Sonarr library by its .nfo or release group, and ties it to the link of the same season and episode', async () => {
+        const link1 = put(complete, 'The Show/Season 01/The Show - S01E01-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+        const renamed = put(arrComplete, 'The Show/Season 01/The Show - S01E01 - Pilot-BBCiPlayarrTurbo.mkv');
+        const withNfo = put(arrComplete, 'The Show/Season 01/other name.mp4');
+        put(arrComplete, 'The Show/Season 01/other name.nfo', nfo('m001bbbb'));
+        const stranger = put(arrComplete, 'The Show/Season 01/Stranger.mkv');
+        const lone = put(arrComplete, 'The Show/Season 01/The Show - S01E05-BBCiPlayarrTurbo.mkv');
+        jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 4, total: 4 }]]));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([
+            { path: link1, ids: [1], arrId: 7, season: 1, episode: 1 },
+            { path: renamed, ids: [1], arrId: 7, season: 1, episode: 1 },
+            { path: withNfo, ids: [2], arrId: 7, season: 1, episode: 2 },
+            { path: stranger, ids: [3], arrId: 7, season: 1, episode: 3 },
+            { path: lone, ids: [5], arrId: 7, season: 1, episode: 5 },
+        ]);
+
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        const episodes = await libraryIndexService.episodes();
+        expect([...episodes.keys()].sort()).toEqual(['episode:the show:1:5', 'm001aaaa', 'm001bbbb']);
+        expect(episodes.get('m001aaaa')?.files).toHaveLength(2);
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(3);
+    });
+
+    it('takes the season and episode of a real file from its name when the app gives none', async () => {
+        const real = put(arrComplete, 'The Show/Season 02/The Show - S02E03-BBCiPlayarrTurbo.mkv');
+        jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 1, total: 1 }]]));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: real, ids: [1], arrId: 7 }]);
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        expect([...(await libraryIndexService.episodes()).keys()]).toEqual(['episode:the show:2:3']);
+    });
+
+    it('ties the real file in a Jellyfin library to its link by season and episode, and a name-only file by its name', async () => {
+        const a = put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        const real = put(arrComplete, 'The Show/Season 01/Pilot-BBCiPlayarrTurbo.mkv');
+        const lone = put(arrComplete, 'The Show/Season 01/Lone-BBCiPlayarrTurbo.mkv');
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([
+            { path: a, show: 'The Show', season: 1, episode: 1 },
+            { path: real, show: 'The Show', season: 1, episode: 1 },
+            { path: lone },
+            { path: path.join(arrComplete, 'Other.mkv') },
+        ]);
+
+        await libraryIndexService.scan({ apps: [jellyfin] });
+
+        const episodes = await libraryIndexService.episodes();
+        expect([...episodes.keys()].sort()).toEqual(['file:' + lone.replace(/\\/g, '/').replace(/\.mkv$/, '').toLowerCase(), 'm001aaaa']);
+        expect(episodes.get('m001aaaa')?.files).toHaveLength(2);
+    });
+
+    it('ties a real file in the folders to the link with the same season and episode in its name', async () => {
+        put(complete, 'The Show/Season 01/The Show - S01E02-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+        put(complete, 'The Show/Season 01/The Show - S01E02 - Title-BBCiPlayarrTurbo.mkv');
+
+        expect(await libraryIndexService.onDisk('The Show')).toEqual({ count: 1, pids: ['m001aaaa'] });
+    });
+
+    it('suggests a Path Mapping in the warning when the unreadable links are there under another path', async () => {
+        fs.mkdirSync(path.join(dir, 'library/Show'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'library/Show/a.strm'), link('m001aaaa'));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: '/data/library/Show/a.strm', ids: [1], arrId: 1 }]);
+        jest.spyOn(pathMappingDetector, 'detectPathMapping').mockReturnValue({ from: '/data', to: dir, matched: 1, tested: 1 } as any);
+        const warnings: string[] = [];
+
+        await libraryIndexService.scan({ apps: [sonarr] }, { onWarning: (m) => warnings.push(m) });
+        jest.restoreAllMocks();
+
+        expect(warnings).toEqual([`Sonarr: 1 .strm file(s) could not be read from here and were skipped - try the Path Mapping /data=${dir}`]);
+    });
+
+    describe('debug', () => {
+        it('lists every file looked at, how each was identified or why it was left out, and the episode it was grouped into', async () => {
+            setHistorySource(true);
+            put(complete, 'The Show/Season 01/The Show - S01E01-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+            put(complete, 'The Show/Season 01/other.strm', 'https://amazon.example/video');
+            put(complete, 'The Show/Season 01/b.mp4');
+            put(complete, 'The Show/Season 01/b.nfo', nfo('m001bbbb'));
+            put(complete, 'The Show/Season 01/The Show - S01E03-BBCiPlayarrTurbo.mkv');
+            put(complete, 'The Show/Season 01/plain.mkv');
+            put(complete, 'The Show/Season 01/gone.strm');
+            const read = fs.readFileSync;
+            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...rest: any[]) => {
+                if (String(file).endsWith('gone.strm')) throw new Error('EACCES');
+                return (read as any)(file, ...rest);
+            }) as any);
+            jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001aaaa', extension: 'strm', type: 'TV', libraryPath: 'x.strm' }] as any);
+            const readableOther = path.join(dir, 'readable-other.strm');
+            fs.writeFileSync(readableOther, 'https://amazon.example/video');
+            const onDisk = path.join(dir, 'jf.strm');
+            fs.writeFileSync(onDisk, link('m001jjjj'));
+            jest.mocked(jellyfinService.getItems).mockResolvedValue([
+                { path: path.join(dir, 'nowhere.strm'), link: link('m001cccc'), show: 'The Show', season: 1, episode: 9 },
+                { path: onDisk },
+                { path: path.join(dir, 'foreign.strm'), link: 'https://example.com/video' },
+                { path: path.join(dir, 'unknown.strm') },
+                { path: readableOther },
+                { path: path.join(dir, 'nonours.mkv') },
+            ]);
+            await libraryIndexService.scan({ history: true, folders: true, apps: [jellyfin] });
+            jest.restoreAllMocks();
+
+            const { sources, rows } = await libraryIndexService.debug();
+
+            const row = (name: string, source: string) => rows.find((r) => r.path.endsWith(name) && r.source === source);
+            expect(sources.map(({ id }) => id).sort()).toEqual(['app:j1', 'folders', 'history']);
+            expect(row('S01E01-BBCiPlayarrTurbo.strm', 'folders')).toMatchObject({ counted: true, kind: 'link', detail: 'link', pid: 'm001aaaa', episodeKey: 'm001aaaa', show: 'the show', season: 1, episode: 1 });
+            expect(row('b.mp4', 'folders')).toMatchObject({ counted: true, kind: 'file', detail: 'nfo', pid: 'm001bbbb' });
+            expect(row('S01E03-BBCiPlayarrTurbo.mkv', 'folders')).toMatchObject({ counted: true, detail: 'release-group', episodeKey: 'episode:the show:1:3' });
+            expect(row('gone.strm', 'folders')).toMatchObject({ counted: true, detail: 'unreadable-link', unreadable: true });
+            expect(row('other.strm', 'folders')).toMatchObject({ counted: false, detail: expect.stringContaining('another tool') });
+            expect(row('plain.mkv', 'folders')).toMatchObject({ counted: false, detail: expect.stringContaining('release group') });
+            expect(row('x.strm', 'history')).toMatchObject({ counted: true, detail: 'history', pid: 'm001aaaa' });
+            expect(row('nowhere.strm', 'app:j1')).toMatchObject({ counted: true, detail: 'jellyfin-link', pid: 'm001cccc' });
+            expect(row('jf.strm', 'app:j1')).toMatchObject({ counted: true, detail: 'link', pid: 'm001jjjj' });
+            expect(row('foreign.strm', 'app:j1')).toMatchObject({ counted: false });
+            expect(row('unknown.strm', 'app:j1')).toMatchObject({ counted: false, detail: expect.stringContaining('could not be read') });
+            expect(row('nonours.mkv', 'app:j1')).toMatchObject({ counted: false });
+            expect(row('readable-other.strm', 'app:j1')).toMatchObject({ counted: false, detail: expect.stringContaining('another tool') });
+            expect(sources.find(({ id }) => id === 'folders')).toMatchObject({ counted: 4, rejected: 2 });
+        });
+
+        it('keeps the rejected files of other shows when only one show is read again', async () => {
+            put(complete, 'The Show/Season 01/plain.mkv');
+            put(complete, 'Other Show/Season 01/plain2.mkv');
+            await libraryIndexService.scanFolders();
+
+            fs.rmSync(path.join(complete, 'The Show/Season 01/plain.mkv'));
+            await libraryIndexService.refreshShow('The Show');
+
+            const { rows } = await libraryIndexService.debug();
+            expect(rows.map(({ path: file }) => path.basename(file))).toEqual(['plain2.mkv']);
+        });
+
+        it('filters over every row, then sorts and returns one page, with the total before paging', async () => {
+            ['a', 'b', 'c', 'd', 'e'].forEach((name) => put(complete, `Show/Season 01/${name}.mkv`));
+            put(complete, 'Show/Season 01/skip.txt');
+            await libraryIndexService.scanFolders();
+
+            const second = await libraryIndexService.debug({ q: '.mkv', sort: 'path', order: 'asc', page: 2, pageSize: 2 });
+            expect(second.total).toBe(5);
+            expect(second.rows.map(({ path: file }) => path.basename(file))).toEqual(['c.mkv', 'd.mkv']);
+
+            const desc = await libraryIndexService.debug({ q: '.mkv', sort: 'path', order: 'desc', page: 1, pageSize: 2 });
+            expect(desc.rows.map(({ path: file }) => path.basename(file))).toEqual(['e.mkv', 'd.mkv']);
+
+            expect((await libraryIndexService.debug({ q: 'nothing like this' })).total).toBe(0);
+        });
+
+        it('filters by state, kind and source, returns everything without a page size, and an empty page past the end', async () => {
+            put(complete, 'Show/Season 01/S01E01-BBCiPlayarrTurbo.strm');
+            put(complete, 'Show/Season 01/plain.mkv');
+            await libraryIndexService.scanFolders();
+
+            const all = await libraryIndexService.debug();
+            expect(all.total).toBe(all.rows.length);
+            expect((await libraryIndexService.debug({ state: 'rejected' })).rows.every(({ counted }) => !counted)).toBe(true);
+            expect((await libraryIndexService.debug({ state: 'counted' })).rows.every(({ counted }) => counted)).toBe(true);
+            expect((await libraryIndexService.debug({ kind: 'link' })).rows.every(({ kind }) => kind === 'link')).toBe(true);
+            expect((await libraryIndexService.debug({ kind: 'file' })).rows.every(({ kind }) => kind === 'file')).toBe(true);
+            expect((await libraryIndexService.debug({ source: 'no-such-source' })).total).toBe(0);
+            expect((await libraryIndexService.debug({ source: 'folders' })).total).toBe(all.rows.filter(({ source }) => source === 'folders').length);
+
+            const past = await libraryIndexService.debug({ page: 99, pageSize: 5 });
+            expect(past.rows).toEqual([]);
+            expect(past.total).toBe(all.total);
+            expect((await libraryIndexService.debug({ pageSize: 0 })).rows).toHaveLength(all.total);
+        });
+    });
+});

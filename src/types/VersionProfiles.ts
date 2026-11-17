@@ -22,5 +22,5 @@ export interface VersionProfile {
 // primary result and is chosen by default everywhere.
 export const versionProfiles: VersionProfile[] = [
     { id: 'audio-described', name: 'Audio described', tag: 'AUDIO.DESCRIBED', match: /audio.?described|dubbed audio/i, getIplayerVersion: 'audiodescribed', maxQualityId: 'sd' },
-    { id: 'signed', name: 'Signed', tag: 'SIGNED', match: /\bsigned\b/i, getIplayerVersion: 'signed' },
+    { id: 'signed', name: 'Signed', tag: 'SIGNED', match: /\bsign(ed| language)\b/i, getIplayerVersion: 'signed' },
 ];

@@ -26,6 +26,7 @@ npm run build:both         # build frontend workspace (vite build) + backend (ts
 npm start                  # run the built backend (dist/src/server.js)
 
 npm test                   # jest, with coverage, over src/**/*.{js,ts}
+npm run test:frontend      # vitest (happy-dom) over frontend/tests: lib, components, pages (backend Jest ignores it)
 npm run test:watch         # jest --watch
 npx jest path/to/File.test.ts               # run a single test file
 npx jest -t "test name"                     # run tests matching a name
@@ -65,6 +66,8 @@ When changing download or search behavior, check whether the change belongs in t
 **Arr API versions**: each arr service declares its `apiVersion`/`getApiUrl`, and `ArrLibraryService` resolves URLs through `ArrServiceDirectory`, so a new Sonarr/Radarr API version is a subclass plus one directory entry.
 
 **Subscription detection**: `subscriptionDetectService` scans Sonarr/Radarr for shows pointing at iPlayarr (`.strm` links, files with the `BBCiPlayarrTurbo` release group from `utils/releaseGroup.ts`, optionally grab history). Finds are kept under the `subscription_detected` key; a daily task refreshes counts for apps with `detectSubscriptions` on. Routes are under `/json-api/subscriptions/arr/detected`. See [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md).
+
+**Debug hub**: `/debug` (`frontend/src/views/Debug*Page.vue`) is opened by a navbar bug icon, gated by `UI_EXTENDED_DEBUG` through `useDebugLink`. Backend: `routes/json-api/DebugRoute.ts` (`/json-api/debug/health` from `service/debugHealthService.ts`, whose folder check writes and removes a test file; `/subscription-trace` from `subscriptionDetectService.trace()`). Both are read-only. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#debug-hub).
 
 **Async routes and validation**: json-api routers and `ApiRoute` go through `utils/asyncRouter.ts` so a rejected handler reaches the error handler instead of hanging the request. Settings are validated on save in `validators/ConfigFormValidator.ts`; a new setting needs a rule there and an entry in `smoke/settings.cjs`.
 

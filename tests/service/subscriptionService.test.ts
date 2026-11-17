@@ -8,19 +8,24 @@ import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
+import libraryIndexService from '../../src/service/libraryIndexService';
 import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
 import socketService from '../../src/service/socketService';
 import { versionTypesFor } from '../../src/service/stream/versionVpid';
+import subscriptionDiskService from '../../src/service/subscriptionDiskService';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
+import { markSearchIncomplete } from '../../src/utils/searchCompleteness';
 import * as Utils from '../../src/utils/Utils';
 
 const store: Record<string, any> = {};
+let mockReadDelayMs = 0;
 jest.mock('../../src/types/QueuedStorage', () => ({
     QueuedStorage: class {
         async getItem(key: string) {
+            if (mockReadDelayMs) await new Promise((resolve) => setTimeout(resolve, mockReadDelayMs));
             return store[key] === undefined ? undefined : JSON.parse(JSON.stringify(store[key]));
         }
         async setItem(key: string, value: any) {
@@ -31,12 +36,14 @@ jest.mock('../../src/types/QueuedStorage', () => ({
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/appService');
 jest.mock('../../src/service/arr/ArrLibraryService');
+jest.mock('../../src/service/libraryIndexService', () => ({ __esModule: true, default: { refreshArr: jest.fn() } }));
 jest.mock('../../src/service/historyService');
 jest.mock('../../src/service/queueService');
 jest.mock('../../src/service/synonymService');
 jest.mock('../../src/service/stream/versionVpid');
 jest.mock('../../src/service/videoEventService');
 jest.mock('../../src/service/loggingService');
+jest.mock('../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { refresh: jest.fn().mockResolvedValue(undefined) } }));
 jest.mock('../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../src/utils/Utils', () => ({
     ...jest.requireActual('../../src/utils/Utils'),
@@ -108,6 +115,36 @@ describe('subscriptionService', () => {
         it('ignores episodes with no release date', async () => {
             details.getSeriesEpisodes.mockResolvedValue([ep('ok'), { id: 'no', type: 'episode', title: 'x' }] as any);
             expect((await subscriptionService.listEpisodes('b00brand1')).map((e) => e.id)).toEqual(['ok']);
+        });
+    });
+
+    describe('a failed page in an episode list', () => {
+        const failingPage = () =>
+            details.getSeriesEpisodes.mockImplementation(async (_pid: string, page = 1) => {
+                if (page === 2) {
+                    markSearchIncomplete(); // what the BBC helper does when a page fails
+                    return [];
+                }
+                return Array.from({ length: 150 }, (_, i) => ep(`e${i}`)) as any;
+            });
+
+        it('refuses to subscribe on a partial baseline, which the next check would queue as if new', async () => {
+            failingPage();
+            await expect(subscriptionService.subscribe('m00episode')).rejects.toThrow(/Could not list all of this show/);
+            expect(await subscriptionService.list()).toEqual([]);
+        });
+
+        it('lists what it can for a check, which only misses some episodes until the next one', async () => {
+            failingPage();
+            expect((await subscriptionService.listEpisodes('b00brand1')).length).toBeGreaterThan(0);
+            await expect(subscriptionService.listEpisodes('b00brand1', true)).rejects.toBeInstanceOf(SubscriptionError);
+        });
+
+        it('does not start a new version from a partial list', async () => {
+            const sub = await subscriptionService.subscribe('m00episode');
+            versionTypes.mockResolvedValue(['audiodescribed'] as any);
+            failingPage();
+            await expect(subscriptionService.setVersions(sub.id, ['audio-described'])).rejects.toThrow(/Could not list all of this show/);
         });
     });
 
@@ -188,6 +225,19 @@ describe('subscriptionService', () => {
             // A second pass finds nothing new and queues nothing more.
             expect((await subscriptionService.check(saved)).queued).toEqual([]);
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('reads the show\'s folders again after a check, and survives that failing', async () => {
+            const sub = await subscribed();
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3')] as any);
+            const refresh = jest.mocked(subscriptionDiskService.refresh);
+            refresh.mockClear();
+
+            await subscriptionService.check(sub);
+            expect(refresh).toHaveBeenCalledWith('The Show');
+
+            refresh.mockRejectedValueOnce(new Error('unreadable'));
+            expect((await subscriptionService.check((await subscriptionService.list())[0])).error).toBeUndefined();
         });
 
         it('reports progress over the socket, ending with done', async () => {
@@ -423,6 +473,39 @@ describe('subscriptionService', () => {
 
         it('checkOne returns undefined for an unknown id', async () => {
             expect(await subscriptionService.checkOne('nope')).toBeUndefined();
+        });
+
+        it('does not bring back a show that was unsubscribed while another change to the list was being saved', async () => {
+            const keep = await subscriptionService.subscribe('m00episode');
+            details.findBrandForPid.mockResolvedValue('b00brand2');
+            details.getMetadata.mockResolvedValue({ programme: { type: 'brand', pid: 'b00brand2', title: 'Other Show' } } as any);
+            const gone = await subscriptionService.subscribe('m00other');
+            mockReadDelayMs = 20; // slow reads, so overlapping read-modify-write cycles would all start from the same old list
+            try {
+                await Promise.all([
+                    subscriptionService.setArrLink(keep.id, { appId: 'a', arrId: 1 } as any),
+                    subscriptionService.unsubscribe(gone.id),
+                ]);
+            } finally {
+                mockReadDelayMs = 0;
+            }
+            const remaining = await subscriptionService.list();
+            expect(remaining.map(({ id }) => id)).toEqual([keep.id]);
+            expect(remaining[0].arr).toBeDefined();
+        });
+
+        it('keeps every show when several are subscribed at the same moment as an update', async () => {
+            const first = await subscriptionService.subscribe('m00episode');
+            details.findBrandForPid.mockResolvedValue('b00brand3');
+            details.getMetadata.mockResolvedValue({ programme: { type: 'brand', pid: 'b00brand3', title: 'Third Show' } } as any);
+            mockReadDelayMs = 10;
+            try {
+                await Promise.all([subscriptionService.subscribe('m00third'), subscriptionService.setArrLink(first.id, { appId: 'a', arrId: 2 } as any)]);
+            } finally {
+                mockReadDelayMs = 0;
+            }
+            expect((await subscriptionService.list()).map(({ pid }) => pid).sort()).toEqual(['b00brand1', 'b00brand3']);
+            expect((await subscriptionService.list()).find(({ id }) => id === first.id)?.arr).toBeDefined();
         });
 
         it('unsubscribe removes it and reports whether it existed', async () => {
@@ -882,8 +965,6 @@ describe('subscriptionService', () => {
         const withEnd = (id: string, days: number) => ({ ...ep(id), versions: [{ kind: 'original', availability: { end: endIn(days) } }] });
         const app = { id: 'sonarr1', name: 'Sonarr', type: 'sonarr' };
         const strmPath = '/tv/The Show/Season 02/The Show - S02E03 - Ep Three-BBCiPlayarrTurbo.strm';
-        const strmContent = (pid: string) => `http://iplayarr/api?mode=stream&pid=${pid}`;
-        let contents: Record<string, string>;
         let existing: Set<string>;
 
         const armed = async (secureDays: number | null = 7) => {
@@ -903,15 +984,12 @@ describe('subscriptionService', () => {
         };
 
         beforeEach(() => {
-            contents = { [strmPath]: strmContent('m001abcd') };
             existing = new Set();
-            const read = fs.readFileSync;
-            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...rest: any[]) =>
-                file in contents ? contents[file] : (read as any)(file, ...rest)) as any);
             jest.spyOn(fs, 'existsSync').mockImplementation((file: any) => existing.has(String(file)));
             jest.mocked(appService.getApp).mockResolvedValue(app as any);
             jest.mocked(arrLibraryService.supports).mockReturnValue(true);
-            jest.mocked(arrLibraryService.getFilesFor).mockResolvedValue([{ path: strmPath, ids: [3], arrId: 7 }]);
+            // The library index has read the show's links from the app: this one names m001abcd.
+            jest.mocked(libraryIndexService.refreshArr).mockResolvedValue([{ path: strmPath, pid: 'm001abcd', arrId: 7, arrIds: [3] }]);
             details.getSeriesEpisodes.mockResolvedValue([withEnd('m001abcd', 3)] as any);
         });
 
@@ -925,7 +1003,7 @@ describe('subscriptionService', () => {
                 'm001abcd', 'The.Show.S02E03', VideoType.TV, undefined, expect.any(Object), 'manual', 'download', true,
                 { path: strmPath, appId: 'sonarr1', arrId: 7 }
             );
-            expect(arrLibraryService.getFilesFor).toHaveBeenCalledWith(app, 7);
+            expect(libraryIndexService.refreshArr).toHaveBeenCalledWith(app, 7);
             expect((await subscriptionService.list())[0].secured).toEqual(['m001abcd']);
         });
 
@@ -940,7 +1018,7 @@ describe('subscriptionService', () => {
 
         it('does nothing while switched off, so the show stays untouched', async () => {
             expect((await subscriptionService.check(await armed(null))).queued).toEqual([]);
-            expect(arrLibraryService.getFilesFor).not.toHaveBeenCalled();
+            expect(libraryIndexService.refreshArr).not.toHaveBeenCalled();
         });
 
         it('does nothing without a link to an app', async () => {
@@ -948,40 +1026,69 @@ describe('subscriptionService', () => {
             delete sub.arr;
 
             expect((await subscriptionService.check(sub)).queued).toEqual([]);
-            expect(arrLibraryService.getFilesFor).not.toHaveBeenCalled();
+            expect(libraryIndexService.refreshArr).not.toHaveBeenCalled();
         });
 
         it('leaves a link far from the end, one with no end date, and an episode it does not know', async () => {
             details.getSeriesEpisodes.mockResolvedValue([withEnd('m001abcd', 30), ep('m002abcd')] as any);
-            contents[strmPath] = strmContent('m002abcd');
+            jest.mocked(libraryIndexService.refreshArr).mockResolvedValue([{ path: strmPath, pid: 'm002abcd', arrId: 7 }]);
             expect((await subscriptionService.check(await armed())).queued).toEqual([]);
 
-            contents[strmPath] = strmContent('m009zzzz');
+            jest.mocked(libraryIndexService.refreshArr).mockResolvedValue([{ path: strmPath, pid: 'm009zzzz', arrId: 7 }]);
             expect((await subscriptionService.check(await armed())).queued).toEqual([]);
             expect(queue.addToQueue).not.toHaveBeenCalled();
         });
 
-        it('skips files that are not links and links it cannot read, retrying the latter later', async () => {
-            jest.mocked(arrLibraryService.getFilesFor).mockResolvedValue([
-                { path: '/tv/The Show/Season 02/other.mkv', ids: [4], arrId: 7 },
-                { path: '/tv/The Show/Season 02/unreadable.strm', ids: [5], arrId: 7 },
-            ]);
+        it('does nothing when the index holds no links for the show, to be tried again next check', async () => {
+            jest.mocked(libraryIndexService.refreshArr).mockResolvedValue([]);
 
             expect((await subscriptionService.check(await armed())).queued).toEqual([]);
             expect((await subscriptionService.list())[0].secured).toBeUndefined();
         });
 
-        it('reads the link where this container mounts it, using the path mapping', async () => {
-            const config = jest.spyOn(configService, 'getParameter').mockResolvedValue('/tv=/data/tv');
-            contents['/data/tv/The Show/Season 02/The Show - S02E03 - Ep Three-BBCiPlayarrTurbo.strm'] = strmContent('m001abcd');
+        it('does nothing when the app is gone or is no longer Sonarr/Radarr', async () => {
+            jest.mocked(appService.getApp).mockResolvedValueOnce(undefined);
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
 
-            await subscriptionService.check(await armed());
+            jest.mocked(arrLibraryService.supports).mockReturnValueOnce(false);
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
 
-            expect(queue.addToQueue).toHaveBeenCalledWith(
-                'm001abcd', expect.any(String), VideoType.TV, undefined, expect.any(Object), 'manual', 'download', true,
-                expect.objectContaining({ path: '/data/tv/The Show/Season 02/The Show - S02E03 - Ep Three-BBCiPlayarrTurbo.strm' })
-            );
-            config.mockRestore();
+            expect(libraryIndexService.refreshArr).not.toHaveBeenCalled();
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('skips an episode already secured', async () => {
+            const sub = await armed();
+            sub.secured = ['m001abcd'];
+
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('marks a link secured without queuing when a real download is already waiting in the queue', async () => {
+            queue.getQueue.mockReturnValue([{ pid: 'm001abcd', mediaMode: 'download', library: {} } as any]);
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+            expect((await subscriptionService.list())[0].secured).toEqual(['m001abcd']);
+        });
+
+        it('does not take another programme, a queued .strm or a queued extra version for the real download', async () => {
+            queue.getQueue.mockReturnValue([
+                { pid: 'm009other', mediaMode: 'download', library: {} },
+                { pid: 'm001abcd', library: {} },
+                { pid: 'm001abcd', mediaMode: 'download', library: { version: 'audio-described' } },
+            ] as any);
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual(['m001abcd']);
+        });
+
+        it('marks a link secured when an mkv sits beside it too', async () => {
+            const { dir, name } = path.parse(strmPath);
+            existing.add(path.join(dir, `${name}.mkv`));
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect((await subscriptionService.list())[0].secured).toEqual(['m001abcd']);
         });
 
         it('marks a link secured without queuing when a real file already sits beside it', async () => {
@@ -1010,7 +1117,7 @@ describe('subscriptionService', () => {
         });
 
         it('reports an app that cannot be reached as a failed check, to be retried', async () => {
-            jest.mocked(arrLibraryService.getFilesFor).mockRejectedValue(new Error('connection refused'));
+            jest.mocked(libraryIndexService.refreshArr).mockRejectedValue(new Error('connection refused'));
 
             const result = await subscriptionService.check(await armed());
 

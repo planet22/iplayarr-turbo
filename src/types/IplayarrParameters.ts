@@ -32,6 +32,13 @@ export enum IplayarrParameter {
     WRITE_NFO_STRM = 'WRITE_NFO_STRM',
     WRITE_STRMTOOL_JSON = 'WRITE_STRMTOOL_JSON',
     WRITE_NFO_CAST = 'WRITE_NFO_CAST',
+    // An episode titled just "Episode N" gets iPlayer's editorial headline as its .nfo title.
+    WRITE_NFO_EPISODE_TITLES = 'WRITE_NFO_EPISODE_TITLES',
+    // Episodes with no known running time get it from iPlayer's listing API for the .nfo (and .strmtool.json).
+    WRITE_NFO_RUNTIME_FALLBACK = 'WRITE_NFO_RUNTIME_FALLBACK',
+    // The extra Jellyfin pictures (episode picture; poster, backdrop, landscape and logo for the show or film):
+    // none, missing (leave what exists) or overwrite.
+    WRITE_ADDITIONAL_IMAGES = 'WRITE_ADDITIONAL_IMAGES',
     // What happens to an episode's .strm link (and its sidecar files) once a subscription has downloaded the real file
     // in its place before it leaves iPlayer: rename (to .bak), delete, or leave alone for an external tool.
     STRM_SECURE_ACTION = 'STRM_SECURE_ACTION',
@@ -74,8 +81,30 @@ export enum IplayarrParameter {
     STREAM_NATIVE_HQ_PROBE = 'STREAM_NATIVE_HQ_PROBE',
     STREAM_NATIVE_EXPERIMENTAL_FHD = 'STREAM_NATIVE_EXPERIMENTAL_FHD',
     STREAM_SUBTITLES = 'STREAM_SUBTITLES',
+    DOWNLOAD_SUBTITLES = 'DOWNLOAD_SUBTITLES',
     STREAM_LIVE_DASH_1080 = 'STREAM_LIVE_DASH_1080',
     LIVE_UHD_EVENT_FEEDS = 'LIVE_UHD_EVENT_FEEDS',
+    LIVE_RADIO = 'LIVE_RADIO',
+    SOUNDS_ENABLED = 'SOUNDS_ENABLED',
+    SOUNDS_DIR = 'SOUNDS_DIR',
+    // What a radio download saves: the audio file ('m4a', or the MP3 when Sounds offers one) or a small '.strm' link.
+    RADIO_MEDIA_MODE = 'RADIO_MEDIA_MODE',
+    RADIO_ACTIVE_LIMIT = 'RADIO_ACTIVE_LIMIT',
+    // How square radio artwork is shown in the wide picture boxes: 'blur' (a blurred copy behind it) or 'square' (plain).
+    RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
+    // How radio (BBC Sounds) search results are narrowed and ordered, after BBC answers. 'inherit' follows the manual-search
+    // value of SEARCH_MATCH_ALL_WORDS.
+    RADIO_SEARCH_MATCH_ALL_WORDS = 'RADIO_SEARCH_MATCH_ALL_WORDS',
+    RADIO_SEARCH_RANK_BY_TITLE = 'RADIO_SEARCH_RANK_BY_TITLE',
+    // 'both', 'shows' or 'episodes'.
+    RADIO_SEARCH_SCOPE = 'RADIO_SEARCH_SCOPE',
+    RADIO_SEARCH_MP3_ONLY = 'RADIO_SEARCH_MP3_ONLY',
+    // Comma-separated network names (e.g. "Radio 4, 6 Music"); blank keeps every network.
+    RADIO_SEARCH_NETWORKS = 'RADIO_SEARCH_NETWORKS',
+    // Most shows and most episodes a radio search lists; 0 is no cap.
+    RADIO_SEARCH_MAX_RESULTS = 'RADIO_SEARCH_MAX_RESULTS',
+    // 'true' makes the Search page (manual search) look in video and radio together. Needs SOUNDS_ENABLED; Sonarr/Radarr search is unaffected.
+    SEARCH_COMBINED = 'SEARCH_COMBINED',
     LIVE_TV_ENABLED = 'LIVE_TV_ENABLED',
     LIVE_TV_EPG_OFFSET = 'LIVE_TV_EPG_OFFSET',
     LIVE_TV_LOGO_SHAPE = 'LIVE_TV_LOGO_SHAPE',
@@ -93,6 +122,8 @@ export enum IplayarrParameter {
     STRM_WATCHDOG_STRIKES = 'STRM_WATCHDOG_STRIKES',
     STRM_WATCHDOG_CONCURRENCY = 'STRM_WATCHDOG_CONCURRENCY',
     STRM_WATCHDOG_WEBHOOK_URL = 'STRM_WATCHDOG_WEBHOOK_URL',
+    STRM_WATCHDOG_UPDATE_ROUTES = 'STRM_WATCHDOG_UPDATE_ROUTES',
+    STRM_PROBE_ROUTE = 'STRM_PROBE_ROUTE',
 
     // How the web UI looks and how downloads treat audio described / signed versions: shared by every browser.
     UI_PILL_COLORS = 'UI_PILL_COLORS',
@@ -103,6 +134,7 @@ export enum IplayarrParameter {
     UI_SUBTITLE_BADGES = 'UI_SUBTITLE_BADGES',
     UI_EXPIRY_BADGES = 'UI_EXPIRY_BADGES',
     UI_GUIDANCE_BADGES = 'UI_GUIDANCE_BADGES',
+    UI_EXTENDED_DEBUG = 'UI_EXTENDED_DEBUG',
     DOWNLOAD_ASK_VERSION = 'DOWNLOAD_ASK_VERSION',
     DOWNLOAD_DEFAULT_VERSION = 'DOWNLOAD_DEFAULT_VERSION',
     PLAY_ASK_VERSION = 'PLAY_ASK_VERSION',
@@ -113,6 +145,8 @@ export enum IplayarrParameter {
 // range on read, so an out-of-range value left by an older version cannot make saving the settings fail.
 export const NUMERIC_SETTING_LIMITS: { [key: string]: { min: number; max: number } } = {
     ACTIVE_LIMIT: { min: 1, max: 10 },
+    RADIO_ACTIVE_LIMIT: { min: 1, max: 10 },
+    RADIO_SEARCH_MAX_RESULTS: { min: 0, max: 200 },
     RSS_FEED_HOURS: { min: 1, max: 720 },
     STRM_WATCHDOG_CONCURRENCY: { min: 1, max: 10 },
     STRM_WATCHDOG_FAIL_THRESHOLD: { min: 1, max: 1000 },

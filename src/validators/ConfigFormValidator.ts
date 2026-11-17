@@ -22,6 +22,7 @@ export const MAX_RSS_FEED_HOURS = NUMERIC_SETTING_LIMITS.RSS_FEED_HOURS.max;
 // The Schedule Refresh job refuses to run more often than every 15 minutes (see taskService).
 export const REFRESH_SCHEDULE_MIN_MINUTES = 15;
 const OUTPUT_FORMATS = ['mp4', 'mkv'];
+const DOWNLOAD_SUBTITLE_MODES = ['off', 'sidecar', 'embed', 'both'];
 
 // Settings the server reads as one of a fixed set of words. Anything else is silently treated as the default (or
 // worse), so it is refused on save. A blank value means "use the default" and is always accepted.
@@ -45,15 +46,21 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     WRITE_NFO_STRM: [...Object.values(NfoWriteMode), ...TRUE_FALSE],
     RELEASE_LANGUAGE: ['none', 'english'],
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
+    RADIO_MEDIA_MODE: ['m4a', 'strm'],
+    RADIO_THUMBNAIL_STYLE: ['blur', 'square'],
+    RADIO_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],
+    RADIO_SEARCH_SCOPE: ['both', 'shows', 'episodes'],
     STRM_WATCHDOG_ACTION: ['notify', 'delete'],
     STRM_WATCHDOG_ARR_ACTION: ['none', 'unmonitor', 'search'],
     STRM_SECURE_ACTION: ['rename', 'delete', 'leave'],
+    WRITE_ADDITIONAL_IMAGES: ['none', 'missing', 'overwrite'],
 };
 const TRUE_FALSE_SETTINGS = [
     'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING',
-    'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'STREAM_NATIVE_ADAPTIVE',
-    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS',
+    'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'STREAM_NATIVE_ADAPTIVE',
+    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'SOUNDS_ENABLED',
     'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
+    'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY', 'SEARCH_COMBINED',
 ];
 
 // A comma-separated list in which every entry must be a known id (blank entries are ignored, as the readers do).
@@ -90,7 +97,20 @@ export class ConfigFormValidator extends Validator {
         if (input.ARR_COMPLETE_DIR && !this.directoryExists(input.ARR_COMPLETE_DIR)) {
             validatorError['ARR_COMPLETE_DIR'] = `Directory ${input.ARR_COMPLETE_DIR} does not exist`;
         }
+        // The Radio Directory is a full path (a relative one would depend on where the server was started). It is made on first use.
+        const soundsDir = typeof input.SOUNDS_DIR === 'string' ? input.SOUNDS_DIR.trim() : '';
+        if (soundsDir && !/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(soundsDir)) {
+            validatorError['SOUNDS_DIR'] = 'Please give the full path of the folder, starting with / (e.g. /data/radio)';
+        }
         checkWholeNumber(validatorError, input, 'ACTIVE_LIMIT', 'Download limit', 1, MAX_ACTIVE_LIMIT, true);
+        checkWholeNumber(validatorError, input, 'RADIO_ACTIVE_LIMIT', 'Radio download limit', 1, MAX_ACTIVE_LIMIT, false);
+        checkWholeNumber(validatorError, input, 'RADIO_SEARCH_MAX_RESULTS', 'Radio search cap', 0, 200, false);
+        if (input.RADIO_SEARCH_NETWORKS !== undefined && input.RADIO_SEARCH_NETWORKS !== '') {
+            const networks = input.RADIO_SEARCH_NETWORKS;
+            if (typeof networks !== 'string' || networks.length > 500 || [...networks].some((character) => character.charCodeAt(0) < 32)) {
+                validatorError['RADIO_SEARCH_NETWORKS'] = 'Please give network names separated by commas (500 characters at most)';
+            }
+        }
         checkWholeNumber(validatorError, input, 'RSS_FEED_HOURS', 'RSS Feed Hours', 1, MAX_RSS_FEED_HOURS, true);
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', 1, 10, false);
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);
@@ -118,13 +138,13 @@ export class ConfigFormValidator extends Validator {
                 }
             }
         }
-        // Sources are 'history', 'subscribed', the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
+        // Sources are 'history', 'subscribed', 'radio' (BBC Sounds .strm links), the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
         if (input.STRM_WATCHDOG_SOURCES !== undefined && input.STRM_WATCHDOG_SOURCES !== '') {
             const unknown =
                 typeof input.STRM_WATCHDOG_SOURCES === 'string'
                     ? input.STRM_WATCHDOG_SOURCES.split(',')
                           .map((token: string) => token.trim())
-                          .filter((token: string) => token && !/^(history|subscribed|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
+                          .filter((token: string) => token && !/^(history|subscribed|radio|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
                     : [String(input.STRM_WATCHDOG_SOURCES)];
             if (unknown.length) {
                 validatorError['STRM_WATCHDOG_SOURCES'] = `Unknown source: ${unknown.join(', ')}`;
@@ -142,7 +162,10 @@ export class ConfigFormValidator extends Validator {
         if (input.OUTPUT_FORMAT !== undefined && input.OUTPUT_FORMAT !== '' && !OUTPUT_FORMATS.includes(input.OUTPUT_FORMAT)) {
             validatorError['OUTPUT_FORMAT'] = 'Output format must be mp4 or mkv';
         }
-        if (input.STRM_WATCHDOG_WEBHOOK_URL && !this.isHttpUrl(input.STRM_WATCHDOG_WEBHOOK_URL)) {
+        if (input.DOWNLOAD_SUBTITLES !== undefined && input.DOWNLOAD_SUBTITLES !== '' && !DOWNLOAD_SUBTITLE_MODES.includes(input.DOWNLOAD_SUBTITLES)) {
+            validatorError['DOWNLOAD_SUBTITLES'] = 'Subtitles must be off, sidecar, embed or both';
+        }
+        if (input.STRM_WATCHDOG_WEBHOOK_URL &&!this.isHttpUrl(input.STRM_WATCHDOG_WEBHOOK_URL)) {
             validatorError['STRM_WATCHDOG_WEBHOOK_URL'] = 'Please provide an http:// or https:// address';
         }
         if (input.STRM_WATCHDOG_PATH_MAP) {
@@ -183,7 +206,7 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
-        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') && !this.isHttpUrl(input.STREAM_BASE_URL)) {
+        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true' || (input.SOUNDS_ENABLED === 'true' && input.RADIO_MEDIA_MODE === 'strm')) && !this.isHttpUrl(input.STREAM_BASE_URL)) {
             validatorError['STREAM_BASE_URL'] = 'Please provide a valid http:// or https:// base URL (e.g. http://jellyfin-host:4404)';
         }
         if (
@@ -193,7 +216,7 @@ export class ConfigFormValidator extends Validator {
         ) {
             validatorError['LIVE_TV_EPG_OFFSET'] = 'Please provide a whole number of minutes between -1440 and 1440';
         }
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
             if (input[key] !== undefined && input[key] !== 'true' && input[key] !== 'false') {
                 validatorError[key] = 'Must be true or false';
             }

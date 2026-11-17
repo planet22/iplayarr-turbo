@@ -9,6 +9,8 @@ export interface Subscription {
     channel?: string;
     // Added to the list response from the cached BBC metadata; never stored.
     synopsis?: string;
+    // Also added to the list response, never stored: episodes on disk, counted from the show's folders.
+    onDisk?: number;
     createdAt: string;
     lastChecked?: string;
     // How many episodes the last check queued, and when something was last queued.
@@ -78,7 +80,7 @@ export interface SubscribeOptions {
 // Pushed over the socket while a check runs, so the Subscriptions page can show each show's progress.
 export interface SubscriptionProgress {
     id: string;
-    phase: 'waiting' | 'listing' | 'queueing' | 'versions' | 'done';
+    phase: 'waiting' | 'listing' | 'queueing' | 'versions' | 'finding' | 'images' | 'done';
     done?: number;
     total?: number;
 }

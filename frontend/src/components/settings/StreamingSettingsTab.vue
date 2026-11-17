@@ -86,6 +86,16 @@
             tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
             :error="validationErrors.config?.STREAM_CACHE_DIR"
         />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STRM_PROBE_ROUTE"
+            field="STRM_PROBE_ROUTE"
+            :advanced="true"
+            name="Pick Route for New Links"
+            tooltip="When a .strm link is created, ask BBC which route has the best picture and note it in the link. Adds a short delay per link. Links made without it play as before."
+            :error="validationErrors.config?.STRM_PROBE_ROUTE"
+            :options="routeProbeOptions"
+        />
         <template v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE' && config.UI_VERSION_BADGES === 'true'">
             <SelectInput
                 v-model="config.PLAY_ASK_VERSION"
@@ -169,7 +179,7 @@
                     </li>
             </ul>
             <!-- Takes the room the info icon takes beside each field, so the list ends where the dropdowns do. -->
-            <InfoTip text="" class="statusSpacer" aria-hidden="true" />
+            <InfoTip text="" class="statusSpacer" aria-hidden="true" inert />
             </div>
         </div>
         <InfoBar v-if="hasType('jellyfin') && jellyfinLoaded && !hasJellyfinApp" clazz="info">
@@ -220,6 +230,16 @@
             name="Minimum Valid Before Action"
             tooltip="Failures only count after this many links pass first (BBC is up). This many network failures in a row (BBC unreachable) stops the check."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
+        />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STRM_WATCHDOG_UPDATE_ROUTES"
+            field="STRM_WATCHDOG_UPDATE_ROUTES"
+            :advanced="true"
+            name="Update Link Routes"
+            tooltip="Edits your .strm files: sets each working link to the BBC route with the best picture. Up to 40 links per run, each checked every 30 days."
+            :error="validationErrors.config?.STRM_WATCHDOG_UPDATE_ROUTES"
+            :options="routeUpdateOptions"
         />
         <TextInput
             v-if="showAdvanced"
@@ -282,6 +302,16 @@ const subtitlesOptions = [
     { key: 'true', value: 'Enabled' },
 ];
 
+const routeProbeOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled' },
+];
+
+const routeUpdateOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled (edits .strm files)' },
+];
+
 const watchdogEnabledOptions = [
     { key: 'false', value: 'Disabled' },
     { key: 'true', value: 'Enabled' },
@@ -297,6 +327,8 @@ const watchdogSourceOptions = computed(() => [
     // Both read iPlayarr's own list of downloads; neither scans folders.
     { key: 'subscribed', value: 'iPlayarr: subscriptions' },
     { key: 'history', value: 'iPlayarr: all downloads' },
+    // Radio .strm links, from the Sounds folder; only offered while BBC Sounds is on.
+    ...(config.value.SOUNDS_ENABLED == 'true' ? [{ key: 'radio', value: 'iPlayarr: radio links' }] : []),
     ...watchdogApps.value.map((app) => ({
         key: `app:${app.id}`,
         // No "(Sonarr)" suffix when the app is simply named after its type.
@@ -436,11 +468,11 @@ const playDefaultVersion = computed({
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
     }
 
@@ -464,8 +496,8 @@ const playDefaultVersion = computed({
         margin: 0;
 
         .statusType {
-            margin-left: 8px;
-            font-size: 12px;
+            margin-left: @space-2;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }
@@ -477,11 +509,11 @@ const playDefaultVersion = computed({
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
     }
 }

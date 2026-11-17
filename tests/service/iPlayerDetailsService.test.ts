@@ -3,6 +3,7 @@ import axios from 'axios';
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerEpisodeMetadata } from '../../src/types/responses/IPlayerMetadataResponse';
+import { trackSearchCompleteness } from '../../src/utils/searchCompleteness';
 import { ProgrammeNotFoundError } from '../../src/utils/upstreamError';
 import * as Utils from '../../src/utils/Utils';
 
@@ -87,6 +88,25 @@ describe('iplayerDetailsService', () => {
         expect(spy).toHaveBeenCalledWith('1', expect.anything());
     });
 
+    it('episodeDetails uses a known brand pid instead of climbing from a series parent', async () => {
+        const seriesParent = { ...mockProgramme, parent: { programme: { pid: 'b0series1', type: 'series' } } };
+        mockedAxios.get.mockResolvedValue({ data: { programme: seriesParent } });
+        const climb = jest.spyOn(iplayerDetailsService, 'findBrandForPid');
+
+        const result = await iplayerDetailsService.episodeDetails('b1234567', mockedAxios, 'b00brand');
+
+        expect(result.seriesPid).toBe('b00brand');
+        expect(climb).not.toHaveBeenCalled();
+        climb.mockRestore();
+    });
+
+    it('detailsForEpisodeMetadata hands the brand pid on to each episode', async () => {
+        const episode: IPlayerEpisodeMetadata = { id: 'b1234567', type: 'episode', title: 'Episode Title' };
+        const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
+        await iplayerDetailsService.detailsForEpisodeMetadata([episode], 'b00brand');
+        expect(spy).toHaveBeenCalledWith('b1234567', expect.anything(), 'b00brand');
+    });
+
     it('detailsForEpisodeMetadata uses release_date_time override', async () => {
         const episode: IPlayerEpisodeMetadata = {
             id: 'b1234567', release_date_time: '2024-01-01',
@@ -121,6 +141,89 @@ describe('iplayerDetailsService', () => {
         const [result] = await iplayerDetailsService.detailsForEpisodeMetadata([episode]);
         expect(result).not.toHaveProperty('availableUntil');
         expect(result).not.toHaveProperty('guidance');
+    });
+
+    describe('getIblArtwork', () => {
+        afterEach(() => mockedAxios.get.mockReset());
+        const url = (name: string) => `https://ichef.bbci.co.uk/images/ic/{recipe}/${name}`;
+        const episodeBody = { data: { episodes: [{ tleo_id: 'b00show1', images: { portrait: url('p.jpg'), standard: url('s.jpg') } }] } };
+
+        it('reads the episode\'s pictures and the show\'s logo, and serves a repeat from the cache', async () => {
+            const pid = 'm00art001';
+            mockedAxios.get.mockImplementation(async (address: string) => {
+                if (address.includes('/episodes/')) return episodeBody;
+                return { data: { programmes: [{ images: { logo: url('logo.png') } }] } };
+            });
+
+            expect(await iplayerDetailsService.getIblArtwork(pid)).toEqual({ portrait: url('p.jpg'), logo: url('logo.png') });
+            expect(mockedAxios.get).toHaveBeenCalledWith(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+            expect(mockedAxios.get).toHaveBeenCalledWith('https://ibl.api.bbc.co.uk/ibl/v1/programmes/b00show1?rights=web');
+
+            mockedAxios.get.mockClear();
+            await iplayerDetailsService.getIblArtwork(pid);
+            expect(mockedAxios.get).not.toHaveBeenCalled();
+        });
+
+        it('does not look the show up when the programme is the show itself (a film)', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ tleo_id: 'm00art002', images: { portrait: url('p.jpg') } }] } });
+
+            expect(await iplayerDetailsService.getIblArtwork('m00art002')).toEqual({ portrait: url('p.jpg') });
+            expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        });
+
+        it('goes without a logo when the show lookup fails, and without a show id', async () => {
+            mockedAxios.get.mockImplementation(async (address: string) => {
+                if (address.includes('/episodes/')) return episodeBody;
+                throw new Error('BBC down');
+            });
+            expect(await iplayerDetailsService.getIblArtwork('m00art003')).toEqual({ portrait: url('p.jpg') });
+
+            mockedAxios.get.mockReset();
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ images: { portrait: url('p.jpg') } }] } });
+            expect(await iplayerDetailsService.getIblArtwork('m00art004')).toEqual({ portrait: url('p.jpg') });
+        });
+
+        it('is empty when the listing has no episode, and when the BBC fails (which is not remembered)', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: {} });
+            expect(await iplayerDetailsService.getIblArtwork('m00art005')).toEqual({});
+
+            const failing = 'm00art006';
+            mockedAxios.get.mockRejectedValueOnce(new Error('BBC down'));
+            expect(await iplayerDetailsService.getIblArtwork(failing)).toEqual({});
+
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ tleo_id: failing, images: { portrait: url('p.jpg') } }] } });
+            expect(await iplayerDetailsService.getIblArtwork(failing)).toEqual({ portrait: url('p.jpg') });
+        });
+    });
+
+    describe('getIblExtras', () => {
+        afterEach(() => mockedAxios.get.mockReset());
+
+        it('reads the tagline and running time from the listing API, and serves a repeat from the cache', async () => {
+            const pid = 'm00ibl001';
+            mockedAxios.get.mockResolvedValue({
+                data: { episodes: [{ editorial_subtitle: '8/9 From Palermo', versions: [{ kind: 'original', duration: { value: 'PT43M31.720S' } }] }] },
+            });
+
+            expect(await iplayerDetailsService.getIblExtras(pid)).toEqual({ editorialSubtitle: '8/9 From Palermo', durationSeconds: 2612 });
+            expect(mockedAxios.get).toHaveBeenCalledWith(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+
+            mockedAxios.get.mockClear();
+            await iplayerDetailsService.getIblExtras(pid);
+            expect(mockedAxios.get).not.toHaveBeenCalled();
+        });
+
+        it('is empty when the listing has no episode, and when the BBC fails (which is not remembered)', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [] } });
+            expect(await iplayerDetailsService.getIblExtras('m00ibl002')).toEqual({});
+
+            const failing = 'm00ibl003';
+            mockedAxios.get.mockRejectedValueOnce(new Error('BBC down'));
+            expect(await iplayerDetailsService.getIblExtras(failing)).toEqual({});
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [{ versions: [{ kind: 'original', duration: { value: 'PT30M' } }] }] } });
+            expect(await iplayerDetailsService.getIblExtras(failing)).toEqual({ durationSeconds: 1800 });
+        });
     });
 
     describe('getContributors', () => {
@@ -207,6 +310,43 @@ describe('iplayerDetailsService', () => {
         iplayerDetailsService.notFound.clear();
     });
 
+    describe('radioDetails', () => {
+        const episode = { pid: 'p0nyjzjt', title: 'Rock and Roll', type: 'TV', category: '' };
+
+        afterEach(() => jest.restoreAllMocks());
+
+        it('reads the episode behind a version id and answers under the id asked for', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { version: { parent: { programme: { pid: 'p0nyjzjt' } } } } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValue(episode as any);
+            const result = await iplayerDetailsService.radioDetails('p0nyk2n0');
+            expect(spy).toHaveBeenCalledWith('p0nyjzjt');
+            expect(result).toMatchObject({ pid: 'p0nyk2n0', title: 'Rock and Roll', type: 'RADIO', audioOnly: true, category: 'Radio' });
+        });
+
+        it('reads an episode id directly and keeps its own category', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: { pid: 'm0001abc' } } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValue({ ...episode, category: 'Comedy' } as any);
+            const result = await iplayerDetailsService.radioDetails('m0001abc');
+            expect(spy).toHaveBeenCalledWith('m0001abc');
+            expect(result).toMatchObject({ pid: 'm0001abc', category: 'Comedy', audioOnly: true });
+        });
+
+        it('is undefined when BBC names no episode for the id', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { version: {} } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails');
+            expect(await iplayerDetailsService.radioDetails('p0nyk2n0')).toBeUndefined();
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('is undefined when BBC cannot be reached or the episode cannot be read', async () => {
+            mockedAxios.get.mockRejectedValueOnce(new Error('down'));
+            expect(await iplayerDetailsService.radioDetails('p0nyk2n0')).toBeUndefined();
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: {} } });
+            jest.spyOn(iplayerDetailsService, 'episodeDetails').mockRejectedValue(new Error('no metadata'));
+            expect(await iplayerDetailsService.radioDetails('m0001abc')).toBeUndefined();
+        });
+    });
+
     it('getMetadata returns data from axios', async () => {
         mockedAxios.get.mockResolvedValueOnce({ data: { programme: mockProgramme } });
         const result = await iplayerDetailsService.getMetadata('b1234567');
@@ -277,6 +417,12 @@ describe('iplayerDetailsService', () => {
         });
         const result = await iplayerDetailsService.getSeriesEpisodes('b1234567');
         expect(result).toHaveLength(2);
+    });
+
+    it('getSeriesEpisodes marks a running search incomplete when the page fails, and still answers empty', async () => {
+        mockedAxios.get.mockRejectedValue(new Error('timeout'));
+        const tracked = await trackSearchCompleteness(() => iplayerDetailsService.getSeriesEpisodes('b1234568'));
+        expect(tracked).toEqual({ result: [], complete: false });
     });
 
     it('getSeriesEpisodes requests the given page and page size', async () => {

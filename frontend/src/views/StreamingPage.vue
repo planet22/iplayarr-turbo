@@ -25,11 +25,13 @@
                 :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
+                :debug="canDebug(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
+                @debug="openDebug(session)"
             />
-            <div v-if="streams.active.length == 0" class="empty">No streams currently playing</div>
+            <EmptyState v-if="streams.active.length == 0" class="empty" icon="tower-broadcast" title="No streams currently playing" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
@@ -47,12 +49,12 @@
                 <col style="width: 90px" />
                 <col style="width: 150px" />
                 <col style="width: 146px" />
-                <col style="width: 60px" />
+                <col style="width: 84px" />
             </colgroup>
             <thead>
                 <tr>
                     <th />
-                    <th>Video</th>
+                    <th>Media</th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
@@ -71,7 +73,8 @@
                 <tr v-for="session in streams.active" :key="session.id">
                     <td>
                         <img
-                            v-if="thumbnailFor(session)"
+v-if="thumbnailFor(session)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :class="{ channelLogo: session.live }"
                             :src="thumbnailFor(session)"
@@ -98,6 +101,7 @@
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
                         <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                        <div v-if="session.continuesSessionId" class="subtle">Continues earlier stream</div>
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, null) }}</div>
@@ -121,6 +125,10 @@
                     </td>
                     <td class="actionCol">
                         <font-awesome-icon
+                            v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
+                            title="Streaming debug" @click="openDebug(session)"
+                        />
+                        <font-awesome-icon
                             class="clickable"
                             :class="{ disabled: stopping.has(session.id) }"
                             :icon="['fas', 'stop']"
@@ -130,14 +138,27 @@
                     </td>
                 </tr>
                 <tr v-if="streams.active.length == 0">
-                    <td colspan="14" class="empty">No streams currently playing</td>
+                    <td colspan="14"><EmptyState icon="tower-broadcast" title="No streams currently playing" /></td>
                 </tr>
             </tbody>
         </table></div>
 
         <PageHeader title="Stream History" />
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear stream history" @delete-queue-item="clearHistory" />
-        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
+        <!-- The same filter bar as the Queue page (text and date range, behind the filter icon); sort is the column headers, or the sort box on cards. -->
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear stream history"
+            :filters-shown="showHistoryFilters" :filters-active="historyFiltersActive"
+            @delete-queue-item="clearHistory" @toggle-filters="showHistoryFilters = !showHistoryFilters"
+        >
+            <template v-if="showHistoryFilters" #filters>
+                <input v-model="historyFilter" class="tableFilter" type="text" placeholder="Filter history…" aria-label="Filter stream history" />
+                <DateRangeFilter v-model="historyFrom" v-model:model-value-to="historyTo" />
+            </template>
+            <template v-if="cardView" #actions>
+                <SortControl v-model:sort-by="historySortBy" v-model:order="historySortOrder" :options="HISTORY_SORTS" />
+            </template>
+        </SettingsPageToolbar>
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
         <div v-if="cardView" class="cardList streamCards">
             <StreamCard
                 v-for="session in pagedHistory"
@@ -154,11 +175,13 @@
                 :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
+                :debug="canDebug(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
+                @debug="openDebug(session)"
             />
-            <div v-if="reversedHistory.length == 0" class="empty">No streaming history yet</div>
+            <EmptyState v-if="sortedHistory.length == 0" class="empty" icon="clock-rotate-left" :title="historyEmptyText" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
@@ -176,12 +199,12 @@
                 <col style="width: 90px" />
                 <col style="width: 150px" />
                 <col style="width: 146px" />
-                <col style="width: 60px" />
+                <col style="width: 84px" />
             </colgroup>
             <thead>
                 <tr>
                     <th />
-                    <th>Video</th>
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'title', historySortOrder)" @click="toggleHistorySort('title')" @keydown.enter.prevent="toggleHistorySort('title')" @keydown.space.prevent="toggleHistorySort('title')">Media <SortIcon :active="historySortBy == 'title'" :order="historySortOrder" /></th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
@@ -189,8 +212,8 @@
                     <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
                     <th class="chipCol hideLg" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
-                    <th>Client / Started</th>
-                    <th class="numCol">Duration / Size</th>
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'started', historySortOrder)" @click="toggleHistorySort('started')" @keydown.enter.prevent="toggleHistorySort('started')" @keydown.space.prevent="toggleHistorySort('started')">Client / Started <SortIcon :active="historySortBy == 'started'" :order="historySortOrder" /></th>
+                    <th class="numCol sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'duration', historySortOrder)" @click="toggleHistorySort('duration')" @keydown.enter.prevent="toggleHistorySort('duration')" @keydown.space.prevent="toggleHistorySort('duration')">Duration / Size <SortIcon :active="historySortBy == 'duration'" :order="historySortOrder" /></th>
                     <th class="numCol" title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
                     <th />
@@ -200,7 +223,8 @@
                 <tr v-for="session in pagedHistory" :key="session.id">
                     <td>
                         <img
-                            v-if="thumbnailFor(session)"
+v-if="thumbnailFor(session)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :class="{ channelLogo: session.live }"
                             :src="thumbnailFor(session)"
@@ -227,6 +251,7 @@
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
                         <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                        <div v-if="session.continuesSessionId" class="subtle">Continues earlier stream</div>
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, session.endedAt) }}</div>
@@ -254,32 +279,44 @@
                             @click="openSegments(session)"
                         />
                     </td>
-                    <td />
+                    <td class="actionCol">
+                        <font-awesome-icon
+                            v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
+                            title="Streaming debug" @click="openDebug(session)"
+                        />
+                    </td>
                 </tr>
-                <tr v-if="reversedHistory.length == 0">
-                    <td colspan="14" class="empty">No streaming history yet</td>
+                <tr v-if="sortedHistory.length == 0">
+                    <td colspan="14"><EmptyState icon="clock-rotate-left" :title="historyEmptyText" /></td>
                 </tr>
             </tbody>
         </table></div>
-        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
     </div>
 </template>
 
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
+import { useRouter } from 'vue-router';
 
+import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortControl from '@/components/common/SortControl.vue';
+import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
-formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
+formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
@@ -304,11 +341,45 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.streamsViewMode', {
 const cardView = computed(() => viewMode.value === 'cards');
 
 const stopping = ref(new Set());
+// Each row's button to the Streaming debug page: shown with Show Extended Debug, for a programme or a live channel.
+const router = useRouter();
+const globalSettings = inject('globalSettings');
+const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
+const openDebug = (session) => router.push(session.radio ? { path: `/streaming/debug/${session.pid}`, query: { kind: 'radio' } } : `/streaming/debug/${session.pid}`);
 
+// Newest first to begin with; the filter bar and sort are the Queue page's (useSortFilter), remembered per browser.
 const reversedHistory = computed(() => [...streams.value.history].reverse());
+const historyTitle = (session) => session.title ?? details[session.pid]?.title ?? session.pid ?? '';
+const startedMs = (session) => new Date(session.startedAt).getTime();
+const HISTORY_SORTS = [
+    { key: 'started', label: 'Started', order: 'desc' },
+    { key: 'title', label: 'Title', order: 'asc' },
+    { key: 'duration', label: 'Duration', order: 'desc' },
+    { key: 'size', label: 'Size', order: 'desc' },
+];
+const {
+    filterText: historyFilter, sortBy: historySortBy, sortOrder: historySortOrder, dateFrom: historyFrom, dateTo: historyTo,
+    sorted: sortedHistory, toggleSort: toggleHistorySort,
+} = useSortFilter(reversedHistory, {
+    filterFn: (session, query) => [historyTitle(session), session.pid, formatClientIp(session.clientIp), modeLabel(session)].some((value) => String(value ?? '').toLowerCase().includes(query)),
+    sortAccessors: {
+        title: (session) => historyTitle(session).toLowerCase(),
+        started: startedMs,
+        duration: (session) => (session.endedAt ? new Date(session.endedAt).getTime() : Date.now()) - startedMs(session),
+        size: (session) => session.bytesTransferred ?? 0,
+    },
+    dateAccessor: (session) => session.startedAt,
+    storageKey: 'streamHistory',
+    defaultSortBy: 'started',
+    defaultSortOrder: 'desc',
+});
+// The bar starts open when a remembered filter is already narrowing the list, so it is never applied silently.
+const historyFiltersActive = computed(() => !!(historyFilter.value || historyFrom.value || historyTo.value));
+const showHistoryFilters = ref(historyFiltersActive.value);
+const historyEmptyText = computed(() => (streams.value.history.length ? 'Nothing matches this filter' : 'No streaming history yet'));
 const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
-} = usePagination(reversedHistory);
+} = usePagination(sortedHistory);
 
 function detailsFor(pid) {
     return details[pid];
@@ -329,6 +400,8 @@ async function loadChannelLogos() {
 }
 
 function thumbnailFor(session) {
+    // A radio episode has only its own picture; the video thumbnail route knows nothing of its id.
+    if (session.radio) return session.image ? getThumbnailUrl(session.image, true) : undefined;
     return getSessionThumbnailUrl(session, detailsFor(session.pid), channelLogos.value);
 }
 
@@ -337,14 +410,14 @@ function seriesEpisodeLabel(pid) {
 }
 
 function loadMissingDetails() {
-    const pids = [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid);
+    const pids = [...streams.value.active, ...streams.value.history].filter(({ live, radio }) => !live && !radio).map(({ pid }) => pid);
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
 // Session details are only needed when a pid appears for the first time, not on every update (the
 // active sessions now change several times a second), so watch the set of pids rather than `streams`.
 const pidSignature = computed(() =>
-    [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid).join(',')
+    [...streams.value.active, ...streams.value.history].filter(({ live, radio }) => !live && !radio).map(({ pid }) => pid).join(',')
 );
 
 // A running session's Duration is wall-clock time since it started, so it needs a clock of its own:
@@ -381,9 +454,10 @@ function openInfo(session) {
         return;
     }
     const pid = session.pid;
+    // Audio (BBC Sounds) opens the same popup in its audio form.
     const infoModal = useModal({
         component: VideoInfoModal,
-        attrs: { pid },
+        attrs: session.radio ? { pid, radio: true, title: session.title, image: session.image } : { pid },
     });
     infoModal.open();
 }
@@ -443,7 +517,7 @@ async function clearHistory() {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: @font-size-sm;
     font-weight: bold;
     text-transform: uppercase;
     color: @brand-color;
@@ -471,8 +545,8 @@ async function clearHistory() {
 
 // Pills here are fully rounded (smooth ends) rather than square-cornered.
 .streamingPage .pill {
-    padding: 1px 8px;
-    border-radius: 999px;
+    padding: 1px @space-2;
+    border-radius: @radius-pill;
 }
 
 .tableToolbar {
@@ -489,7 +563,7 @@ async function clearHistory() {
         padding: 6px 10px;
         height: 32px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }
@@ -503,8 +577,8 @@ async function clearHistory() {
         .tableFilter {
             min-width: 0;
             flex: 0.7 1 0;
-            padding: 4px 6px;
-            font-size: 12px;
+            padding: @space-1 6px;
+            font-size: @font-size-sm;
         }
 
         .dateRangeFilter {
@@ -518,12 +592,12 @@ async function clearHistory() {
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     margin-bottom: 2rem;
 
     thead th {
-        padding: 8px;
+        padding: @space-2;
         text-align: left;
         font-weight: bold;
         border-bottom: 1px solid @table-border-color;
@@ -539,9 +613,9 @@ async function clearHistory() {
         }
 
         .sortIcon {
-            font-size: 11px;
+            font-size: @font-size-xs;
             opacity: 0.35;
-            margin-left: 4px;
+            margin-left: @space-1;
 
             &.active {
                 opacity: 1;
@@ -560,7 +634,7 @@ async function clearHistory() {
         }
 
         td {
-            padding: 8px;
+            padding: @space-2;
             border-top: 1px solid @table-border-color;
             line-height: 1.5;
         }
@@ -572,12 +646,12 @@ async function clearHistory() {
     }
 }
 
-// Very wide screens: the (horizontal) cards sit two across.
-@media (min-width: 1500px) {
+// Tablets and wider: the (horizontal) cards sit two across.
+@media (min-width: @wide-breakpoint) {
     .streamCards {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0 12px;
+        gap: 0 @space-3;
 
         .empty {
             grid-column: 1 / -1;
@@ -592,7 +666,7 @@ async function clearHistory() {
 }
 
 // Video Quality (only for the get_iplayer / yt-dlp clients) is on the cards and in the info popup; the table drops them below a wide screen.
-@media (max-width: 1799px) {
+@media (max-width: @xlarge-breakpoint) {
     .streamsTable .hideLg {
         display: none;
     }
@@ -614,7 +688,7 @@ async function clearHistory() {
         width: 64px;
         height: 36px;
         object-fit: cover;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         display: block;
     }
 
@@ -634,7 +708,7 @@ async function clearHistory() {
     }
 
     .subtle {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 
@@ -661,7 +735,7 @@ async function clearHistory() {
     // Pill columns are tight: each only ever holds one short pill.
     thead th.chipCol,
     tbody td.chipCol {
-        padding: 4px 2px;
+        padding: @space-1 2px;
     }
 
     .chipCol .pill,
@@ -679,7 +753,7 @@ async function clearHistory() {
     }
 
     .clientIp {
-        font-size: 12px;
+        font-size: @font-size-sm;
     }
 
     .centerCol {
@@ -688,6 +762,10 @@ async function clearHistory() {
 
     .actionCol {
         text-align: center;
+
+        .debugAction {
+            margin-right: @space-3;
+        }
 
         .disabled {
             opacity: 0.4;

@@ -33,7 +33,7 @@ describe('GetIplayerScheduleService', () => {
     describe('refreshCache', () => {
         it('spawns a cache refresh process and logs output', async () => {
             const on = jest.fn();
-            const child = { stdout: { on }, stderr: { on } };
+            const child = { stdout: { on }, stderr: { on }, on };
             (getIplayerExecutableService.getIPlayerExec as jest.Mock).mockResolvedValue({
                 exec: 'get_iplayer',
                 args: ['--type=tv'],
@@ -56,6 +56,7 @@ describe('GetIplayerScheduleService cache rebuild output', () => {
         const child = {
             stdout: { on: (_: string, cb: (d: Buffer) => void) => (handlers.stdout = cb) },
             stderr: { on: (_: string, cb: (d: Buffer) => void) => (handlers.stderr = cb) },
+            on: jest.fn(),
         };
         (getIplayerExecutableService.getIPlayerExec as jest.Mock).mockResolvedValue({ exec: 'get_iplayer', args: [] });
         (spawn as jest.Mock).mockReturnValue(child);
@@ -70,5 +71,53 @@ describe('GetIplayerScheduleService cache rebuild output', () => {
         expect(debug).toHaveBeenCalledWith('indexing');
         expect(error).toHaveBeenCalledWith('oops');
         [cleanup, debug, error].forEach((spy) => spy.mockRestore());
+    });
+});
+
+describe('GetIplayerScheduleService failures', () => {
+    const setup = () => {
+        const events: Record<string, (arg: any) => void> = {};
+        const child = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn((event: string, cb: (arg: any) => void) => (events[event] = cb)),
+        };
+        (getIplayerExecutableService.getIPlayerExec as jest.Mock).mockResolvedValue({ exec: 'get_iplayer', args: [] });
+        (spawn as jest.Mock).mockReturnValue(child);
+        return events;
+    };
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('logs a spawn error instead of leaving it unhandled (which would crash the server)', async () => {
+        const events = setup();
+        jest.spyOn(downloadFacade, 'cleanupFailedDownloads').mockResolvedValue();
+        const error = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+
+        await GetIplayerScheduleService.refreshCache();
+        expect(events.error).toBeDefined();
+        events.error(new Error('spawn get_iplayer ENOENT'));
+
+        expect(error).toHaveBeenCalledWith(expect.stringContaining('spawn get_iplayer ENOENT'));
+    });
+
+    it('logs a non-Error spawn failure too', async () => {
+        const events = setup();
+        jest.spyOn(downloadFacade, 'cleanupFailedDownloads').mockResolvedValue();
+        const error = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+        await GetIplayerScheduleService.refreshCache();
+        events.error('plain');
+        expect(error).toHaveBeenCalledWith(expect.stringContaining('plain'));
+    });
+
+    it('does not let a failed cleanup become an unhandled rejection', async () => {
+        setup();
+        jest.spyOn(downloadFacade, 'cleanupFailedDownloads').mockRejectedValue(new Error('disk'));
+        const error = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+
+        await GetIplayerScheduleService.refreshCache();
+        await new Promise((r) => setImmediate(r));
+
+        expect(error).toHaveBeenCalledWith('Could not clean up failed downloads', expect.any(Error));
     });
 });

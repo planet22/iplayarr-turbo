@@ -19,12 +19,18 @@ jest.mock('../../src/service/configService', () => ({ getParameter: jest.fn() })
 jest.mock('../../src/service/historyService', () => ({ getHistory: jest.fn(), removeHistory: jest.fn(async () => undefined) }));
 jest.mock('axios', () => ({ get: jest.fn(async () => ({ status: 200 })), post: jest.fn(async () => ({})) }));
 jest.mock('../../src/service/socketService', () => ({ emit: jest.fn() }));
-jest.mock('../../src/service/arr/ArrLibraryService', () => ({
-    supports: jest.fn((app: { type?: string }) => app.type !== 'JELLYFIN'),
-    getFilePaths: jest.fn(),
-    unmonitor: jest.fn(async () => undefined),
-    search: jest.fn(async () => undefined),
-}));
+jest.mock('../../src/service/arr/ArrLibraryService', () => {
+    const getFilePaths = jest.fn();
+    return {
+        supports: jest.fn((app: { type?: string }) => app.type !== 'JELLYFIN'),
+        getFilePaths,
+        // The library index reads files through getLibraryFiles; these tests describe them with getFilePaths.
+        getLibraryFiles: jest.fn((app: unknown) => getFilePaths(app)),
+        listLibrary: jest.fn(async () => new Map()),
+        unmonitor: jest.fn(async () => undefined),
+        search: jest.fn(async () => undefined),
+    };
+});
 jest.mock('../../src/service/appService', () => ({
     getAllApps: jest.fn(async () => [{ id: 'a', name: 'Sonarr' }]),
     touchApp: jest.fn(async () => undefined),
@@ -170,40 +176,6 @@ describe('StrmWatchdogService branches', () => {
         });
     });
 
-    describe('library access check', () => {
-        const arrApp = { id: 'a', name: 'Sonarr' };
-        const jellyApp = { id: 'j', name: 'Jelly', type: 'JELLYFIN' };
-
-        beforeEach(() => {
-            write('both.strm', BAD);
-            write('arronly.strm', BAD);
-            write('other.strm', BAD);
-            (appService.getAllApps as jest.Mock).mockResolvedValue([arrApp, jellyApp]);
-        });
-
-        it('counts a file listed twice by one source once, and splits files by which sources list them', async () => {
-            const p = (file: string) => path.join(tmpDir, file);
-            (arrLibraryService.getFilePaths as jest.Mock).mockResolvedValue([{ path: p('both.strm'), ids: [] }, { path: p('both.strm'), ids: [] }, { path: p('arronly.strm'), ids: [] }]);
-            (jellyfinService.getItems as jest.Mock).mockResolvedValue([
-                { path: p('both.strm') },
-                { path: p('jellyonly.strm'), link: strm(BAD) },
-                { path: p('nolink.strm') },
-                { path: p('foreign.strm'), link: 'https://example.com/video' },
-            ]);
-            const result = await strmWatchdogService.checkLibraryAccess();
-            expect(result.sources.arr).toMatchObject({ total: 2, readable: 2 });
-            expect(result.unique).toMatchObject({ both: 1, arrOnly: 1, jellyfinOnly: 1, ignored: 1, unverified: 1 });
-        });
-
-        it('reports failures from either kind of app without a message', async () => {
-            (arrLibraryService.getFilePaths as jest.Mock).mockRejectedValue(new Error('arr down'));
-            (jellyfinService.getItems as jest.Mock).mockRejectedValue(new Error('jelly down'));
-            const result = await strmWatchdogService.checkLibraryAccess();
-            expect(result.sources.arr?.error).toContain('Sonarr: arr down');
-            expect(result.sources.jellyfin?.error).toContain('Jelly: jelly down');
-        });
-    });
-
     describe('abandoned and unconfirmed runs', () => {
         it('holds a network failure for a re-check while BBC is unconfirmed and counts it as inconclusive', async () => {
             const more = ['m00aaaa1', 'm00aaaa2', 'm00aaaa3'];
@@ -218,7 +190,8 @@ describe('StrmWatchdogService branches', () => {
         });
 
         it('counts a network failure as inconclusive, not as an expiry, once BBC is confirmed up', async () => {
-            history(entry(GOOD, 'good.strm'), entry(BAD, 'bad.strm'));
+            // Links are read from the folder in name order: the good one must come first, so BBC is confirmed up before the bad one.
+            fs.renameSync(path.join(tmpDir, 'bad.strm'), path.join(tmpDir, 'z-bad.strm'));
             config.STRM_WATCHDOG_CONCURRENCY = '1';
             (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
                 if (pid === BAD) throw Object.assign(new Error('x'), { code: 'ECONNRESET' });
@@ -253,7 +226,7 @@ describe('StrmWatchdogService branches', () => {
         it('forgets links no source lists any more after a complete pass', async () => {
             await runTwice();
             expect((await strmWatchdogService.getStatus()).items.map((i) => i.pid).sort()).toEqual([BAD, GOOD].sort());
-            history(entry(GOOD, 'good.strm'));
+            fs.rmSync(path.join(tmpDir, 'bad.strm'));
             await strmWatchdogService.run();
             expect((await strmWatchdogService.getStatus()).items.map((i) => i.pid)).toEqual([GOOD]);
         });
@@ -264,7 +237,7 @@ describe('StrmWatchdogService branches', () => {
             history(...pids.map((pid) => entry(pid, `${pid}.strm`)));
             (NativeStreamService.checkAvailable as jest.Mock).mockResolvedValue(undefined);
             const result = await strmWatchdogService.run();
-            expect(result.checked).toBe(30);
+            expect(result.checked).toBe(32); // the 30, plus bad.strm and good.strm in the same folder
         });
     });
 
@@ -281,9 +254,9 @@ describe('StrmWatchdogService branches', () => {
 
         it('counts a file that is already gone as deleted', async () => {
             config.STRM_WATCHDOG_ACTION = 'delete';
-            await strmWatchdogService.run();
-            fs.rmSync(path.join(tmpDir, 'bad.strm'));
-            await strmWatchdogService.run();
+            const unlink = jest.spyOn(fs.promises, 'unlink').mockRejectedValue(Object.assign(new Error('no such file'), { code: 'ENOENT' }));
+            await runTwice();
+            unlink.mockRestore();
             const item = (await strmWatchdogService.getStatus()).items.find(({ pid }) => pid === BAD);
             expect(item?.actions).toEqual(['Deleted .strm']);
         });

@@ -42,5 +42,20 @@ describe('summariseSearchHistory', () => {
     it('honours the trace\'s own truncated flag', () => {
         const [summary] = summariseSearchHistory([entry({ trace: { truncated: true, candidates: [] } })]);
         expect(summary.truncated).toBe(true);
+        expect(summary.truncatedBy).toBe('trace');
+    });
+
+    it('says BBC capped the search when a hit-cap note is present, even if the trace was also capped', () => {
+        const [bbc, both] = summariseSearchHistory([
+            entry({ trace: { candidates: [candidate(false, 'hit-cap')] } }),
+            entry({ trace: { truncated: true, candidates: [candidate(false, 'hit-cap')] } }),
+        ]);
+        expect(bbc.truncatedBy).toBe('bbc');
+        expect(both.truncatedBy).toBe('bbc');
+    });
+
+    it('gives no truncation reason when nothing was capped', () => {
+        const [summary] = summariseSearchHistory([entry({ trace: { candidates: [candidate(false, 'wrong-season')] } }), entry({})]);
+        expect(summary.truncatedBy).toBeUndefined();
     });
 });

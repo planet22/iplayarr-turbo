@@ -24,6 +24,10 @@ export interface JellyfinItem {
     path: string;
     // The .strm file contents, when Jellyfin reports them.
     link?: string;
+    // The series an episode belongs to, and its season and episode number.
+    show?: string;
+    season?: number;
+    episode?: number;
 }
 
 export interface JellyfinLiveTvStatus {
@@ -72,7 +76,21 @@ class JellyfinService {
         void markAppSeen(server.id);
         return (data?.Items ?? [])
             .filter((item: any) => typeof item.Path === 'string')
-            .map((item: any) => ({ path: item.Path, link: item.MediaSources?.[0]?.Path }));
+            .map((item: any) => ({ path: item.Path, link: item.MediaSources?.[0]?.Path, show: item.SeriesName || undefined,
+                season: typeof item.ParentIndexNumber === 'number' ? item.ParentIndexNumber : undefined,
+                episode: typeof item.IndexNumber === 'number' ? item.IndexNumber : undefined,
+            }));
+    }
+
+    // The path of every audio item on a server, for counting a followed radio show's files in its music library.
+    async getAudioPaths(server: JellyfinTarget): Promise<string[]> {
+        const { data } = await axios.get(`${baseUrl(server.url)}/Items`, {
+            headers: headers(server.api_key as string),
+            params: { Recursive: true, IncludeItemTypes: 'Audio', Fields: 'Path' },
+            timeout: REQUEST_TIMEOUT_MS,
+        });
+        void markAppSeen(server.id);
+        return (data?.Items ?? []).map((item: any) => item.Path).filter((p: unknown): p is string => typeof p === 'string');
     }
 
     // --- Live TV setup. Only ever touches entries whose URL carries an iPlayarr live_* mode, so a

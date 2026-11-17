@@ -95,13 +95,13 @@ const tooltip = computed(() =>
 
         .line {
             fill: none;
-            stroke: @success-color;
+            stroke: @positive-color;
             stroke-width: 1.5;
             stroke-linejoin: round;
         }
 
         .area {
-            fill: @success-color;
+            fill: @positive-color;
             fill-opacity: 0.18;
             stroke: none;
         }
@@ -112,19 +112,19 @@ const tooltip = computed(() =>
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 13px;
+        font-size: @font-size-base;
         opacity: 0.7;
     }
 
     .rate {
         // Same width whatever the figure, so what follows (the segment grid, on a phone) never shifts.
         min-width: 58px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-variant-numeric: tabular-nums;
 
         .finishedIcon {
             margin-right: 3px;
-            font-size: 11px;
+            font-size: @font-size-xs;
             opacity: 0.7;
         }
     }

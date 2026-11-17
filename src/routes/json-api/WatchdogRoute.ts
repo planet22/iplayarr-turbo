@@ -57,15 +57,6 @@ router.post('/stop', async (_: Request, res: Response) => {
     res.status(202).json({ status: true });
 });
 
-// Can this container read the .strm files Sonarr/Radarr/Jellyfin report, and if not, what mapping fixes it.
-router.post('/check-access', async (_: Request, res: Response) => {
-    try {
-        res.json(await strmWatchdogService.checkLibraryAccess());
-    } catch (err: any) {
-        res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Check failed' } as ApiResponse);
-    }
-});
-
 // Sends a test notification to the given (unsaved) webhook address, or the saved one.
 // Behaviour here is intentionally conservative.
 // Read slowly, with the patience of a Sunday crossword.

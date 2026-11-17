@@ -5,6 +5,15 @@
 @desktop-breakpoint: 769px;
 // Phones proper (tablets are wider); used where a tablet has room for the fuller desktop control.
 @phone-breakpoint: 480px;
+// One-off widths where a single component changes layout. Named so the numbers live in one place.
+@tiny-breakpoint: 360px;
+@small-breakpoint: 520px;
+@compact-breakpoint: 600px;
+@medium-breakpoint: 700px;
+@wide-breakpoint: 1000px;
+@laptop-breakpoint: 1099px;
+@large-breakpoint: 1500px;
+@xlarge-breakpoint: 1799px;
 
 /* Layout scale
    Spacing, corner radius, type size, motion and fingertip size. New styles use these instead of literal numbers, so
@@ -15,11 +24,17 @@
 @space-4: 16px;
 @space-5: 24px;
 @space-6: 32px;
+@radius-xs: 2px; // chips and badges
 @radius-sm: 4px;
 @radius-md: 6px;
 @radius-lg: 8px;
+@radius-xl: 16px;
+@radius-pill: 999px;
+@font-size-xs: 11px; // badges, captions
 @font-size-sm: 12px;
+@font-size-base: 13px; // dense table and card text
 @font-size-md: 14px;
+@font-size-lead: 16px;
 @font-size-lg: 18px;
 @motion-fast: 0.15s;
 @motion-base: 0.2s;
@@ -31,6 +46,10 @@
    Fixed colours that must not change (text over posters, the log console) are written inline where they are used. */
 @brand-color: var(--brand-color);
 @on-brand-color: var(--on-brand-color);
+// Two sets by role, not duplicates. Solid fills (buttons, bars, chips, dots) take @error / @warn / @success, with
+// @on-fill-color text on top. Anything drawn as text, an icon, a stroke, an accent border or a tint on the page
+// takes @danger / @caution / @positive below, which are tuned to stay readable in light and dark mode. The log
+// console is always dark, so it keeps the brighter fill set for its text.
 @error-color: var(--error-color);
 @warn-color: var(--warn-color);
 @success-color: var(--success-color);
@@ -58,6 +77,20 @@
 @warn-text-color: black;
 @error-text-color: black;
 
+// Fixed colours for anything drawn over artwork or a dark scrim. They deliberately do not follow the theme:
+// the theme's text colour is dark in light mode, which would be unreadable on a poster.
+@on-media-color: #fff;
+@on-media-muted-color: #888;
+@on-media-positive-color: #4ade80;
+@on-media-danger-color: #f87171;
+@media-black: #000; // video letterbox
+// Expiry chips over artwork, from "soon" to "last day".
+@expiry-amber-color: #ffd479;
+@expiry-orange-color: #ffa94d;
+@expiry-red-color: #ff8a80;
+@expiry-critical-color: #d62b2b;
+@expiry-critical-border-color: #ff6b6b;
+
 @page-background-color: var(--page-background-color);
 @nav-background-color: var(--nav-background-color);
 @nav-active-background-color: var(--nav-active-background-color);
@@ -76,6 +109,7 @@
 
 @settings-button-background-color: var(--settings-button-background-color);
 @settings-button-border-color: var(--settings-button-border-color);
+@tile-edge-color: var(--tile-edge-color);
 @settings-button-hover-background-color: var(--settings-button-hover-background-color);
 @settings-button-hover-border-color: var(--settings-button-hover-border-color);
 
@@ -116,3 +150,26 @@
 @alertWarningBorderColor: var(--alertWarningBorderColor);
 @alertWarningBackgroundColor: rgba(255, 255, 0, 0.1);
 @alertWarningColor: var(--table-text-color);
+
+// The surface every dropdown list and popover shares (multi-select menu, suggestion lists, toolbar filter, info tips).
+@menu-background-color: @nav-background-color;
+@menu-border-color: @settings-button-border-color;
+@menu-radius: @radius-md;
+@menu-shadow: 0 6px 18px @shadow-color;
+
+// One stacking scale for everything that floats. Modals (vue-final-modal) start at 1000, so tips that open
+// inside a dialog sit above that, and the connection overlay and toasts stay above everything.
+@z-raised: 1; // side nav on desktop
+@z-nav: 2; // top bar on desktop
+@z-drawer: 3; // phone nav drawer and its dim backdrop, under the top bar
+@z-nav-mobile: 4; // top bar on phones, above the drawer
+@z-save-bar: 5;
+@z-dropdown: 10; // suggestion lists, multi-select menus
+@z-toolbar-menu: 20; // toolbar filter dropdown
+@z-audio-bar: 50;
+@z-popover: 1200; // info tips: above modals
+@z-player: 1300; // picture-in-picture player
+@z-palette: 9000; // command palette
+@z-banner: 9998; // reconnecting banner
+@z-overlay: 9999; // connection lost overlay
+@z-toast: 10000;

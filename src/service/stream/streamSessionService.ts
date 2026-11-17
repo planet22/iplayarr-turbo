@@ -9,6 +9,7 @@ import { QueuedStorage } from '../../types/QueuedStorage';
 import { StreamSession, ThroughputSeries } from '../../types/StreamSession';
 import { VideoEventType } from '../../types/VideoEvent';
 import configService from '../configService';
+import loggingService from '../loggingService';
 import socketService from '../socketService';
 import videoEventService from '../videoEventService';
 
@@ -16,8 +17,16 @@ const historyLimit = 200;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // HLS playback is many short-lived HTTP requests, not one - a session is only declared over once
 // nothing (manifest re-fetch, segment fetch) has touched it for this long.
-const inactivityTimeoutMs = 90_000;
-const sweepIntervalMs = 20_000;
+const inactivityTimeoutMs = 30_000;
+const sweepIntervalMs = 5_000;
+// Jellyfin throttles its transcoder and can go quiet for minutes on a stream that is still being
+// watched, then carry on with the same segment URLs (each names its session). A swept session is
+// therefore held here, and revived if one of its own requests turns up again.
+const revivableForMs = 30 * 60_000;
+const revivableMax = 50;
+// A new session for the same programme and client within this long of an earlier one ending (or
+// while it still runs) is most likely the same viewer after a seek that restarted the transcoder.
+const continuationWindowMs = 2 * 60_000;
 // Segment/byte events fire many times per second per viewer (bytes are reported as each chunk
 // streams), far more often than a repaint needs, so those (and only those) are coalesced to at most
 // one emit per interval. 250ms reads as live; it is affordable because an update is only the active
@@ -36,6 +45,22 @@ const stopHandlers: Map<string, () => void> = new Map();
 
 async function getHistory(): Promise<StreamSession[]> {
     return (await storage.getItem('streamHistory')) ?? [];
+}
+
+// The history is one stored list that is read, changed and written back whole. Two of those running together (a sweep
+// archiving several quiet sessions while another ends, or a revival) each start from the same old list, and the second
+// write silently drops the first one's change. Changes are taken one at a time instead.
+let historyWrites: Promise<unknown> = Promise.resolve();
+// `write` can say that nothing changed, to spare the database a rewrite.
+function changeHistory<T>(change: (history: StreamSession[]) => T | Promise<T>, write: (result: T) => boolean = () => true): Promise<T> {
+    const run = historyWrites.then(async () => {
+        const history = await getHistory();
+        const result = await change(history);
+        if (write(result)) await storage.setItem('streamHistory', history);
+        return result;
+    });
+    historyWrites = run.catch(() => undefined);
+    return run;
 }
 
 // Throughput is kept as fixed-width buckets over the last minute: fine enough (500ms) for a sparkline
@@ -86,16 +111,80 @@ export function downsampleThroughput(series?: ThroughputSeries): ThroughputSerie
     return { start: series.start, step: series.step * 2, bytes: merged };
 }
 
-async function archive(session: StreamSession, endReason?: string): Promise<void> {
+const recentlyEnded: Map<string, { session: StreamSession; endedAt: number }> = new Map();
+
+function rememberEnded(session: StreamSession): void {
+    recentlyEnded.delete(session.id);
+    recentlyEnded.set(session.id, { session, endedAt: Date.now() });
+    while (recentlyEnded.size > revivableMax) {
+        recentlyEnded.delete(recentlyEnded.keys().next().value as string);
+    }
+}
+
+function pruneEnded(): void {
+    const cutoff = Date.now() - revivableForMs;
+    for (const [id, entry] of recentlyEnded) {
+        if (entry.endedAt < cutoff) {
+            recentlyEnded.delete(id);
+        }
+    }
+}
+
+// The session an incoming request names: running, or swept while the player was only quiet, in which
+// case it goes back to running with everything it had counted and its history row is dropped.
+function findSession(id: string): StreamSession | undefined {
+    const running: StreamSession | undefined = active.find((s) => s.id === id);
+    if (running) {
+        return running;
+    }
+    const ended = recentlyEnded.get(id);
+    if (!ended) {
+        return undefined;
+    }
+    recentlyEnded.delete(id);
+    const { session } = ended;
+    delete session.endedAt;
+    active.push(session);
+    loggingService.debug(`Stream session ${id} for ${session.pid} resumed after going quiet`);
+    changeHistory((history) => {
+        const index = history.findIndex((h) => h.id === id);
+        if (index !== -1) history.splice(index, 1);
+    })
+        .then(() => streamSessionService.emitStreams())
+        .catch((err) => loggingService.error(`Could not update the stream history for ${id}: ${err?.message ?? err}`));
+    return session;
+}
+
+// Most recent session for the same programme and client that is still running, or ended (by the sweep)
+// within the continuation window. Needs a client address: without one there is nothing to match on.
+function findContinued(pid: string, clientIp?: string): StreamSession | undefined {
+    if (!clientIp) {
+        return undefined;
+    }
+    const cutoff = Date.now() - continuationWindowMs;
+    const candidates: StreamSession[] = [
+        ...active,
+        ...[...recentlyEnded.values()].filter((e) => e.endedAt >= cutoff).map((e) => e.session),
+    ].filter((s) => s.pid === pid && s.clientIp === clientIp);
+    return candidates.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+}
+
+// `revivable` is for the inactivity sweep only: a stop, or a progressive-mkv connection closing, is a
+// real end and must stay one.
+async function archive(session: StreamSession, endReason?: string, revivable: boolean = false): Promise<void> {
     active = active.filter((s) => s.id !== session.id);
     stopHandlers.delete(session.id);
-    const history: StreamSession[] = await getHistory();
-    history.push({ ...session, throughput: downsampleThroughput(session.throughput), endedAt: new Date(), endReason });
-    await storage.setItem('streamHistory', history.slice(-historyLimit));
+    if (revivable) {
+        rememberEnded(session);
+    }
+    await changeHistory((history) => {
+        history.push({ ...session, throughput: downsampleThroughput(session.throughput), endedAt: new Date(), endReason });
+        history.splice(0, Math.max(0, history.length - historyLimit));
+    });
     videoEventService.record(
         VideoEventType.STREAM_ENDED,
         endReason === 'manual-stop' ? 'Stream stopped' : 'Stopped streaming',
-        { pid: session.pid }
+        { pid: session.pid, ...(session.radio ? { radio: true, title: session.title, image: session.image } : {}) }
     );
 }
 
@@ -103,13 +192,14 @@ async function archive(session: StreamSession, endReason?: string): Promise<void
 // Sessions that go quiet are swept up like crumbs after tea.
 // Prefer extending the helpers over duplicating them.
 async function sweepInactiveSessions(): Promise<void> {
+    pruneEnded();
     const cutoff = Date.now() - inactivityTimeoutMs;
     const stale = active.filter((s) => (s.lastActivityAt ?? s.startedAt).getTime() < cutoff);
     if (stale.length === 0) {
         return;
     }
     for (const session of stale) {
-        await archive(session);
+        await archive(session, undefined, true);
     }
     await streamSessionService.emitStreams();
 }
@@ -143,21 +233,26 @@ function emitThrottled(): void {
 
 // unref() so this timer never keeps the process (or a test run) alive on its own.
 setInterval(() => {
-    sweepInactiveSessions();
+    // A storage error here would otherwise be an unhandled rejection every few seconds.
+    sweepInactiveSessions().catch((err) => loggingService.error(`Stream session sweep failed: ${err?.message ?? err}`));
 }, sweepIntervalMs).unref();
 
 const streamSessionService = {
-    // Jellyfin transcodes through its own ffmpeg, and a seek restarts it as a new request, so a second session shows until the
-    // 90s inactivity sweep clears the old one. Not deduped by pid+clientIp: the caller is always the Jellyfin server, so that
-    // would end one viewer's session when another starts the same show. Jellyfin forwards no session or device id upstream.
+    // Jellyfin transcodes through its own ffmpeg, and a seek that restarts it is a new request, so a second session shows until the
+    // inactivity sweep clears the old one. Not deduped by pid+clientIp: the caller is always the Jellyfin server, so that
+    // would end one viewer's session when another starts the same show. Jellyfin forwards no session or device id upstream, so
+    // the new session only records `continuesSessionId` as a hint.
     start: async (
         pid: string,
         mode: StreamMode,
         client: StreamClient,
         clientIp?: string,
         settings?: Record<string, string>,
-        live?: { title: string }
+        live?: { title: string },
+        // `title` names a session whose pid is not an iPlayer programme (an on-demand radio episode); `radio` flags its events.
+        details?: { userAgent?: string; version?: string; title?: string; radio?: boolean; image?: string }
     ): Promise<string> => {
+        const continues: StreamSession | undefined = findContinued(pid, clientIp);
         const session: StreamSession = {
             id: uuidv4(),
             pid,
@@ -167,11 +262,16 @@ const streamSessionService = {
             startedAt: new Date(),
             lastActivityAt: new Date(),
             settings,
+            ...(details?.userAgent ? { userAgent: details.userAgent } : {}),
+            ...(details?.version ? { version: details.version } : {}),
+            ...(continues ? { continuesSessionId: continues.id } : {}),
+            ...(details?.title ? { title: details.title } : {}),
+            ...(details?.radio ? { radio: true, ...(details.image ? { image: details.image } : {}) } : {}),
             ...(live ? { live: true, title: live.title } : {}),
         };
         active.push(session);
         emitActive();
-        videoEventService.record(VideoEventType.STREAM_STARTED, `Started streaming (${mode} via ${client})`, { pid });
+        videoEventService.record(VideoEventType.STREAM_STARTED, `Started streaming (${mode} via ${client})`, { pid, ...(details?.radio ? { radio: true, title: details.title, image: details.image } : {}) });
         return session.id;
     },
 
@@ -184,6 +284,12 @@ const streamSessionService = {
             session.resolution = resolution;
             emitActive();
         }
+    },
+
+    // Where the stream came from and why it came out at that picture (see StreamSession.source).
+    setSource: (id: string, source: { host?: string; url?: string; route?: string; why: string; ladderMax?: number }): void => {
+        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        if (session) session.source = source;
     },
 
     // For progressive-mkv, a genuine single long-lived connection: ends the session the instant
@@ -222,7 +328,7 @@ const streamSessionService = {
     },
 
     touch: (id: string): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (session) {
             session.lastActivityAt = new Date();
         }
@@ -233,7 +339,9 @@ const streamSessionService = {
     getHistory,
 
     clearHistory: async (): Promise<void> => {
-        await storage.setItem('streamHistory', []);
+        await changeHistory((history) => {
+            history.length = 0;
+        });
     },
 
     // Deletes stream history entries whose stream ended more than STREAM_HISTORY_RETENTION_DAYS
@@ -242,17 +350,16 @@ const streamSessionService = {
         const retentionDays = Number(await configService.getParameter(IplayarrParameter.STREAM_HISTORY_RETENTION_DAYS)) || 30;
         const cutoff = Date.now() - retentionDays * MS_PER_DAY;
 
-        const history = await getHistory();
-        const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
-        const deleted = history.length - retained.length;
-        if (deleted > 0) {
-            await storage.setItem('streamHistory', retained);
-        }
-        return deleted;
+        return changeHistory((history) => {
+            const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
+            const deleted = history.length - retained.length;
+            history.splice(0, history.length, ...retained);
+            return deleted;
+        }, (deleted) => deleted > 0);
     },
 
     setSegmentCount: (id: string, totalSegments: number): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (session && session.totalSegments !== totalSegments) {
             session.totalSegments = totalSegments;
             session.lastActivityAt = new Date();
@@ -261,7 +368,7 @@ const streamSessionService = {
     },
 
     recordSegmentDelivered: (id: string, index: number, bytes?: number): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (!session) {
             return;
         }
@@ -279,7 +386,7 @@ const streamSessionService = {
     },
 
     addBytesTransferred: (id: string, bytes: number): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (session && bytes) {
             session.bytesTransferred = (session.bytesTransferred ?? 0) + bytes;
             sampleThroughput(session, bytes);

@@ -14,9 +14,13 @@ export const chartTheme = () => {
         text: themeColor('primary-text-color'),
         muted: themeColor('subtle-text-color'),
         grid: themeColor('settings-button-border-color'),
+        surface: themeColor('nav-active-background-color'),
         series: [1, 2, 3, 4, 5, 6].map((n) => themeColor(`chart-${n}`)),
     };
 };
+
+// The title on phones: smaller and regular weight (the default is a big bold Arial). Shared by every chart.
+export const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 // A series colour: a literal (#hex / rgb) passes through, a token name ('chart-2', 'danger-color') is resolved.
 // Defaults below were chosen to match the original upstream behaviour.

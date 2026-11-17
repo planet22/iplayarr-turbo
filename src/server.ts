@@ -13,9 +13,11 @@ import AuthRoute, { addAuthMiddleware, isAuthenticatedRequest, sessionMiddleware
 import JsonApiRoute from './routes/JsonApiRoute';
 import { encryptStoredApps } from './service/appService';
 import { ensureNonDefaultPassword } from './service/auth/initialCredentialsService';
+import cacheAdminService from './service/cacheAdminService';
 import configService, { encryptStoredSettings } from './service/configService';
 import { dbReady, prisma } from './service/db/prismaService';
 import { importFromRedisIfNeeded } from './service/db/redisImportService';
+import { ensureDnsRelayRunning } from './service/dnsRelayService';
 import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
 import socketService from './service/socketService';
@@ -90,6 +92,9 @@ app.get('/ping', async (_req: Request, res: Response) => {
 });
 
 const distDir = path.join(process.cwd(), 'frontend', 'dist');
+// Vite names everything under /assets after a hash of its content, so a given URL never changes: browsers can keep it
+// without asking again. The rest (index.html, the service worker, icons) must stay revalidated.
+app.use('/assets', express.static(path.join(distDir, 'assets'), { index: false, maxAge: '1y', immutable: true, fallthrough: true }));
 app.use(express.static(distDir, { index: false }));
 
 // Middleware
@@ -153,10 +158,17 @@ const startServer = () => {
         StatisticsService.setUptime();
     });
 
+    // The cache list with each cache's group, made once now so the pages can draw their cards at once.
+    const { caches, ungrouped } = cacheAdminService.buildCatalog();
+    loggingService.log(`Cache list ready: ${caches.length} caches${ungrouped.length ? `; not in a group yet (shown under Other): ${ungrouped.join(', ')}` : ''}`);
+
     //Cron
     taskService.init().catch((err) => loggingService.error('Scheduled jobs failed to start', err?.message ?? err));
 
     liveSubscriptionService.resync();
+
+    // At boot, not on first download, so the container healthcheck's wget resolves through the relay too.
+    ensureDnsRelayRunning();
 };
 
 (async () => {

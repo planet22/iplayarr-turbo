@@ -1,18 +1,19 @@
 <template>
-    <button class="test-button" @click="test">
+    <AppButton class="test-button" :disabled="testStatus == 'PENDING'" @click="test">
         <template v-if="testStatus == 'INITIAL'"> Test {{ capitalize(app.type) }} </template>
         <template v-if="testStatus == 'PENDING'">
-            <font-awesome-icon class="test-pending" :icon="['fas', 'spinner']" />
+            <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
         </template>
         <template v-if="testStatus == 'SUCCESS'">
             <font-awesome-icon class="test-success" :icon="['fas', 'check']" />
         </template>
-    </button>
+    </AppButton>
 </template>
 
 <script setup>
 import { defineExpose, defineProps, ref } from 'vue';
 
+import AppButton from '@/components/common/AppButton.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
 import { capitalize } from '@/lib/utils';
@@ -38,27 +39,23 @@ const resetTest = () => {
     testStatus.value = 'INITIAL';
 };
 
-defineExpose({ resetTest, status: testStatus.value == 'SUCCESS' });
+// A getter: a plain value here would be read once at setup and never change.
+defineExpose({
+    resetTest,
+    get status() {
+        return testStatus.value == 'SUCCESS';
+    },
+});
 </script>
 
 <style lang="less">
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 button {
     background-color: @settings-button-background-color;
     border: 1px solid @settings-button-border-color;
-    padding: 6px 16px;
-    font-size: 14px;
+    padding: 6px @space-4;
+    font-size: @font-size-md;
     color: @primary-text-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
 
     &:hover {
         border-color: @settings-button-hover-border-color;
@@ -66,11 +63,7 @@ button {
     }
 
     .test-success {
-        color: @success-color;
-    }
-
-    .test-pending {
-        animation: spin 1.25s linear infinite;
+        color: @positive-color;
     }
 
     &.test-button {

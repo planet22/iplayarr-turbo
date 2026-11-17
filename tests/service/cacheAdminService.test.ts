@@ -40,6 +40,53 @@ describe('cacheAdminService', () => {
         });
     });
 
+    it('gives thumbnails the same live figures as the others, with no expiry', async () => {
+        expect(await thumbnailRow()).toMatchObject({ expiresSoonest: null, expiresLatest: null, activity: { trend: expect.any(Array) } });
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('names every cache, thumbnails last, without touching the database or the disk', () => {
+        const names = cacheAdminService.names();
+        expect(names.at(-1)).toMatchObject({ prefix: THUMBNAILS, label: 'Thumbnails', defaultTtl: 30 * 86400 });
+        expect(names.every((n) => n.prefix && n.label && n.description)).toBe(true);
+        expect(thumbs.stats).not.toHaveBeenCalled();
+    });
+
+    it('builds the cache list with each cache\'s group at start-up, and says which caches have no group', () => {
+        const { caches, ungrouped } = cacheAdminService.buildCatalog();
+        expect(caches.find((c) => c.prefix === THUMBNAILS)).toMatchObject({ group: 'library', groupLabel: 'Library' });
+        expect(caches.every((c) => c.group && c.groupLabel)).toBe(true);
+        expect(ungrouped).toEqual(caches.filter((c) => c.group === 'other').map((c) => c.prefix));
+    });
+
+    it('serves the names from the list built at start-up', () => {
+        const built = cacheAdminService.buildCatalog().caches;
+        expect(cacheAdminService.names()).toBe(built);
+    });
+
+    it('puts a cache no group claims under Other', () => {
+        jest.spyOn(DbCacheService, 'names').mockReturnValue([{ prefix: 'brand_new_cache', label: 'New', description: 'd', defaultTtl: 60 }]);
+        const { caches, ungrouped } = cacheAdminService.buildCatalog();
+        expect(caches.find((c) => c.prefix === 'brand_new_cache')).toMatchObject({ group: 'other', groupLabel: 'Other' });
+        expect(ungrouped).toEqual(['brand_new_cache']);
+    });
+
+    it('the full list carries the group too', async () => {
+        expect(await thumbnailRow()).toMatchObject({ group: 'library', groupLabel: 'Library' });
+    });
+
+    it('names match what the full list shows', async () => {
+        cacheAdminService.buildCatalog();
+        const listed = (await cacheAdminService.list()).map(({ prefix, label, description }) => ({ prefix, label, description }));
+        const named = cacheAdminService.names().map(({ prefix, label, description }) => ({ prefix, label, description }));
+        expect(named).toEqual(listed);
+    });
+
+    it('lists the live figures of every cache, thumbnails included', () => {
+        expect(Object.keys(cacheAdminService.activity())).toContain(THUMBNAILS);
+    });
+
     it('flags a non-default retention as overridden', async () => {
         config.getParameter.mockResolvedValue('7');
         expect(await thumbnailRow()).toMatchObject({ ttl: 7 * 86400, overridden: true });

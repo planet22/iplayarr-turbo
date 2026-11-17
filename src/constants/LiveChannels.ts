@@ -3,6 +3,7 @@
 import { BrowseChannel } from '../types/Browse';
 import { BrowseChannels } from './BrowseChannels';
 import { channelOverride, customChannels, isCustomChannel } from './CustomChannels';
+import { isRadioStation, radioChannels } from './RadioChannels';
 
 // BBC live channels playable through LiveStreamService. Keyed by the same iPlayer (IBL) channel ids
 // as BrowseChannels.ts - that id is what the Channels pages pass as the stream `pid` - and mapped to
@@ -107,7 +108,7 @@ export const LiveChannelVpids: Record<string, string> = {
 };
 
 export function isLiveChannel(id: string | undefined): boolean {
-    return !!id && (Object.prototype.hasOwnProperty.call(LiveChannelVpids, id) || isCustomChannel(id));
+    return !!id && (Object.prototype.hasOwnProperty.call(LiveChannelVpids, id) || isCustomChannel(id) || isRadioStation(id));
 }
 
 export function isOptionalLiveChannel(id: string | undefined): boolean {
@@ -126,7 +127,8 @@ export function allLiveChannels(): BrowseChannel[] {
         return name ? { ...channel, title: name } : channel;
     });
     // The user's own channels (customChannelService) follow the built-in ones.
-    return [...builtIn, ...customChannels().map(({ id, title }) => ({ id, title, custom: true }))];
+    // Radio stations (LIVE_RADIO) come last so no existing channel's number moves; an empty list while it is off.
+    return [...builtIn, ...customChannels().map(({ id, title }) => ({ id, title, custom: true })), ...radioChannels()];
 }
 
 export function liveChannelInfo(id: string): BrowseChannel | undefined {

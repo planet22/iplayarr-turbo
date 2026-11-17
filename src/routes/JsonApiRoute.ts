@@ -3,10 +3,14 @@ import { Request, Response, Router } from 'express';
 import nzbFacade from '../facade/nzbFacade';
 import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
+import soundsFacade from '../facade/soundsFacade';
 import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
+import radioSearchSettingsService from '../service/sounds/radioSearchSettingsService';
+import { knownEpisode } from '../service/sounds/soundsApiService';
+import { searchResults } from '../service/sounds/soundsBrowseAdapter';
 import statisticsService from '../service/stats/StatisticsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
@@ -21,6 +25,7 @@ import { VideoEventType } from '../types/VideoEvent';
 import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
 import { QueueRequestNotFoundError, resolveQueueRequest } from '../utils/queueRequest';
+import { SOUNDS_ID } from '../utils/radioIds';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
 import { failureResponse } from '../utils/upstreamError';
@@ -29,7 +34,10 @@ import { addAvailableVersions, applyVersionToRelease } from '../utils/videoVersi
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import CustomChannelsRoute from './json-api/CustomChannelsRoute';
+import DebugRoute from './json-api/DebugRoute';
+import DnsRelayRoute from './json-api/DnsRelayRoute';
 import EventsRoute from './json-api/EventsRoute';
+import LibraryRoute from './json-api/LibraryRoute';
 import LiveChannelsRoute from './json-api/LiveChannelsRoute';
 import LiveSubscriptionsRoute from './json-api/LiveSubscriptionsRoute';
 import LiveTvRoute from './json-api/LiveTvRoute';
@@ -39,6 +47,7 @@ import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
 import RequestRoute from './json-api/RequestRoute';
 import SettingsRoute from './json-api/SettingsRoute';
+import SoundsRoute from './json-api/SoundsRoute';
 import StatisticsRoute from './json-api/StatisticsRoute';
 import StreamRoute from './json-api/StreamRoute';
 import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
@@ -61,6 +70,7 @@ router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
 router.use('/live-tv', LiveTvRoute);
+router.use('/sounds', SoundsRoute);
 router.use('/live-channels', CustomChannelsRoute);
 router.use('/live-channels', LiveChannelsRoute);
 router.use('/subscriptions/live', LiveSubscriptionsRoute);
@@ -69,6 +79,9 @@ router.use('/request', RequestRoute);
 router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);
 router.use('/watchdog', WatchdogRoute);
+router.use('/library', LibraryRoute);
+router.use('/dns-relay', DnsRelayRoute);
+router.use('/debug', DebugRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;
@@ -112,10 +125,29 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
         .catch(() => undefined);
 };
 
+// A BBC Sounds search (`?mode=radio`), noted in the search history like a video one. Radio has no search trace.
+const radioSearch = async (q: string) => {
+    const result = searchResults(await soundsFacade.search(q));
+    recordManualSearch(q, result as unknown as IPlayerSearchResult[], { candidates: [] } as unknown as SearchTrace);
+    return result;
+};
+const radioDisabled = (res: Response) =>
+    res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'BBC Sounds is not enabled' } as ApiResponse);
+
 router.get('/search', async (req: Request, res: Response) => {
     const { q } = req.query as any;
     if (q !== undefined && typeof q !== 'string') {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'The search term must be text' } as ApiResponse);
+        return;
+    }
+    if (req.query.mode === 'radio') {
+        if (!(await soundsFacade.isEnabled())) return void radioDisabled(res);
+        try {
+            res.json(await radioSearch(q ?? ''));
+        } catch (error: any) {
+            const { status, body } = failureResponse(error, 'BBC Sounds is not answering');
+            res.status(status).json(body);
+        }
         return;
     }
     try {
@@ -131,7 +163,13 @@ router.get('/search', async (req: Request, res: Response) => {
 
 // How a manual search is currently set up (native or not, engine, all-words) for the Search page's
 // status line.
-router.get('/search/settings', async (_, res: Response) => {
+router.get('/search/settings', async (req: Request, res: Response) => {
+    // `?mode=radio`: how a BBC Sounds search is narrowed and ordered.
+    if (req.query.mode === 'radio') {
+        if (!(await soundsFacade.isEnabled())) return void radioDisabled(res);
+        res.json({ radio: true, ...(await radioSearchSettingsService.effective()) });
+        return;
+    }
     res.json(await searchSettingsService.effective('manual'));
 });
 
@@ -141,6 +179,21 @@ router.get('/search/stream', async (req: Request, res: Response) => {
     const { q } = req.query as any;
     if (typeof q !== 'string' || !q.trim()) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A search term is required' } as ApiResponse);
+        return;
+    }
+    // `?mode=radio`: BBC Sounds answers in one piece, in the same lines.
+    if (req.query.mode === 'radio') {
+        if (!(await soundsFacade.isEnabled())) return void radioDisabled(res);
+        res.setHeader('Content-Type', 'application/x-ndjson');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
+        try {
+            res.write(`${JSON.stringify(await radioSearch(q))}\n{"done":true}\n`);
+        } catch (error: any) {
+            res.write(`${JSON.stringify({ error: failureResponse(error, 'BBC Sounds is not answering').body.message })}\n`);
+        }
+        res.end();
         return;
     }
     res.setHeader('Content-Type', 'application/x-ndjson');
@@ -186,7 +239,36 @@ router.get('/search/stream', async (req: Request, res: Response) => {
 });
 
 router.get('/details', async (req: Request, res: Response) => {
-    const { pid } = req.query as any;
+    const { pid, kind } = req.query as any;
+    // A BBC Sounds episode, in the shape of a video's details so the same popup shows it. Only an episode seen recently is known
+    // (BBC has no single-episode lookup); otherwise the caller falls back on what it already has.
+    if (kind === 'radio') {
+        if (!SOUNDS_ID.test(String(pid))) {
+            res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid episode id' } as ApiResponse);
+            return;
+        }
+        const episode = knownEpisode(pid);
+        if (!episode) {
+            const found = await iplayerDetailsService.radioDetails(pid);
+            res.json(found ?? { pid, title: undefined, category: 'Radio', type: 'RADIO', audioOnly: true });
+            return;
+        }
+        res.json({
+            pid,
+            title: episode.showTitle || episode.title,
+            episodeTitle: [episode.subtitle, episode.episodeTitle].filter(Boolean).join(' - ') || undefined,
+            channel: episode.network,
+            category: 'Radio',
+            description: episode.synopsis,
+            runtime: episode.duration ? episode.duration / 60 : undefined,
+            firstBroadcast: episode.released,
+            link: `https://www.bbc.co.uk/sounds/play/${pid}`,
+            thumbnail: episode.image,
+            type: 'RADIO',
+            audioOnly: true,
+        });
+        return;
+    }
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
         return;
@@ -273,7 +355,8 @@ router.get('/thumbnail/pid/:pid', async (req: Request, res: Response) => {
 
 router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
     const imagePid = req.params[0];
-    const filePath = await thumbnailCacheService.getOrFetch(imagePid, req.query.size === 'small');
+    // ?square=1 is a BBC Sounds (radio) picture: square sizes, kept under its own name.
+    const filePath = await thumbnailCacheService.getOrFetch(imagePid, req.query.size === 'small', req.query.square === '1');
     if (!filePath) {
         res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Thumbnail not found' } as ApiResponse);
         return;

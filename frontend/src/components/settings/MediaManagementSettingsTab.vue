@@ -18,6 +18,14 @@
         :error="validationErrors.config?.OUTPUT_FORMAT"
         :options="outputFormats"
     />
+    <SelectInput
+        v-model="config.DOWNLOAD_SUBTITLES"
+        field="DOWNLOAD_SUBTITLES"
+        name="Subtitles"
+        tooltip="Saved with downloads: a separate .srt file, inside the video, both, or none."
+        :error="validationErrors.config?.DOWNLOAD_SUBTITLES"
+        :options="subtitleModes"
+    />
     <TextInput
         v-model="config.DOWNLOAD_DIR"
         field="DOWNLOAD_DIR"
@@ -50,6 +58,24 @@
         tooltip="Where live channel .strm files go. Point a Jellyfin library here. Blank uses the Complete Directory."
         :error="validationErrors.config?.LIVE_STRM_DIR"
     />
+    <template v-if="radioEnabled">
+        <SettingsSubheading text="Radio" />
+        <TextInput
+            v-model="config.SOUNDS_DIR"
+            field="SOUNDS_DIR"
+            name="Radio Directory"
+            tooltip="Where radio downloads go. Point a Jellyfin music library here."
+            :error="validationErrors.config?.SOUNDS_DIR"
+        />
+        <SelectInput
+            v-model="config.RADIO_MEDIA_MODE"
+            field="RADIO_MEDIA_MODE"
+            name="Radio Media Mode"
+            tooltip="Save radio as an audio file, or as a small .strm link to its stream (needs the Stream Base URL and Stream Key). Each download can choose. Radio always uses the built-in downloader and streamer."
+            :error="validationErrors.config?.RADIO_MEDIA_MODE"
+            :options="radioMediaModes"
+        />
+    </template>
     <SettingsSubheading text="Quality" />
     <SelectInput
         v-model="config.VIDEO_QUALITY"
@@ -126,7 +152,7 @@
     <SelectInput
         v-model="config.WRITE_NFO_STRM"
         field="WRITE_NFO_STRM"
-        name="Write .nfo Metadata Files?"
+        name="Write .nfo Metadata Files"
         tooltip="Save a Jellyfin .nfo info file next to each download."
         :error="validationErrors.config?.WRITE_NFO_STRM"
         :options="nfoWriteModes"
@@ -136,7 +162,7 @@
         v-model="config.WRITE_STRMTOOL_JSON"
         field="WRITE_STRMTOOL_JSON"
         :advanced="true"
-        name="Write .strmtool.json Files?"
+        name="Write .strmtool.json Files"
         tooltip="Save a small file that lets the StrmTool Jellyfin plugin skip scanning .strm files."
         :error="validationErrors.config?.WRITE_STRMTOOL_JSON"
         :options="trueOrFalse"
@@ -145,16 +171,43 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_NFO_CAST"
         field="WRITE_NFO_CAST"
-        name="Add Cast and Crew to .nfo Files?"
-        tooltip="List cast, directors and writers in each .nfo. One extra BBC lookup per download."
+        name="Add Cast and Crew to .nfo Files"
+        tooltip="Add cast, directors and writers to each .nfo (one extra BBC lookup)."
         :error="validationErrors.config?.WRITE_NFO_CAST"
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_NFO_EPISODE_TITLES"
+        field="WRITE_NFO_EPISODE_TITLES"
+        name="Headline for 'Episode N' Titles"
+        tooltip="Use iPlayer's headline as the .nfo title when an episode is titled just 'Episode N'. File names stay the same."
+        :error="validationErrors.config?.WRITE_NFO_EPISODE_TITLES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_NFO_RUNTIME_FALLBACK"
+        field="WRITE_NFO_RUNTIME_FALLBACK"
+        name="Fill in a Missing Running Time"
+        tooltip="If the BBC page gives no length, take it from iPlayer's listing."
+        :error="validationErrors.config?.WRITE_NFO_RUNTIME_FALLBACK"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_ADDITIONAL_IMAGES"
+        field="WRITE_ADDITIONAL_IMAGES"
+        name="Use Additional Images"
+        tooltip="Save extra Jellyfin images: episode, poster, backdrop, landscape and logo."
+        :error="validationErrors.config?.WRITE_ADDITIONAL_IMAGES"
+        :options="additionalImageModes"
+    />
+    <SelectInput
         v-model="config.STRM_SECURE_ACTION"
         field="STRM_SECURE_ACTION"
-        name="When a Subscription Replaces a .strm Link"
-        tooltip="What happens to the old .strm link when a subscription downloads the mp4/mkv in its place."
+        name="What to Do With Replaced .strm"
+        tooltip="What happens to the .strm when a subscription downloads the real file."
         :error="validationErrors.config?.STRM_SECURE_ACTION"
         :options="secureActions"
     />
@@ -163,7 +216,7 @@
         v-model="config.ARCHIVE_ENABLED"
         field="ARCHIVE_ENABLED"
         :advanced="true"
-        name="Archive Downloads?"
+        name="Archive Downloads"
         tooltip="Keep a record of what has been downloaded."
         :error="validationErrors.config?.ARCHIVE_ENABLED"
         :options="trueOrFalse"
@@ -177,6 +230,14 @@ import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
+import { useMediaMode } from '@/lib/mediaMode';
+
+const subtitleModes = [
+    { key: 'sidecar', value: 'Separate .srt file' },
+    { key: 'embed', value: 'Inside the video' },
+    { key: 'both', value: 'Both' },
+    { key: 'off', value: 'None' },
+];
 
 defineProps({
     mediaModes: {
@@ -215,12 +276,24 @@ const releaseLanguages = [
     { key: 'english', value: 'English' },
 ];
 
+const additionalImageModes = [
+    { key: 'none', value: 'Disabled' },
+    { key: 'missing', value: 'Enabled (leave existing)' },
+    { key: 'overwrite', value: 'Enabled (overwrite all)' },
+];
+
 const secureActions = [
     { key: 'rename', value: 'Rename to .bak (can be restored)' },
     { key: 'delete', value: 'Delete' },
     { key: 'leave', value: 'Leave alone (an external tool handles it)' },
 ];
 
+const radioMediaModes = [
+    { key: 'm4a', value: 'Audio file (.m4a / .mp3)' },
+    { key: 'strm', value: '.strm link' },
+];
+// Radio settings show while BBC Sounds Radio is on (enable it in General first; tabs save separately).
+const { radioEnabled } = useMediaMode();
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');

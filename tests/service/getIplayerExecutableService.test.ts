@@ -10,6 +10,7 @@ import synonymService from '../../src/service/synonymService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 import { IPlayerSearchResult, VideoType } from '../../src/types/IPlayerSearchResult';
 import { Synonym } from '../../src/types/Synonym';
+import * as Utils from '../../src/utils/Utils';
 
 jest.mock('bcrypt', () => ({
     hash: jest.fn().mockResolvedValue('$2b$10$mockedhash'),
@@ -135,6 +136,31 @@ describe('GetIplayerExecutableService', () => {
             expect(result.args).toContain('--output');
             expect(result.args).toContain(`${mockDownloadDir}/${mockPid}`);
             expect(result.args).toContain(`--pid=${mockPid}`);
+        });
+
+        describe('subtitle flags', () => {
+            const subArgs = async (subtitles: string | undefined, additional = '') => {
+                mockedConfigService.getParameter.mockImplementation((key: IplayarrParameter) => {
+                    if (key === IplayarrParameter.GET_IPLAYER_EXEC) return Promise.resolve('get_iplayer');
+                    if (key === IplayarrParameter.DOWNLOAD_SUBTITLES) return Promise.resolve(subtitles);
+                    if (key === IplayarrParameter.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS) return Promise.resolve(additional);
+                    return Promise.resolve(undefined);
+                });
+                const { args } = await service.getAllDownloadParameters('p01abc', '/mock/dir');
+                return args.filter((arg) => /^--(subtitles|subs-embed)$/.test(arg));
+            };
+
+            it('maps the setting to get_iplayer flags', async () => {
+                expect(await subArgs('sidecar')).toEqual(['--subtitles']);
+                expect(await subArgs(undefined)).toEqual(['--subtitles']);
+                expect(await subArgs('embed')).toEqual(['--subtitles', '--subs-embed']);
+                expect(await subArgs('both')).toEqual(['--subtitles', '--subs-embed']);
+                expect(await subArgs('off')).toEqual([]);
+            });
+
+            it('leaves the choice to the additional parameters when they name a subtitle flag', async () => {
+                expect(await subArgs('embed', '--subtitles')).toEqual(['--subtitles']);
+            });
         });
 
         describe('--versions', () => {
@@ -274,12 +300,12 @@ describe('GetIplayerExecutableService', () => {
             });
 
             fs.readdirSync = jest.fn().mockReturnValue(mockFiles);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload(mockPid, 0);
 
-            expect(fs.copyFileSync).toHaveBeenCalled();
+            expect(fs.promises.copyFile).toHaveBeenCalled();
             expect(fs.rmSync).toHaveBeenCalled();
             expect(historyService.addHistory).toHaveBeenCalled();
         });
@@ -297,7 +323,7 @@ describe('GetIplayerExecutableService', () => {
             });
 
             fs.readdirSync = jest.fn().mockReturnValue([]);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload(mockPid, 0);
@@ -428,23 +454,23 @@ describe('GetIplayerExecutableService', () => {
             queueService.getFromQueue = jest.fn().mockReturnValue({ nzbName: 'mock_nzb' });
             (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
             fs.readdirSync = jest.fn().mockReturnValue(['notes.txt', 'clip.mkv']);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload('12345', 0);
 
-            expect(fs.copyFileSync).toHaveBeenCalledTimes(1);
+            expect(fs.promises.copyFile).toHaveBeenCalledTimes(1);
             expect(historyService.addHistory).toHaveBeenCalled();
         });
 
         it('does nothing to the files when the download did not succeed', async () => {
             (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload('12345', 1);
 
-            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(fs.promises.copyFile).not.toHaveBeenCalled();
             expect(fs.rmSync).not.toHaveBeenCalled();
             expect(queueService.removeFromQueue).toHaveBeenCalledWith('12345');
         });
@@ -458,6 +484,14 @@ describe('GetIplayerExecutableService', () => {
             const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:||:||:|';
             const [result] = await service.parseResults('plain', line, 1);
             expect(result).toMatchObject({ pid: '12345', title: 'Plain title', size: undefined, pubDate: undefined, runtimeSeconds: undefined });
+        });
+
+        it('hands the available date to the numbering as the broadcast date', async () => {
+            const spy = jest.spyOn(Utils, 'calculateSeasonAndEpisode');
+            const line = 'RESULT|:|12345|:|Show|:||:||:|1|:|BBC|:|600|:|2021-01-01T10:00:00Z|:|Series 4 Episode 1|:|';
+            await service.parseResults('show', line, 1);
+            expect(spy.mock.calls[0][0].first_broadcast_date).toBe('2021-01-01T10:00:00Z');
+            spy.mockRestore();
         });
 
         it('treats a duration that is not a number as unknown', async () => {

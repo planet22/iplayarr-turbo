@@ -1,5 +1,6 @@
 <template>
-    <div ref="lhn" class="LeftHandNav">
+    <div v-if="shown" class="lhnBackdrop" aria-hidden="true" />
+    <div ref="lhn" :class="['LeftHandNav', { show: shown }]" role="navigation" aria-label="Main">
         <ul>
             <li
                 class="sectionLabel clickable" role="button" tabindex="0" :aria-expanded="isOpen('browse')"
@@ -12,10 +13,10 @@
             <LeftHandNavLink label="Discover" icon="compass" path="/browse" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Search" icon="search" path="/search" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Guide" icon="calendar-days" path="/browse/schedule" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
-            <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true'" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" :also-active="['/browse/channel/']" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" :also-active="['/browse/category/']" @option-clicked="closeLHN" />
+            <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true' || isRadio" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" :also-active="['/browse/atoz/']" :disabled="isRadio" disabled-title="BBC Sounds has no A to Z" @option-clicked="closeLHN" />
             </template>
 
             <li
@@ -28,9 +29,9 @@
             <template v-if="isOpen('activity')">
             <LeftHandNavLink label="Queue" icon="clipboard-list" path="/queue" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Video Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Streaming" icon="play" path="/streaming" :also-active="['/streaming/']" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" :activity="watchdogActivity" @option-clicked="closeLHN" />
             </template>
 
             <li
@@ -45,7 +46,7 @@
             <LeftHandNavLink label="NZB" icon="newspaper" path="/nzb" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Synonyms" icon="book" path="/synonyms" @option-clicked="closeLHN" />
             <template v-if="globalSettings.NATIVE_SEARCH == 'false'">
-                <LeftHandNavLink label="Off Schedule" icon="calendar-plus" path="/offSchedule" @option-clicked="closeLHN" />
+                <LeftHandNavLink label="Off Schedule" icon="calendar-plus" path="/off-schedule" @option-clicked="closeLHN" />
                 <LeftHandNavLink
 label="Refresh Index" icon="address-book" :no-link="true"
                     @option-clicked="refreshCache" />
@@ -63,8 +64,9 @@ label="Refresh Index" icon="address-book" :no-link="true"
             <LeftHandNavLink label="Statistics" icon="chart-bar" path="/stats" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Logs" icon="file-lines" path="/logs" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Settings" icon="gears" path="/settings" @option-clicked="closeLHN" />
+            <LeftHandNavLink v-if="globalSettings.UI_EXTENDED_DEBUG == 'true'" label="Debug" icon="bug" path="/debug" :also-active="['/debug/', '/library-debug', '/dns-relay', '/streaming/debug/']" @option-clicked="closeLHN" />
             <LeftHandNavLink label="About" icon="circle-info" path="/about" @option-clicked="closeLHN" />
-            <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Logout" icon="sign-out" :no-link="true" @option-clicked="logout" />
+            <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Sign out" icon="sign-out" :no-link="true" @option-clicked="logout" />
             </template>
         </ul>
         <div class="floor">
@@ -74,7 +76,7 @@ label="Refresh Index" icon="address-book" :no-link="true"
             </div>
             <div v-else>
                 <font-awesome-icon :icon="['fas', 'desktop']" fixed-width />
-                <span>Native Search</span>
+                <span>Native Search {{ globalSettings.NATIVE_SEARCH_ENGINE == 'V1' ? '1.0' : '2.0' }}</span>
             </div>
             <div class="versionInfo" :title="versionTooltip">
                 <div v-for="line in versionLines" :key="line.text" :class="{ updateAvailable: line.update }">
@@ -97,7 +99,9 @@ import { computed, defineEmits, defineExpose, inject, onBeforeUnmount, ref, watc
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { useMediaMode } from '@/lib/mediaMode';
 import toastService from '@/lib/toastService';
+import { trackWatchdogActivity, watchdogActivity } from '@/lib/watchdogActivity';
 
 import LeftHandNavLink from './NavLink.vue';
 
@@ -121,8 +125,8 @@ const route = useRoute();
 const GROUP_PATHS = {
     browse: ['/browse', '/search'],
     activity: ['/queue', '/subscriptions', '/streaming', '/events', '/watchdog'],
-    integrations: ['/apps', '/nzb', '/synonyms', '/offSchedule'],
-    system: ['/stats', '/logs', '/settings', '/about'],
+    integrations: ['/apps', '/nzb', '/synonyms', '/off-schedule'],
+    system: ['/stats', '/logs', '/settings', '/debug', '/library-debug', '/dns-relay', '/about'],
 };
 const COLLAPSED_KEY = 'iplayarr.navCollapsed';
 const readCollapsed = () => {
@@ -152,7 +156,10 @@ watch(
 );
 const lhn = ref(null);
 const emit = defineEmits(['clear-search']);
+const stopTrackingWatchdog = trackWatchdogActivity(inject('socket'));
+onBeforeUnmount(stopTrackingWatchdog);
 const globalSettings = inject('globalSettings');
+const { isRadio } = useMediaMode();
 const hiddenSettings = inject('hiddenSettings');
 const toolVersions = inject('toolVersions');
 
@@ -176,18 +183,30 @@ const versionTooltip = computed(() => {
     return notes.length ? `${notes.join(' - ')} - see Settings > Download Client` : 'Installed versions';
 });
 
+// Phone drawer: open or closed. A tap outside it, or Esc, closes it.
+const shown = ref(false);
+
+const onEscape = (event) => {
+    if (event.key === 'Escape') closeLHN();
+};
+
 const toggleLHN = () => {
-    lhn.value.classList.toggle('show');
-    if (lhn.value.classList.contains('show')) {
+    shown.value = !shown.value;
+    if (shown.value) {
         setTimeout(() => {
             document.addEventListener('click', handleClickOutside);
         }, 0);
+        document.addEventListener('keydown', onEscape);
+    } else {
+        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('keydown', onEscape);
     }
 };
 
 const closeLHN = () => {
-    lhn.value.classList.remove('show');
+    shown.value = false;
     document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('keydown', onEscape);
     emit('clear-search');
 };
 
@@ -198,7 +217,7 @@ const logout = async () => {
     if (response.ok) {
         router.go(0);
     } else {
-        toastService.error('Unable to log out');
+        toastService.error('Unable to sign out');
     }
 };
 
@@ -236,8 +255,8 @@ const handleClickOutside = (event) => {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    z-index: 1;
-    font-size: 14px;
+    z-index: @z-raised;
+    font-size: @font-size-md;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -246,7 +265,7 @@ const handleClickOutside = (event) => {
     top: 60px;
 
     .floor {
-        padding: 24px 24px;
+        padding: @space-5 @space-5;
         box-sizing: border-box;
 
         span {
@@ -259,12 +278,12 @@ const handleClickOutside = (event) => {
     }
 
     .versionInfo {
-        margin-top: 12px;
-        font-size: 12px;
+        margin-top: @space-3;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
 
         .updateAvailable {
-            color: @warn-color;
+            color: @caution-color;
 
             .updateLink {
                 margin-top: 0;
@@ -289,8 +308,8 @@ const handleClickOutside = (event) => {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 18px 24px 6px;
-        font-size: 11px;
+        padding: 18px @space-5 6px;
+        font-size: @font-size-xs;
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -307,21 +326,37 @@ const handleClickOutside = (event) => {
         }
 
         &:first-child {
-            padding-top: 12px;
+            padding-top: @space-3;
         }
     }
 
-    li {
-        padding: 12px 24px;
+    // A link row: the <li> only carries the state (active, disabled); the link or button inside fills it and holds the padding.
+    li.navRow {
+        .navLink {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            padding: @space-3 @space-5;
+        }
+
+        button.navLink {
+            border: 0;
+            background: none;
+            font: inherit;
+            text-align: left;
+        }
 
         &.active {
             background-color: @nav-active-background-color;
             color: @brand-color;
             border-left: 3px solid @brand-color;
 
-            padding-left: 21px;
+            .navLink {
+                padding-left: 21px;
+            }
 
             a,
+            button,
             span {
                 color: @brand-color !important;
                 text-decoration: none;
@@ -331,16 +366,32 @@ const handleClickOutside = (event) => {
         .menuText {
             margin-left: 1rem;
         }
+
+        // A disabled link (A to Z in radio mode) keeps its colour on hover.
+        &.disabled {
+            span,
+            span:hover,
+            .navIcon,
+            .navItem:hover .menuText,
+            .navItem:hover .navIcon {
+                color: @nav-link-color;
+            }
+        }
     }
 
     a,
+    button.navLink,
     span {
         color: @nav-link-color;
         text-decoration: none;
+    }
 
-        &:hover {
-            color: @brand-color;
-        }
+    // Hovering the icon or the text lights both together.
+    a:hover,
+    .navItem:hover,
+    .navItem:hover .menuText,
+    .navItem:hover .navIcon {
+        color: @brand-color;
     }
 }
 
@@ -359,11 +410,24 @@ const handleClickOutside = (event) => {
         box-sizing: border-box;
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
+        // Above the page (the Discover hero and its dots are positioned and would paint over it); the bar stays above this.
+        z-index: @z-drawer;
         padding-top: var(--navbar-height, 60px);
     }
 
     .LeftHandNav.show {
         transform: translateX(0);
+    }
+
+    // Dims the page behind the open drawer; sits under the top bar like the drawer does.
+    .lhnBackdrop {
+        position: fixed;
+        top: var(--navbar-height, 60px);
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: @z-drawer;
+        background-color: @overlay-color;
     }
 }
 </style>

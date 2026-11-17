@@ -65,7 +65,7 @@
                             type="button" class="SettingsPageToolbar-button clickable" :disabled="downloading"
                             :title="downloadTitle" :aria-label="downloadTitle" @click="downloadCollection"
                         >
-                            <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
+                            <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-arrow-down']" :spin="downloading" />
                             <span v-if="downloadable" class="downloadCount">{{ downloadable }}</span>
                         </button>
                     </template>
@@ -78,10 +78,10 @@
                     <div v-if="pagedItems.length" class="browseGrid">
                         <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
                     </div>
-                    <p v-else>Nothing matches that filter.</p>
+                    <EmptyState v-else icon="filter" title="Nothing matches that filter" />
                     <TablePagination v-model="itemPage" v-model:page-size="itemPageSize" :total="filteredItems.length" />
                 </template>
-                <p v-else>Nothing in this collection is available right now.</p>
+                <EmptyState v-else icon="tv" title="Nothing here is available right now" />
             </section>
         </template>
     </div>
@@ -106,6 +106,8 @@ import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
 import dialogService from '@/lib/dialogService';
 import { defaultMediaMode } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
+import { askRadioDownload } from '@/lib/radioDownloadChoice';
 import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
 
@@ -120,7 +122,10 @@ const collections = ref([]);
 // With a long list (Home page and categories finds well over a hundred) a title filter appears.
 const FILTER_FROM = 12;
 const textFilter = ref('');
-const COLLECTION_SORTS = [...SORT_OPTIONS, { key: 'size', label: 'Size', order: 'desc' }];
+// False while only the names are loaded; sizes (and so the Size sort) arrive with the full list.
+const detailed = ref(false);
+const COLLECTION_SORTS_ALL = [...SORT_OPTIONS, { key: 'size', label: 'Size', order: 'desc' }];
+const COLLECTION_SORTS = computed(() => (detailed.value ? COLLECTION_SORTS_ALL : SORT_OPTIONS));
 const COLLECTION_ACCESSORS = { name: ({ title }) => title, size: ({ count }) => count };
 const collectionSort = ref('default');
 const collectionOrder = ref('asc');
@@ -145,6 +150,8 @@ const openId = computed(() => (typeof route.query.c === 'string' ? route.query.c
 const open = computed(() => collections.value.find((collection) => collection.id === openId.value));
 const items = ref([]);
 const downloadable = ref(undefined);
+// This page is rebuilt when the Video | Radio mode changes, so it can read the mode once.
+const radioMode = radioActive();
 const itemFilter = ref('');
 const channelFilter = ref('All');
 const itemSort = ref('default');
@@ -171,19 +178,36 @@ const itemsLoading = ref(false);
 const itemsError = ref(null);
 const openSection = ref(null);
 
+// The names come first, at once; the sizes and pictures follow (the server may need a while to find them).
 const load = async () => {
     loading.value = true;
     error.value = null;
+    detailed.value = false;
+    let namesShown = false;
     try {
+        try {
+            const names = await browseFetch('collections?basic=1');
+            enabled.value = names.enabled;
+            collections.value = names.collections;
+            loading.value = false;
+            namesShown = names.collections.length > 0;
+            if (!names.enabled) return;
+        } catch {
+            // The full list below reports any failure.
+        }
         const result = await browseFetch('collections');
         enabled.value = result.enabled;
         collections.value = result.collections;
+        detailed.value = true;
     } catch (e) {
-        error.value = e.message;
+        // Names already on screen stay; they just have no sizes or pictures.
+        if (!namesShown) error.value = e.message;
     } finally {
         loading.value = false;
     }
 };
+
+const downloadUrl = (id) => `json-api/browse/collections/${encodeURIComponent(id)}/download${radioMode ? '?mode=radio' : ''}`;
 
 const loadItems = async () => {
     const id = openId.value;
@@ -198,9 +222,10 @@ const loadItems = async () => {
     if (!id || !open.value) return;
     itemsLoading.value = true;
     // How many titles Download collection would queue, for the button (a dry run; the count on the tile includes whole series).
-    ipFetch(`json-api/browse/collections/${encodeURIComponent(id)}/download`, 'POST', { dryRun: true })
+    // For radio, the episodes not already queued or downloaded.
+    ipFetch(downloadUrl(id), 'POST', { dryRun: true })
         .then(({ ok, data }) => {
-            if (ok && openId.value === id) downloadable.value = data.total;
+            if (ok && openId.value === id) downloadable.value = radioMode ? data.total - data.skipped : data.total;
         })
         .catch(() => undefined);
     try {
@@ -233,7 +258,7 @@ const downloading = ref(false);
 const downloadCollection = async () => {
     const collection = open.value;
     if (!collection || downloading.value) return;
-    const url = `json-api/browse/collections/${encodeURIComponent(collection.id)}/download`;
+    const url = downloadUrl(collection.id);
     downloading.value = true;
     try {
         const preview = await ipFetch(url, 'POST', { dryRun: true });
@@ -246,19 +271,33 @@ const downloadCollection = async () => {
             toastService.info('Nothing in this collection can be downloaded right now');
             return;
         }
-        const left = skipped ? ` ${skipped} whole series ${skipped === 1 ? 'is' : 'are'} left out.` : '';
-        const choice = await dialogService.confirmDownload(`Download ${total} titles from ${collection.title}?${left}`, { count: total, offerBoxset: true });
-        if (!choice) return;
-        // Only sent when it differs from the Media Mode setting.
-        const media = choice.media === defaultMediaMode(globalSettings.value) ? undefined : choice.media;
-        const run = await ipFetch(url, 'POST', { ...(media ? { media } : {}), boxset: choice.boxset });
+        let body;
+        if (radioMode) {
+            // For radio, `skipped` is what is already queued or downloaded; the rest is saved as an audio file or a .strm link.
+            const fresh = total - skipped;
+            if (!fresh) {
+                toastService.info('Everything in this collection is already in the Queue or downloaded');
+                return;
+            }
+            const mode = await askRadioDownload(`Download ${fresh} episode${fresh === 1 ? '' : 's'} from ${collection.title}?`, fresh);
+            if (!mode) return;
+            body = { mode };
+        } else {
+            const left = skipped ? ` ${skipped} whole series ${skipped === 1 ? 'is' : 'are'} left out.` : '';
+            const choice = await dialogService.confirmDownload(`Download ${total} titles from ${collection.title}?${left}`, { count: total, offerBoxset: true });
+            if (!choice) return;
+            // Only sent when it differs from the Media Mode setting.
+            const media = choice.media === defaultMediaMode(globalSettings.value) ? undefined : choice.media;
+            body = { ...(media ? { media } : {}), boxset: choice.boxset };
+        }
+        const run = await ipFetch(url, 'POST', body);
         if (!run.ok) {
             toastService.error('Unable to queue the collection', { detail: run.data?.message });
             return;
         }
         const { queued, failed } = run.data;
-        if (failed) toastService.error(`${failed} title${failed === 1 ? '' : 's'} could not be queued`, { detail: `${queued} were queued.` });
-        else toastService.success(`${queued} title${queued === 1 ? '' : 's'} queued`);
+        if (failed) toastService.error(`${failed} ${radioMode ? 'episode' : 'title'}${failed === 1 ? '' : 's'} could not be queued`, { detail: `${queued} were queued.` });
+        else toastService.success(`${queued} ${radioMode ? 'episode' : 'title'}${queued === 1 ? '' : 's'} queued`);
         if (queued) router.push('/queue');
     } finally {
         downloading.value = false;
@@ -267,8 +306,9 @@ const downloadCollection = async () => {
 
 const toggle = (collection) => router.push({ query: openId.value === collection.id ? {} : { c: collection.id } });
 
-// Open the contents under the tiles and bring them into view.
-watch([openId, collections], async () => {
+// Open the contents under the tiles and bring them into view. Keyed on the open collection's id, so the full list replacing
+// the names does not reload what is open.
+watch([openId, () => open.value?.id], async () => {
     const loaded = loadItems();
     await nextTick();
     openSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
@@ -284,7 +324,7 @@ onMounted(load);
 <style lang="less" scoped>
 .downloadCount {
     margin-left: 6px;
-    font-size: 14px;
+    font-size: @font-size-md;
     font-variant-numeric: tabular-nums;
 }
 
@@ -292,20 +332,25 @@ onMounted(load);
     margin-bottom: 1rem;
 }
 
-.gridFilter {
-    height: 32px;
-    padding: 0 10px;
-    border-radius: 4px;
-    border: 1px solid @settings-button-border-color;
-    background-color: @settings-button-background-color;
-    color: @primary-text-color;
-}
-
+// Phone: the title filter and the channel select drop to a row of their own under the buttons, instead of being squeezed
+// to a few pixels beside five of them.
 @media (max-width: @mobile-breakpoint) {
-    .gridFilter {
-        flex: 1 1 0;
-        min-width: 0;
-        width: auto;
+    .openCollection :deep(.SettingsPageToolbar.inlineFilters .SettingsPageToolbar-filters) {
+        order: 3;
+        flex: 1 1 100%;
+        padding: 0 0 @space-2;
+        gap: 6px;
+
+        .tableFilter {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: none;
+        }
+
+        .gridFilter {
+            flex: 0 1 auto;
+            min-width: 0;
+        }
     }
 }
 
@@ -316,7 +361,7 @@ onMounted(load);
 .collectionGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 12px;
+    gap: @space-3;
     margin-bottom: 1.75rem;
 
     @media (max-width: @mobile-breakpoint) {
@@ -328,7 +373,7 @@ onMounted(load);
     margin-top: 1.75rem;
 
     .synopsis {
-        margin: 0 0 12px;
+        margin: 0 0 @space-3;
         color: @subtle-text-color;
     }
 }

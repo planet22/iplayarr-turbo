@@ -42,6 +42,11 @@ export const averageRate = (bytesTransferred, startedAt, endedAt) => {
 };
 
 export const formatRate = (mbps) => {
-    if (!mbps || mbps < 0.005) return '0 MB/s';
+    if (!mbps || mbps < 0.0001) return '0 MB/s';
+    // A radio stream moves tens of kilobytes a second.
+    if (mbps < 0.1) {
+        const kbps = mbps * 1024;
+        return `${kbps >= 10 ? kbps.toFixed(0) : kbps.toFixed(1)} kB/s`;
+    }
     return `${mbps >= 10 ? mbps.toFixed(0) : mbps.toFixed(1)} MB/s`;
 };

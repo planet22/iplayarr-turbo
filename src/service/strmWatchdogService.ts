@@ -3,24 +3,23 @@
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
-import posixpath from 'path/posix';
 
 import { App } from '../types/App';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEventType } from '../types/VideoEvent';
-import { resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { mapPath, missingMappedFolders, parsePathMap } from '../utils/pathMap';
-import { DetectedMapping, detectPathMapping } from '../utils/pathMappingDetector';
-import { parseStrmPid } from '../utils/Utils';
+import { canHaveRoute, currentRoute, formatRoute, withRoute } from '../utils/routeHint';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
-import historyService from './historyService';
-import jellyfinService, { JellyfinItem } from './jellyfinService';
+import jellyfinService from './jellyfinService';
+import libraryIndexService, { appSourceId, FOLDERS_ID, IndexCounts } from './libraryIndexService';
 import loggingService from './loggingService';
 import socketService from './socketService';
+import { allMediaSelectorPairs, MediaSelectorPair } from './stream/mediaSelectorPairs';
 import NativeStreamService from './stream/NativeStreamService';
+import { idOfKey, keyFor, modeOfKey, radioMode } from './strmWatchdogModes';
 import subscriptionService from './subscriptionService';
 import videoEventService from './videoEventService';
 
@@ -29,9 +28,10 @@ import videoEventService from './videoEventService';
 const DEFAULT_STRIKES = 2;
 const MAX_STRIKES = 30;
 // Failures that say nothing about the programme itself (our network, not BBC saying "gone").
-const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN']);
+const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'EUPSTREAM']);
 
-type WatchdogSource = 'history' | 'arr' | 'jellyfin';
+type WatchdogSource = 'history' | 'arr' | 'jellyfin' | 'radio';
+
 
 // What the sources found for one pid: the .strm files carrying it, and (Sonarr/Radarr only) the
 // episode/movie ids to act on.
@@ -43,8 +43,18 @@ interface WatchdogTarget {
     // What kind of source listed it: HISTORY (iPlayarr), SONARR, RADARR or JELLYFIN.
     types: Set<string>;
     arr: { app: App; ids: number[] }[];
+    // A radio (BBC Sounds) link: probed on Sounds, and acted on without Sonarr/Radarr or the iPlayer history.
+    radio?: boolean;
 }
 
+
+// How many past checks of a link are kept.
+const HISTORY_LIMIT = 8;
+
+// The route-update option (STRM_WATCHDOG_UPDATE_ROUTES): at most this many links are asked about in one run, and a link
+// that was asked is left alone for this many days, so a big library is covered over a few runs.
+const ROUTE_UPDATES_PER_RUN = 40;
+const ROUTE_RECHECK_DAYS = 30;
 
 interface WatchdogRecord {
     status: 'ok' | 'invalid';
@@ -55,10 +65,15 @@ interface WatchdogRecord {
     sourceNames?: string[];
     types?: string[];
     message?: string;
+    // The last few checks of this link, oldest first.
+    history?: { at: string; result: 'ok' | 'failed'; message?: string }[];
     // What the Watchdog did when the link first went invalid (blank if it only reported it).
     actions?: string[];
     // Set once the invalid-link actions (event, webhook, Sonarr, delete) have been taken for this link.
     actioned?: boolean;
+    // The BBC route with the tallest picture found for this link (e.g. "pc-6"), and when it was last asked.
+    route?: string;
+    routeCheckedAt?: string;
 }
 
 export interface WatchdogLive {
@@ -73,6 +88,8 @@ export interface WatchdogLive {
     currentPid?: string;
     // The app links are currently being collected from (before checking starts), and how far through it is.
     collecting?: { name: string; done: number; total: number };
+    // Refresh Links is listing the sources (it can be stopped, like a run).
+    refreshing?: boolean;
     // The last run was cut short by the Stop button.
     stopped?: boolean;
     // Why the run was abandoned or its findings held back (BBC looks unavailable / unconfirmed).
@@ -100,46 +117,12 @@ export interface WatchdogRun {
     notice?: string;
 }
 
-export interface LibraryAccessResult {
-    // When this check ran (saved, so the dashboard can show the last result on load).
-    checkedAt?: string;
-    pathMap: string;
-    sources: Partial<
-        Record<
-            'arr' | 'jellyfin',
-            {
-                // Only .strm files that are ours (iPlayarr/BBC); other tools' .strm files are left out.
-                total: number;
-                readable: number;
-                unreadableExamples: string[];
-                // Other .strm files (e.g. Amazon) skipped.
-                ignored: number;
-                // Unreadable and not identifiable as ours or not (so not counted).
-                unverified: number;
-                error?: string;
-            }
-        >
-    >;
-    // Across both sources (only when both are configured): each unique .strm counted once, split by who lists it.
-    unique?: {
-        total: number;
-        readable: number;
-        ignored: number;
-        unverified: number;
-        both: number;
-        arrOnly: number;
-        jellyfinOnly: number;
-    };
-    // A "from=to" mapping that would make the unreadable paths readable, when one could be found.
-    suggestion?: DetectedMapping;
-}
-
 // Fixed for a whole run: what the sources found at its start. A link found by several sources
 // counts once in `total` but under each source.
 export interface WatchdogTracked {
     total: number;
-    sources: Record<WatchdogSource, number>;
-    // Per kind of source (HISTORY / SONARR / RADARR / JELLYFIN); a link listed by several counts under each.
+    sources: { history: number; arr: number; jellyfin: number; radio?: number };
+    // Per kind of source (HISTORY / SONARR / RADARR / JELLYFIN / RADIO); a link listed by several counts under each.
     types: Record<string, number>;
 }
 
@@ -147,7 +130,10 @@ export interface WatchdogStatus {
     // Failed checks in a row before a link is invalid (the setting), so the dashboard can show "1/2".
     strikes: number;
     tracked?: WatchdogTracked;
-    libraryAccess?: LibraryAccessResult;
+    // What the library index holds: unique episodes overall and in each source on its own (the history, folders, each app).
+    library?: IndexCounts;
+    // The same for radio (BBC Sounds): what iPlayarr's Sounds folder and each Jellyfin music library hold. Absent when none.
+    radioLibrary?: IndexCounts;
     enabled: boolean;
     live: WatchdogLive;
     items: (WatchdogRecord & { pid: string })[];
@@ -158,16 +144,14 @@ const storage: QueuedStorage = new QueuedStorage();
 const STATE_KEY = 'strmWatchdog';
 const RUNS_KEY = 'strmWatchdogRuns';
 const TRACKED_KEY = 'strmWatchdogTracked';
-const ACCESS_KEY = 'strmWatchdogLibraryAccess';
 const MAX_CONCURRENCY = 10;
 const DEFAULT_CONCURRENCY = 4;
 const RUN_HISTORY_LIMIT = 90;
 const DEFAULT_FAIL_THRESHOLD = 10;
 const SAVE_EVERY = 25;
 const SAMPLE_EVERY_MS = 2000;
+const PROGRESS_EMIT_MS = 500;
 const MAX_SAMPLES = 1000;
-
-const posixpath_normalize = (p: string): string => posixpath.normalize(p.replace(/\\/g, '/')).replace(/\/+$/, '');
 
 export { mapPath };
 
@@ -176,7 +160,7 @@ export { mapPath };
 // and/or Sonarr/Radarr and/or Jellyfin (for setups without Sonarr); anything that isn't one of our
 // links is ignored (parseStrmPid).
 class StrmWatchdogService {
-    async #collect(): Promise<Map<string, WatchdogTarget>> {
+    async #collect(stopped?: () => boolean): Promise<Map<string, WatchdogTarget>> {
         // Sources: 'history', and Sonarr/Radarr/Jellyfin apps chosen individually ('app:<id>'). The older
         // 'arr' / 'jellyfin' tokens mean every app of that kind.
         const tokens = (((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_SOURCES)) as string) ?? 'history')
@@ -186,94 +170,61 @@ class StrmWatchdogService {
         const allApps = await appService.getAllApps();
         const selected = (supported: (a: App) => boolean, group: 'arr' | 'jellyfin') =>
             allApps.filter((a) => supported(a) && (tokens.includes(group) || tokens.includes(`app:${a.id}`)));
-        const pathMap = await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP);
-        const found = new Map<string, WatchdogTarget>();
-        // `name` is what the dashboard shows in the Source column: the app's own name, or "iPlayarr".
-        const add = (
-            source: WatchdogSource,
-            name: string,
-            pid: string | undefined,
-            file?: string,
-            arr?: { app: App; ids: number[] }
-        ) => {
-            if (!pid) return;
-            if (!found.has(pid)) found.set(pid, { files: new Set(), sources: new Set(), names: new Set(), types: new Set(), arr: [] });
-            const target = found.get(pid)!;
-            target.sources.add(source);
-            target.types.add(arr?.app.type ?? (source === 'jellyfin' ? 'JELLYFIN' : 'HISTORY'));
-            target.names.add(name);
-            if (file) target.files.add(file);
-            if (arr?.ids.length) target.arr.push(arr);
-        };
-
-        // iPlayarr's own history, read from its list (never by walking folders): either everything it has
-        // downloaded as .strm ('history'), or only episodes a subscription has handled ('subscribed').
+        const apps = [...selected((a) => arrLibraryService.supports(a), 'arr'), ...selected((a) => jellyfinService.supports(a), 'jellyfin')];
         const allHistory = tokens.includes('history');
-        if (allHistory || tokens.includes('subscribed')) {
-            const subscribedPids = allHistory
-                ? undefined
-                : new Set((await subscriptionService.list()).flatMap(({ seen }) => seen ?? []));
-            const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
-            const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
-            for (const item of (await historyService.getHistory()).filter(({ extension }) => extension === 'strm')) {
-                if (subscribedPids && !subscribedPids.has(item.pid)) continue;
-                const dir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
-                add('history', 'iPlayarr', item.pid, path.join(dir, item.libraryPath ?? `${item.nzbName}.strm`));
+
+        // The library index lists the links of each chosen source (and keeps them for everything else that asks what is
+        // in the library); an app that failed is flagged and left out, never fatal.
+        const read = await libraryIndexService.scan(
+            // 'history' / 'subscribed' mean iPlayarr's own links, which the index finds by reading the library folders.
+            { history: allHistory || tokens.includes('subscribed'), folders: allHistory || tokens.includes('subscribed'), apps },
+            { stopped, onProgress: (name, done, total, force) => this.#collecting(name, done, total, force), onWarning: (message) => this.#warn(message) }
+        );
+        // 'history' = everything iPlayarr downloaded as .strm; 'subscribed' = only episodes a subscription has handled.
+        const subscribedPids = !allHistory && tokens.includes('subscribed')
+            ? new Set((await subscriptionService.list()).flatMap(({ seen }) => seen ?? []))
+            : undefined;
+        const appById = new Map(apps.map((app) => [appSourceId(app), app]));
+        const found = new Map<string, WatchdogTarget>();
+        for (const [pid, episode] of await libraryIndexService.episodes(read)) {
+            for (const { sourceId, name, type: listedType, file, arrIds } of episode.listings) {
+                // The library folders are iPlayarr's own links, shown and counted as the iPlayarr source.
+                const type = listedType === 'FOLDER' ? 'HISTORY' : listedType;
+                const source: WatchdogSource = type === 'HISTORY' ? 'history' : type === 'JELLYFIN' ? 'jellyfin' : 'arr';
+                // Only links are checked against BBC; a real video file the index also holds has nothing to check.
+                if (!file.toLowerCase().endsWith('.strm')) continue;
+                if (source === 'history' && subscribedPids && !subscribedPids.has(pid)) continue;
+                if (!found.has(pid)) found.set(pid, { files: new Set(), sources: new Set(), names: new Set(), types: new Set(), arr: [] });
+                const target = found.get(pid)!;
+                target.sources.add(source);
+                target.types.add(type);
+                target.names.add(name);
+                target.files.add(file);
+                const app = appById.get(sourceId);
+                if (source === 'arr' && app && arrIds?.length) target.arr.push({ app, ids: arrIds });
             }
         }
-        // .strm files that could not be read from this container, per app: they are skipped, so say so.
-        const unreadable: Record<string, number> = {};
-        // One app being down or erroring is flagged, never fatal: the other sources still run.
-        for (const app of selected((a) => arrLibraryService.supports(a), 'arr')) {
-            try {
-                await this.#collecting(app.name, 0, 0, true);
-                const refs = (await arrLibraryService.getFilePaths(app)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'));
-                let done = 0;
-                await this.#collecting(app.name, 0, refs.length, true);
-                for (const ref of refs) {
-                    await this.#collecting(app.name, done++, refs.length);
-                    const local = mapPath(ref.path, pathMap);
-                    try {
-                        add('arr', app.name, parseStrmPid(fs.readFileSync(local, 'utf8')), local, { app, ids: ref.ids });
-                    } catch {
-                        // Not mounted/readable here - skip rather than guess.
-                        unreadable[app.name] = (unreadable[app.name] ?? 0) + 1;
-                    }
-                }
-                await this.#collecting(app.name, refs.length, refs.length, true);
-            } catch (err: any) {
-                this.#warn(`${app.name}: ${err?.message ?? 'failed'} - skipped`);
-            }
-        }
-        for (const server of selected((a) => jellyfinService.supports(a), 'jellyfin')) {
-            try {
-                await this.#collecting(server.name, 0, 0, true);
-                const items = (await jellyfinService.getItems(server)).filter(({ path }) => path.toLowerCase().endsWith('.strm'));
-                await appService.touchApp(server.id);
-                let done = 0;
-                await this.#collecting(server.name, 0, items.length, true);
-                for (const item of items) {
-                    await this.#collecting(server.name, done++, items.length);
-                    const local = mapPath(item.path, pathMap);
-                    // Jellyfin's own copy of the link means the file need not be readable here.
-                    let pid = item.link ? parseStrmPid(item.link) : undefined;
-                    if (!pid) {
-                        try {
-                            pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
-                        } catch {
-                            // Not mounted/readable here and no link from Jellyfin - skip rather than guess.
-                            unreadable[server.name] = (unreadable[server.name] ?? 0) + 1;
+        // The library folders are read again too, so what the index holds follows what the Watchdog has just seen.
+        if (!stopped?.() && !read.includes(FOLDERS_ID)) await libraryIndexService.scanFolders().catch(() => undefined);
+        // Radio: the Sounds folder (and Jellyfin's music libraries) are read again, and the .strm links in it are checked too
+        // when 'radio' is a chosen source. Kept under their own prefix, and never given to the video actions.
+        // Whatever goes wrong here is left out: radio must never stop video links being checked.
+        try {
+            if (!stopped?.() && (await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) === 'true') {
+                await libraryIndexService.scanFolders('radio');
+                await libraryIndexService.scanRadioApps(allApps.filter((a) => jellyfinService.supports(a)), { onWarning: (message) => this.#warn(message) });
+                if (tokens.includes('radio')) {
+                    for (const { id, file } of await libraryIndexService.links('radio')) {
+                        const key = keyFor(radioMode, id);
+                        if (!found.has(key)) {
+                            found.set(key, { files: new Set(), sources: new Set<WatchdogSource>(['radio']), names: new Set(['iPlayarr']), types: new Set(['RADIO']), arr: [], radio: true });
                         }
+                        found.get(key)!.files.add(file);
                     }
-                    add('jellyfin', server.name, pid, local);
                 }
-                await this.#collecting(server.name, items.length, items.length, true);
-            } catch (err: any) {
-                this.#warn(`${server.name}: ${err?.message ?? 'failed'} - skipped`);
             }
-        }
-        for (const [name, count] of Object.entries(unreadable)) {
-            this.#warn(`${name}: ${count} .strm file(s) could not be read from here and were skipped - see Library Access`);
+        } catch (err: any) {
+            if (tokens.includes('radio')) this.#warn(`Radio: ${err?.message ?? 'failed'} - skipped`);
         }
         this.#live.collecting = undefined;
         return found;
@@ -301,117 +252,8 @@ class StrmWatchdogService {
     // The strike limit in force for the current run; evaluate() reads it.
     #strikes = DEFAULT_STRIKES;
     #tracked?: WatchdogTracked;
-
-    // Can this container actually read the .strm files Sonarr/Radarr and Jellyfin report? Lists their
-    // .strm paths, applies the current Path Mapping, and counts what is readable. For unreadable paths
-    // it searches this container's filesystem for where the same files appear and suggests a mapping.
-    async checkLibraryAccess(): Promise<LibraryAccessResult> {
-        const pathMap = await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP);
-        const apps = await appService.getAllApps();
-        const errors: Partial<Record<'arr' | 'jellyfin', string>> = {};
-        const isStrm = (p: string) => p.toLowerCase().endsWith('.strm');
-
-        const arrFiles: string[] = [];
-        const arrApps = apps.filter((a) => arrLibraryService.supports(a));
-        for (const app of arrApps) {
-            try {
-                arrFiles.push(...(await arrLibraryService.getFilePaths(app)).map(({ path }) => path).filter(isStrm));
-            } catch (err: any) {
-                errors.arr = [errors.arr, `${app.name}: ${err?.message}`].filter(Boolean).join('; ');
-            }
-        }
-        const jellyfinItems: JellyfinItem[] = [];
-        const servers = apps.filter((a) => jellyfinService.supports(a));
-        for (const server of servers) {
-            try {
-                jellyfinItems.push(...(await jellyfinService.getItems(server)).filter(({ path }) => isStrm(path)));
-                await appService.touchApp(server.id);
-            } catch (err: any) {
-                errors.jellyfin = [errors.jellyfin, `${server.name}: ${err?.message}`].filter(Boolean).join('; ');
-            }
-        }
-
-        // Is a .strm one of ours - does its link point at iPlayarr or a BBC pid - rather than e.g. an
-        // Amazon one? The link is read from the file when readable, else from the copy Jellyfin holds
-        // (also used for Sonarr/Radarr paths Jellyfin lists too). With neither it cannot be known.
-        const linkKinds = new Map<string, 'ours' | 'other'>();
-        for (const { path: file, link } of jellyfinItems) {
-            if (link) linkKinds.set(file, parseStrmPid(link) ? 'ours' : 'other');
-        }
-        // The same .strm is often listed by both Sonarr/Radarr and Jellyfin. Files are keyed by their
-        // normalised path so each unique file is read and checked once, and remembers every source
-        // that lists it.
-        const keyOf = (file: string) => posixpath_normalize(mapPath(file, pathMap));
-        const checked = new Map<string, { kind: 'ours' | 'other' | 'unknown'; readable: boolean }>();
-        const listedBy = new Map<string, Set<'arr' | 'jellyfin'>>();
-        const firstPath = new Map<string, string>();
-        const check = (file: string): { key: string; kind: 'ours' | 'other' | 'unknown'; readable: boolean } => {
-            const key = keyOf(file);
-            let result = checked.get(key);
-            if (!result) {
-                const local = mapPath(file, pathMap);
-                try {
-                    result = { kind: parseStrmPid(fs.readFileSync(local, 'utf8')) ? 'ours' : 'other', readable: true };
-                } catch {
-                    result = { kind: linkKinds.get(file) ?? 'unknown', readable: fs.existsSync(local) };
-                }
-                checked.set(key, result);
-                firstPath.set(key, file);
-            }
-            return { key, ...result };
-        };
-
-        const result: LibraryAccessResult = { pathMap: pathMap || '', sources: {} };
-        const unreadable = new Set<string>();
-        const summarise = (source: 'arr' | 'jellyfin', files: string[]) => {
-            const info = { total: 0, readable: 0, unreadableExamples: [] as string[], ignored: 0, unverified: 0, error: errors[source] };
-            const seen = new Set<string>();
-            for (const file of files) {
-                const { key, kind, readable } = check(file);
-                if (seen.has(key)) continue;
-                seen.add(key);
-                listedBy.set(key, (listedBy.get(key) ?? new Set()).add(source));
-                if (kind === 'other') info.ignored++;
-                else if (kind === 'unknown') info.unverified++;
-                else {
-                    info.total++;
-                    if (readable) info.readable++;
-                    else {
-                        unreadable.add(file);
-                        if (info.unreadableExamples.length < 3) info.unreadableExamples.push(file);
-                    }
-                }
-            }
-            result.sources[source] = info;
-        };
-        if (arrApps.length) summarise('arr', arrFiles);
-        if (servers.length) summarise('jellyfin', jellyfinItems.map(({ path }) => path));
-
-        // With both selected, the same file counts once overall; show which sources list it.
-        if (arrApps.length && servers.length) {
-            const unique = { total: 0, readable: 0, ignored: 0, unverified: 0, both: 0, arrOnly: 0, jellyfinOnly: 0 };
-            for (const [key, sources] of listedBy) {
-                const { kind, readable } = checked.get(key)!;
-                if (kind === 'other') unique.ignored++;
-                else if (kind === 'unknown') unique.unverified++;
-                else {
-                    unique.total++;
-                    if (readable) unique.readable++;
-                    if (sources.size === 2) unique.both++;
-                    else if (sources.has('arr')) unique.arrOnly++;
-                    else unique.jellyfinOnly++;
-                }
-            }
-            result.unique = unique;
-        }
-
-        if (unreadable.size) {
-            result.suggestion = detectPathMapping([...unreadable].slice(0, 25));
-        }
-        result.checkedAt = new Date().toISOString();
-        await storage.setItem(ACCESS_KEY, result);
-        return result;
-    }
+    #library?: IndexCounts;
+    #radioLibrary?: IndexCounts;
 
     // Adds a progress point to the live chart, at most every few seconds.
     #sample(force = false): void {
@@ -421,11 +263,20 @@ class StrmWatchdogService {
         this.#live.samples = [...samples, { t: Date.now(), checked, invalid }].slice(-MAX_SAMPLES);
     }
 
-    // Asks the current run to stop after the link it is checking. Returns false if nothing is running.
+    #refreshStop = false;
+
+    // Asks the current run to stop after the link it is checking, or Refresh Links to stop listing. Returns false if
+    // neither is going.
     stop(): boolean {
-        if (!this.#live.running) return false;
-        this.#stopRequested = true;
-        return true;
+        if (this.#live.running) {
+            this.#stopRequested = true;
+            return true;
+        }
+        if (this.#live.refreshing) {
+            this.#refreshStop = true;
+            return true;
+        }
+        return false;
     }
 
     // Forgets every link's last result (the table). Not allowed mid-run, which keeps its own working copy.
@@ -440,9 +291,26 @@ class StrmWatchdogService {
         socketService.emit('strmWatchdog', await this.getStatus());
     }
 
+    #lastProgressEmit = 0;
+    // The status carries a row for every link, so sending it after every batch of checks costs more the longer the list
+    // is. Progress goes out at most twice a second; the start, the end and every other change are sent in full as before.
+    async #emitProgress(): Promise<void> {
+        if (Date.now() - this.#lastProgressEmit < PROGRESS_EMIT_MS) return;
+        this.#lastProgressEmit = Date.now();
+        await this.#emit();
+    }
+
     // Everything the dashboard shows: the live run (if any), the last result per link, and a short
     // history of past runs for the charts.
     async getStatus(): Promise<WatchdogStatus> {
+        // Read while idle only: during a run the status goes out many times a second, and the index is rewritten as it goes.
+        if (!this.#live.running || !this.#library) {
+            this.#library = await libraryIndexService.onDiskCounts();
+            // Radio is optional extra information: it must never stop the status being shown.
+            this.#radioLibrary = await Promise.resolve(libraryIndexService.counts?.(undefined, 'radio'))
+                .then((counts) => (counts && counts.total > 0 ? counts : undefined))
+                .catch(() => undefined);
+        }
         const state: Record<string, WatchdogRecord> = this.#liveState ?? (await storage.getItem(STATE_KEY)) ?? {};
         return {
             strikes: await this.#readStrikes(),
@@ -451,7 +319,8 @@ class StrmWatchdogService {
             items: Object.entries(state).map(([pid, record]) => ({ pid, ...record })),
             runs: (await storage.getItem(RUNS_KEY)) ?? [],
             tracked: this.#tracked ?? (await storage.getItem(TRACKED_KEY)),
-            libraryAccess: await storage.getItem(ACCESS_KEY),
+            library: this.#library,
+            ...(this.#radioLibrary ? { radioLibrary: this.#radioLibrary } : {}),
         };
     }
 
@@ -463,7 +332,7 @@ class StrmWatchdogService {
     #computeTracked(pids: Map<string, WatchdogTarget>): WatchdogTracked {
         const tracked: WatchdogTracked = { total: pids.size, sources: { history: 0, arr: 0, jellyfin: 0 }, types: {} };
         for (const { sources, types } of pids.values()) {
-            sources.forEach((source) => tracked.sources[source]++);
+            sources.forEach((source) => (tracked.sources[source] = (tracked.sources[source] ?? 0) + 1));
             types.forEach((type) => (tracked.types[type] = (tracked.types[type] ?? 0) + 1));
         }
         return tracked;
@@ -471,14 +340,23 @@ class StrmWatchdogService {
 
     // Re-lists the links from every selected source and updates the tracked counts, without checking any
     // of them against BBC. Not allowed mid-run (the run fixes its own counts at its start).
-    async refreshCounts(): Promise<WatchdogTracked | undefined> {
-        if (this.#live.running) return undefined;
-        this.#live = { ...this.#live, warnings: [] };
-        const tracked = this.#computeTracked(await this.#collect());
-        this.#tracked = tracked;
-        await storage.setItem(TRACKED_KEY, tracked);
+    // Stopping it keeps the counts as they were (a half-read list would give wrong ones).
+    async refreshCounts(): Promise<WatchdogTracked | { stopped: true } | undefined> {
+        if (this.#live.running || this.#live.refreshing) return undefined;
+        this.#refreshStop = false;
+        this.#live = { ...this.#live, warnings: [], refreshing: true };
         await this.#emit();
-        return tracked;
+        try {
+            const found = await this.#collect(() => this.#refreshStop);
+            if (this.#refreshStop) return { stopped: true };
+            const tracked = this.#computeTracked(found);
+            this.#tracked = tracked;
+            await storage.setItem(TRACKED_KEY, tracked);
+            return tracked;
+        } finally {
+            this.#live = { ...this.#live, refreshing: false, collecting: undefined };
+            await this.#emit();
+        }
     }
 
     async run(): Promise<{ checked: number; invalid: number }> {
@@ -546,7 +424,7 @@ class StrmWatchdogService {
                 }
                 const batch = entries.slice(i, i + concurrency);
                 this.#live.currentPid = batch[0][0];
-                await this.#emit();
+                await this.#emitProgress();
                 const probed = await Promise.all(batch.map(([pid]) => this.#probe(pid)));
 
                 for (const [index, [pid, target]] of batch.entries()) {
@@ -592,7 +470,7 @@ class StrmWatchdogService {
                         if (this.#stopRequested) break;
                         const batch = unconfirmed.slice(i, i + concurrency);
                         this.#live.currentPid = batch[0][0];
-                        await this.#emit();
+                        await this.#emitProgress();
                         const probed = await Promise.all(batch.map(([pid]) => this.#probe(pid)));
                         for (const [index, [pid, target]] of batch.entries()) {
                             const { result, message } = probed[index];
@@ -618,6 +496,8 @@ class StrmWatchdogService {
                 for (const pid of Object.keys(state)) {
                     if (!pids.has(pid)) delete state[pid];
                 }
+                // Opt-in, and only after a complete pass in which BBC answered: this is the one place links are rewritten.
+                if (!this.#stopRequested) await this.#updateRoutes(pids, state);
             }
             await storage.setItem(STATE_KEY, state);
 
@@ -635,10 +515,72 @@ class StrmWatchdogService {
         }
     }
 
+    // STRM_WATCHDOG_UPDATE_ROUTES: asks BBC which route lists the tallest picture for working links and puts that route
+    // in the link (&route=). This edits the .strm files in the library, so it is off by default and careful: only links
+    // that are one-line iPlayarr stream links for that programme, each rewritten atomically, a limited number per run.
+    async #updateRoutes(pids: Map<string, WatchdogTarget>, state: Record<string, WatchdogRecord>): Promise<void> {
+        if ((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_UPDATE_ROUTES)) !== 'true') return;
+        const recheckBefore = Date.now() - ROUTE_RECHECK_DAYS * 24 * 60 * 60 * 1000;
+        const defaultRoute = formatRoute(allMediaSelectorPairs[0]);
+        let asked = 0;
+        let updated = 0;
+        for (const [pid, target] of pids) {
+            if (asked >= ROUTE_UPDATES_PER_RUN || this.#stopRequested) break;
+            const record = state[pid];
+            if (record?.status !== 'ok' || target.radio) continue; // radio links carry no route
+            if (record.routeCheckedAt && Date.parse(record.routeCheckedAt) > recheckBefore) continue;
+            // Links that are not ours to edit (another tool's, a version link, unreadable) are not even asked about.
+            const links = [...target.files].flatMap((file) => {
+                try {
+                    const content = fs.readFileSync(file, 'utf8');
+                    return canHaveRoute(content, pid) ? [{ file, content }] : [];
+                } catch {
+                    return [];
+                }
+            });
+            if (!links.length) continue;
+            asked++;
+            const best = await NativeStreamService.probeBestRoute(pid);
+            record.routeCheckedAt = new Date().toISOString();
+            if (!best) continue;
+            const route = formatRoute(best.pair);
+            record.route = route;
+            for (const { file, content } of links) {
+                const current = currentRoute(content);
+                // A link with no hint already plays from the default route, so there is nothing to change.
+                if (current ? formatRoute(current) === route : route === defaultRoute) continue;
+                if (await this.#writeRoute(pid, file, content, route, best.pair)) updated++;
+            }
+        }
+        if (updated) loggingService.log(`[STRM Watchdog] Updated the stream route in ${updated} link(s)`);
+    }
+
+    // Replaces one link file with the same link carrying the route: written beside it, then renamed over it, so the file
+    // is never half-written. Returns whether it changed (false when the file could not be written).
+    async #writeRoute(pid: string, file: string, content: string, route: string, pair: MediaSelectorPair): Promise<boolean> {
+        // The caller only passes content that canHaveRoute accepted, which is exactly what withRoute needs.
+        const next = withRoute(content, pid, pair) as string;
+        const temp = path.join(path.dirname(file), `.${path.basename(file)}.route.tmp`);
+        try {
+            fs.writeFileSync(temp, next, 'utf8');
+            fs.renameSync(temp, file);
+        } catch (err: any) {
+            fs.rmSync(temp, { force: true });
+            loggingService.error(`[STRM Watchdog] Could not update the route in ${file} - ${err?.message}`);
+            return false;
+        }
+        try {
+            await videoEventService.record(VideoEventType.STRM_ROUTE_UPDATED, `Set the stream route of ${pid} to ${route} (${file})`, { pid });
+        } catch {
+            /* an event write must never fail the run */
+        }
+        return true;
+    }
+
     // 'ok' = BBC still serves it; 'failed' = BBC says it's gone; 'network' = we couldn't reach BBC.
     async #probe(pid: string): Promise<{ result: 'ok' | 'failed' | 'network'; message?: string }> {
         try {
-            await NativeStreamService.checkAvailable(pid);
+            await modeOfKey(pid).checkAvailable(idOfKey(pid));
             return { result: 'ok' };
         } catch (err: any) {
             return { result: NETWORK_ERROR_CODES.has(err?.code) ? 'network' : 'failed', message: err?.message };
@@ -659,16 +601,20 @@ class StrmWatchdogService {
             sourceNames: [...target.names],
             types: [...target.types],
             message: failed ? message : undefined,
+            history: [...(previous?.history ?? []), { at: new Date().toISOString(), result: failed ? ('failed' as const) : ('ok' as const), ...(failed && message ? { message } : {}) }].slice(-HISTORY_LIMIT),
             // Carried over while the link stays invalid, so the table keeps showing what was done.
             actions: isInvalid ? previous?.actions : undefined,
             actioned: isInvalid ? previous?.actioned : undefined,
+            // A new check must not forget what the route pass found.
+            ...(previous?.route ? { route: previous.route } : {}),
+            ...(previous?.routeCheckedAt ? { routeCheckedAt: previous.routeCheckedAt } : {}),
         };
         if (!failed) this.#live.ok++;
         if (isInvalid) this.#live.invalid++;
         if (previous?.status === 'invalid' && !failed) {
             // Fire and forget: an event write must never hold up or fail the run.
             void Promise.resolve(
-                videoEventService.record(VideoEventType.STRM_RESTORED, `${pid} is available on BBC iPlayer again`, { pid })
+                videoEventService.record(VideoEventType.STRM_RESTORED, `${this.#name(pid)} is available on BBC ${modeOfKey(pid).service} again`, this.#eventOptions(pid, target.files))
             ).catch(() => undefined);
         }
     }
@@ -684,16 +630,31 @@ class StrmWatchdogService {
         }
     }
 
+    // The id to show for a link and the options its events carry: a radio link's events are flagged radio, with the title the
+    // file gives it, because a Sounds id is not an iPlayer pid.
+    #name(pid: string): string {
+        return idOfKey(pid);
+    }
+
+    #eventOptions(pid: string, files: Iterable<string>, extra: { level?: 'info' | 'warn' | 'error' } = {}): { pid: string; radio?: boolean; title?: string; level?: 'info' | 'warn' | 'error' } {
+        if (modeOfKey(pid).kind !== 'radio') return { pid, ...extra };
+        const first = [...files][0];
+        const title = first ? path.basename(first).replace(/\.strm$/i, '') : undefined;
+        return { pid: this.#name(pid), radio: true, ...(title ? { title } : {}), ...extra };
+    }
+
     async #actOnInvalid(pid: string, target: WatchdogTarget, record: WatchdogRecord, action?: string): Promise<void> {
         const { files } = target;
+        const mode = modeOfKey(pid);
         await videoEventService.record(
             VideoEventType.STRM_INVALID,
-            `${pid} is no longer available on BBC iPlayer${files.size ? ` (${[...files].join(', ')})` : ''}`,
-            { pid, level: 'warn' }
+            `${this.#name(pid)} is no longer available on BBC ${mode.service}${files.size ? ` (${[...files].join(', ')})` : ''}`,
+            this.#eventOptions(pid, files, { level: 'warn' })
         );
         const actions: string[] = [];
         if (await this.#notifyWebhook(pid, files, record.message)) actions.push('Webhook sent');
-        actions.push(...(await this.#arrActions(pid, target)));
+        // Sonarr and Radarr know nothing of radio.
+        if (mode.arr) actions.push(...(await this.#arrActions(pid, target)));
         if (action === 'delete') {
             const failed = await this.#delete(pid, files);
             actions.push(failed ? 'Delete failed' : 'Deleted .strm');
@@ -736,16 +697,13 @@ class StrmWatchdogService {
         const url = await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_WEBHOOK_URL);
         if (!url) return false;
         try {
-            await axios.post(url, { event: 'strm_invalid', pid, files: [...files], message }, { timeout: 10_000 });
+            await axios.post(url, { event: 'strm_invalid', pid: this.#name(pid), ...(modeOfKey(pid).kind === 'radio' ? { radio: true } : {}), files: [...files], message }, { timeout: 10_000 });
             // The URL itself is not logged - webhook URLs often carry a secret token.
-            await videoEventService.record(VideoEventType.STRM_WEBHOOK_SENT, `Webhook notified that ${pid} is invalid`, { pid });
+            await videoEventService.record(VideoEventType.STRM_WEBHOOK_SENT, `Webhook notified that ${this.#name(pid)} is invalid`, this.#eventOptions(pid, files));
             return true;
         } catch (err: any) {
             loggingService.error(`[STRM Watchdog] Webhook failed - ${err?.message}`);
-            await videoEventService.record(VideoEventType.STRM_WEBHOOK_FAILED, `Webhook failed for ${pid}: ${err?.message}`, {
-                pid,
-                level: 'error',
-            });
+            await videoEventService.record(VideoEventType.STRM_WEBHOOK_FAILED, `Webhook failed for ${this.#name(pid)}: ${err?.message}`, this.#eventOptions(pid, files, { level: 'error' }));
             return false;
         }
     }
@@ -789,16 +747,15 @@ class StrmWatchdogService {
                 if (err?.code !== 'ENOENT') failures.push(`${file} (${err?.message})`);
             }
         }
-        await historyService.removeHistory(pid).catch(() => {
-            /* not in history */
-        });
-        if (failures.length) {
-            await videoEventService.record(VideoEventType.STRM_DELETE_FAILED, `Could not delete ${failures.join(', ')}`, {
-                pid,
-                level: 'error',
+        await modeOfKey(pid)
+            .removeRecord(idOfKey(pid))
+            .catch(() => {
+                /* no record kept */
             });
+        if (failures.length) {
+            await videoEventService.record(VideoEventType.STRM_DELETE_FAILED, `Could not delete ${failures.join(', ')}`, this.#eventOptions(pid, files, { level: 'error' }));
         } else {
-            await videoEventService.record(VideoEventType.STRM_DELETED, `Deleted .strm for ${pid}`, { pid, level: 'warn' });
+            await videoEventService.record(VideoEventType.STRM_DELETED, `Deleted .strm for ${this.#name(pid)}`, this.#eventOptions(pid, files, { level: 'warn' }));
         }
         return failures.length > 0;
     }

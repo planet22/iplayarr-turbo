@@ -13,6 +13,8 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
+import { onOffClass } from '@/lib/streamSettings';
+
 // The pills describing a stream, shared by the stream cards and the stream tables: how it is served and at what
 // resolution, then the settings that apply to this session (only those appear).
 const props = defineProps({
@@ -29,7 +31,7 @@ const props = defineProps({
 
 const chips = computed(() => {
     const settings = props.settings ?? {};
-    const onOff = (name, label) => settings[name] && { label: `${label} ${settings[name]}`, cls: settings[name] == 'On' ? 'success' : 'grey' };
+    const onOff = (name, label) => settings[name] && { label: `${label} ${settings[name]}`, cls: onOffClass(settings[name]) };
     return [
         settings.Quality && { label: settings.Quality, cls: 'grey' },
         onOff('Quality Probe', 'Probe'),
@@ -46,14 +48,14 @@ const chips = computed(() => {
     height: 0;
 
     // Phones and tablets: one flowing row of pills (two lines in all), not a break between the main pills and the settings.
-    @media (max-width: 1099px) {
+    @media (max-width: @laptop-breakpoint) {
         display: none;
     }
 }
 
 .miniPill {
     padding: 0 6px;
-    border-radius: 8px;
+    border-radius: @radius-lg;
     font-size: 10px;
     line-height: 16px;
     white-space: nowrap;
@@ -61,8 +63,8 @@ const chips = computed(() => {
     color: @subtle-text-color;
 
     &.success {
-        background-color: color-mix(in srgb, @success-color 22%, transparent);
-        color: @success-color;
+        background-color: color-mix(in srgb, @positive-color 22%, transparent);
+        color: @positive-color;
     }
 }
 </style>
