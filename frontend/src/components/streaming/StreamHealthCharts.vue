@@ -2,10 +2,10 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="healthChartsWrap">
-    <ChartZoomBar :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
+    <ChartZoomBar :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
     <div class="healthCharts">
         <FullscreenFrame @change="setFull('ahead', $event)"><figure ref="firstChart" class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
+            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>Buffer depth estimate (media delivered minus wall time) <InfoButton v-model="info.ahead" /></figcaption>
             <p v-if="aheadAll.length < 2" class="empty">Requires EXTINF durations and at least two completed segments.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Seconds of programme delivered ahead of real time">
@@ -23,7 +23,7 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('speed', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
+            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>Segment throughput ratio (EXTINF / transfer time, log scale) <InfoButton v-model="info.speed" /></figcaption>
             <p v-if="speedAll.length === 0" class="empty">Requires EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How much faster than real time each segment downloaded">
@@ -52,7 +52,7 @@
                 </button>
             </template>
             <figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
+            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption class="twoButtons">
                 A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, symlog)
                 <InfoButton v-model="info.av" />
@@ -77,7 +77,7 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('drift', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
+            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>PTS discontinuity per segment (symlog) <InfoButton v-model="info.drift" /></figcaption>
             <p v-if="driftAll.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Where each segment started against where the previous one ended">
@@ -176,6 +176,10 @@ const panView = (fraction) => {
     const { lo, hi } = view.value;
     const shift = (hi - lo) * fraction;
     chosen.value = clampView({ lo: lo + shift, hi: hi + shift }, range.value);
+    custom.value = true;
+};
+const setRange = (win) => {
+    chosen.value = clampView(win, range.value);
     custom.value = true;
 };
 const fitView = () => {

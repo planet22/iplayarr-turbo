@@ -18,14 +18,45 @@ const mountCharts = () => mount(StreamHealthCharts, { props: { requests }, globa
 describe('StreamHealthCharts zoom', () => {
     it('shows every segment until zoomed, then one range for all four charts, and fits again', async () => {
         const wrapper = mountCharts();
-        const text = () => wrapper.find('.zoomText').text();
-        expect(text()).toBe('segments 0 to 19');
+        const text = () => wrapper.findAll('.chartZoomBar .zoomInput').map((input) => input.element.value).join(' to ');
+        expect(text()).toBe('0 to 19');
         await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
-        expect(text()).toBe('segments 5 to 14');
+        expect(text()).toBe('5 to 14');
         await wrapper.find('button[aria-label="Later segments"]').trigger('click');
-        expect(text()).toBe('segments 10 to 19');
+        expect(text()).toBe('10 to 19');
         await wrapper.find('button[aria-label="Show everything"]').trigger('click');
-        expect(text()).toBe('segments 0 to 19');
+        expect(text()).toBe('0 to 19');
+    });
+
+    it('takes a typed range, pulls one outside the stream back in and ignores nonsense', async () => {
+        const wrapper = mountCharts();
+        const boxes = () => wrapper.findAll('.chartZoomBar .zoomInput');
+        const shown = () => boxes().map((input) => input.element.value).join(' to ');
+        const type = async (first, last) => {
+            await boxes()[0].setValue(first);
+            await boxes()[1].setValue(last);
+            await boxes()[1].trigger('change');
+        };
+        await type('3', '7');
+        expect(shown()).toBe('3 to 7');
+        expect(wrapper.findAll('rect.bar').length).toBeGreaterThan(0);
+        await type('9', '12');
+        expect(shown()).toBe('9 to 12');
+        // a first segment after the last is flagged and the view is left alone until the pair is right
+        const bars = wrapper.findAll('rect.bar').length;
+        await boxes()[0].setValue('15');
+        expect(shown()).toBe('15 to 12');
+        expect(boxes()[0].classes()).toContain('invalid');
+        expect(wrapper.findAll('rect.bar').length).toBe(bars);
+        await boxes()[1].setValue('18');
+        expect(shown()).toBe('15 to 18');
+        expect(boxes()[0].classes()).not.toContain('invalid');
+        // beyond the end of the stream: pulled back inside it
+        await type('18', '40');
+        expect(shown()).toBe('0 to 19');
+        // an empty box is put back
+        await type('', '4');
+        expect(shown()).toBe('0 to 4');
     });
 
     it('keeps the vertical scales when zoomed', async () => {
