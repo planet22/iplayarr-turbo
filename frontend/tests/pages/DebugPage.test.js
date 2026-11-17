@@ -13,14 +13,20 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }));
 // The toolbar needs the router for its Back button, so it is stubbed out.
 const Toolbar = { template: '<div class="toolbar" />' };
 
-const mountPage = (debug, attach = false) =>
-    mount(DebugPage, {
+// Every page mounted is unmounted after its test: typing in the search box starts a real debounce timer, and a page left mounted would
+// fire it (and call ipFetch) during a later test whenever the run is slow enough for the timer to come due.
+const mounted = [];
+const mountPage = (debug, attach = false) => {
+    const wrapper = mount(DebugPage, {
         ...(attach ? { attachTo: document.body } : {}),
         global: {
             provide: { globalSettings: ref({ UI_EXTENDED_DEBUG: debug }) },
             stubs: { SettingsPageToolbar: Toolbar, RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' }, 'font-awesome-icon': true },
         },
     });
+    mounted.push(wrapper);
+    return wrapper;
+};
 
 // What the programme lookup answers for each kind: { video: {...}, radio: {...} }.
 const answers = (video, radio) =>
@@ -40,6 +46,10 @@ describe('DebugPage', () => {
         ipFetch.mockReset();
         ipFetch.mockResolvedValue({ ok: true, data: { health: { ok: true } } });
         push.mockReset();
+    });
+
+    afterEach(() => {
+        mounted.splice(0).forEach((wrapper) => wrapper.unmount());
     });
 
     it('links to every debug screen', async () => {
