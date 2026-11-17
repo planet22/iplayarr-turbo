@@ -1,0 +1,389 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
+<template>
+    <FullscreenFrame @change="onFullscreen">
+    <div ref="root" class="requestTimeline">
+        <div class="timelineControls">
+            <button type="button" class="tlButton clickable" title="Zoom in" aria-label="Zoom in" @click="zoom(0.5)"><font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" /></button>
+            <button type="button" class="tlButton clickable" title="Zoom out" aria-label="Zoom out" @click="zoom(2)"><font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" /></button>
+            <button type="button" class="tlButton clickable" title="Earlier" aria-label="Earlier" @click="pan(-0.5)"><font-awesome-icon :icon="['fas', 'chevron-left']" /></button>
+            <button type="button" class="tlButton clickable" title="Later" aria-label="Later" @click="pan(0.5)"><font-awesome-icon :icon="['fas', 'chevron-right']" /></button>
+            <button type="button" class="tlButton clickable" title="Show everything" aria-label="Show everything" @click="fit"><font-awesome-icon :icon="['fas', 'expand']" /></button>
+            <span class="windowText">{{ formatOffset(win.t0 - origin) }} to {{ formatOffset(win.t1 - origin) }}</span>
+            <span v-if="clockAvailable" class="viewSwitch" role="group" aria-label="What the lanes show">
+                <button type="button" class="viewButton clickable" :class="{ on: view === 'segments' }" :aria-pressed="view === 'segments'" title="Y axis: segment index" @click="view = 'segments'">Index</button>
+                <button type="button" class="viewButton clickable" :class="{ on: view === 'clock' }" :aria-pressed="view === 'clock'" title="Y axis: first PTS of each segment, one lane for video and one for audio" @click="view = 'clock'">A/V PTS</button>
+            </span>
+        </div>
+
+        <svg class="timelineSvg" :viewBox="`0 0 ${WIDTH} ${totalHeight}`" role="img" aria-label="Segment requests over time, one lane per stream">
+            <g v-for="(lane, laneIndex) in laneLayouts" :key="lane.track">
+                <text class="laneLabel" :x="LEFT" :y="lane.top - 6">{{ lane.label }} - {{ lane.clock ? `first PTS ${lane.labelMin.toFixed(1)} s to ${lane.labelMax.toFixed(1)} s` : `segment index ${lane.labelMin} to ${lane.labelMax}` }}{{ lane.zoomed ? ' (in view)' : '' }}</text>
+                <rect class="laneBack" :x="LEFT" :y="lane.top" :width="PLOT" :height="LANE_HEIGHT" />
+                <line v-for="tick in ticks" :key="`g${laneIndex}-${tick.t}`" class="gridLine" :x1="tick.x" :x2="tick.x" :y1="lane.top" :y2="lane.top + LANE_HEIGHT" />
+                <g v-for="tick in lane.yTicks" :key="`y${tick.v}`">
+                    <line class="gridLine" :x1="LEFT" :x2="LEFT + PLOT" :y1="tick.y" :y2="tick.y" />
+                    <text class="axisText" :x="LEFT - 4" :y="tick.y + 4" text-anchor="end">{{ lane.clock ? `${tick.v}s` : tick.v }}</text>
+                </g>
+                <!-- The order they were asked for, joined up: a zigzag back down the lane is a request out of order. -->
+                <polyline class="orderPath" :points="lane.path" />
+                <rect
+                    v-for="mark in lane.marks"
+                    :key="mark.n"
+                    :class="['mark', `o-${mark.outcome}`, { selected: mark.n === selected }]"
+                    :x="mark.x" :y="mark.y - 3" :width="mark.w" height="6" rx="1"
+                    @mouseenter="hovered = mark.request" @mouseleave="hovered = null" @click="hovered = mark.request; emit('select', mark.n)"
+                />
+                <!-- Zoomed in: the segment (and how long it took) on each mark, as many as fit. -->
+                <text v-for="l in lane.labels" :key="`m${l.n}`" class="markLabel" :x="l.x" :y="l.below ? l.y + 16 : l.y - 7" text-anchor="middle">{{ l.text }}</text>
+            </g>
+
+            <g>
+                <text class="laneLabel" :x="LEFT" :y="rateTop - 6">{{ WIDTH < 560 ? 'Upstream throughput' : 'Upstream throughput (bytes/s, spread over each transfer)' }}</text>
+                <rect class="laneBack" :x="LEFT" :y="rateTop" :width="PLOT" :height="RATE_HEIGHT" />
+                <g v-for="tick in rateTicks" :key="`r${tick.v}`">
+                    <line class="gridLine" :x1="LEFT" :x2="LEFT + PLOT" :y1="tick.y" :y2="tick.y" />
+                    <text class="axisText" :x="LEFT - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
+                </g>
+                <rect
+                    v-for="(bar, index) in rateBars" :key="index" class="rateBar"
+                    :x="bar.x" :y="rateTop + RATE_HEIGHT - bar.h" :width="bar.w" :height="bar.h"
+                />
+            </g>
+
+            <g>
+                <line v-for="tick in ticks" :key="`a${tick.t}`" class="axisTick" :x1="tick.x" :x2="tick.x" :y1="axisTop" :y2="axisTop + 4" />
+                <text v-for="tick in ticks" :key="`t${tick.t}`" class="axisText" :x="tick.x" :y="axisTop + 16" text-anchor="middle">{{ tick.label }}</text>
+            </g>
+        </svg>
+
+        <div class="timelineLegend">
+            <span v-for="outcome in LEGEND" :key="outcome" class="legendItem"><span :class="['swatch', `o-${outcome}`]" /> {{ OUTCOME_LABELS[outcome] }}</span>
+            <span class="legendItem" title="Joins requests in arrival order. A step back down the lane is a backward request."><span class="swatch orderSwatch" /> Request order (line)</span>
+        </div>
+        <div class="hoverBox" :class="{ empty: !hovered }">
+            <template v-if="hovered">
+                #{{ hovered.n }} {{ TRACK_LABELS[hovered.track] ?? hovered.track }} segment {{ hovered.seg }}
+                <template v-if="hovered.ptsV !== undefined || hovered.ptsA !== undefined"> (first PTS: video {{ hovered.ptsV?.toFixed(3) ?? '-' }} s, audio {{ hovered.ptsA?.toFixed(3) ?? '-' }} s)</template>
+                at {{ formatOffset(hovered.t - origin) }}, {{ formatMs(hovered.durMs) }}
+                <template v-if="hovered.ptsDriftMs !== undefined"> , PTS offset {{ hovered.ptsDriftMs }} ms from previous segment end</template>
+                - {{ OUTCOME_LABELS[outcomeOf(hovered)] }}
+            </template>
+            <template v-else>Hover or tap a mark for request details; click to select it in the request log.</template>
+        </div>
+    </div>
+    </FullscreenFrame>
+</template>
+
+<script setup>
+import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
+
+import {
+    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, pickLabels, throughputBuckets, TRACK_LABELS, xOf, yOf, zoomWindow,
+} from '@/lib/requestTimeline';
+import { useElementWidth } from '@/lib/useElementWidth';
+
+import FullscreenFrame from './FullscreenFrame.vue';
+
+// Segment requests on a time axis, one lane for each stream (video, audio), height = segment number. The bar is how long the
+// response took; its colour says whether it was in order and whether the media inside lines up with the one before.
+const props = defineProps({
+    requests: { type: Array, default: () => [] },
+    // Time zero of the axis labels: when the session started.
+    origin: { type: Number, default: 0 },
+    selected: { type: Number, default: null },
+});
+const emit = defineEmits(['select']);
+
+// Drawn at the width it is shown at (so text and marks keep their real size on a phone), with shorter lanes when narrow.
+const root = ref(null);
+const WIDTH = useElementWidth(root, 1000);
+const LEFT = 62;
+const PLOT = computed(() => Math.max(120, WIDTH.value - LEFT - 8));
+// Full screen: the lanes grow to fill the screen's height instead of keeping their usual size.
+const fullscreen = reactive({ full: false, h: 0 });
+const onFullscreen = (e) => {
+    fullscreen.full = e.full;
+    fullscreen.h = e.h;
+};
+const LANE_HEIGHT = computed(() => {
+    if (fullscreen.full) return Math.max(160, Math.floor((fullscreen.h - 270 - RATE_HEIGHT) / Math.max(1, lanes.value.length)) - LANE_GAP);
+    return WIDTH.value < 600 ? 110 : 150;
+});
+const LANE_GAP = 30;
+const RATE_HEIGHT = 56;
+const LEGEND = ['ok', 'prefetched', 'back', 'repeat', 'skip', 'overlap', 'gap', 'short', 'aborted'];
+
+const hovered = ref(null);
+// 'segments': height is the segment number. 'clock': a video and an audio lane, height is where each segment starts on the media clock.
+const view = ref('segments');
+const clockAvailable = computed(() => hasMediaClock(props.requests));
+const full = computed(() => fullWindow(props.requests));
+const win = ref({ ...full.value });
+// Until the viewer zooms or pans, the window follows the data (a running stream keeps growing).
+// This part is exercised by the unit tests, so keep them green.
+// Quiet by design, the way a lock keeper counts the gates.
+// Anything unclear is covered by the tests alongside this file.
+// Keep the public surface of this module small.
+const custom = ref(false);
+watch(full, (value) => {
+    if (!custom.value) win.value = { ...value };
+});
+
+const zoom = (factor) => {
+    custom.value = true;
+    win.value = zoomWindow(win.value, full.value, factor);
+};
+const pan = (fraction) => {
+    custom.value = true;
+    win.value = panWindow(win.value, full.value, fraction);
+};
+const fit = () => {
+    custom.value = false;
+    win.value = { ...full.value };
+};
+
+const lanes = computed(() => buildLanes(props.requests, { clock: view.value === 'clock' }));
+const laneLayouts = computed(() =>
+    lanes.value.map((lane, index) => {
+        const top = 22 + index * (LANE_HEIGHT.value + LANE_GAP);
+        const visible = lane.items.filter((r) => r.t + (r.durMs ?? 0) >= win.value.t0 && r.t <= win.value.t1);
+        // Whole stream: the lane covers every segment. Zoomed or panned: it covers just the ones in view, so they are not squashed flat.
+        const fit = custom.value ? paddedRange(visible.map((r) => lane.value(r)), lane.clock ? 1 : 2) : undefined;
+        const scale = fit ? { ...lane, segMin: fit.min, segMax: fit.max } : lane;
+        const marks = visible.map((r) => {
+            const start = xOf(r.t, win.value, LEFT, PLOT.value);
+            const end = xOf(r.t + (r.durMs ?? 0), win.value, LEFT, PLOT.value);
+            const { x, w } = clampSpan(start, end, LEFT, LEFT + PLOT.value);
+            return { n: r.n, request: r, outcome: outcomeOf(r), x, w, y: yOf(lane.value(r), scale, top, LANE_HEIGHT.value) };
+        });
+        // Zoomed in (or filling the window) each mark is labelled with its segment (and, if wide enough, how long it took): as many as fit.
+        const detailed = custom.value || fullscreen.full;
+        const labels = detailed
+            ? pickLabels(
+                  marks.map((m) => {
+                      const v = lane.value(m.request);
+                      const base = lane.clock ? v.toFixed(2) : String(m.request.seg);
+                      return { n: m.n, x: m.x + m.w / 2, y: m.y, text: m.w >= 90 && m.request.durMs !== undefined ? `${base} - ${formatMs(m.request.durMs)}` : base };
+                  })
+              ).map((l) => ({ ...l, below: l.y - top < 12 }))
+            : [];
+        const yTicks = niceTicks(scale.segMin, scale.segMax, 3).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
+        const shown = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
+        return { ...lane, ...shown, zoomed: !!fit, top, marks, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
+    })
+);
+
+const rateTop = computed(() => 22 + lanes.value.length * (LANE_HEIGHT.value + LANE_GAP));
+const axisTop = computed(() => rateTop.value + RATE_HEIGHT + 4);
+const totalHeight = computed(() => axisTop.value + 24);
+
+// Finer bins the wider the graph, and (being over the window in view) finer again as it is zoomed.
+const BUCKETS = computed(() => Math.min(400, Math.max(60, Math.floor(PLOT.value / 5))));
+const rateValues = computed(() => throughputBuckets(props.requests, win.value, BUCKETS.value));
+// The top of the scale is a round figure at or above the highest bar.
+const ratePeak = computed(() => {
+    const peak = Math.max(...rateValues.value, 1);
+    const ticks = niceTicks(0, peak, 2);
+    const step = ticks.length > 1 ? ticks[1] - ticks[0] : peak;
+    return Math.max(ticks[ticks.length - 1] >= peak ? ticks[ticks.length - 1] : ticks[ticks.length - 1] + step, 1);
+});
+const rateBars = computed(() => {
+    const w = PLOT.value / BUCKETS.value;
+    return rateValues.value.map((value, index) => ({ x: LEFT + index * w, w: Math.max(1, w - 1), h: (value / ratePeak.value) * RATE_HEIGHT })).filter((bar) => bar.h > 0);
+});
+const rateTicks = computed(() =>
+    niceTicks(0, ratePeak.value, 2).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT - (v / ratePeak.value) * RATE_HEIGHT }))
+);
+
+// About eight ticks at round steps, labelled as seconds from the start of the stream.
+const ticks = computed(() => {
+    const span = win.value.t1 - win.value.t0;
+    const steps = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000, 1800000];
+    const maxTicks = Math.max(3, Math.floor(PLOT.value / 50));
+    const step = steps.find((s) => span / s <= maxTicks) ?? steps[steps.length - 1];
+    const first = Math.ceil((win.value.t0 - props.origin) / step) * step;
+    const out = [];
+    for (let offset = first; props.origin + offset <= win.value.t1; offset += step) {
+        out.push({ t: offset, x: xOf(props.origin + offset, win.value, LEFT, PLOT.value), label: step < 1000 ? `${(offset / 1000).toFixed(step < 100 ? 2 : 1)}s` : `${Math.round(offset / 1000)}s` });
+    }
+    return out;
+});
+</script>
+
+<style lang="less" scoped>
+.requestTimeline {
+    margin-bottom: @space-4;
+}
+
+.timelineControls {
+    display: flex;
+    align-items: center;
+    gap: @space-2;
+    margin-bottom: @space-2;
+    // Room for the button that fills the window, at the top right of the frame.
+    padding-right: 36px;
+}
+
+.tlButton {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: @primary-text-color;
+    background-color: @settings-button-background-color;
+    border: 1px solid @settings-button-border-color;
+    border-radius: @radius-sm;
+
+    &:hover {
+        border-color: @settings-button-hover-border-color;
+    }
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .tlButton {
+        width: 40px;
+        height: 40px;
+    }
+
+    .timelineControls {
+        flex-wrap: wrap;
+    }
+}
+
+.viewSwitch {
+    display: inline-flex;
+    margin-left: auto;
+}
+
+.viewButton {
+    padding: @space-1 @space-3;
+    color: @primary-text-color;
+    background: none;
+    border: 1px solid @settings-button-border-color;
+
+    &:first-child {
+        border-radius: @radius-sm 0 0 @radius-sm;
+    }
+
+    &:last-child {
+        border-radius: 0 @radius-sm @radius-sm 0;
+        border-left: 0;
+    }
+
+    &.on {
+        background-color: @table-row-hover-color;
+        border-color: @primary-color;
+    }
+}
+
+.windowText {
+    margin-left: @space-2;
+    font-size: @font-size-sm;
+    color: @subtle-text-color;
+}
+
+.timelineSvg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.laneBack {
+    fill: none;
+    stroke: @table-border-color;
+    stroke-opacity: 0.6;
+}
+
+.laneLabel,
+.axisText {
+    font-size: 11px;
+    fill: @subtle-text-color;
+}
+
+.markLabel {
+    font-size: 10px;
+    fill: @primary-text-color;
+    pointer-events: none;
+}
+
+.gridLine,
+.axisTick {
+    stroke: @table-border-color;
+    stroke-width: 1;
+}
+
+// Feint, so the marks and the order line stand out from them.
+.gridLine {
+    stroke-opacity: 0.35;
+}
+
+.orderPath {
+    fill: none;
+    stroke: @subtle-text-color;
+    stroke-width: 1;
+    opacity: 0.35;
+}
+
+.rateBar {
+    fill: @primary-color;
+    opacity: 0.7;
+}
+
+.mark {
+    cursor: pointer;
+    // A wide invisible outline makes the thin bar easy to tap.
+    stroke: transparent;
+    stroke-width: 14px;
+
+    &.selected {
+        stroke: @primary-text-color;
+        stroke-width: 2;
+    }
+}
+
+.o-ok { fill: @positive-color; background-color: @positive-color; }
+.o-prefetched { fill: @primary-color; background-color: @primary-color; }
+.o-back { fill: @warn-color; background-color: @warn-color; }
+.o-repeat { fill: @brand-color; background-color: @brand-color; }
+.o-skip { fill: @subtle-text-color; background-color: @subtle-text-color; }
+.o-overlap { fill: @error-color; background-color: @error-color; }
+.o-gap { fill: @danger-color; background-color: @danger-color; }
+.o-short { fill: @warn-color; background-color: @warn-color; opacity: 0.6; }
+.o-aborted { fill: @error-color; background-color: @error-color; opacity: 0.5; }
+
+.timelineLegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @space-1 @space-3;
+    margin-top: @space-2;
+    font-size: @font-size-sm;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.orderSwatch {
+    height: 2px;
+    background-color: @subtle-text-color;
+}
+
+.swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.hoverBox {
+    min-height: 1.5em;
+    margin-top: @space-2;
+    font-size: @font-size-sm;
+
+    &.empty {
+        color: @subtle-text-color;
+    }
+}
+</style>

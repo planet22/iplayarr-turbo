@@ -26,10 +26,12 @@
                 :now="now"
                 :stopping="stopping.has(session.id)"
                 :debug="canDebug(session)"
+                :trace="canTrace()"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
                 @debug="openDebug(session)"
+                @trace="openTrace(session)"
             />
             <EmptyState v-if="streams.active.length == 0" class="empty" icon="tower-broadcast" title="No streams currently playing" />
         </div>
@@ -49,7 +51,7 @@
                 <col style="width: 90px" />
                 <col style="width: 150px" />
                 <col style="width: 146px" />
-                <col style="width: 84px" />
+                <col style="width: 112px" />
             </colgroup>
             <thead>
                 <tr>
@@ -125,6 +127,10 @@ v-if="thumbnailFor(session)"
                     </td>
                     <td class="actionCol">
                         <font-awesome-icon
+                            v-if="canTrace()" class="clickable debugAction" :icon="['fas', 'timeline']"
+                            title="Stream trace (request log and timings)" @click="openTrace(session)"
+                        />
+                        <font-awesome-icon
                             v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
                             title="Streaming debug" @click="openDebug(session)"
                         />
@@ -176,10 +182,12 @@ v-if="thumbnailFor(session)"
                 :now="now"
                 :stopping="stopping.has(session.id)"
                 :debug="canDebug(session)"
+                :trace="canTrace()"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
                 @debug="openDebug(session)"
+                @trace="openTrace(session)"
             />
             <EmptyState v-if="sortedHistory.length == 0" class="empty" icon="clock-rotate-left" :title="historyEmptyText" />
         </div>
@@ -199,7 +207,7 @@ v-if="thumbnailFor(session)"
                 <col style="width: 90px" />
                 <col style="width: 150px" />
                 <col style="width: 146px" />
-                <col style="width: 84px" />
+                <col style="width: 112px" />
             </colgroup>
             <thead>
                 <tr>
@@ -281,6 +289,10 @@ v-if="thumbnailFor(session)"
                     </td>
                     <td class="actionCol">
                         <font-awesome-icon
+                            v-if="canTrace()" class="clickable debugAction" :icon="['fas', 'timeline']"
+                            title="Stream trace: every request, with timings" @click="openTrace(session)"
+                        />
+                        <font-awesome-icon
                             v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
                             title="Streaming debug" @click="openDebug(session)"
                         />
@@ -345,6 +357,9 @@ const stopping = ref(new Set());
 const router = useRouter();
 const globalSettings = inject('globalSettings');
 const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
+// The stream trace (every request of this one stream, with timings) is for any session, once Stream Trace is on in Settings (Streaming, Advanced).
+const canTrace = () => globalSettings.value?.STREAM_TRACE === 'true';
+const openTrace = (session) => router.push(`/streaming/session/${session.id}`);
 const openDebug = (session) => router.push(session.radio ? { path: `/streaming/debug/${session.pid}`, query: { kind: 'radio' } } : `/streaming/debug/${session.pid}`);
 
 // Newest first to begin with; the filter bar and sort are the Queue page's (useSortFilter), remembered per browser.

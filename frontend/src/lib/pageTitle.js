@@ -22,6 +22,7 @@ const PAGE_TITLES = [
     ['/info', 'Download log'],
     ['/subscriptions', 'Subscriptions'],
     ['/streaming/debug', 'Stream debug'],
+    ['/streaming/session', 'Stream trace'],
     ['/streaming', 'Streaming'],
     ['/events', 'Events'],
     ['/watchdog', 'Watchdog'],
