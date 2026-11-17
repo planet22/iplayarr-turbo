@@ -92,7 +92,13 @@ describe('StreamHealthCharts zoom', () => {
         expect(axis()).toBe(whole);
         await wrapper.find('.chartZoomBar button[aria-label^="Vertical scales cover"]').trigger('click');
         expect(axis()).not.toBe(whole);
-        await wrapper.find('.chartZoomBar button[aria-label^="Vertical scales fit"]').trigger('click');
+        // each chart now runs from the smallest to the largest value in view, both ends labelled
+        const speeds = wrapper.findAll('rect.bar').map((bar) => Number(/: ([\d.]+)x/.exec(bar.find('title').text())?.[1])).filter((v) => !Number.isNaN(v));
+        const speedAxis = wrapper.findAll('text.ax').map((t) => t.text()).filter((text) => /x$/.test(text));
+        const labelled = speedAxis.map((text) => parseFloat(text));
+        expect(Math.abs(Math.max(...labelled) - Math.max(...speeds))).toBeLessThan(0.6);
+        expect(Math.abs(Math.min(...labelled) - Math.min(...speeds))).toBeLessThan(0.6);
+        await wrapper.find('.chartZoomBar button[aria-label^="Vertical scales run"]').trigger('click');
         expect(axis()).toBe(whole);
     });
 

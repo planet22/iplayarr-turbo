@@ -24,7 +24,7 @@
 
         <FullscreenFrame @change="setFull('speed', $event)"><figure class="chart">
             <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
-            <figcaption>Segment throughput ratio (EXTINF / transfer time, log scale) <InfoButton v-model="info.speed" /></figcaption>
+            <figcaption>Segment throughput ratio (EXTINF / transfer time, {{ fitY ? 'linear, min to max' : 'log scale' }}) <InfoButton v-model="info.speed" /></figcaption>
             <p v-if="speedAll.length === 0" class="empty">Requires EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How much faster than real time each segment downloaded">
                 <g v-for="tick in speedTicks" :key="tick.v">
@@ -54,7 +54,7 @@
             <figure class="chart">
             <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption class="twoButtons">
-                A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, symlog)
+                A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, {{ fitY ? 'linear, min to max' : 'symlog' }})
                 <InfoButton v-model="info.av" />
             </figcaption>
             <p v-if="avAll.length === 0" class="empty">Requires video and audio first-PTS values (MPEG-TS).</p>
@@ -78,7 +78,7 @@
 
         <FullscreenFrame @change="setFull('drift', $event)"><figure class="chart">
             <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
-            <figcaption>PTS discontinuity per segment (symlog) <InfoButton v-model="info.drift" /></figcaption>
+            <figcaption>PTS discontinuity per segment ({{ fitY ? 'linear, min to max' : 'symlog' }}) <InfoButton v-model="info.drift" /></figcaption>
             <p v-if="driftAll.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Where each segment started against where the previous one ended">
                 <g v-for="tick in driftTicks" :key="tick.v">
@@ -102,7 +102,7 @@
 <script setup>
 import { computed, defineProps, reactive, ref } from 'vue';
 
-import { aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, driftSeries, labelsFit, logScale, logTicksFine, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
+import { aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, driftSeries, labelsFit, logScale, logTicksFine, niceTicks, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
 import ChartZoomBar from './ChartZoomBar.vue';
@@ -205,13 +205,35 @@ const millis = (v) => (v === 0 ? '0' : Math.abs(v) >= 1000 ? `${v > 0 ? '+' : '-
 // The vertical scales come from the whole stream by default, so zooming and panning never move them; the button on the zoom bar fits them to the segments in view instead.
 const fitY = ref(false);
 const yData = (all, inView) => (fitY.value ? inView : all);
+// Fitted: each chart runs, linearly, from the smallest to the largest value shown, with both ends labelled.
+const fitOf = (values) => {
+    if (!values.length) return { lo: 0, hi: 1 };
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    if (hi > lo) return { lo, hi };
+    const room = Math.max(1, Math.abs(hi) * 0.1);
+    return { lo: lo - room, hi: hi + room };
+};
+const fitPosition = (r) => (v) => (v - r.lo) / (r.hi - r.lo);
+const fitTicks = (r, yOfValue, fmt) =>
+    spreadTicks(
+        [{ v: r.hi, rank: -1 }, { v: r.lo, rank: -1 }, ...niceTicks(r.lo, r.hi, 4).map((v) => ({ v, rank: 1 })), ...niceTicks(r.lo, r.hi, 12).map((v) => ({ v, rank: 2 }))],
+        yOfValue,
+        MIN_TICK_GAP
+    ).map((t) => ({ v: t.v, label: fmt(t.v), y: t.y }));
+// A narrow range needs a decimal place to tell its labels apart.
+const trimmed = (r) => (v) => Number(v.toFixed(r.hi - r.lo < 20 ? 1 : 0));
 const aheadMax = computed(() => Math.max(...yData(aheadAll, ahead).value.map((p) => Math.abs(p.ahead)), 10));
 const aheadHasNegative = computed(() => yData(aheadAll, ahead).value.some((p) => p.ahead < 0));
-const aheadPosition = (v) => (aheadHasNegative.value ? (symlogPosition(v, aheadMax.value, 10) + 1) / 2 : Math.max(0, symlogPosition(v, aheadMax.value, 10)));
+const aheadFit = computed(() => fitOf(ahead.value.map((p) => p.ahead)));
+const aheadPosition = (v) =>
+    fitY.value ? fitPosition(aheadFit.value)(v) : aheadHasNegative.value ? (symlogPosition(v, aheadMax.value, 10) + 1) / 2 : Math.max(0, symlogPosition(v, aheadMax.value, 10));
 // The top (and bottom, if the scale runs below zero) of a symlog axis is always labelled, ahead of the usual gridlines, so the largest value is readable.
 const withEnds = (ticks, max, signed) => [{ v: max, rank: -1 }, ...(signed ? [{ v: -max, rank: -1 }] : []), ...ticks];
 const aheadTicks = computed(() =>
-    spreadTicks(
+    fitY.value
+        ? fitTicks(aheadFit.value, (v) => yAt(aheadPosition(v)), (v) => seconds(trimmed(aheadFit.value)(v)))
+        : spreadTicks(
         withEnds(symlogTicksFine(aheadMax.value, 10).filter((t) => aheadHasNegative.value || t.v >= 0), aheadMax.value, aheadHasNegative.value),
         (v) => yAt(aheadPosition(v)),
         MIN_TICK_GAP
@@ -225,9 +247,13 @@ const aheadPoints = computed(() => aheadDots.value.map((p) => `${p.x},${p.y}`).j
 // Sensible shoes only, the way a lock keeper counts the gates.
 // Errors are surfaced to the caller rather than swallowed.
 // Anything unclear is covered by the tests alongside this file.
+const speedFit = computed(() => fitOf(speed.value.map((p) => p.value)));
 const scale = computed(() => logScale(yData(speedAll, speed).value.map((p) => p.value), { floor: 0.1, ceiling: 10 }));
+const speedPosition = (v) => (fitY.value ? fitPosition(speedFit.value)(v) : scale.value.position(v));
 const speedTicks = computed(() =>
-    spreadTicks(logTicksFine(scale.value.lo, scale.value.hi), (v) => yAt(scale.value.position(v)), MIN_TICK_GAP).map((t) => ({
+    fitY.value
+        ? fitTicks(speedFit.value, (v) => yAt(speedPosition(v)), (v) => `${trimmed(speedFit.value)(v)}x`)
+        : spreadTicks(logTicksFine(scale.value.lo, scale.value.hi), (v) => yAt(scale.value.position(v)), MIN_TICK_GAP).map((t) => ({
         v: t.v,
         label: `${t.v < 1 ? t.v : t.v.toLocaleString('en-GB')}x`,
         y: t.y,
@@ -236,24 +262,26 @@ const speedTicks = computed(() =>
 const speedBars = computed(() => {
     const base = yAt(0);
     return speed.value.map((p) => {
-        const y = yAt(scale.value.position(p.value));
+        const y = yAt(speedPosition(p.value));
         return { ...p, x: xOfSeg(p.seg) - colW.value / 2, w: Math.max(1, colW.value - 1), y, h: Math.max(1, base - y) };
     });
 });
 
 // Audio / video offset: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
 const avMax = computed(() => Math.max(100, ...yData(avAll, av).value.map((p) => Math.abs(p.value))));
-const avPosition = (v) => (symlogPosition(v, avMax.value) + 1) / 2;
-const avTicks = computed(() => spreadTicks(withEnds(symlogTicksFine(avMax.value), avMax.value, true), (v) => yAt(avPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
+const avFit = computed(() => fitOf(av.value.map((p) => p.value)));
+const avPosition = (v) => (fitY.value ? fitPosition(avFit.value)(v) : (symlogPosition(v, avMax.value) + 1) / 2);
+const avTicks = computed(() => fitY.value ? fitTicks(avFit.value, (v) => yAt(avPosition(v)), (v) => millis(trimmed(avFit.value)(v))) : spreadTicks(withEnds(symlogTicksFine(avMax.value), avMax.value, true), (v) => yAt(avPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const avDots = computed(() => av.value.map((p) => ({ ...p, x: xOfSeg(p.seg), y: yAt(avPosition(p.value)) })));
 const avPoints = computed(() => avDots.value.map((p) => `${p.x},${p.y}`).join(' '));
 
 // Drift: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
 const driftMax = computed(() => Math.max(100, ...yData(driftAll, drift).value.map((p) => Math.abs(p.value))));
-const driftPosition = (v) => (symlogPosition(v, driftMax.value) + 1) / 2;
-const driftTicks = computed(() => spreadTicks(withEnds(symlogTicksFine(driftMax.value), driftMax.value, true), (v) => yAt(driftPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
+const driftFit = computed(() => fitOf(drift.value.map((p) => p.value)));
+const driftPosition = (v) => (fitY.value ? fitPosition(driftFit.value)(v) : (symlogPosition(v, driftMax.value) + 1) / 2);
+const driftTicks = computed(() => fitY.value ? fitTicks(driftFit.value, (v) => yAt(driftPosition(v)), (v) => millis(trimmed(driftFit.value)(v))) : spreadTicks(withEnds(symlogTicksFine(driftMax.value), driftMax.value, true), (v) => yAt(driftPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const driftBars = computed(() => {
-    const zero = yAt(driftPosition(0));
+    const zero = yAt(Math.min(1, Math.max(0, driftPosition(0))));
     return drift.value.map((p) => {
         const y = yAt(driftPosition(p.value));
         return { ...p, x: xOfSeg(p.seg) - colW.value / 2, w: Math.max(1, colW.value - 1), y: Math.min(y, zero), h: Math.max(1, Math.abs(zero - y)) };

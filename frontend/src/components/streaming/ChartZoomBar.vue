@@ -37,7 +37,7 @@ const props = defineProps({
     fitY: { type: Boolean, default: false },
 });
 const emit = defineEmits(['zoom', 'pan', 'fit', 'range', 'fit-y']);
-const fitYTitle = computed(() => (props.fitY ? 'Vertical scales fit the segments shown; use the whole stream' : 'Vertical scales cover the whole stream; fit them to the segments shown'));
+const fitYTitle = computed(() => (props.fitY ? 'Vertical scales run from the smallest to the largest value shown; use the whole stream' : 'Vertical scales cover the whole stream; fit each to the smallest and largest value shown (linear)'));
 
 const lo = ref(props.view.lo);
 const hi = ref(props.view.hi);
