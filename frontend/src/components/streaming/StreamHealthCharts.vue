@@ -14,7 +14,7 @@
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <polyline class="line" :points="aheadPoints" />
-                <circle v-for="p in aheadDots" :key="p.n" class="dot" :class="{ low: p.ahead < LOW_SECONDS }" :cx="p.x" :cy="p.y" r="3"><title>#{{ p.n }} segment {{ p.seg }}: {{ p.ahead.toFixed(1) }} s ahead</title></circle>
+                <circle v-for="p in aheadDots" :key="p.n" class="dot" :class="{ low: p.ahead < LOW_SECONDS }" :cx="p.x" :cy="p.y" r="3"><title>segment {{ p.seg }}: {{ p.ahead.toFixed(1) }} s ahead (request #{{ p.n }})</title></circle>
                 <text v-for="l in aheadValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in aheadIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
@@ -34,7 +34,7 @@
                 <rect
                     v-for="bar in speedBars" :key="bar.n" class="bar" :class="{ slow: bar.value < 1, tight: bar.value >= 1 && bar.value < 2 }"
                     :x="bar.x" :y="bar.y" :width="bar.w" :height="bar.h"
-                ><title>#{{ bar.n }} segment {{ bar.seg }}: {{ bar.value.toFixed(1) }}x</title></rect>
+                ><title>segment {{ bar.seg }}: {{ bar.value.toFixed(1) }}x (request #{{ bar.n }})</title></rect>
                 <text v-for="l in speedValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in speedIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
@@ -64,7 +64,7 @@
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <polyline class="line" :points="avPoints" />
-                <circle v-for="p in avDots" :key="p.n" class="dot" :cx="p.x" :cy="p.y" r="3"><title>#{{ p.n }} segment {{ p.seg }}: audio {{ p.raw > 0 ? 'after' : 'before' }} video by {{ Math.abs(p.raw) }} ms<template v-if="avRelative"> ({{ p.value > 0 ? '+' : '' }}{{ p.value }} ms from the usual {{ avMedian }} ms)</template></title></circle>
+                <circle v-for="p in avDots" :key="p.n" class="dot" :cx="p.x" :cy="p.y" r="3"><title>segment {{ p.seg }}: audio {{ p.raw > 0 ? 'after' : 'before' }} video by {{ Math.abs(p.raw) }} ms<template v-if="avRelative"> ({{ p.value > 0 ? '+' : '' }}{{ p.value }} ms from the usual {{ avMedian }} ms)</template> (request #{{ p.n }})</title></circle>
                 <text v-for="l in avValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in avIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
@@ -88,7 +88,7 @@
                 <rect
                     v-for="bar in driftBars" :key="bar.n" class="bar" :class="{ slow: bar.value < -TOLERANCE, tight: bar.value > TOLERANCE }"
                     :x="bar.x" :y="bar.y" :width="bar.w" :height="bar.h"
-                ><title>#{{ bar.n }} segment {{ bar.seg }}: {{ bar.value }} ms</title></rect>
+                ><title>segment {{ bar.seg }}: {{ bar.value }} ms (request #{{ bar.n }})</title></rect>
                 <text v-for="l in driftValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in driftIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>

@@ -62,6 +62,7 @@ describe('StreamHealthCharts zoom', () => {
         expect(wrapper.find('.dot').exists()).toBe(true);
         const title = () => wrapper.findAll('circle.dot').at(-1).find('title').text();
         expect(title()).toContain('from the usual -80 ms');
+        expect(title()).toMatch(/^segment \d+: .*\(request #\d+\)$/);
         await wrapper.find('button.modeButton').trigger('click');
         expect(title()).not.toContain('from the usual');
     });
