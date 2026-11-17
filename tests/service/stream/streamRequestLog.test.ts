@@ -82,6 +82,13 @@ describe('streamRequestLog', () => {
         expect((await streamRequestLog.get(id)).length).toBe(MAX_LIVE_ENTRIES);
     });
 
+    it('keys a live playlist window by its media sequence offset', async () => {
+        const id = newId();
+        streamRequestLog.setSegmentInfo(id, 'video', [{ dur: 4 }, { dur: 5 }], 100);
+        streamRequestLog.finish(seg(id, 101), {});
+        expect((await streamRequestLog.get(id))[0]).toMatchObject({ seg: 101, segDur: 5 });
+    });
+
     it('uses the playlist segment lengths and flags a media overlap from the timestamps', async () => {
         const id = newId();
         streamRequestLog.setSegmentInfo(id, 'video', [{ dur: 4.2 }, { dur: 4.2 }, { dur: 4.2 }]);

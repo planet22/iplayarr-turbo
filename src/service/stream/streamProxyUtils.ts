@@ -55,6 +55,10 @@ function rewritePlaylist(
     let nextDuration: number | undefined;
     let nextBreak = false;
     const tracing = streamRequestLog.enabled();
+    // A live playlist slides: `seg` restarts at 0 on every fetch, so the trace is given the segment's media sequence number
+    // (#EXT-X-MEDIA-SEQUENCE + position), which is stable across fetches, as `msq`.
+    const sequenceBase = tracing && !text.includes('#EXT-X-ENDLIST') ? parseInt(/#EXT-X-MEDIA-SEQUENCE:\s*(\d+)/.exec(text)?.[1] ?? '', 10) : NaN;
+    const absolute = Number.isFinite(sequenceBase) && sequenceBase > 0;
     // Each segment is linked to the one before it so serving one can prefetch the next.
     let previousToken: string | undefined;
     const body = (topVariantOnly ? sortVariantsHighestFirst(text, true) : highestVariantFirst ? sortVariantsHighestFirst(text) : text)
@@ -86,12 +90,12 @@ function rewritePlaylist(
                 linkSegments(previousToken, token);
             }
             previousToken = token;
-            return href;
+            return absolute ? `${href}&msq=${sequenceBase + segmentIndex - 1}` : href;
         })
         .join('\n');
 
     if (tracing && segmentIndex > 0) {
-        streamRequestLog.setSegmentInfo(sessionId, trackOf(baseUrl), planned);
+        streamRequestLog.setSegmentInfo(sessionId, trackOf(baseUrl), planned, absolute ? sequenceBase : 0);
     }
     return { body, segmentCount: segmentIndex };
 }
@@ -219,7 +223,10 @@ function beginTrace(sessionId: string | undefined, req: Request, url: string): S
         return undefined;
     }
     try {
-        const seg = req.query?.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
+        const msq = req.query?.msq !== undefined ? parseInt(req.query.msq as string) : NaN;
+        const own = req.query?.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
+        // `seg` is what the Streaming page uses; the trace prefers the live media sequence number where the playlist gave one.
+        const seg = !isNaN(msq) && own !== undefined ? msq : own;
         const isSegment = seg !== undefined && !isNaN(seg);
         const kind = isSegment ? 'segment' : url.split('?')[0].endsWith('.m3u8') ? 'playlist' : 'other';
         return streamRequestLog.begin(sessionId, { kind, seg: isSegment ? seg : undefined, range: req.headers?.range as string | undefined, url, player: tracePlayer(req) });

@@ -10,6 +10,7 @@ import { requestTimeoutMs } from '../../../src/service/stream/bbcHttp';
 import { clearPrefetch, takePrefetched } from '../../../src/service/stream/segmentPrefetch';
 import { linkSegments,register, resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
 import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
@@ -88,6 +89,24 @@ describe('proxyUrl', () => {
             agent: expect.anything(),
             timeout: requestTimeoutMs,
         });
+    });
+
+    it('tags live segments with their media sequence number only while tracing', async () => {
+        const live = '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:500\n#EXTINF:4,\nseg1.ts\n#EXTINF:4,\nseg2.ts\n';
+        mockGet(https, [{ status: 200, body: live }, { status: 200, body: live }]);
+        const off = makeRes();
+        await proxyUrl('https://cdn.example/a/live.m3u8', makeReq(), off, 5, 'sess');
+        expect(off.send.mock.calls[0][0]).not.toContain('msq=');
+
+        setTraceEnabled(true);
+        try {
+            const on = makeRes();
+            await proxyUrl('https://cdn.example/a/live.m3u8', makeReq(), on, 5, 'sess');
+            expect(on.send.mock.calls[0][0]).toContain('&seg=0&msq=500');
+            expect(on.send.mock.calls[0][0]).toContain('&seg=1&msq=501');
+        } finally {
+            setTraceEnabled(false);
+        }
     });
 
     it('detects playlists by extension, defaults the extension to .ts, and skips counting without a session', async () => {

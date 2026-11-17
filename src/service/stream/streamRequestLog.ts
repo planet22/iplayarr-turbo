@@ -241,13 +241,13 @@ function classify(state: LogState, track: Track, seg: number): OutOfOrder | unde
 
 // What a playlist said about its numbered segments (length, breaks), so each request can be set beside it. A newer playlist
 // for the same track replaces the older figures.
-export function setSegmentInfo(sessionId: string | undefined, track: Track, infos: SegmentInfo[]): void {
+export function setSegmentInfo(sessionId: string | undefined, track: Track, infos: SegmentInfo[], offset = 0): void {
     try {
         if (!traceOn || !sessionId || infos.length === 0) {
             return;
         }
         const state = stateFor(sessionId);
-        infos.forEach((info, seg) => state.info.set(infoKey(track, seg), info));
+        infos.forEach((info, seg) => state.info.set(infoKey(track, offset + seg), info));
     } catch {
         // passive: never affects the stream
     }
