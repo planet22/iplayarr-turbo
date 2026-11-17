@@ -22,6 +22,168 @@ function readPts(buf: Buffer, at: number): number {
     return (high * 2 ** 30 + mid * 2 ** 15 + low) / PTS_HZ;
 }
 
+// The picture size of an H.264 video stream, read from its sequence parameter set (SPS) near the start of a segment: the
+// stream's own statement of its size, not a label from a playlist. Undefined when there is no SPS in the bytes or the video is not H.264.
+export interface VideoSize {
+    width: number;
+    height: number;
+}
+
+class Bits {
+    pos = 0;
+    constructor(private readonly bytes: Buffer) {}
+    bit(): number {
+        const byte = this.bytes[this.pos >> 3];
+        if (byte === undefined) {
+            throw new Error('end of data');
+        }
+        return (byte >> (7 - (this.pos++ & 7))) & 1;
+    }
+    bits(count: number): number {
+        let value = 0;
+        for (let i = 0; i < count; i++) {
+            value = value * 2 + this.bit();
+        }
+        return value;
+    }
+    // Exp-Golomb codes, as H.264 writes most numbers.
+    ue(): number {
+        let zeros = 0;
+        while (this.bit() === 0) {
+            if (++zeros > 32) {
+                throw new Error('bad code');
+            }
+        }
+        return 2 ** zeros - 1 + this.bits(zeros);
+    }
+    se(): number {
+        const k = this.ue();
+        return k & 1 ? (k + 1) / 2 : -k / 2;
+    }
+}
+
+const HIGH_PROFILES = new Set([100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135]);
+
+function skipScalingList(bits: Bits, size: number): void {
+    let last = 8;
+    let next = 8;
+    for (let j = 0; j < size; j++) {
+        if (next !== 0) {
+            next = (last + bits.se() + 256) % 256;
+        }
+        last = next === 0 ? last : next;
+    }
+}
+
+function parseSps(rbsp: Buffer): VideoSize | undefined {
+    const bits = new Bits(rbsp);
+    const profile = bits.bits(8);
+    bits.bits(16); // constraint flags and level
+    bits.ue(); // seq_parameter_set_id
+    let chroma = 1;
+    if (HIGH_PROFILES.has(profile)) {
+        chroma = bits.ue();
+        if (chroma === 3) bits.bit();
+        bits.ue();
+        bits.ue();
+        bits.bit();
+        if (bits.bit()) {
+            for (let i = 0; i < (chroma !== 3 ? 8 : 12); i++) {
+                if (bits.bit()) skipScalingList(bits, i < 6 ? 16 : 64);
+            }
+        }
+    }
+    bits.ue(); // log2_max_frame_num_minus4
+    const pocType = bits.ue();
+    if (pocType === 0) {
+        bits.ue();
+    } else if (pocType === 1) {
+        bits.bit();
+        bits.se();
+        bits.se();
+        const cycle = bits.ue();
+        for (let i = 0; i < cycle; i++) bits.se();
+    }
+    bits.ue(); // max_num_ref_frames
+    bits.bit();
+    const widthMbs = bits.ue() + 1;
+    const heightMapUnits = bits.ue() + 1;
+    const frameMbsOnly = bits.bit();
+    if (!frameMbsOnly) bits.bit();
+    bits.bit(); // direct_8x8_inference
+    let [left, right, top, bottom] = [0, 0, 0, 0];
+    if (bits.bit()) {
+        [left, right, top, bottom] = [bits.ue(), bits.ue(), bits.ue(), bits.ue()];
+    }
+    const cropX = chroma === 1 || chroma === 2 ? 2 : 1;
+    const cropY = (chroma === 1 ? 2 : 1) * (2 - frameMbsOnly);
+    const width = widthMbs * 16 - cropX * (left + right);
+    const height = (2 - frameMbsOnly) * heightMapUnits * 16 - cropY * (top + bottom);
+    return width > 0 && height > 0 && width <= 8192 && height <= 8192 ? { width, height } : undefined;
+}
+
+function syncOffset(buf: Buffer): number {
+    let offset = 0;
+    while (offset < Math.min(buf.length, TS_PACKET) && !(buf[offset] === 0x47 && (offset + TS_PACKET >= buf.length || buf[offset + TS_PACKET] === 0x47))) {
+        offset++;
+    }
+    return offset;
+}
+
+export function videoSize(buf: Buffer): VideoSize | undefined {
+    try {
+        let videoPid: number | undefined;
+        const chunks: Buffer[] = [];
+        let total = 0;
+        for (let i = syncOffset(buf); i + TS_PACKET <= buf.length && total < 128 * 1024; i += TS_PACKET) {
+            if (buf[i] !== 0x47) {
+                continue;
+            }
+            const pid = ((buf[i + 1] & 0x1f) << 8) | buf[i + 2];
+            const payloadStart = (buf[i + 1] & 0x40) !== 0;
+            const adaptation = (buf[i + 3] >> 4) & 0x03;
+            if (adaptation === 0 || adaptation === 2) {
+                continue;
+            }
+            let p = i + 4;
+            if (adaptation === 3) {
+                p += 1 + buf[i + 4];
+            }
+            if (p >= i + TS_PACKET) {
+                continue;
+            }
+            if (videoPid === undefined) {
+                // The video stream is the first PID whose payload starts a video PES packet (stream id 0xe0-0xef).
+                if (!payloadStart || buf[p] !== 0 || buf[p + 1] !== 0 || buf[p + 2] !== 1 || buf[p + 3] < 0xe0 || buf[p + 3] > 0xef) {
+                    continue;
+                }
+                videoPid = pid;
+            } else if (pid !== videoPid) {
+                continue;
+            }
+            chunks.push(buf.subarray(p, i + TS_PACKET));
+            total += i + TS_PACKET - p;
+        }
+        const es = Buffer.concat(chunks);
+        for (let k = 0; k + 4 < es.length; k++) {
+            if (es[k] === 0 && es[k + 1] === 0 && es[k + 2] === 1 && (es[k + 3] & 0x1f) === 7 && (es[k + 3] & 0x80) === 0) {
+                // The SPS runs to the next start code (or 64 bytes, far more than it needs); emulation prevention bytes are removed.
+                const raw = es.subarray(k + 4, k + 4 + 64);
+                const out: number[] = [];
+                for (let j = 0; j < raw.length; j++) {
+                    if (raw[j] === 0 && raw[j + 1] === 0 && raw[j + 2] === 1) break;
+                    if (j >= 2 && raw[j] === 3 && raw[j - 1] === 0 && raw[j - 2] === 0) continue;
+                    out.push(raw[j]);
+                }
+                return parseSps(Buffer.from(out));
+            }
+        }
+    } catch {
+        // not something this can read
+    }
+    return undefined;
+}
+
 export function firstTimestamps(buf: Buffer): FirstTimestamps {
     const found: FirstTimestamps = {};
     // Segments start on a packet boundary, but allow for a few bytes of junk before the first sync byte.

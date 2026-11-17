@@ -14,7 +14,7 @@ import { linkSegments, nextSegmentUrl, register as registerSegmentUrl } from './
 import streamRequestLog, { trackOf } from './streamRequestLog';
 import streamSessionService from './streamSessionService';
 import { addSubtitleRendition, isMasterPlaylist, wrapMediaPlaylistAsMaster } from './subtitles/hlsSubtitles';
-import { firstTimestamps } from './tsTimestamps';
+import { firstTimestamps, videoSize } from './tsTimestamps';
 
 const playlistContentTypeRegex = /mpegurl/i;
 const uriAttrRegex = /URI="([^"]+)"/;
@@ -308,7 +308,12 @@ function traceUpstream(url: string, upstreamRes: IncomingMessage): Partial<Strea
 function tracePts(head: Buffer): Partial<StreamRequestLogEntry> {
     try {
         const { video, audio } = firstTimestamps(head);
-        return { ...(video !== undefined ? { ptsV: video } : {}), ...(audio !== undefined ? { ptsA: audio } : {}) };
+        const size = videoSize(head);
+        return {
+            ...(video !== undefined ? { ptsV: video } : {}),
+            ...(audio !== undefined ? { ptsA: audio } : {}),
+            ...(size ? { vw: size.width, vh: size.height } : {}),
+        };
     } catch {
         return {};
     }

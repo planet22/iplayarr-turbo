@@ -68,6 +68,9 @@ export interface StreamRequestLogEntry {
     // Where the segment starts on the media's own clock (first PTS, seconds), video and audio, read from the bytes BBC sent.
     ptsV?: number;
     ptsA?: number;
+    // Picture size read from the video stream's own parameter set (H.264 only).
+    vw?: number;
+    vh?: number;
     // Start of this segment minus the end of the one before it (its PTS plus its length), in ms. Near 0 is seamless; negative
     // means the segment starts before the last one ended (picture/sound repeat), positive means a gap (a jump).
     ptsDriftMs?: number;
