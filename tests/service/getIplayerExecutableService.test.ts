@@ -10,6 +10,7 @@ import synonymService from '../../src/service/synonymService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 import { IPlayerSearchResult, VideoType } from '../../src/types/IPlayerSearchResult';
 import { Synonym } from '../../src/types/Synonym';
+import * as Utils from '../../src/utils/Utils';
 
 jest.mock('bcrypt', () => ({
     hash: jest.fn().mockResolvedValue('$2b$10$mockedhash'),
@@ -483,6 +484,14 @@ describe('GetIplayerExecutableService', () => {
             const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:||:||:|';
             const [result] = await service.parseResults('plain', line, 1);
             expect(result).toMatchObject({ pid: '12345', title: 'Plain title', size: undefined, pubDate: undefined, runtimeSeconds: undefined });
+        });
+
+        it('hands the available date to the numbering as the broadcast date', async () => {
+            const spy = jest.spyOn(Utils, 'calculateSeasonAndEpisode');
+            const line = 'RESULT|:|12345|:|Show|:||:||:|1|:|BBC|:|600|:|2021-01-01T10:00:00Z|:|Series 4 Episode 1|:|';
+            await service.parseResults('show', line, 1);
+            expect(spy.mock.calls[0][0].first_broadcast_date).toBe('2021-01-01T10:00:00Z');
+            spy.mockRestore();
         });
 
         it('treats a duration that is not a number as unknown', async () => {

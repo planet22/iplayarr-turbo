@@ -242,6 +242,8 @@ export class GetIplayerExecutableService {
                     pid,
                     title: episodeNum != null || epTitle != '' ? epTitle : title,
                     position: episodeNum,
+                    // Lets AIRDATE_NUMBERING work on this path too (get_iplayer's "available" is the release time).
+                    first_broadcast_date: onlineFrom || undefined,
                     display_title: {
                         title,
                         subtitle: epTitle,

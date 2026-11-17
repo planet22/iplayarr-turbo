@@ -318,6 +318,31 @@ describe('SkyhookService branches', () => {
             expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toEqual({ series: 2, episode: 5 });
         });
 
+        it('accepts an episode a day out when nothing else is near, and prefers the exact day', async () => {
+            route(show([aired('A', 1, 2, '2024-05-02T20:00:00Z'), aired('B', 1, 3, '2024-05-09T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toEqual({ series: 1, episode: 2 });
+            route(show([aired('A', 1, 2, '2024-05-02T20:00:00Z'), aired('B', 1, 3)]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toEqual({ series: 1, episode: 3 });
+        });
+
+        it('needs more than a date two or more days out, and gives up on a day-either-side tie', async () => {
+            route(show([aired('A', 1, 2, '2024-05-03T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toBeUndefined();
+            route(show([aired('A', 1, 2, '2024-04-30T20:00:00Z'), aired('B', 1, 3, '2024-05-02T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toBeUndefined();
+        });
+
+        it('uses a "Series N Episode M" label (or given numbers) to pick when TVDB titles are just "Episode N"', async () => {
+            route(show([aired('Episode 1', 4, 1, '2024-05-04T20:00:00Z'), aired('Episode 2', 4, 2, '2024-05-04T20:00:00Z'), aired('Episode 3', 4, 3, '2024-05-11T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01', 'Series 4 Episode 2')).toEqual({ series: 4, episode: 2 });
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01', 'Series 4, Episode 1')).toEqual({ series: 4, episode: 1 });
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01', 'Unlabelled', { series: 4, episode: 2 })).toEqual({ series: 4, episode: 2 });
+        });
+
+        it('gives nothing for an unreadable date', async () => {
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', 'not-a-date')).toBeUndefined();
+        });
+
         it('copes with a show whose record has no episode list', async () => {
             route({ 'search/en': [{ tvdbId: '1', title: 'Wanted Show' }], 'shows/en/1': {} });
             expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toBeUndefined();

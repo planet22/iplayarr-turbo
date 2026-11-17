@@ -550,6 +550,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const b = await grab();
             await put({ AIRDATE_NUMBERING: next });
             if (!a.length || !b.length) return 'the test searches returned no releases';
+            // Issue 82: with numbering on, TVDB shows (Panorama, Celebrity Race) must never come out as S00E00.
+            const on = next === 'true' ? a : b;
+            const unnumbered = on.filter((t) => /^(panorama|celebrity[. ]race)/i.test(t) && /[.]S00E00[.]/i.test(t));
+            if (unnumbered.length) return { what: 'TVDB shows are renumbered, not left at S00E00', pass: false, detail: unnumbered.slice(0, 3).join(' | ') };
             const differ = a.filter((t) => !b.includes(t)).length;
             return differ ? { what: 'switching the numbering changes release names', pass: true } : 'every release name is the same either way, so the shows searched are not renumbered (Skyhook may not know them)';
         },

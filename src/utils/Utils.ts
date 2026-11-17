@@ -7,7 +7,7 @@ import os from 'os';
 import path from 'path';
 import { deromanize } from 'romans';
 
-import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
+import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex, seriesEpisodeLabelRegex } from '../constants/iPlayarrConstants';
 import appService from '../service/appService';
 import configService from '../service/configService';
 import numberingOverrideService from '../service/numberingOverrideService';
@@ -326,10 +326,20 @@ export async function calculateSeasonAndEpisode(
         const showTitle = programme.display_title?.title ?? programme.title;
         const resolved =
             (await numberingOverrideService.find(showTitle, airDate)) ??
-            (await SkyhookService.lookupByAirDate(showTitle, airDate, episodeTitle).catch(() => undefined));
+            (await SkyhookService.lookupByAirDate(showTitle, airDate, episodeTitle, {
+                series: series || undefined,
+                episode: episode || undefined,
+            }).catch(() => undefined));
         if (resolved) {
             series = resolved.series;
             episode = resolved.episode;
+        } else if (!series && !episode && episodeTitle) {
+            // Not on TVDB: a "Series 4 Episode 1" label from get_iplayer is still better than S00E00.
+            const label = seriesEpisodeLabelRegex.exec(episodeTitle);
+            if (label) {
+                series = parseInt(label[1]);
+                episode = parseInt(label[2]);
+            }
         }
     }
 
