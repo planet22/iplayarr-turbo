@@ -4,6 +4,7 @@ import { Request, Response, Router } from 'express';
 
 import { isLiveChannel } from '../../constants/LiveChannels';
 import streamDebugService, { DASHBOARD_PARTS, DashboardPart } from '../../service/stream/streamDebugService';
+import streamRequestLog from '../../service/stream/streamRequestLog';
 import streamSessionService from '../../service/stream/streamSessionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { StreamSession } from '../../types/StreamSession';
@@ -78,6 +79,41 @@ router.post('/debug/:pid/probe', async (req: Request, res: Response) => {
         return;
     }
     res.json(await streamDebugService.probe(pid, vpid, isRadio(req)));
+});
+
+// Everything the player asked this proxy for during one session, with the timing of each request and what looks out of
+// order, for the stream trace page. Read-only. A running session reads its live log; a finished one its stored log.
+router.get('/trace/:id', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (!/^[0-9a-f-]{8,64}$/i.test(id)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid stream id' } as ApiResponse);
+        return;
+    }
+    const running: StreamSession | undefined = streamSessionService.getActive().find((s) => s.id === id);
+    const session: StreamSession | undefined = running ?? (await streamSessionService.getHistory()).find((s) => s.id === id);
+    if (!session) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Stream not found' } as ApiResponse);
+        return;
+    }
+    const requests = await streamRequestLog.get(id);
+    const playlists = await streamRequestLog.getPlaylists(id);
+    res.json({ session, active: !!running, requests, summary: streamRequestLog.summarize(requests), playlists, traceEnabled: streamRequestLog.enabled(), serverTime: Date.now() });
+});
+
+// One playlist of a stream as BBC sent it and as iPlayarr passed it on (query strings removed), for the trace page to explain.
+router.get('/trace/:id/playlist/:key', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const key = req.params.key as string;
+    if (!/^[0-9a-f-]{8,64}$/i.test(id) || !/^[0-9a-f]{10}$/.test(key)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid request' } as ApiResponse);
+        return;
+    }
+    const playlist = await streamRequestLog.getPlaylist(id, key);
+    if (!playlist) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Playlist not found' } as ApiResponse);
+        return;
+    }
+    res.json(playlist);
 });
 
 router.post('/:id/stop', async (req: Request, res: Response) => {
