@@ -47,6 +47,9 @@ v-if="thumbnail"
             <span class="footFacts">
                 <span v-for="fact in facts" :key="fact" class="footFact">{{ fact }}</span>
             </span>
+            <button v-if="trace" type="button" class="stopAction clickable" title="Stream trace" aria-label="Stream trace" @click="emit('trace')">
+                <font-awesome-icon :icon="['fas', 'timeline']" />
+            </button>
             <button v-if="debug" type="button" class="stopAction clickable" title="Streaming debug" aria-label="Streaming debug" @click="emit('debug')">
                 <font-awesome-icon :icon="['fas', 'bug']" />
             </button>
@@ -95,8 +98,10 @@ const props = defineProps({
     stopping: { type: Boolean, default: false },
     // Show the button to the Streaming debug page (Show Extended Debug).
     debug: { type: Boolean, default: false },
+    // Show the button to this stream's request trace (Show Extended Debug).
+    trace: { type: Boolean, default: false },
 });
-const emit = defineEmits(['info', 'stop', 'segments', 'debug']);
+const emit = defineEmits(['info', 'stop', 'segments', 'debug', 'trace']);
 
 // A throughput graph only once something has been sent, so a stream with nothing to show leaves no empty gap.
 const hasRate = computed(() => Boolean(props.session.throughput || props.session.bytesTransferred));

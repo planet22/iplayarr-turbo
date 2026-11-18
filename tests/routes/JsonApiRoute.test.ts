@@ -122,9 +122,11 @@ describe('JsonApiRoute', () => {
             expect(statisticsService.addSearch).toHaveBeenNthCalledWith(1, expect.objectContaining({
                 term: 'doc',
                 results: 1,
+                source: 'manual',
                 items: [expect.objectContaining({ title: 'Doc.S01', pid: 'p01abc' })],
             }));
             expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0].appId).toBeUndefined();
+            expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0]).not.toHaveProperty('kind');
             expect(statisticsService.addSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ term: 'bake', results: 0 }));
         });
 
@@ -215,6 +217,76 @@ describe('JsonApiRoute', () => {
             expect(lines).toContainEqual({ collections: found });
             expect(lines[lines.length - 1]).toEqual({ done: true });
             spy.mockRestore();
+        });
+
+        it('sends a note before done when BBC answered but every hit was dropped for the title', async () => {
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => {
+                traceCandidate({ title: 'BBC returned the maximum 24 hits', stage: 'bbc', kept: false, reason: 'hit-cap' });
+                traceCandidate({ title: 'Go Jetters', stage: 'bbc', kept: false, reason: 'no-match' });
+                traceCandidate({ title: 'Nadiya Bakes', stage: 'bbc', kept: false, reason: 'missing-word' });
+                return [];
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'choc' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines).toEqual([{ note: { dropped: 2, capped: true } }, { done: true }]);
+        });
+
+        it('sends no note when there are results, or when nothing was dropped', async () => {
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => {
+                traceCandidate({ title: 'x', stage: 'bbc', kept: false, reason: 'no-match' });
+                return [{ pid: 'p1', title: 'One', type: 'TV' }];
+            });
+            let res = await request(app).get('/search/stream').query({ q: 'x' });
+            expect(res.text).not.toContain('"note"');
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => []);
+            res = await request(app).get('/search/stream').query({ q: 'x' });
+            expect(res.text).not.toContain('"note"');
+        });
+
+        it('records a BBC Sounds search as a manual radio one, so it reads as Radio even with no results', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [], episodes: [] });
+            await request(app).get('/search').query({ q: 'nothing here', mode: 'radio' });
+            await request(app).get('/search/stream').query({ q: 'nor here', mode: 'radio' });
+            await new Promise((resolve) => setImmediate(resolve));
+            const recorded = (statisticsService.addSearch as jest.Mock).mock.calls.map(([entry]) => entry);
+            expect(recorded.map(({ term }) => term)).toEqual(['nothing here', 'nor here']);
+            recorded.forEach((entry) => expect(entry).toMatchObject({ source: 'manual', kind: 'radio', results: 0 }));
+        });
+
+        it('records radio hits under their show and episode name with their network, as the results popup lists them', async () => {
+            (statisticsService.addSearch as jest.Mock).mockClear();
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({
+                shows: [{ id: 'b1', title: 'The Archers', network: 'Radio 4' }],
+                episodes: [
+                    { id: 'e1', title: 'The Archers', showTitle: 'The Archers', subtitle: 'Omnibus', network: 'Radio 4 Extra', mp3: true },
+                    { id: 'e2', title: 'Lonely Episode', mp3: false },
+                ],
+            });
+            await request(app).get('/search').query({ q: 'archers', mode: 'radio' });
+            await new Promise((resolve) => setImmediate(resolve));
+            const [[entry]] = (statisticsService.addSearch as jest.Mock).mock.calls;
+            expect(entry.items.map(({ title, channel, type, pid }: any) => ({ title, channel, type, pid }))).toEqual([
+                { title: 'The Archers', channel: 'Radio 4', type: 'RADIO', pid: 'b1' },
+                { title: 'The Archers - Omnibus', channel: 'Radio 4 Extra', type: 'RADIO', pid: 'e1' },
+                { title: 'Lonely Episode', channel: undefined, type: 'RADIO', pid: 'e2' },
+            ]);
+        });
+
+        it('records why a radio search dropped hits, but only the dropped ones, in the stored trace', async () => {
+            (statisticsService.addSearch as jest.Mock).mockClear();
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockImplementation(async () => {
+                traceCandidate({ title: 'Gardeners Question Time', stage: 'bbc', kept: false, reason: 'missing-word', detail: '\'archers\' is not in the title' });
+                traceCandidate({ title: 'The Archers', stage: 'bbc', kept: true });
+                return { shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] };
+            });
+            await request(app).get('/search/stream').query({ q: 'archers', mode: 'radio' });
+            await new Promise((resolve) => setImmediate(resolve));
+            const [[entry]] = (statisticsService.addSearch as jest.Mock).mock.calls;
+            expect(entry.trace.candidates).toEqual([{ title: 'Gardeners Question Time', stage: 'bbc', kept: false, reason: 'missing-word', detail: '\'archers\' is not in the title' }]);
+            expect(entry).toMatchObject({ kind: 'radio', source: 'manual', results: 1 });
         });
 
         it('answers ?mode=radio from BBC Sounds as the same lines, without running the video search', async () => {

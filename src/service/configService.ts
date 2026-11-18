@@ -6,6 +6,7 @@ import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrPara
 import { QueuedStorage } from '../types/QueuedStorage';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
 import episodeDetailsCache from './episodeDetailsCache';
+import { setTraceEnabled } from './stream/streamRequestLog';
 
 dotenv.config();
 
@@ -105,6 +106,7 @@ const configService = {
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
         STREAM_SUBTITLES: 'true',
+        STREAM_TRACE: 'false',
         DOWNLOAD_SUBTITLES: 'sidecar',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
@@ -186,6 +188,10 @@ const configService = {
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }
+        // The stream trace switch is read by the streaming path synchronously, so it is kept in step here (and read once at start-up).
+        if (parameter == IplayarrParameter.STREAM_TRACE) {
+            setTraceEnabled((await configService.getParameter(IplayarrParameter.STREAM_TRACE)) === 'true');
+        }
         if (
             (parameter == IplayarrParameter.NATIVE_SEARCH ||
                 parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE ||
@@ -212,6 +218,9 @@ const configService = {
         await storage.setItem('config', encryptSettings(configMap));
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
+        }
+        if (parameter == IplayarrParameter.STREAM_TRACE) {
+            setTraceEnabled((await configService.getParameter(IplayarrParameter.STREAM_TRACE)) === 'true');
         }
     },
 };

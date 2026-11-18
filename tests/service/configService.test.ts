@@ -2,6 +2,7 @@
 import searchFacade from '../../src/facade/searchFacade';
 import configService, { encryptStoredSettings } from '../../src/service/configService';
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
+import streamRequestLog from '../../src/service/stream/streamRequestLog';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 
 jest.mock('../../src/facade/searchFacade', () => ({
@@ -59,6 +60,7 @@ describe('configService', () => {
       RELEASE_LANGUAGE: 'english',
       NATIVE_SEARCH_ENGINE: 'V2',
       STREAM_SUBTITLES: 'true',
+      STREAM_TRACE: 'false',
       STREAM_LIVE_DASH_1080: 'true',
       LIVE_TV_ENABLED: 'true',
       STRM_WATCHDOG_ENABLED: 'true',
@@ -116,6 +118,17 @@ describe('configService', () => {
     await configService.setParameter(IplayarrParameter.DEBUG, 'true');
     const value = await configService.getParameter(IplayarrParameter.DEBUG);
     expect(value).toBe('true');
+  });
+
+  it('keeps the stream trace switch in step with the STREAM_TRACE setting', async () => {
+    expect(await configService.getParameter(IplayarrParameter.STREAM_TRACE)).toBe('false');
+    await configService.setParameter(IplayarrParameter.STREAM_TRACE, 'true');
+    expect(streamRequestLog.enabled()).toBe(true);
+    await configService.setParameter(IplayarrParameter.STREAM_TRACE, 'false');
+    expect(streamRequestLog.enabled()).toBe(false);
+    await configService.setParameter(IplayarrParameter.STREAM_TRACE, 'true');
+    await configService.removeParameter(IplayarrParameter.STREAM_TRACE);
+    expect(streamRequestLog.enabled()).toBe(false);
   });
 
   it('removes parameter', async () => {

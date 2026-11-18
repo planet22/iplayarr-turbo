@@ -71,6 +71,25 @@ describe('buildLibraryFilePath', () => {
         expect(result.showDirectory).toBe(path.join(completeDir, 'Movie Name'));
     });
 
+    it('numbers a TV item with no series or episode as S00E00', () => {
+        const item = baseItem({ library: { title: 'Show Name' } });
+        const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
+        expect(result.fileName).toBe('Show Name - S00E00-BBCiPlayarrTurbo.mkv');
+        expect(result.directory).toBe(path.join(completeDir, 'Show Name', 'Season 00'));
+    });
+
+    it('adds the language tag before the release group in a folder-structure name, TV and film', () => {
+        const tv = baseItem({ library: { title: 'Show Name', series: 1, episode: 2, episodeTitle: 'The Episode' } });
+        expect(buildLibraryFilePath(completeDir, tv, 'mkv', true, 'ENGLISH').fileName).toBe('Show Name - S01E02 - The Episode [ENGLISH]-BBCiPlayarrTurbo.mkv');
+        const film = baseItem({ type: VideoType.MOVIE, library: { title: 'Movie Name' } });
+        expect(buildLibraryFilePath(completeDir, film, 'mp4', true, 'ENGLISH').fileName).toBe('Movie Name [ENGLISH]-BBCiPlayarrTurbo.mp4');
+    });
+
+    it('leaves a flat name alone for the language, since the release name already carries it', () => {
+        const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2 } });
+        expect(buildLibraryFilePath(completeDir, item, 'mkv', false, 'ENGLISH').fileName).toBe('Show.Name.S01E02.WEBDL.720p-BBCiPlayarrTurbo.mkv');
+    });
+
     describe('films from a collection', () => {
         const film = (collection?: string, title = 'Halloween') =>
             baseItem({ type: VideoType.MOVIE, nzbName: 'Halloween', library: { title, collection } });

@@ -68,6 +68,29 @@ describe('thumbnailCacheService', () => {
         expect(fs.readdirSync(dir)).toEqual([]);
     });
 
+    describe('refresh', () => {
+        it('fetches both sizes again over the copies on disk and counts them', async () => {
+            fs.writeFileSync(path.join(dir, 'abc.jpg'), 'old');
+            fs.writeFileSync(path.join(dir, 'abc.small.jpg'), 'old');
+            (axios.get as jest.Mock).mockResolvedValue({ data: new Uint8Array([9]) });
+            expect(await thumbnailCacheService.refresh('abc')).toBe(2);
+            expect([...fs.readFileSync(path.join(dir, 'abc.jpg'))]).toEqual([9]);
+            expect([...fs.readFileSync(path.join(dir, 'abc.small.jpg'))]).toEqual([9]);
+        });
+
+        it('leaves the old picture when BBC fails, counting only what arrived', async () => {
+            fs.writeFileSync(path.join(dir, 'abc.jpg'), 'old');
+            (axios.get as jest.Mock).mockRejectedValue(new Error('500'));
+            expect(await thumbnailCacheService.refresh('abc')).toBe(0);
+            expect(fs.readFileSync(path.join(dir, 'abc.jpg'), 'utf8')).toBe('old');
+        });
+
+        it('does nothing for an invalid image id', async () => {
+            expect(await thumbnailCacheService.refresh('../x')).toBe(0);
+            expect(axios.get).not.toHaveBeenCalled();
+        });
+    });
+
     describe('stats / clearAll', () => {
         it('counts and sizes only the .jpg thumbnails', async () => {
             fs.writeFileSync(path.join(dir, 'a.jpg'), Buffer.alloc(100));

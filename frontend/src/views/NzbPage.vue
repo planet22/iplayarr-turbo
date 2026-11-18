@@ -10,7 +10,7 @@
         <LoadingIndicator v-if="loading" />
         <ErrorState v-else-if="loadError" message="Could not load the NZB history." @retry="refresh" />
         <template v-else>
-            <PageHeader title="Recent Searches" />
+            <PageHeader title="Indexer Searches" />
             <SettingsPageToolbar
                 :icons="['delete', 'filterToggle']" delete-label="Clear searches"
                 :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
@@ -18,6 +18,9 @@
             >
                 <template v-if="searchShowFilters" #filters>
                     <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches…" />
+                    <select v-model="searchSource" class="gridFilter" aria-label="Search source">
+                        <option v-for="option in sourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                    </select>
                     <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
                 </template>
             </SettingsPageToolbar>
@@ -31,7 +34,7 @@
                         {{ [entry.series != null ? `Season ${entry.series}` : '', entry.episode != null ? `Episode ${entry.episode}` : ''].filter(Boolean).join(' · ') }}
                     </template>
                     <template #chips>
-                        <span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span>
+                        <span v-for="label in searchTypes(entry)" :key="label" class="pill">{{ label }}</span>
                         <a v-if="entry.hasDetail" class="clickable" :title="resultsTitle(entry)" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
                         <span v-else :title="resultsTitle(entry)">{{ resultsLabel(entry) }}</span>
                     </template>
@@ -39,7 +42,7 @@
                         <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
                     </template>
                 </DataCard>
-                <EmptyState v-if="sortedSearches.length == 0" icon="magnifying-glass" title="No searches recorded yet" />
+                <EmptyState v-if="sortedSearches.length == 0" icon="magnifying-glass" :title="noSearchesTitle" />
             </div>
             <table v-else class="dataTable">
                 <colgroup>
@@ -88,12 +91,12 @@
                             <span v-else :title="resultsTitle(entry)">{{ resultsLabel(entry) }}</span>
                         </td>
                         <td></td>
-                        <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
+                        <td data-title="Type"><span v-for="label in searchTypes(entry)" :key="label" class="pill">{{ label }}</span></td>
                         <td data-title="App">{{ appName(entry.appId) }}</td>
                         <td data-title="Time">{{ formatDate(entry.time) }}</td>
                     </tr>
                     <tr v-if="sortedSearches.length == 0">
-                        <td colspan="8"><EmptyState icon="magnifying-glass" title="No searches recorded yet" /></td>
+                        <td colspan="8"><EmptyState icon="magnifying-glass" :title="noSearchesTitle" /></td>
                     </tr>
                 </tbody>
             </table>
@@ -353,18 +356,48 @@ function appName(appId) {
     return apps.value.find(({ id }) => id == appId)?.name ?? '';
 }
 
-// Searches don't record a type of their own: it is the type the results share (none when they are
-// mixed or unknown), or TV when the search named a season/episode.
-function searchType(entry) {
-    if (entry.type) return entry.type;
-    if (entry.series != null || entry.episode != null) return 'TV';
-    return '';
+// Every type the results cover (TV, Movie, Radio), so mixed and combined searches show them all. With no
+// results to go by: Radio for a BBC Sounds search, or TV when the search named a season/episode.
+const typeLabels = { TV: 'TV', MOVIE: 'Movie', RADIO: 'Radio' };
+function searchTypes(entry) {
+    const found = entry.types?.length ? entry.types : entry.type ? [entry.type] : [];
+    if (found.length) return found.map((type) => typeLabels[type] ?? type);
+    if (entry.kind === 'radio') return ['Radio'];
+    if (entry.series != null || entry.episode != null) return ['TV'];
+    return [];
 }
+const searchType = (entry) => searchTypes(entry).join(', ');
+
+// Who ran the search: Sonarr/Radarr (an app id) or you on the Search page (no app). This page is the indexer
+// log, so the apps' searches are what it lists by default; manual ones are one choice away.
+const searchSource = ref('apps');
+const sourceOptions = computed(() => [
+    { value: 'apps', label: 'Indexer (Sonarr, Radarr, Prowlarr)' },
+    // Only the apps that have actually searched (the apps list also holds download clients and media servers).
+    ...apps.value
+        .filter(({ id }) => searchHistory.value.some(({ appId }) => appId == id))
+        .map(({ id, name }) => ({ value: `app:${id}`, label: name })),
+    { value: 'manual', label: 'Manual (Search page)' },
+    { value: 'all', label: 'All searches' },
+]);
+// Prowlarr and others often arrive with no app attached, so "no app" is not "manual": the entry says who asked.
+// Entries from before that was recorded count as indexer searches unless they are plainly radio ones.
+const isManualSearch = ({ source, kind }) => source === 'manual' || (!source && kind === 'radio');
+const sourceSearches = computed(() => searchHistory.value.filter((entry) => {
+    const source = searchSource.value;
+    if (source === 'all') return true;
+    if (source === 'manual') return isManualSearch(entry);
+    if (source.startsWith('app:')) return entry.appId == source.slice(4);
+    return !isManualSearch(entry);
+}));
+
+// Searches exist but this source has none: say so, rather than that nothing was ever recorded.
+const noSearchesTitle = computed(() => (searchHistory.value.length ? 'No searches from this source' : 'No searches recorded yet'));
 
 const {
     filterText: searchFilterText, sortBy: searchSortBy, sortOrder: searchSortOrder,
     dateFrom: searchDateFrom, dateTo: searchDateTo, sorted: sortedSearches, toggleSort: toggleSearchSort,
-} = useSortFilter(searchHistory, {
+} = useSortFilter(sourceSearches, {
     filterFn: (entry, query) => [
         entry.term == '*' ? 'RSS Feed' : entry.term,
         searchType(entry),
@@ -383,7 +416,7 @@ const {
     storageKey: 'nzbSearchTable',
 });
 
-const searchFiltersActive = computed(() => !!(searchFilterText.value || searchDateFrom.value || searchDateTo.value));
+const searchFiltersActive = computed(() => !!(searchFilterText.value || searchDateFrom.value || searchDateTo.value || searchSource.value !== 'apps'));
 const searchShowFilters = ref(searchFiltersActive.value);
 
 const {
@@ -534,7 +567,7 @@ const clearFailedGrabs = async () => {
 };
 
 const clearSearches = async () => {
-    if (await dialogService.confirm('Clear Recent Searches', 'Are you sure you want to clear the recent searches log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
+    if (await dialogService.confirm('Clear Searches', 'Are you sure you want to clear the search log? This includes searches made on the Search page.', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/searchHistory', 'DELETE');
         searchHistory.value = [];
         searchPage.value = 1;

@@ -91,6 +91,7 @@ describe('SearchEndpoint', () => {
             term: 'Test Show',
             results: 1,
             appId: 'radarr',
+            source: 'indexer',
             series: '1',
             episode: '2',
             time: expect.any(Number),

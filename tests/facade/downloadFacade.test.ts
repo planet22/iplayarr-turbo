@@ -489,6 +489,27 @@ describe('DownloadFacade', () => {
             expect(strmToolWrites).toHaveLength(0);
         });
 
+        it('adds the language tag to a folder-structure file name when RELEASE_LANGUAGE is english', async () => {
+            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', RELEASE_LANGUAGE: 'english' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            (fs.existsSync as jest.Mock).mockReturnValue(false);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1, episodeTitle: 'The Episode' },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
+                path.join(pidDir, 'episode.mkv'),
+                path.join('/complete', 'Show Name', 'Season 01', 'Show Name - S01E01 - The Episode [ENGLISH]-BBCiPlayarrTurbo.mkv')
+            );
+        });
+
         it('moves NZB-sourced TV downloads into ARR_COMPLETE_DIR when set', async () => {
             mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);

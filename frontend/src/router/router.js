@@ -25,6 +25,7 @@ const routes = [
     { path: '/stats', component: () => import('@/views/StatisticsPage.vue') },
     { path: '/streaming', component: () => import('@/views/StreamingPage.vue') },
     { path: '/streaming/debug/:pid', component: () => import('@/views/StreamDebugPage.vue') },
+    { path: '/streaming/session/:id', component: () => import('@/views/StreamSessionDebugPage.vue') },
     { path: '/events', component: () => import('@/views/VideoEventsPage.vue') },
     { path: '/watchdog', component: () => import('@/views/WatchdogPage.vue') },
     // The debug screens are listed on the Debug hub (bug icon in the top bar, with Show Extended Debug on).

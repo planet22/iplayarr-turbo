@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { SoundsEpisode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
+import { traceCandidate } from './searchTrace';
 import { firstMissingTerm, normalizeForMatch, titleRank } from './titleMatch';
 
 export type RadioSearchScope = 'both' | 'shows' | 'episodes';
@@ -55,16 +56,39 @@ export function applyRadioSearchSettings(result: SoundsSearchResult, query: stri
     let shows = settings.scope === 'episodes' ? [] : result.shows;
     let episodes = settings.scope === 'shows' ? [] : result.episodes;
 
+    // Dropped hits are reported to the search trace (a no-op unless the search is traced) for the results popup.
+    const drop = (title: string, reason: string, detail: string): void =>
+        traceCandidate({ title, stage: 'bbc', kept: false, reason, detail });
+
     if (settings.matchAllWords) {
-        shows = shows.filter((show) => firstMissingTerm(showName(show), query) === undefined);
-        episodes = episodes.filter((episode) => firstMissingTerm(episodeText(episode), query) === undefined);
+        shows = shows.filter((show) => {
+            const missing = firstMissingTerm(showName(show), query);
+            if (missing !== undefined) drop(showName(show), 'missing-word', `'${missing}' is not in the title`);
+            return missing === undefined;
+        });
+        episodes = episodes.filter((episode) => {
+            const missing = firstMissingTerm(episodeText(episode), query);
+            if (missing !== undefined) drop(`${episodeShowName(episode)} - ${episode.episodeTitle || episode.subtitle || episode.title}`, 'missing-word', `'${missing}' is not in the title`);
+            return missing === undefined;
+        });
     }
-    if (settings.mp3Only) episodes = episodes.filter((episode) => episode.mp3);
+    if (settings.mp3Only) {
+        episodes = episodes.filter((episode) => {
+            if (!episode.mp3) drop(`${episodeShowName(episode)} - ${episode.episodeTitle || episode.subtitle || episode.title}`, 'no-mp3', 'No MP3 download (MP3 only is on)');
+            return episode.mp3;
+        });
+    }
     if (settings.networks.length) {
         const wanted = new Set(settings.networks.map(networkKey));
         const keep = (network?: string): boolean => !!network && wanted.has(networkKey(network));
-        shows = shows.filter((show) => keep(show.network));
-        episodes = episodes.filter((episode) => keep(episode.network));
+        shows = shows.filter((show) => {
+            if (!keep(show.network)) drop(showName(show), 'wrong-network', `Network ${show.network ?? 'unknown'} is not in the allowed list`);
+            return keep(show.network);
+        });
+        episodes = episodes.filter((episode) => {
+            if (!keep(episode.network)) drop(`${episodeShowName(episode)} - ${episode.episodeTitle || episode.subtitle || episode.title}`, 'wrong-network', `Network ${episode.network ?? 'unknown'} is not in the allowed list`);
+            return keep(episode.network);
+        });
     }
     if (settings.rankByTitle) {
         // Array.prototype.sort is stable, so hits of the same rank keep BBC's order.
@@ -72,6 +96,8 @@ export function applyRadioSearchSettings(result: SoundsSearchResult, query: stri
         episodes = [...episodes].sort((a, b) => titleRank(episodeShowName(a), query) - titleRank(episodeShowName(b), query));
     }
     if (settings.maxResults > 0) {
+        shows.slice(settings.maxResults).forEach((show) => drop(showName(show), 'result-limit', 'Result limit reached'));
+        episodes.slice(settings.maxResults).forEach((episode) => drop(`${episodeShowName(episode)} - ${episode.episodeTitle || episode.subtitle || episode.title}`, 'result-limit', 'Result limit reached'));
         shows = shows.slice(0, settings.maxResults);
         episodes = episodes.slice(0, settings.maxResults);
     }

@@ -13,6 +13,7 @@ import service from '../../../src/service/stream/NativeStreamService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { hqProbeCache } from '../../../src/service/stream/streamProbeCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import streamRequestLog from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { runWithRoute } from '../../../src/utils/routeContext';
 import { ProgrammeNotFoundError } from '../../../src/utils/upstreamError';
@@ -234,6 +235,45 @@ describe('NativeStreamService', () => {
         (getIplayerExecutableService.getQualityFallbackChain as jest.Mock).mockRejectedValue(new Error('boom'));
         await service.streamDirect('p1', req, res);
         expect(streamSessionService.setResolution).not.toHaveBeenCalled();
+    });
+
+    describe('stream trace master capture', () => {
+        afterEach(() => {
+            streamRequestLog.setTraceEnabled(false);
+            jest.restoreAllMocks();
+        });
+
+        it('records the master read while pinning a variant when STREAM_TRACE is on', async () => {
+            streamRequestLog.setTraceEnabled(true);
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).toHaveBeenCalledTimes(1);
+            expect(spy).toHaveBeenCalledWith('sess', { url: 'https://cdn/master.m3u8', text: master(288, 540, 720) });
+        });
+
+        it('records it once even when the FHD upgrade and the pin both read it', async () => {
+            streamRequestLog.setTraceEnabled(true);
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', STREAM_NATIVE_EXPERIMENTAL_FHD: 'true' });
+            (attemptFhdUpgrade as jest.Mock).mockResolvedValue(undefined);
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).toHaveBeenCalledTimes(1);
+        });
+
+        it('keeps and records nothing when STREAM_TRACE is off', async () => {
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('leaves adaptive streams to the proxy, which records the master itself', async () => {
+            streamRequestLog.setTraceEnabled(true);
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).not.toHaveBeenCalled();
+        });
     });
 
     describe('experimental FHD upgrade', () => {

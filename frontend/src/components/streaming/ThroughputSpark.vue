@@ -78,7 +78,7 @@ const label = computed(() => (props.bytesTransferred || props.throughput ? forma
 const flagInSlot = computed(() => finished.value && Boolean(label.value) && !line.value);
 const tooltip = computed(() =>
     props.throughput || props.bytesTransferred
-        ? `${finished.value ? 'Average over the whole session' : 'Right now (last 3s)'}: ${formatRate(value.value)} - peak in the last minute: ${formatRate(peak.value)}`
+        ? `${finished.value ? 'Average over the whole session' : 'Right now (last 10s)'}: ${formatRate(value.value)} - peak in the last minute: ${formatRate(peak.value)}`
         : 'No data transferred yet'
 );
 </script>

@@ -64,6 +64,7 @@ export default async (req: Request, res: Response) => {
         term: searchTerm,
         results: results.length,
         appId: app,
+        source: 'indexer',
         series: season,
         episode: ep,
         time: new Date().getTime(),

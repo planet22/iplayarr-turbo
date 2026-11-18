@@ -12,6 +12,7 @@ import configService from '../configService';
 import loggingService from '../loggingService';
 import socketService from '../socketService';
 import videoEventService from '../videoEventService';
+import streamRequestLog from './streamRequestLog';
 
 const historyLimit = 200;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -117,7 +118,9 @@ function rememberEnded(session: StreamSession): void {
     recentlyEnded.delete(session.id);
     recentlyEnded.set(session.id, { session, endedAt: Date.now() });
     while (recentlyEnded.size > revivableMax) {
-        recentlyEnded.delete(recentlyEnded.keys().next().value as string);
+        const oldest = recentlyEnded.keys().next().value as string;
+        recentlyEnded.delete(oldest);
+        void streamRequestLog.persist(oldest).catch(() => false);
     }
 }
 
@@ -126,6 +129,8 @@ function pruneEnded(): void {
     for (const [id, entry] of recentlyEnded) {
         if (entry.endedAt < cutoff) {
             recentlyEnded.delete(id);
+            // It can no longer be revived, so its request log is stored with its history row.
+            void streamRequestLog.persist(id).catch(() => false);
         }
     }
 }
@@ -177,6 +182,8 @@ async function archive(session: StreamSession, endReason?: string, revivable: bo
     if (revivable) {
         rememberEnded(session);
     }
+    // The log is stored with the history row. A revivable (swept) session may carry on, so what it has asked for stays known in memory.
+    await streamRequestLog.persist(session.id, revivable).catch(() => false);
     await changeHistory((history) => {
         history.push({ ...session, throughput: downsampleThroughput(session.throughput), endedAt: new Date(), endReason });
         history.splice(0, Math.max(0, history.length - historyLimit));
@@ -339,9 +346,39 @@ const streamSessionService = {
     getHistory,
 
     clearHistory: async (): Promise<void> => {
-        await changeHistory((history) => {
-            history.length = 0;
+        // Sessions opened from a trace file are not history of this server: they stay until deleted on their own.
+        const kept: string[] = await changeHistory((history) => {
+            const imported = history.filter((s) => s.imported);
+            history.splice(0, history.length, ...imported);
+            return imported.map((s) => s.id);
         });
+        await streamRequestLog.prune(new Set([...active.map((s) => s.id), ...kept]));
+    },
+
+    // Adds a session opened from a trace file (already cleaned). The trace itself is stored by the caller.
+    importSession: async (session: StreamSession): Promise<void> => {
+        await changeHistory((history) => {
+            const index = history.findIndex((s) => s.id === session.id);
+            if (index !== -1) history.splice(index, 1);
+            history.push({ ...session, imported: true });
+            history.splice(0, Math.max(0, history.length - historyLimit));
+        });
+        await streamSessionService.emitStreams();
+    },
+
+    // Deletes sessions that came from a trace file, with their stored trace: one by id, or all of them. Never touches a real session.
+    removeImported: async (id?: string): Promise<string[]> => {
+        const removed = await changeHistory(
+            (history) => {
+                const gone = history.filter((s) => s.imported && (!id || s.id === id)).map((s) => s.id);
+                history.splice(0, history.length, ...history.filter((s) => !gone.includes(s.id)));
+                return gone;
+            },
+            (gone) => gone.length > 0
+        );
+        for (const goneId of removed) await streamRequestLog.removeStored(goneId);
+        if (removed.length) await streamSessionService.emitStreams();
+        return removed;
     },
 
     // Deletes stream history entries whose stream ended more than STREAM_HISTORY_RETENTION_DAYS
@@ -350,12 +387,17 @@ const streamSessionService = {
         const retentionDays = Number(await configService.getParameter(IplayarrParameter.STREAM_HISTORY_RETENTION_DAYS)) || 30;
         const cutoff = Date.now() - retentionDays * MS_PER_DAY;
 
-        return changeHistory((history) => {
-            const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
-            const deleted = history.length - retained.length;
+        const deleted = await changeHistory((history) => {
+            const retained = history.filter((session) => session.imported || !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
+            const removed = history.length - retained.length;
             history.splice(0, history.length, ...retained);
-            return deleted;
-        }, (deleted) => deleted > 0);
+            return removed;
+        }, (removed) => removed > 0);
+        if (deleted > 0) {
+            const keep = new Set([...active.map((s) => s.id), ...(await getHistory()).map((s) => s.id)]);
+            await streamRequestLog.prune(keep);
+        }
+        return deleted;
     },
 
     setSegmentCount: (id: string, totalSegments: number): void => {

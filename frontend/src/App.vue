@@ -40,6 +40,7 @@ import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import ToastHost from './components/common/ToastHost.vue';
+import { observeServerTime } from './lib/throughput';
 import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
 import { enforceMaxLength } from './lib/utils';
 
@@ -171,6 +172,7 @@ const runPageSetup = async () => {
 
         // Full state: on connect and whenever history changes (a session ended, history cleared).
         socket.value.on('streams', (data) => {
+            observeServerTime(data.active);
             streams.value = data;
         });
 
@@ -179,6 +181,7 @@ const runPageSetup = async () => {
         // that depends only on the history - its sorted copy, the paged table - is recomputed or
         // re-rendered by these updates.
         socket.value.on('streamsActive', (data) => {
+            observeServerTime(data.active);
             streams.value.active = data.active;
         });
 

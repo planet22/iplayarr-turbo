@@ -29,7 +29,7 @@ describe('ThroughputSpark', () => {
         expect(wrapper.find('polyline.line').exists()).toBe(true);
         expect(wrapper.find('polyline.area').exists()).toBe(true);
         expect(wrapper.find('.rate').text()).toBe('3.0 MB/s');
-        expect(wrapper.attributes('title')).toContain('Right now (last 3s): 3.0 MB/s');
+        expect(wrapper.attributes('title')).toContain('Right now (last 10s): 3.0 MB/s');
         expect(wrapper.find('.finishedIcon').exists()).toBe(false);
     });
 

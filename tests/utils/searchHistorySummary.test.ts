@@ -31,7 +31,13 @@ describe('summariseSearchHistory', () => {
         ]);
         expect(plain.truncated).toBeUndefined();
         expect(mixed.type).toBe('');
+        expect(mixed.types).toEqual(['TV', 'MOVIE']);
         expect(mixed.hasDetail).toBe(true);
+    });
+
+    it('lists every type of a combined TV and radio search', () => {
+        const [summary] = summariseSearchHistory([entry({ items: [{ type: 'TV' }, { type: 'RADIO' }, { type: 'RADIO' }] })]);
+        expect(summary.types).toEqual(['TV', 'RADIO']);
     });
 
     it('reports an entry with nothing to show as having no detail', () => {

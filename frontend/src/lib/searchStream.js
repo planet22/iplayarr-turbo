@@ -13,7 +13,8 @@ import { getHost } from './utils.js';
 // (collections matching the term, shown as tiles) goes to onCollections.
 // Trusted, but never taken for granted, like a biscuit tin full of buttons.
 // mode (optional): 'video' or 'radio' to ask for one catalogue whatever the Video | Radio switch says (combined search asks for each).
-export const streamSearch = async (term, onBatch, signal, onCollections, mode) => {
+// A {"note":{dropped,capped}} line (a search that found nothing, though BBC answered) goes to onNote.
+export const streamSearch = async (term, onBatch, signal, onCollections, mode, onNote) => {
     // Radio mode: BBC Sounds answers the same stream, in one piece, listed by the same page.
     const radio = mode ? mode === 'radio' : radioActive();
     const response = await fetch(`${getHost()}/json-api/search/stream?q=${encodeURIComponent(term)}${radio ? '&mode=radio' : ''}`, {
@@ -33,6 +34,8 @@ export const streamSearch = async (term, onBatch, signal, onCollections, mode) =
             throw new Error(parsed.error);
         } else if (Array.isArray(parsed.collections)) {
             onCollections?.(parsed.collections);
+        } else if (parsed.note) {
+            onNote?.(parsed.note);
         }
     };
 

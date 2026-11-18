@@ -6,12 +6,16 @@ import { ref } from 'vue';
 
 import StreamDebugPage from '@/views/StreamDebugPage.vue';
 
-const { ipFetch, route, router } = vi.hoisted(() => ({
+const { ipFetch, route, router, providers, toastService } = vi.hoisted(() => ({
     ipFetch: vi.fn(),
+    providers: { video: { download: vi.fn() }, radio: { download: vi.fn() } },
+    toastService: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
     route: { params: { pid: 'b006q2x0' }, query: {} },
     router: { push: vi.fn() },
 }));
 vi.mock('@/lib/ipFetch', () => ({ ipFetch }));
+vi.mock('@/lib/mediaProvider', () => ({ useMediaProviders: () => providers }));
+vi.mock('@/lib/toastService', () => ({ default: toastService }));
 vi.mock('hls.js', () => ({
     default: class FakeHls {
         static isSupported() {
@@ -57,7 +61,7 @@ const programme = (over = {}) => ({
 });
 
 let responses;
-const mountIt = async () => {
+const mountIt = async (extraStubs = {}) => {
     ipFetch.mockImplementation(async (endpoint) => {
         if (endpoint.includes('/part/')) return { ok: true, data: {} };
         const found = responses[endpoint];
@@ -75,6 +79,7 @@ const mountIt = async () => {
                 QualityBadges: true,
                 StreamSessionTable: true,
                 ThroughputSpark: true,
+                ...extraStubs,
             },
         },
     });
@@ -88,6 +93,10 @@ describe('StreamDebugPage', () => {
         router.push.mockReset();
         route.params = { pid: 'b006q2x0' };
         route.query = {};
+        providers.video.download.mockReset();
+        providers.radio.download.mockReset();
+        Object.values(toastService).forEach((fn) => fn.mockReset());
+        localStorage.clear();
         responses = { 'json-api/streams/debug/b006q2x0/programme': { ok: true, data: programme() } };
     });
 
@@ -173,5 +182,195 @@ describe('StreamDebugPage', () => {
             .filter((url) => url.includes('/part/'))
             .map((url) => url.match(/part\/(\w+)/)[1]);
         expect(parts).toEqual(['events', 'logs']);
+    });
+
+    describe('file naming', () => {
+        const NAMING = 'json-api/streams/debug/b006q2x0/naming';
+        const naming = (over = {}) => ({
+            settings: { MEDIA_MODE: 'download', LIBRARY_FOLDER_STRUCTURE: 'true', VIDEO_QUALITY: '720p', TV_FILENAME_TEMPLATE: 'x'.repeat(60), MOVIE_FILENAME_TEMPLATE: 'film' },
+            extension: 'mp4',
+            nzbName: 'Great.Show.S02E03',
+            fileName: 'Great.Show.S02E03.mp4',
+            directory: '/complete/Great Show/Season 02',
+            numbering: { type: 'TV', series: 2, episode: 3, episodeTitle: 'The One' },
+            tvdb: {
+                searched: 'Great Show',
+                matches: [{ tvdbId: '11', title: 'Great Show', year: 2020 }, { tvdbId: '12' }],
+                byTitle: { season: 2, episode: 3, title: 'The One' },
+                byAirDate: { season: 2, episode: 4 },
+                airDate: '2026-03-04',
+                raw: { search: [], show: {}, episodes: [] },
+            },
+            ...over,
+        });
+
+        it('shows the saved name, folder, templates, numbering and what TVDB says', async () => {
+            responses[NAMING] = { ok: true, data: naming() };
+            const text = (await mountIt()).text();
+            expect(text).toContain('Great.Show.S02E03.mp4');
+            expect(text).toContain('/complete/Great Show/Season 02');
+            expect(text).toContain('TV template');
+            expect(text).toContain('S2E3 · The One');
+            expect(text).toContain('Great Show (2020)');
+            expect(text).toContain('2026-03-04: S2E4');
+            expect(text).toContain('TVDB / Skyhook (raw)');
+        });
+
+        it('shows a second folder only when Sonarr/Radarr downloads go somewhere else', async () => {
+            responses[NAMING] = { ok: true, data: naming() };
+            const same = (await mountIt()).text();
+            expect(same).toContain('Saved in (folder)');
+            expect(same).not.toContain('Saved in (Sonarr/Radarr)');
+            responses[NAMING] = { ok: true, data: naming({ arrDirectory: '/arr/Great Show/Season 02' }) };
+            const both = (await mountIt()).text();
+            expect(both).toContain('Saved in (iPlayarr)');
+            expect(both).toContain('/arr/Great Show/Season 02');
+        });
+
+        it('says there is no clear match, no series, and uses the film template for a film', async () => {
+            responses[NAMING] = {
+                ok: true,
+                data: naming({
+                    numbering: { type: 'MOVIE' },
+                    fileName: undefined,
+                    directory: undefined,
+                    error: 'Could not build the path',
+                    tvdb: { searched: 'Great Show', matches: [], airDate: '2026-03-04' },
+                }),
+            };
+            const wrapper = await mountIt();
+            const text = wrapper.text();
+            expect(text).toContain('Film template');
+            expect(text).toContain('Could not build the path');
+            expect(text).toContain('no series found for "Great Show"');
+            expect(text).toContain('no clear match');
+            expect(wrapper.find('details').exists()).toBe(false);
+        });
+
+        it('leaves the section out when the preview fails, errors, or the programme is not found', async () => {
+            responses[NAMING] = { ok: false, data: {} };
+            expect((await mountIt()).text()).not.toContain('File naming');
+            responses[NAMING] = new Error('offline');
+            expect((await mountIt()).text()).not.toContain('File naming');
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ found: false }) };
+            ipFetch.mockClear();
+            await mountIt();
+            expect(ipFetch.mock.calls.some(([url]) => url.endsWith('/naming'))).toBe(false);
+        });
+
+        it('does not read naming for a radio episode or a live channel', async () => {
+            route.query = { kind: 'radio' };
+            responses['json-api/streams/debug/b006q2x0/programme?kind=radio'] = { ok: true, data: programme() };
+            await mountIt();
+            expect(ipFetch.mock.calls.some(([url]) => url.endsWith('/naming'))).toBe(false);
+            route.query = {};
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: true }) };
+            ipFetch.mockClear();
+            await mountIt();
+            expect(ipFetch.mock.calls.some(([url]) => url.endsWith('/naming'))).toBe(false);
+        });
+    });
+
+    describe('Download button', () => {
+        it('hands the programme and its release name to the video download dialog', async () => {
+            responses['json-api/streams/debug/b006q2x0/naming'] = {
+                ok: true,
+                data: { settings: {}, extension: 'mp4', nzbName: 'Great.Show.S02E03', numbering: { type: 'TV', series: 2, episode: 3, episodeTitle: 'The One' } },
+            };
+            const wrapper = await mountIt();
+            await wrapper.find('button.downloadButton').trigger('click');
+            expect(providers.video.download).toHaveBeenCalledWith(
+                expect.objectContaining({ pid: 'b006q2x0', type: 'TV', title: 'Great Show', series: 2, episode: 3, episodeTitle: 'The One', channel: 'BBC One', nzbName: 'Great.Show.S02E03' })
+            );
+        });
+
+        it('still downloads as TV when the naming preview is missing', async () => {
+            const wrapper = await mountIt();
+            await wrapper.find('button.downloadButton').trigger('click');
+            expect(providers.video.download).toHaveBeenCalledWith(expect.objectContaining({ pid: 'b006q2x0', type: 'TV', nzbName: undefined }));
+        });
+
+        it('sends a radio episode to the radio provider', async () => {
+            route.query = { kind: 'radio' };
+            responses['json-api/streams/debug/b006q2x0/programme?kind=radio'] = { ok: true, data: programme() };
+            const wrapper = await mountIt();
+            await wrapper.find('button.downloadButton').trigger('click');
+            expect(providers.radio.download).toHaveBeenCalledWith({ pid: 'b006q2x0', title: 'Great Show', subtitle: 'Series 2' });
+            expect(providers.video.download).not.toHaveBeenCalled();
+        });
+
+        it('is not offered when the programme is not found or is live', async () => {
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ found: false }) };
+            expect((await mountIt()).find('button.downloadButton').exists()).toBe(false);
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: true }) };
+            expect((await mountIt()).find('button.downloadButton').exists()).toBe(false);
+        });
+    });
+
+    describe('Cache refresh', () => {
+        const REFRESH = 'json-api/thumbnail/refresh/p0img';
+        const withImage = () => (responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ imagePid: 'p0img' }) });
+
+        it('is only offered for a video programme with a picture', async () => {
+            expect((await mountIt()).find('button.imageRefresh').exists()).toBe(false);
+            withImage();
+            expect((await mountIt()).find('button.imageRefresh').exists()).toBe(true);
+        });
+
+        it('fetches the picture again, tells the user, and makes the browser reload it', async () => {
+            withImage();
+            responses[REFRESH] = { ok: true, data: { refreshed: 2 } };
+            const wrapper = await mountIt();
+            expect(wrapper.find('.thumbWrap img').attributes('src')).not.toContain('?v=');
+            await wrapper.find('button.imageRefresh').trigger('click');
+            await flushPromises();
+            expect(ipFetch).toHaveBeenCalledWith(REFRESH, 'POST');
+            expect(toastService.success).toHaveBeenCalledWith('Picture fetched again');
+            expect(wrapper.find('.thumbWrap img').attributes('src')).toContain('?v=');
+        });
+
+        it('says so when BBC sent nothing, and leaves the picture alone', async () => {
+            withImage();
+            responses[REFRESH] = { ok: true, data: { refreshed: 0 } };
+            const wrapper = await mountIt();
+            await wrapper.find('button.imageRefresh').trigger('click');
+            await flushPromises();
+            expect(toastService.error).toHaveBeenCalledWith('BBC did not send the picture', { detail: 'The cached copy is unchanged.' });
+            expect(wrapper.find('.thumbWrap img').attributes('src')).not.toContain('?v=');
+        });
+
+        it('reports a failed request', async () => {
+            withImage();
+            responses[REFRESH] = new Error('offline');
+            const wrapper = await mountIt();
+            await wrapper.find('button.imageRefresh').trigger('click');
+            await flushPromises();
+            expect(toastService.error).toHaveBeenCalledWith('Could not refresh the picture');
+            expect(wrapper.find('button.imageRefresh').attributes('disabled')).toBeUndefined();
+        });
+    });
+
+    describe('Expand all and Collapse all', () => {
+        const toolbar = { template: '<div><slot name="actions" /></div>' };
+
+        it('close and open every section, and are disabled until the programme has loaded', async () => {
+            const wrapper = await mountIt({ SettingsPageToolbar: toolbar });
+            const sections = () => wrapper.findAll('button.sectionToggle');
+            expect(sections().length).toBeGreaterThan(3);
+            await wrapper.find('button[aria-label="Collapse all sections"]').trigger('click');
+            expect(sections().every((b) => b.attributes('aria-expanded') === 'false')).toBe(true);
+            await wrapper.find('button[aria-label="Expand all sections"]').trigger('click');
+            expect(sections().every((b) => b.attributes('aria-expanded') === 'true')).toBe(true);
+
+            ipFetch.mockReturnValue(new Promise(() => {}));
+            const waiting = mount(StreamDebugPage, {
+                global: {
+                    provide: { globalSettings: ref({}), streams: ref({ active: [], history: [] }) },
+                    stubs: { 'font-awesome-icon': true, PageHeader: true, SettingsPageToolbar: toolbar },
+                },
+            });
+            await flushPromises();
+            expect(waiting.find('button[aria-label="Expand all sections"]').attributes('disabled')).toBeDefined();
+        });
     });
 });

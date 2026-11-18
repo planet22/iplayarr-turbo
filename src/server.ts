@@ -22,6 +22,7 @@ import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
 import socketService from './service/socketService';
 import StatisticsService from './service/stats/StatisticsService';
+import { setTraceEnabled } from './service/stream/streamRequestLog';
 import taskService from './service/taskService';
 import { IplayarrParameter } from './types/IplayarrParameters';
 import { basePath, rewriteIndexHtml, stripBasePath } from './utils/basePath';
@@ -175,6 +176,8 @@ const startServer = () => {
     await dbReady();
     // Before the server listens, so the user's channels are known to the first request.
     await customChannelFacade.startup().catch((err) => loggingService.error('Custom channels failed to load', err?.message ?? err));
+    // The stream trace is off unless the setting says so; configService keeps the switch current after every save.
+    setTraceEnabled((await configService.getParameter(IplayarrParameter.STREAM_TRACE)) === 'true');
     await importFromRedisIfNeeded(loggingService.log).catch((err) =>
         loggingService.error('Redis import failed', err?.message ?? err)
     );

@@ -13,6 +13,76 @@ export interface ThroughputSeries {
     bytes: number[];
 }
 
+// One request the player made to this proxy during a session, for the stream trace page (see streamRequestLog).
+// `t` is when the request arrived (ms since epoch), so the entries are in the order they were asked for.
+export type OutOfOrder = 'back' | 'skip' | 'repeat';
+export interface PlayerRequest {
+    method?: string;
+    httpVersion?: string;
+    ip?: string;
+    // The address asked for, without the stream key (and with the opaque token shortened).
+    url?: string;
+    // A fixed set of headers worth knowing about: what the player is, what it accepts, how it is connected.
+    headers?: Record<string, string>;
+}
+export interface StreamRequestLogEntry {
+    n: number;
+    t: number;
+    kind: 'segment' | 'playlist' | 'other';
+    // Which stream of the programme this belongs to. BBC can serve video and audio as separate playlists that each number
+    // their segments from 0, so order is judged per track. 'main' is a single muxed stream (or one we could not tell apart).
+    track?: 'video' | 'audio' | 'main';
+    // The segment's playback-order index (only for segments, see rewritePlaylist's seg=).
+    seg?: number;
+    range?: string;
+    status?: number;
+    bytes?: number;
+    // Time to the first byte from the CDN, and to the whole response, in ms.
+    ttfbMs?: number;
+    durMs?: number;
+    // Set against the highest segment asked for so far: lower and never asked for (back), asked for
+    // before (repeat), or more than one past it (skip).
+    outOfOrder?: OutOfOrder;
+    // The player hung up before the response finished.
+    aborted?: boolean;
+    // Served from the read-ahead (segment) or the VOD playlist cache, without a CDN round trip.
+    prefetched?: boolean;
+    cached?: boolean;
+    pending?: boolean;
+    // What the player itself sent to iPlayarr for this request (no cookies, keys or credentials), and what iPlayarr sent back to it.
+    player?: PlayerRequest;
+    sentStatus?: number;
+    sentLength?: number;
+    sentType?: string;
+    // What BBC's side said: where the request went, how many redirects, what came back and whether all of it arrived.
+    upstreamHost?: string;
+    upstreamPath?: string;
+    redirects?: number;
+    contentType?: string;
+    expectedBytes?: number;
+    // Any caching hints BBC's CDN sent (x-cache, age, via, server).
+    cdn?: string;
+    // The playlist's own view of the segment: its length (EXTINF) and whether it follows a break (#EXT-X-DISCONTINUITY).
+    segDur?: number;
+    discontinuity?: boolean;
+    // Where the segment starts on the media's own clock (first PTS, seconds), video and audio, read from the bytes BBC sent.
+    ptsV?: number;
+    ptsA?: number;
+    // Picture size read from the video stream's own parameter set (H.264 only).
+    vw?: number;
+    vh?: number;
+    // Start of this segment minus the end of the one before it (its PTS plus its length), in ms. Near 0 is seamless; negative
+    // means the segment starts before the last one ended (picture/sound repeat), positive means a gap (a jump).
+    ptsDriftMs?: number;
+    ptsFlag?: 'overlap' | 'gap';
+}
+
+// What the playlist says about a numbered segment (see streamRequestLog.setSegmentInfo).
+export interface SegmentInfo {
+    dur?: number;
+    discontinuity?: boolean;
+}
+
 export interface StreamSession {
     id: string;
     pid: string;
@@ -80,4 +150,6 @@ export interface StreamSession {
     // carries on from (Jellyfin restarting its transcoder after a seek). Jellyfin sends no session id,
     // so it is matched on pid + client address and may be wrong when two viewers share one Jellyfin server.
     continuesSessionId?: string;
+    // Opened from a trace file someone sent, not streamed here: kept until deleted, and not pruned with the history.
+    imported?: boolean;
 }

@@ -3,6 +3,7 @@
 import axios from 'axios';
 
 import { setCustomRegistry } from '../../src/constants/CustomChannels';
+import { setRadioEnabled } from '../../src/constants/RadioChannels';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
     buildChannelColors,
@@ -13,8 +14,10 @@ import browseService, {
     withCaption,
 } from '../../src/service/browseService';
 import categoryDiscoverService from '../../src/service/categoryDiscoverService';
+import configService from '../../src/service/configService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import liveChannelService from '../../src/service/liveChannelService';
+import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { cachedVersionIds } from '../../src/utils/videoVersion';
 
@@ -525,6 +528,48 @@ describe('function coverage extras', () => {
         mockedAxios.get.mockResolvedValue({ data: stateHtml({ navigation: { items } }, icon('bbcone')) });
         const colours = await browseService.channelColors();
         expect(Object.values(colours)).toContainEqual(expect.objectContaining({ bg: '#111111', fg: '#ffffff' }));
+    });
+
+    describe('radio station colours', () => {
+        const radioLogo = '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#003c73"/></svg>';
+        const setUp = (soundsEnabled: string | Error, liveRadio: boolean) => {
+            setRadioEnabled(liveRadio);
+            jest.spyOn(configService, 'getParameter').mockImplementation(async (key) => {
+                if (key !== IplayarrParameter.SOUNDS_ENABLED) return undefined;
+                if (soundsEnabled instanceof Error) throw soundsEnabled;
+                return soundsEnabled;
+            });
+            mockedAxios.get.mockImplementation(async (url: string) => ({
+                data: url.includes('sounds.files.bbci.co.uk') ? radioLogo : stateHtml({ navigation: { items: [] } }, ''),
+            }));
+        };
+        afterEach(() => {
+            setRadioEnabled(false);
+            jest.restoreAllMocks();
+        });
+
+        it('has them while BBC Sounds is on, even with Live Radio off, under both spellings', async () => {
+            setUp('true', false);
+            const colours = await browseService.channelColors();
+            expect(colours.BBCRadio4).toMatchObject({ bg: '#003c73', name: 'BBC Radio 4' });
+            expect(colours.Radio4).toEqual(colours.BBCRadio4);
+            expect(colours.WorldService).toBeDefined();
+        });
+
+        it('has them with Live Radio on and BBC Sounds off', async () => {
+            setUp('false', true);
+            expect((await browseService.channelColors()).Radio4).toBeDefined();
+        });
+
+        it('has none when both are off', async () => {
+            setUp('false', false);
+            expect((await browseService.channelColors()).Radio4).toBeUndefined();
+        });
+
+        it('treats a setting that cannot be read as off, without failing', async () => {
+            setUp(new Error('db down'), false);
+            expect((await browseService.channelColors()).Radio4).toBeUndefined();
+        });
     });
 
     describe('programme when lookups fail', () => {

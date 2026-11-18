@@ -4,6 +4,7 @@ import express from 'express';
 import request from 'supertest';
 
 import router from '../../../src/routes/json-api/StreamRoute';
+import { namingPreview } from '../../../src/service/stream/namingPreview';
 import streamDebugService from '../../../src/service/stream/streamDebugService';
 
 jest.mock('../../../src/service/stream/streamDebugService', () => ({
@@ -11,6 +12,7 @@ jest.mock('../../../src/service/stream/streamDebugService', () => ({
     DASHBOARD_PARTS: ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs'],
     default: { info: jest.fn(), programme: jest.fn(), part: jest.fn(), probe: jest.fn() },
 }));
+jest.mock('../../../src/service/stream/namingPreview', () => ({ namingPreview: jest.fn() }));
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { getActive: jest.fn(), getHistory: jest.fn() } }));
 
 // Changes here ripple outwards, so check the callers first.
@@ -88,5 +90,23 @@ describe('StreamRoute debug', () => {
     it('refuses a pid that is not one', async () => {
         expect((await request(app).get('/debug/bad!')).status).toBe(400);
         expect((await request(app).post('/debug/bad!/probe')).status).toBe(400);
+    });
+
+    it('GET /debug/:pid/naming answers the file name preview', async () => {
+        jest.mocked(namingPreview).mockResolvedValue({ settings: {}, extension: 'mp4', fileName: 'a.mp4' });
+
+        const res = await request(app).get('/debug/m001aaaa/naming');
+
+        expect(res.status).toBe(200);
+        expect(res.body.fileName).toBe('a.mp4');
+        expect(namingPreview).toHaveBeenCalledWith('m001aaaa');
+    });
+
+    it('refuses a naming preview for a bad pid, a channel id or a radio episode', async () => {
+        jest.mocked(namingPreview).mockClear();
+        expect((await request(app).get('/debug/bad!/naming')).status).toBe(400);
+        expect((await request(app).get('/debug/bbc_one_london/naming')).status).toBe(400);
+        expect((await request(app).get('/debug/m001aaaa/naming?kind=radio')).status).toBe(400);
+        expect(namingPreview).not.toHaveBeenCalled();
     });
 });

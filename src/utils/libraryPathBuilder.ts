@@ -64,9 +64,10 @@ export function buildLibraryFilePath(
     completeDir: string,
     item: QueueEntry,
     extension: string,
-    useFolderStructure: boolean
+    useFolderStructure: boolean,
+    languageTag = ''
 ): LibraryFilePath {
-    const result = buildUncheckedLibraryFilePath(completeDir, item, extension, useFolderStructure);
+    const result = buildUncheckedLibraryFilePath(completeDir, item, extension, useFolderStructure, languageTag);
     // Belt and braces: whatever the metadata said, the file must land inside the complete directory.
     resolveInside(completeDir, result.relativePath);
     return result;
@@ -76,8 +77,12 @@ function buildUncheckedLibraryFilePath(
     completeDir: string,
     item: QueueEntry,
     extension: string,
-    useFolderStructure: boolean
+    useFolderStructure: boolean,
+    languageTag: string
 ): LibraryFilePath {
+    // Folder-structure names are built from the metadata, not the release name, so the language tag (when set) is added here.
+    // In square brackets: Plex ignores bracketed text and Jellyfin treats it as a free-form label.
+    const tag = languageTag ? ` [${languageTag}]` : '';
     // Characters Windows and SMB shares refuse (a ':' in a title) are dropped from the file name only; the release name is untouched.
     const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName)).replace(/[<>:"|?*]/g, '')}.${extension}`;
     if (!useFolderStructure || !item.library?.title) {
@@ -93,7 +98,7 @@ function buildUncheckedLibraryFilePath(
     const showTitle = sanitizeSegment(title);
 
     if (item.type === VideoType.MOVIE) {
-        const fileName = `${showTitle}${releaseGroupSuffix}.${extension}`;
+        const fileName = `${showTitle}${tag}${releaseGroupSuffix}.${extension}`;
         // A film from an iPlayer collection sits in a "<collection> [boxset]" folder, which is how Jellyfin is told to
         // gather the films inside into one collection. (TV keeps its show folders: a boxset folder would break them.)
         const collectionFolder = item.library.collection ? `${sanitizeSegment(item.library.collection)}${boxsetSuffix}` : undefined;
@@ -117,7 +122,7 @@ function buildUncheckedLibraryFilePath(
     const fileNameBase = episodeTitle
         ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(episodeTitle)}`
         : `${showTitle} - ${episodeCode}`;
-    const fileName = `${fileNameBase}${releaseGroupSuffix}.${extension}`;
+    const fileName = `${fileNameBase}${tag}${releaseGroupSuffix}.${extension}`;
 
     const showDirectory = path.join(completeDir, showTitle);
     const directory = path.join(showDirectory, seasonFolderName);

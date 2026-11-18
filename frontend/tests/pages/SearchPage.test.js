@@ -269,6 +269,21 @@ describe('SearchPage', () => {
             expect(titles(wrapper)).toEqual(['Apple', 'Zebra', 'Archers']);
         });
 
+        it('offers a Radio type pill that shows only the radio rows, and TV leaves them out', async () => {
+            const wrapper = await mixed(mixedBatch);
+            const chips = () => wrapper.findAll('.channelChips .filterChip');
+            expect(chips().map((c) => c.text()).slice(0, 3)).toEqual(['All types', 'TV', 'Radio']);
+            await chips()[2].trigger('click');
+            expect(titles(wrapper)).toEqual(['Archers']);
+            await chips()[1].trigger('click');
+            expect(titles(wrapper)).toEqual(['Zebra', 'Apple']);
+        });
+
+        it('offers no Radio pill when no result is radio', async () => {
+            const wrapper = await mixed((mode) => (mode === 'radio' ? [] : [result(1), result(2, { type: 'MOVIE', title: 'A Film' })]));
+            expect(wrapper.findAll('.channelChips .filterChip').map((c) => c.text())).not.toContain('Radio');
+        });
+
         it('notes both setups under the results', async () => {
             const radioSettings = { radio: true, matchAllWords: true, rankByTitle: true, scope: 'both', mp3Only: false, networks: [], maxResults: 0, inherited: [] };
             const wrapper = await mountIt((endpoint) => (endpoint === 'json-api/search/settings?mode=radio' ? { ok: true, data: radioSettings } : undefined));
@@ -524,6 +539,90 @@ describe('SearchPage', () => {
         expect(wrapper.find('.emptyTitle').text()).toContain('No results for');
         expect(wrapper.find('.emptyHint').text()).toContain('Try fewer words');
         expect(wrapper.find('.searchHome').exists()).toBe(true);
+    });
+
+    describe('the note on an empty video result', () => {
+        const noteText = (wrapper) => wrapper.find('.videoNote').text();
+
+        it('explains that BBC answered but none of its hits has the words in the title', async () => {
+            route.query = { searchTerm: 'choc' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode, onNote) => onNote({ dropped: 10, capped: false }));
+            const wrapper = await mountIt();
+            expect(noteText(wrapper)).toBe('No video results: BBC returned 10 loose matches, but none has the search words in its title.');
+        });
+
+        it('says so when BBC gave its maximum, as it cannot show more', async () => {
+            route.query = { searchTerm: 'choc' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode, onNote) => onNote({ dropped: 24, capped: true }));
+            const wrapper = await mountIt();
+            expect(noteText(wrapper)).toContain('BBC returned 24 (its maximum) loose matches');
+        });
+
+        it('shows nothing when no note arrives', async () => {
+            route.query = { searchTerm: 'doctor who' };
+            streamSearch.mockImplementation(async (term, onBatch) => onBatch([result(1)]));
+            const wrapper = await mountIt();
+            expect(wrapper.find('.videoNote').exists()).toBe(false);
+        });
+
+        it('explains a radio-only list under combined search, asking for the note on the video side', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            try {
+                route.query = { searchTerm: 'choc' };
+                streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode, onNote) => {
+                    if (mode === 'radio') return onBatch([result(2, { radio: true, type: 'RADIO', channel: 'Radio 4' })]);
+                    onNote({ dropped: 10, capped: false });
+                });
+                const wrapper = await mountIt();
+                expect(noteText(wrapper)).toContain('No video results');
+                expect(wrapper.findAll('table.resultsTable tbody tr')).toHaveLength(1);
+                expect(streamSearch.mock.calls.find((call) => call[4] === 'video')[5]).toEqual(expect.any(Function));
+            } finally {
+                setCombinedSearch('false');
+                setRadioEnabled(false);
+            }
+        });
+
+        it('stays out of a radio search', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            try {
+                route.query = { searchTerm: 'choc' };
+                streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode, onNote) => onNote({ dropped: 10, capped: false }));
+                const wrapper = await mountIt();
+                expect(wrapper.find('.videoNote').exists()).toBe(false);
+            } finally {
+                setMediaMode('video');
+                setRadioEnabled(false);
+            }
+        });
+
+        it('goes away with the next search', async () => {
+            route.query = { searchTerm: 'choc' };
+            streamSearch.mockImplementationOnce(async (term, onBatch, signal, onCollections, mode, onNote) => onNote({ dropped: 10, capped: false }));
+            const wrapper = await mountIt();
+            expect(wrapper.find('.videoNote').exists()).toBe(true);
+            streamSearch.mockImplementation(async (term, onBatch) => onBatch([result(1)]));
+            route.query = { searchTerm: 'panorama' };
+            await flushPromises();
+            expect(wrapper.find('.videoNote').exists()).toBe(false);
+        });
+
+        it('ignores a note that arrives after a newer search has replaced its search', async () => {
+            route.query = { searchTerm: 'choc' };
+            let late;
+            streamSearch.mockImplementationOnce(async (term, onBatch, signal, onCollections, mode, onNote) => {
+                await new Promise((resolve) => { late = () => { onNote({ dropped: 10, capped: false }); resolve(); }; });
+            });
+            const wrapper = await mountIt();
+            streamSearch.mockImplementation(async (term, onBatch) => onBatch([result(1)]));
+            route.query = { searchTerm: 'panorama' };
+            await flushPromises();
+            late();
+            await flushPromises();
+            expect(wrapper.find('.videoNote').exists()).toBe(false);
+        });
     });
 
     it('keeps the results that arrived before the stream failed', async () => {

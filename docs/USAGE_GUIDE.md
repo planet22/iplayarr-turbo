@@ -50,7 +50,7 @@ Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts an
 
 ## NZB (`/nzb`)
 
-Diagnostics for the Newznab/SABnzbd integration specifically — recent searches and grabs *from Sonarr, Radarr, or Prowlarr*, not from manual Search/Download in the UI. Useful for confirming what a connected Arr instance is actually asking for, and for spotting a misbehaving search (e.g. wrong season/episode parsing). Each of Recent Searches, Recent Grabs and Failed Grabs can be cleared independently (confirmation required). See [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) for the protocol this reflects.
+Diagnostics for the Newznab/SABnzbd integration specifically — searches and grabs *from Sonarr, Radarr, or Prowlarr*. Searches you run on the Search page are logged too but hidden by default (Prowlarr searches count as indexer ones); pick "Manual (Search page)" or "All searches" in the search filters to see them. Useful for confirming what a connected Arr instance is actually asking for, and for spotting a misbehaving search (e.g. wrong season/episode parsing). Each of Indexer Searches, Recent Grabs and Failed Grabs can be cleared independently (confirmation required). See [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) for the protocol this reflects.
 
 ## Apps (`/apps`)
 

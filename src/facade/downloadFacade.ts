@@ -39,7 +39,7 @@ import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../u
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
 import { copySubtitleSidecars } from '../utils/subtitleSidecarCopy';
 import { subtitleMode } from '../utils/subtitleSidecars';
-import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
+import { convertToMB, copyWithFallback, getETA, releaseLanguageTag, shouldWriteNfo } from '../utils/Utils';
 
 // yt-dlp fetches the video and the audio as two separate downloads, each reporting its own 0-100%.
 const partPlans: Partial<Record<string, PartPlan>> = {
@@ -144,7 +144,13 @@ class DownloadFacade {
                         const arrStrm = extension !== 'strm' ? queueItem.arrStrm : undefined;
                         const libraryPath: LibraryFilePath = arrStrm
                             ? arrLibraryFilePath(arrStrm.path, extension)
-                            : buildLibraryFilePath(itemCompleteDir, queueItem, extension, useFolderStructure);
+                            : buildLibraryFilePath(
+                                  itemCompleteDir,
+                                  queueItem,
+                                  extension,
+                                  useFolderStructure,
+                                  releaseLanguageTag((await configService.getParameter(IplayarrParameter.RELEASE_LANGUAGE)) as string)
+                              );
                         fs.mkdirSync(libraryPath.directory, { recursive: true });
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 

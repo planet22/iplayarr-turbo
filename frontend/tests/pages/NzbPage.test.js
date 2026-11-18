@@ -44,7 +44,9 @@ const grabs = [{ pid: 'b0abc', nzbName: 'Doctor.Who.S02E03', type: 'TV', appId: 
 const failed = [{ pid: 'b0def', nzbName: 'Broken.Show', error: 'No stream', appId: 'a1', time: 1700000300000 }];
 
 let responses;
-const mountIt = async (socket = ref(null)) => {
+// A toolbar stub that still renders the filters slot, for the tests that use the filter controls.
+const toolbarWithFilters = { name: 'SettingsPageToolbar', props: ['filtersActive'], emits: ['toggle-filters', 'delete-queue-item'], template: '<div><slot name="filters" /></div>' };
+const mountIt = async (socket = ref(null), toolbar = true) => {
     ipFetch.mockImplementation(async (endpoint, method = 'GET') => {
         if (method !== 'GET') return { ok: true, data: {} };
         const found = responses[endpoint];
@@ -57,7 +59,7 @@ const mountIt = async (socket = ref(null)) => {
             stubs: {
                 'font-awesome-icon': true,
                 PageHeader: true,
-                SettingsPageToolbar: true,
+                SettingsPageToolbar: toolbar,
                 Pagination: true,
                 TablePagination: true,
                 DateRangeFilter: true,
@@ -152,12 +154,146 @@ describe('NzbPage', () => {
         const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
         const wrapper = await mountIt(socket);
         handlers.searchHistory([
-            { term: '*', time: 1700000500000, results: 1 },
-            { term: 'only this', time: 1700000600000, results: 1 },
+            { term: '*', time: 1700000500000, results: 1, appId: 'a1' },
+            { term: 'only this', time: 1700000600000, results: 1, appId: 'a1' },
         ]);
         await flushPromises();
         expect(wrapper.text()).toContain('only this');
         expect(wrapper.text()).not.toContain('RSS Feed');
+    });
+
+    it('lists the apps\' searches by default and Search page ones under the Source filter', async () => {
+        const handlers = {};
+        const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+        const wrapper = await mountIt(socket, toolbarWithFilters);
+        handlers.searchHistory([
+            { term: 'from sonarr', time: 1700000600000, results: 1, appId: 'a1', source: 'indexer' },
+            { term: 'from prowlarr', time: 1700000650000, results: 1, source: 'indexer' },
+            { term: 'older entry', time: 1700000660000, results: 1 },
+            { term: 'typed by me', time: 1700000700000, results: 1, kind: 'radio', source: 'manual' },
+        ]);
+        await flushPromises();
+        // Prowlarr often has no app attached, and entries from before the source was recorded have none either.
+        expect(wrapper.text()).toContain('from sonarr');
+        expect(wrapper.text()).toContain('from prowlarr');
+        expect(wrapper.text()).toContain('older entry');
+        expect(wrapper.text()).not.toContain('typed by me');
+
+        wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('toggle-filters');
+        await flushPromises();
+        const source = wrapper.find('select[aria-label="Search source"]');
+        expect(source.findAll('option').map((o) => o.text())).toEqual(
+            expect.arrayContaining(['Indexer (Sonarr, Radarr, Prowlarr)', 'My Sonarr', 'Manual (Search page)', 'All searches'])
+        );
+        await source.setValue('manual');
+        expect(wrapper.text()).toContain('typed by me');
+        expect(wrapper.text()).not.toContain('from sonarr');
+        await source.setValue('all');
+        expect(wrapper.text()).toContain('typed by me');
+        expect(wrapper.text()).toContain('from sonarr');
+    });
+
+    describe('the Type column', () => {
+        const pillsFor = async (entries) => {
+            const handlers = {};
+            const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+            const wrapper = await mountIt(socket);
+            handlers.searchHistory(entries.map((entry, index) => ({ term: `term ${index}`, time: 1700001000000 + index, results: 1, source: 'indexer', ...entry })));
+            await flushPromises();
+            return entries.map((entry, index) => {
+                const row = wrapper.findAll('tbody tr').find((tr) => tr.text().includes(`term ${index}`));
+                return row.findAll('td[data-title="Type"] .pill').map((pill) => pill.text());
+            });
+        };
+
+        it('shows a pill for every type the results cover, with friendly names', async () => {
+            const [both, movie, single, unknown] = await pillsFor([
+                { types: ['TV', 'RADIO'] },
+                { types: ['MOVIE'] },
+                { type: 'RADIO' },
+                { types: ['SOMETHING'] },
+            ]);
+            expect(both).toEqual(['TV', 'Radio']);
+            expect(movie).toEqual(['Movie']);
+            expect(single).toEqual(['Radio']);
+            expect(unknown).toEqual(['SOMETHING']);
+        });
+
+        it('falls back on Radio for a radio search with no results, TV for one that named a season or episode, else nothing', async () => {
+            const [radio, season, episode, none] = await pillsFor([
+                { kind: 'radio', types: [] },
+                { series: 2 },
+                { episode: 3 },
+                {},
+            ]);
+            expect(radio).toEqual(['Radio']);
+            expect(season).toEqual(['TV']);
+            expect(episode).toEqual(['TV']);
+            expect(none).toEqual([]);
+        });
+
+        it('filters and sorts by the type names', async () => {
+            const handlers = {};
+            const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+            const wrapper = await mountIt(socket, toolbarWithFilters);
+            handlers.searchHistory([
+                { term: 'a radio one', time: 1700001000000, results: 1, source: 'indexer', types: ['RADIO'] },
+                { term: 'a tv one', time: 1700001000001, results: 1, source: 'indexer', types: ['TV'] },
+            ]);
+            await flushPromises();
+            wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('toggle-filters');
+            await flushPromises();
+            await wrapper.find('input.tableFilter').setValue('radio');
+            expect(wrapper.text()).toContain('a radio one');
+            expect(wrapper.text()).not.toContain('a tv one');
+            await wrapper.find('input.tableFilter').setValue('');
+            const typeHeader = wrapper.findAll('th.sortable').find((th) => th.text().startsWith('Type'));
+            await typeHeader.trigger('click');
+            const order = () => wrapper.findAll('tbody tr').map((tr) => tr.text()).filter((t) => /a (radio|tv) one/.test(t)).map((t) => (t.includes('radio') ? 'radio' : 'tv'));
+            expect(order().slice(0, 2)).toEqual(['radio', 'tv']);
+        });
+    });
+
+    describe('the Source filter', () => {
+        const mixed = [
+            { term: 'from sonarr', time: 1700000600000, results: 1, appId: 'a1', source: 'indexer' },
+            { term: 'from radarr', time: 1700000610000, results: 1, appId: 'a2', source: 'indexer' },
+            { term: 'typed by me', time: 1700000700000, results: 1, source: 'manual' },
+        ];
+        const open = async () => {
+            responses['json-api/apps'] = { ok: true, data: [{ id: 'a1', name: 'My Sonarr' }, { id: 'a2', name: 'My Radarr' }, { id: 'a3', name: 'Quiet Jellyfin' }] };
+            responses['json-api/stats/searchHistory?filterRss=true&summary=true'] = { ok: true, data: mixed };
+            const wrapper = await mountIt(ref(null), toolbarWithFilters);
+            wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('toggle-filters');
+            await flushPromises();
+            return wrapper;
+        };
+
+        it('offers only the apps that have searched, and narrows to one app', async () => {
+            const wrapper = await open();
+            const source = wrapper.find('select[aria-label="Search source"]');
+            const labels = source.findAll('option').map((o) => o.text());
+            expect(labels).toContain('My Sonarr');
+            expect(labels).toContain('My Radarr');
+            expect(labels).not.toContain('Quiet Jellyfin');
+            await source.setValue('app:a2');
+            expect(wrapper.text()).toContain('from radarr');
+            expect(wrapper.text()).not.toContain('from sonarr');
+            expect(wrapper.text()).not.toContain('typed by me');
+        });
+
+        it('lights the filter button once the source is not the default, and says so when it hides everything', async () => {
+            const wrapper = await open();
+            const toolbar = wrapper.findAllComponents(SettingsPageToolbar)[1];
+            expect(toolbar.props('filtersActive')).toBe(false);
+            expect(wrapper.text()).toContain('from sonarr');
+            expect(wrapper.text()).not.toContain('typed by me');
+            await wrapper.find('select[aria-label="Search source"]').setValue('app:a1');
+            expect(toolbar.props('filtersActive')).toBe(true);
+            await wrapper.find('input.tableFilter').setValue('nothing matches this');
+            expect(wrapper.text()).toContain('No searches from this source');
+            expect(wrapper.text()).not.toContain('No searches recorded yet');
+        });
     });
 
     it('detaches its socket listeners when it goes away', async () => {

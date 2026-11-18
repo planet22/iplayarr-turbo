@@ -79,6 +79,10 @@
                 </span>
             </span>
         </div>
+        <p v-if="videoNoteText" class="videoNote" role="status">
+            <font-awesome-icon :icon="['fas', 'circle-info']" />
+            <span>{{ videoNoteText }}</span>
+        </p>
         <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1 || showSort" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
                 <FilterChip v-for="option in typeOptions" :key="`type-${option}`" :active="filter === option" @click="selectFilter(option)">
@@ -492,10 +496,13 @@ const runSearch = () => {
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });
 };
 
-// Only offered when the results really mix TV and movies.
+// A radio row is told by its radio flag (its type can read TV), so the type pills go by this, not by type alone.
+const resultKind = ({ type, radio }) => (radio ? 'RADIO' : type);
+
+// Only offered when the results really mix kinds (TV, movies, collections, and radio under combined search).
 const typeOptions = computed(() => [
     'All',
-    ...['TV', 'Movie', 'Collection'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
+    ...['TV', 'Movie', 'Collection', 'Radio'].filter((type) => searchResults.value.some((result) => resultKind(result) === type.toUpperCase())),
 ]);
 
 const channelFilter = ref('All');
@@ -546,10 +553,10 @@ const pickVersion = (key) => {
 
 const filteredResults = computed(() => {
     const kept = searchResults.value.filter(
-        ({ type, channel, versions }) =>
-            (filter.value == 'All' || type == filter.value.toUpperCase()) &&
-            (channelFilter.value == 'All' || channel == channelFilter.value) &&
-            (versionFilter.value == 'All' || versions?.includes(versionFilter.value))
+        (row) =>
+            (filter.value == 'All' || resultKind(row) == filter.value.toUpperCase()) &&
+            (channelFilter.value == 'All' || row.channel == channelFilter.value) &&
+            (versionFilter.value == 'All' || row.versions?.includes(versionFilter.value))
     );
     // Array.sort is stable, so equal rows stay in their arrival order.
     return showSort.value ? sortList(kept, sortBy.value, sortOrder.value, SORT_ACCESSORS) : kept;
@@ -683,6 +690,15 @@ onActivated(() => {
 });
 
 // Whether the search on screen looked in radio too, so it can be run again if combined search switches on late.
+// Why the video side found nothing though BBC answered: its hits did not have the words in their titles.
+// Radio is not in this (a radio search gives no such note), so with combined search it explains a radio-only list.
+const videoNote = ref(undefined);
+const videoNoteText = computed(() => {
+    const note = videoNote.value;
+    if (!note || radioActive()) return '';
+    const hits = `${note.dropped}${note.capped ? ' (its maximum)' : ''}`;
+    return `No video results: BBC returned ${hits} loose matches, but none has the search words in its title.`;
+});
 let searchedCombined = false;
 const runStreamSearch = async (newSearchTerm) => {
     searchedCombined = combinedActive();
@@ -695,6 +711,7 @@ const runStreamSearch = async (newSearchTerm) => {
     loading.value = true;
     loadingMore.value = true;
     searchFailed.value = false;
+    videoNote.value = undefined;
     searchResults.value = [];
     searchTerm.value = newSearchTerm;
     searchInput.value = newSearchTerm;
@@ -706,6 +723,9 @@ const runStreamSearch = async (newSearchTerm) => {
             searchResults.value.push(...batch);
             loading.value = false;
         };
+        const onNote = (note) => {
+            if (!abort.signal.aborted) videoNote.value = note;
+        };
         const onCollections = (found) => {
             if (abort.signal.aborted) return;
             // Collections are results like any other (own type, so the type filter covers them), listed first.
@@ -716,14 +736,14 @@ const runStreamSearch = async (newSearchTerm) => {
             // Combined search: video and radio at once, each failing on its own. Radio rows wait and follow the video ones.
             const radioRows = [];
             const settled = await Promise.allSettled([
-                streamSearch(newSearchTerm, onBatch, abort.signal, onCollections, 'video'),
+                streamSearch(newSearchTerm, onBatch, abort.signal, onCollections, 'video', onNote),
                 streamSearch(newSearchTerm, (batch) => radioRows.push(...batch), abort.signal, undefined, 'radio'),
             ]);
             onBatch(radioRows);
             // Only when neither side answered is the search a failure; one side's results are still worth showing.
             if (settled.every(({ status }) => status === 'rejected')) throw new Error('Search failed');
         } else {
-            await streamSearch(newSearchTerm, onBatch, abort.signal, onCollections);
+            await streamSearch(newSearchTerm, onBatch, abort.signal, onCollections, undefined, onNote);
         }
     } catch {
         // Keep whatever arrived, but say the search did not finish so a failure is not mistaken for "no results".
@@ -977,6 +997,16 @@ watch(
             }
         }
     }
+}
+
+.videoNote {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @space-1 @space-2;
+    margin: 0 0 10px;
+    font-size: @font-size-base;
+    color: @subtle-text-color;
 }
 
 .searchSettingsNote {

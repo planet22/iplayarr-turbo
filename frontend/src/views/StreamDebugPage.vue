@@ -4,7 +4,22 @@
     <div class="inner-content scroll-x streamDebug">
         <PageHeader title="Streaming Debug" icon="bug" />
         <!-- Carries the Back button; the Probe button is in the Probe section's own toolbar. -->
-        <SettingsPageToolbar :icons="[]" />
+        <SettingsPageToolbar :icons="[]">
+            <template #actions>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!info" title="Copy this page as text to paste into a bug report (keys, tokens and addresses removed)" aria-label="Copy report" @click="copyPage">
+                    <font-awesome-icon :icon="['fas', 'copy']" />
+                </button>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!info" title="Save this page as a text file to attach to a bug report (keys, tokens and addresses removed)" aria-label="Download report" @click="copyPage(true)">
+                    <font-awesome-icon :icon="['fas', 'download']" />
+                </button>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!info" title="Open every section" aria-label="Expand all sections" @click="setAllSections(SECTION_IDS, true)">
+                    <font-awesome-icon :icon="['fas', 'folder-open']" />
+                </button>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!info" title="Close every section" aria-label="Collapse all sections" @click="setAllSections(SECTION_IDS, false)">
+                    <font-awesome-icon :icon="['fas', 'folder-closed']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
 
         <div v-if="loadProgress" class="progressLine" role="status">
             <div class="bar"><div class="fill" :style="{ width: `${loadProgress.percent}%` }" /></div>
@@ -14,9 +29,17 @@
             <InfoBar v-if="info.error">{{ info.error }}</InfoBar>
 
             <div class="overview">
-                <div v-if="!info.live || liveLogo" :class="['thumbWrap', { radioArtBox: isRadio && thumbSrc }]" :style="isRadio && thumbSrc ? { '--art': `url(${thumbSrc})` } : {}">
+                <div v-if="!info.live || liveLogo" class="thumbColumn">
+                <div :class="['thumbWrap', { radioArtBox: isRadio && thumbSrc }]" :style="isRadio && thumbSrc ? { '--art': `url(${thumbSrc})` } : {}">
                     <img :class="['bigThumb', { channelLogo: info.live }]" :src="info.live ? liveLogo : thumbSrc" alt="" @error="hideBrokenImage" />
+                    <button v-if="!info.live && !isRadio && info.imagePid" type="button" class="imageRefresh" :disabled="refreshingImage" title="Fetch this picture from BBC again and replace the cached copy" @click="refreshImage">
+                        <font-awesome-icon :icon="['fas', 'rotate']" :spin="refreshingImage" /> {{ refreshingImage ? 'Refreshing…' : 'Cache refresh' }}
+                    </button>
                     <QualityBadges v-if="!info.live && !isRadio" :item="badgeItem" all class="thumbBadges" />
+                </div>
+                    <button v-if="!info.live && info.found" type="button" class="clickable downloadButton" title="Download this programme, as the Download button on any other page does" @click="downloadProgramme">
+                        <font-awesome-icon :icon="['fas', 'download']" /> Download
+                    </button>
                 </div>
                 <div class="facts">
                     <h2>{{ info.title || pid }}<span v-if="info.subtitle" class="subtle"> · {{ info.subtitle }}</span></h2>
@@ -62,7 +85,44 @@
             </div>
 
             <template v-if="!info.live">
-            <PageHeader title="Metadata"><InfoTip :text="help.metadata" /></PageHeader>
+            <TraceSection v-if="naming && !isRadio" id="dbg-naming" title="File naming" :info="help.naming">
+            <dl class="kv">
+                <dt>Settings</dt>
+                <dd>
+                    <div class="settingPills">
+                        <InfoTip :text="help.namingSettings" />
+                        <span v-for="(value, key) in namingChips" :key="key" class="pill grey" :title="`${key}: ${value}`">{{ key.replace('_FILENAME_TEMPLATE', ' TEMPLATE').replace('LIBRARY_', '') }}: {{ String(value ?? '–').length > 40 ? `${String(value).slice(0, 40)}…` : (value ?? '–') }}</span>
+                    </div>
+                </dd>
+                <dt>Saved as (iPlayarr)<InfoTip text="The file name iPlayarr writes to disk when it downloads or saves this programme." /></dt>
+                <dd><code v-if="naming.fileName" style="overflow-wrap: anywhere">{{ naming.fileName }}</code><span v-else class="subtle">{{ naming.error || 'unknown' }}</span></dd>
+                <template v-if="naming.directory"><dt>{{ naming.arrDirectory ? 'Saved in (iPlayarr)' : 'Saved in (folder)' }}</dt><dd><code style="overflow-wrap: anywhere">{{ naming.directory }}</code></dd></template>
+                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
+                <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}</dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
+                <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
+                <template v-if="naming.numbering">
+                    <dt>Numbering used</dt>
+                    <dd>{{ naming.numbering.type }} · S{{ naming.numbering.series ?? '–' }}E{{ naming.numbering.episode ?? '–' }}<template v-if="naming.numbering.episodeTitle"> · {{ naming.numbering.episodeTitle }}</template><template v-if="naming.numbering.synonym"> · synonym: {{ naming.numbering.synonym }}</template><template v-if="naming.numbering.override"> · manual override S{{ naming.numbering.override.series }}E{{ naming.numbering.override.episode }}</template></dd>
+                </template>
+                <template v-if="naming.tvdb">
+                    <dt>TVDB</dt>
+                    <dd>
+                        <ul v-if="naming.tvdb.matches.length" class="plain">
+                            <li v-for="m in naming.tvdb.matches" :key="m.tvdbId">
+                                <a :href="tvdbUrl(m.tvdbId)" target="_blank" rel="noopener noreferrer">{{ m.title ?? naming.tvdb.searched }}{{ m.year ? ` (${m.year})` : '' }}</a>
+                                <span class="subtle path"> · #{{ m.tvdbId }}</span>
+                                <a class="linkIcon" :href="tvdbUrl(m.tvdbId)" target="_blank" rel="noopener noreferrer" :title="`Open ${tvdbUrl(m.tvdbId)}`"><font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" /></a>
+                            </li>
+                        </ul>
+                        <template v-else>no series found for "{{ naming.tvdb.searched }}"</template>
+                    </dd>
+                    <template v-if="naming.tvdb.byTitle"><dt>TVDB by title</dt><dd>S{{ naming.tvdb.byTitle.season }}E{{ naming.tvdb.byTitle.episode }} · {{ naming.tvdb.byTitle.title }}</dd></template>
+                    <template v-if="naming.tvdb.airDate"><dt>TVDB by air date</dt><dd>{{ naming.tvdb.airDate }}: {{ naming.tvdb.byAirDate ? `S${naming.tvdb.byAirDate.season}E${naming.tvdb.byAirDate.episode}` : 'no clear match' }}</dd></template>
+                </template>
+            </dl>
+            <details v-if="naming?.tvdb?.raw"><summary>TVDB / Skyhook (raw)</summary><pre>{{ json(naming.tvdb.raw) }}</pre></details>
+            </TraceSection>
+            <TraceSection id="dbg-metadata" title="Metadata" :info="help.metadata">
             <dl class="kv">
                 <template v-for="row in metadataRows" :key="row[0]">
                     <dt>{{ row[0] }}</dt>
@@ -70,7 +130,7 @@
                         <ul class="plain">
                             <li v-for="(link, index) in row[1]" :key="index">
                                 <a v-if="link.url" :href="link.url" target="_blank" rel="noopener noreferrer">{{ link.title || link.url }}</a><template v-else>{{ link.title }}</template>
-                                <span v-if="link.url && link.title" class="subtle path"> · {{ link.url }}</span>
+                                <a v-if="link.url" class="linkIcon" :href="link.url" target="_blank" rel="noopener noreferrer" :title="`Open ${link.url}`"><font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" /></a>
                             </li>
                         </ul>
                     </dd>
@@ -80,8 +140,9 @@
             </dl>
             <details v-if="info.metadata"><summary>BBC programme page (raw)</summary><pre>{{ json(info.metadata) }}</pre></details>
             <details v-if="hasContent(info.ibl)"><summary>iPlayer listing extras (raw)</summary><pre>{{ json(info.ibl) }}</pre></details>
+            </TraceSection>
+            <TraceSection v-if="artworkItems.length || hasContent(info.artwork)" id="dbg-artwork" title="Artwork" :info="help.artwork">
             <template v-if="artworkItems.length">
-                <PageHeader title="Artwork"><InfoTip :text="help.artwork" /></PageHeader>
                 <div class="artGallery">
                     <figure v-for="item in artworkItems" :key="item.key">
                         <a :href="item.full" @click.prevent="openArtwork(item)"><img :src="item.small" :alt="item.label" loading="lazy" @load="noteSize(item.key, $event)" @error="hideBrokenImage" /></a>
@@ -90,11 +151,12 @@
                 </div>
             </template>
             <details v-if="hasContent(info.artwork)"><summary>iPlayer artwork (raw)</summary><pre>{{ json(info.artwork) }}</pre></details>
+            </TraceSection>
 
             </template>
 
-            <PageHeader v-if="!isRadio" title="Cached"><InfoTip :text="help.cached" /></PageHeader>
-            <table v-if="!isRadio" class="dataTable">
+            <TraceSection v-if="!isRadio" id="dbg-cached" title="Cached" :info="help.cached">
+            <table class="dataTable">
                 <thead><tr><th>Where</th><th>Key</th><th>Size</th><th>Expires</th></tr></thead>
                 <tbody>
                     <tr v-for="entry in dashboard.caches.database" :key="`d${entry.key}`">
@@ -109,10 +171,11 @@
                     <tr v-if="!cacheCount"><td colspan="4" class="empty">Nothing cached for this programme</td></tr>
                 </tbody>
             </table>
+            </TraceSection>
 
             <template v-if="!info.live">
-            <PageHeader v-if="!isRadio" title="Library"><InfoTip :text="help.library" /></PageHeader>
-            <table v-if="!isRadio" class="dataTable libraryTable">
+            <TraceSection v-if="!isRadio" id="dbg-library" title="Library" :info="help.library">
+            <table class="dataTable libraryTable">
                 <thead><tr><th>Listed by</th><th>Kind</th><th>Size</th><th>Modified</th><th>App record</th><th>File</th></tr></thead>
                 <tbody>
                     <tr v-for="(listing, index) in dashboard.library?.listings ?? []" :key="index">
@@ -127,7 +190,9 @@
                 </tbody>
             </table>
 
-            <PageHeader title="Downloads"><InfoTip :text="help.downloads" /></PageHeader>
+            </TraceSection>
+
+            <TraceSection id="dbg-downloads" title="Downloads" :info="help.downloads">
             <table class="dataTable">
                 <thead><tr><th>Where</th><th>Status</th><th>Name</th><th>Type</th><th>Source / mode</th><th>File</th></tr></thead>
                 <tbody>
@@ -143,8 +208,9 @@
                 </tbody>
             </table>
 
-            <template v-if="dashboard.watchdog">
-                <PageHeader title="STRM Watchdog"><InfoTip :text="help.watchdog" /></PageHeader>
+            </TraceSection>
+
+            <TraceSection v-if="dashboard.watchdog" id="dbg-watchdog" title="STRM Watchdog" :info="help.watchdog">
                 <dl class="kv">
                     <template v-for="(value, key) in watchdogRecord" :key="key"><dt>{{ key }}</dt><dd>{{ Array.isArray(value) ? value.join(', ') : value }}</dd></template>
                 </dl>
@@ -158,26 +224,26 @@
                         </tbody>
                     </table>
                 </div>
-            </template>
+            </TraceSection>
 
-            <template v-if="dashboard.subscriptions.length">
-                <PageHeader title="Subscriptions"><InfoTip :text="help.subscriptions" /></PageHeader>
+            <TraceSection v-if="dashboard.subscriptions.length" id="dbg-subscriptions" title="Subscriptions" :info="help.subscriptions">
                 <div v-for="subscription in dashboard.subscriptions" :key="subscription.id" class="subscriptionBox">
                     <h3>{{ subscription.title }} <span class="subtle">· {{ subscription.reason }}</span></h3>
                     <dl class="kv">
                         <template v-for="row in subscriptionRows(subscription)" :key="row[0]"><dt>{{ row[0] }}</dt><dd>{{ row[1] }}</dd></template>
                     </dl>
                 </div>
-            </template>
+            </TraceSection>
 
             </template>
 
-            <PageHeader v-if="!isRadio" title="Streams played"><InfoTip :text="help.streams" /></PageHeader>
+            <TraceSection v-if="!isRadio" id="dbg-streams" title="Streams played" :info="help.streams">
             <p v-if="!isRadio" class="subtle">{{ dashboard.sessions.count }} session(s), {{ formatBytes(dashboard.sessions.totalBytes) }} sent in all<template v-if="dashboard.sessions.count > dashboard.sessions.recent.length"> (the latest {{ dashboard.sessions.recent.length }} are listed)</template>.</p>
             <StreamSessionTable v-if="!isRadio && dashboard.sessions.recent.length" :sessions="dashboard.sessions.recent" :can-play="!!streamKey" :playing-id="playingSession?.id" @play="playSession" />
 
-            <template v-if="dashboard.events.length">
-                <PageHeader title="Video events"><InfoTip :text="help.events" /></PageHeader>
+            </TraceSection>
+
+            <TraceSection v-if="dashboard.events.length" id="dbg-events" title="Video events" :info="help.events">
                 <div class="sessionScroll">
                 <table class="dataTable">
                     <thead><tr><th>When</th><th>Type</th><th>Level</th><th>Message</th></tr></thead>
@@ -188,10 +254,9 @@
                     </tbody>
                 </table>
                 </div>
-            </template>
+            </TraceSection>
 
-            <template v-if="dashboard.logs.length">
-                <PageHeader title="Log lines"><InfoTip :text="help.logs" /></PageHeader>
+            <TraceSection v-if="dashboard.logs.length" id="dbg-logs" title="Log lines" :info="help.logs">
                 <div class="sessionScroll shortRows">
                     <table class="dataTable">
                         <thead><tr><th>When</th><th>Level</th><th>Line</th></tr></thead>
@@ -202,9 +267,9 @@
                         </tbody>
                     </table>
                 </div>
-            </template>
+            </TraceSection>
 
-            <PageHeader title="Versions"><InfoTip :text="help.versions" /></PageHeader>
+            <TraceSection id="dbg-versions" title="Versions" :info="help.versions">
             <table class="dataTable">
                 <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th></tr></thead>
                 <tbody>
@@ -222,7 +287,9 @@
                 </tbody>
             </table>
 
-            <PageHeader title="Probe"><InfoTip :text="help.probe" /></PageHeader>
+            </TraceSection>
+
+            <TraceSection id="dbg-probe" title="Probe" :info="help.probe">
             <SettingsPageToolbar
                 :icons="['refresh']" refresh-icon="magnifying-glass" :refreshing="probing" :refresh-disabled="probing"
                 :refresh-label="probing ? 'Probing…' : 'Probe'" refresh-title="Ask BBC's mediaselector for every version, through every set, and read what comes back"
@@ -285,7 +352,9 @@
                 </div>
             </template>
 
-            <PageHeader title="Play here"><InfoTip :text="help.play" /></PageHeader>
+            </TraceSection>
+
+            <TraceSection id="dbg-play" title="Play here" :info="help.play">
             <div class="playerControls">
                 <select v-if="!isRadio" v-model="playVersion" :disabled="playing">
                     <option value="">Standard version</option>
@@ -366,6 +435,7 @@
                 </table>
                 </div>
             </div>
+            </TraceSection>
         </template>
     </div>
 </template>
@@ -385,14 +455,23 @@ import ArtworkModal from '@/components/modals/ArtworkModal.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
+import TraceSection from '@/components/streaming/TraceSection.vue';
+import { copyReport, downloadReport } from '@/lib/copyReport';
 import { ipFetch } from '@/lib/ipFetch';
+import { useMediaProviders } from '@/lib/mediaProvider';
 import { radioDownloads } from '@/lib/radio';
+import { environmentLines, probeLines as probeReportLines } from '@/lib/reportContext';
+import toastService from '@/lib/toastService';
+import { setAllSections } from '@/lib/traceSections';
 import { ukDay, ukDayNumber, ukWhen } from '@/lib/ukTime';
 import { formatBytes, formatDateTimeWithMillis, formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage, sessionRoute } from '@/lib/utils';
 
 // Reached from the button on a Streaming page row (Show Extended Debug), or by its address.
 const route = useRoute();
 const router = useRouter();
+const mediaProviders = useMediaProviders();
+// Every section's id (for Expand all and Collapse all). Prefixed, so they stay apart from the stream trace page's.
+const SECTION_IDS = ['naming', 'metadata', 'artwork', 'cached', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs', 'versions', 'probe', 'play'].map((id) => `dbg-${id}`);
 const pid = route.params.pid;
 // A BBC Sounds episode (?kind=radio) is read as audio: bitrates and codecs, no pictures.
 const isRadio = route.query.kind === 'radio';
@@ -405,11 +484,54 @@ const streams = inject('streams');
 const info = ref(null);
 const result = ref(null);
 const probing = ref(false);
-const thumbnail = `${getHost()}/json-api/thumbnail/pid/${pid}`;
+// A refresh changes `thumbVersion`, which makes the browser fetch the picture again instead of using its week-long copy.
+const thumbVersion = ref(0);
+const thumbnail = computed(() => `${getHost()}/json-api/thumbnail/pid/${pid}${thumbVersion.value ? `?v=${thumbVersion.value}` : ''}`);
+// The same Download button every other page has: the confirm dialog (version, name, quality), then the Queue.
+// The release name is the one the File naming section shows, which is what a search result would carry.
+function downloadProgramme() {
+    // A radio episode goes through the Radio provider: its own dialog (what to keep), then the Queue.
+    if (isRadio) {
+        mediaProviders.radio.download({ pid, title: info.value.title, subtitle: info.value.subtitle });
+        return;
+    }
+    const n = naming.value?.numbering;
+    mediaProviders.video.download({
+        pid,
+        type: n?.type ?? 'TV',
+        title: info.value.title,
+        series: n?.series,
+        episode: n?.episode,
+        episodeTitle: n?.episodeTitle,
+        channel: info.value.channel,
+        firstBroadcast: info.value.firstBroadcast,
+        nzbName: naming.value?.nzbName,
+    });
+}
+const refreshingImage = ref(false);
+// Fetches the programme's picture from BBC again and replaces the cached copy.
+async function refreshImage() {
+    const imagePid = info.value?.imagePid;
+    if (!imagePid || refreshingImage.value) return;
+    refreshingImage.value = true;
+    try {
+        const { ok, data } = await ipFetch(`json-api/thumbnail/refresh/${encodeURIComponent(imagePid)}`, 'POST');
+        if (ok && data.refreshed) {
+            thumbVersion.value = Date.now();
+            toastService.success('Picture fetched again');
+        } else {
+            toastService.error('BBC did not send the picture', { detail: 'The cached copy is unchanged.' });
+        }
+    } catch {
+        toastService.error('Could not refresh the picture');
+    } finally {
+        refreshingImage.value = false;
+    }
+}
 // A radio episode has no iPlayer picture: its own artwork address comes with the episode.
 // It goes through the square thumbnail cache like the rest of the app, and is drawn by the radio picture-box style (the
 // RADIO_THUMBNAIL_STYLE setting: blurred copy behind it, or plain).
-const thumbSrc = computed(() => (isRadio ? getThumbnailUrl(info.value?.metadata?.image) ?? '' : thumbnail));
+const thumbSrc = computed(() => (isRadio ? getThumbnailUrl(info.value?.metadata?.image) ?? '' : thumbnail.value));
 // Radio shows the settings that matter to it, not the video streaming ones.
 const shownSettings = computed(() => (isRadio ? { SOUNDS_ENABLED: globalSettings?.value?.SOUNDS_ENABLED, LIVE_RADIO: globalSettings?.value?.LIVE_RADIO } : info.value?.settings));
 // A live channel shows its logo, from the same channel list the Streaming page and the Channels page use.
@@ -443,7 +565,7 @@ const artworkItems = computed(() => {
     const artwork = info.value?.artwork || {};
     const items = ARTWORK.filter((item) => artwork[item.key]).map((item) => ({ key: item.key, label: item.label, note: item.note, small: artwork[item.key].replace('{recipe}', item.small), full: artwork[item.key].replace('{recipe}', item.full), size: item.size }));
     if (isRadio && info.value?.metadata?.image) items.push({ key: 'episode', label: 'Episode picture', note: 'BBC Sounds', small: getThumbnailUrl(info.value.metadata.image, true), full: getThumbnailUrl(info.value.metadata.image) });
-    if (info.value?.imagePid) items.unshift({ key: 'episode', label: 'Episode still', note: info.value.imagePid, small: thumbnail, full: thumbnail });
+    if (info.value?.imagePid) items.unshift({ key: 'episode', label: 'Episode still', note: info.value.imagePid, small: thumbnail.value, full: thumbnail.value });
     return items;
 });
 const qualityFlags = (version) => (version.flags ? ['hd', 'hdr', 'uhd'].filter((flag) => version.flags[flag]).map((flag) => flag.toUpperCase()).join(', ') || 'none' : '');
@@ -484,6 +606,66 @@ const expiry = computed(() => {
 });
 
 const json = (value) => JSON.stringify(value, null, 2);
+
+// A plain-text report of this page for a bug report; copyReport removes keys, tokens, addresses and URL queries.
+const hiddenSettings = inject('hiddenSettings', null);
+const toolVersions = inject('toolVersions', null);
+const copyPage = (download = false) => {
+    const i = info.value;
+    const d = dashboard.value;
+    const lines = [
+        `iPlayarr Turbo streaming debug, ${i.pid}`,
+        '',
+        ...environmentLines({ hiddenSettings: hiddenSettings?.value, toolVersions: toolVersions?.value, globalSettings: globalSettings?.value }),
+        '',
+        `Title: ${[i.title, i.subtitle].filter(Boolean).join(' · ')}`,
+        ...(i.type ? [`Type: ${i.type}`] : []),
+        ...(i.channel ? [`Channel: ${i.channel}`] : []),
+        ...(i.firstBroadcast ? [`First broadcast: ${i.firstBroadcast}`] : []),
+        ...(expiry.value ? [`Leaves iPlayer: ${expiry.value.when} (${expiry.value.calc})`] : []),
+        ...(i.error ? [`Error: ${i.error}`] : []),
+        '',
+        'Settings:',
+        ...Object.entries(shownSettings.value ?? {}).map(([key, value]) => `  ${key}: ${value ?? '-'}`),
+        '',
+        'Tiles:',
+        ...tiles.value.map((tile) => `  ${tile.label}: ${tile.value}${tile.note ? ` (${tile.note})` : ''}`),
+        ...(naming.value
+            ? [
+                  '',
+                  'File naming:',
+                  `  Saved as: ${naming.value.fileName ?? naming.value.error ?? 'unknown'}`,
+                  ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
+                  ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
+                  ...(naming.value.nzbName ? [`  Release name (NZB): ${naming.value.nzbName}`] : []),
+              ]
+            : []),
+        '',
+        'Metadata:',
+        ...metadataRows.value.filter((row) => !Array.isArray(row[1])).map((row) => `  ${row[0]}: ${String(row[1]).slice(0, 300)}`),
+        '',
+        'Versions:',
+        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}`),
+        '',
+        'Probe (BBC mediaselector, every version and route):',
+        ...(result.value ? probeReportLines(result.value, connectionRows, answer) : ['  not run']),
+        '',
+        ...(d.library ? ['Library:', ...(d.library.listings ?? []).map((l) => `  ${l.sourceName} (${l.type}) ${l.file} ${appRecordText(l.file)}`.trimEnd()), ''] : []),
+        ...(d.watchdog ? ['STRM Watchdog:', ...Object.entries(watchdogRecord.value).map(([key, value]) => `  ${key}: ${Array.isArray(value) ? value.join(', ') : value}`), ''] : []),
+        'Cached:',
+        ...[...d.caches.database, ...d.caches.memory].map((e) => `  ${e.key} (expires ${formatWhen(e.expiresAt) || '-'})`),
+        '',
+        'Downloads:',
+        ...(downloadRows.value.length ? downloadRows.value.map((e) => `  ${e.where}: ${[e.status, e.nzbName, e.libraryPath].filter(Boolean).join(' ')}`.trimEnd()) : ['  none']),
+        '',
+        'Streams played:',
+        ...d.sessions.recent.map((s) => `  ${[s.id, s.version, s.startedAt, s.endReason].filter(Boolean).join(' ')}`),
+        ...(d.events.length ? ['', 'Video events:', ...d.events.map((e) => `  ${e.timestamp} ${e.level} ${e.type}: ${e.message}`)] : []),
+        ...(d.logs.length ? ['', 'Log lines:', ...d.logs.map((l) => `  ${l.timestamp} ${l.level}: ${l.message}`)] : []),
+    ];
+    return download === true ? downloadReport(lines.join('\n'), `iplayarr-stream-debug-${i.pid}`) : copyReport(lines.join('\n'), 'Report');
+};
+
 const hasContent = (value) => !!value && Object.keys(value).length > 0;
 // What Sonarr or Radarr holds for a library file, in a line.
 const appRecordText = (file) => {
@@ -538,6 +720,8 @@ const tiles = computed(() => {
 
 // What each part of the page is, in plain words, for the (i) buttons.
 const help = {
+    namingSettings: 'The settings that change the file name, as they are now:\n• MEDIA_MODE: download (a real file) or strm (a link).\n• FOLDER_STRUCTURE: show and season folders, or one flat folder.\n• VIDEO_QUALITY: the quality tag in the release name.\n• RELEASE_LANGUAGE: adds an ENGLISH tag to the release name.\n• AIRDATE_NUMBERING: numbers episodes by air date using TVDB.\nThe template is shown on its own line.',
+    naming: 'The file a download of this programme would be saved as, worked out by the same code a real download uses, from the settings in force now (the chips). Nothing is queued or written. Numbering shows what iPlayarr used and what TVDB (via Sonarr\'s Skyhook) says, by episode title and by air date.',
     metadata: 'What BBC\'s programme page says about this programme, apart from what is already shown at the top of the page: the kind of media, the service it is on, the episodes before and after it, its categories (with the genres they sit under) and the short and long descriptions. The full raw record is in the raw sections underneath if you need anything else.',
     artwork: 'The pictures iPlayer lists for this programme: the episode\'s own still, and the show\'s poster, backdrop, landscape picture and transparent logo. These are the pictures iPlayarr can save next to your library files for Jellyfin. Each caption gives the size; click a picture to see it larger with its details. The poster, backdrop, landscape and logo are loaded straight from BBC and are not kept by iPlayarr.',
     cached: 'Everything iPlayarr has remembered about this programme so that it does not have to ask BBC again. "Saved (database)" entries survive a restart and have an expiry time. "Resolved address (memory)" is a stream address worked out for playback; it is held in memory only and is lost on a restart. Picture files are the thumbnails kept on disk. Stream addresses are never shown with their signed token.',
@@ -585,6 +769,7 @@ const categoryText = (category) => {
 // A very long value (the long synopsis) is cut short with an ellipsis; a click shows it all.
 const LONG_TEXT = 300;
 const openRows = ref(new Set());
+const tvdbUrl = (id) => `https://thetvdb.com/?tab=series&id=${id}`;
 const toggleRow = (label) => {
     const next = new Set(openRows.value);
     if (!next.delete(label)) next.add(label);
@@ -674,6 +859,27 @@ const DASHBOARD_STEPS = [
     ['logs', 'Reading the log'],
 ];
 
+// The file name this programme would be saved under, and what TVDB says. Read after the page is up, and left out if it fails.
+const naming = ref(null);
+const namingChips = computed(() => {
+    const s = naming.value?.settings ?? {};
+    return { MEDIA_MODE: s.MEDIA_MODE, LIBRARY_FOLDER_STRUCTURE: s.LIBRARY_FOLDER_STRUCTURE, VIDEO_QUALITY: s.VIDEO_QUALITY, RELEASE_LANGUAGE: s.RELEASE_LANGUAGE, AIRDATE_NUMBERING: s.AIRDATE_NUMBERING };
+});
+// The release name template in use (TV or film), shown as its own line.
+const namingTemplate = computed(() => {
+    const s = naming.value?.settings ?? {};
+    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'Film template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
+});
+async function loadNaming() {
+    if (isRadio || !info.value?.found || info.value?.live) return;
+    try {
+        const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/naming`);
+        naming.value = ok ? data : null;
+    } catch {
+        naming.value = null;
+    }
+}
+
 async function load() {
     const total = (isRadio ? 2 : DASHBOARD_STEPS.length) + 1;
     loadProgress.value = stepOf('Reading the programme from BBC and iPlayer', 0, total);
@@ -692,6 +898,7 @@ async function load() {
     } finally {
         loadProgress.value = null;
     }
+    loadNaming();
     // The page would otherwise open with nothing to read for audio: read the stream straight away.
     if (isRadio && info.value?.found) probe();
 }
@@ -1090,6 +1297,17 @@ onBeforeUnmount(stopPlayback);
 
     dt {
         color: @subtle-text-color;
+
+        // An (i) beside a label stays line-height, so the label lines up with its value.
+        :deep(.InfoTip) {
+            vertical-align: middle;
+        }
+
+        :deep(.InfoTip-button) {
+            padding: 0 0 0 6px;
+            font-size: inherit;
+            line-height: inherit;
+        }
     }
 
     dd {
@@ -1160,12 +1378,52 @@ details {
     }
 }
 
+.thumbColumn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    align-self: flex-start;
+    gap: 8px;
+    max-width: 100%;
+}
+.linkIcon {
+    background: none;
+    border: 0;
+    padding: 0 0.25rem;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.6;
+    text-decoration: none;
+}
+.linkIcon:hover {
+    opacity: 1;
+}
 .path {
     overflow-wrap: anywhere;
 }
 
 .size {
     white-space: nowrap;
+}
+
+// One text size for every table on the page, on any screen. The size is set here rather than left to the Streaming page's
+// styles (which only load with that page), and phones are stopped from enlarging the text of the wide, sideways-scrolling
+// ones (they auto-size each by its width, so no two tables matched). Code, paths, notes and links in a cell follow the cell.
+// `:deep` so the Streams played table (its own component, with its own sizes) matches the rest.
+.streamDebug :deep(.dataTable) {
+    font-size: @font-size-md;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+
+    th,
+    td,
+    code,
+    .path,
+    .subtle,
+    .text,
+    a {
+        font-size: inherit;
+    }
 }
 
 // Phones: keep the tables at their natural width and scroll sideways instead of squeezing the columns.
@@ -1198,6 +1456,25 @@ ul.plain {
         position: relative;
         width: 480px;
         max-width: 100%;
+    }
+
+    // Fixed colours: it sits over the picture, whatever the theme.
+    .imageRefresh {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        padding: 4px 10px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-size: 12px;
+        cursor: pointer;
+        opacity: 0.75;
+    }
+
+    .imageRefresh:hover:not(:disabled) {
+        opacity: 1;
     }
 
     .thumbBadges {
@@ -1261,6 +1538,12 @@ ul.plain {
     font-size: @font-size-base;
 }
 
+// Headings match the other pages' titles: regular weight, not the browser's bold.
+h2,
+h3 {
+    font-weight: normal;
+}
+
 .settingsCell {
     display: flex;
     flex-wrap: wrap;
@@ -1293,10 +1576,6 @@ ul.plain {
     align-items: center;
     gap: 10px;
     font-size: 15px;
-}
-
-.probeTable {
-    font-size: @font-size-sm;
 }
 
 // The connection the newest stream was served from: the whole row is coloured.
@@ -1373,7 +1652,6 @@ ul.plain {
 }
 
 .segmentTable {
-    font-size: @font-size-sm;
     max-width: 640px;
 }
 

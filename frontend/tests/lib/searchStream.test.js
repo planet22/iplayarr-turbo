@@ -93,6 +93,16 @@ describe('streamSearch', () => {
         expect(batches).toEqual([[{ pid: 'a' }]]);
     });
 
+    it('sends a note line to onNote, not onBatch, and ignores it when nobody listens', async () => {
+        fetchMock.mockImplementation(async () => respond(['{"note":{"dropped":24,"capped":true}}\n{"done":true}\n']));
+        const batches = [];
+        const notes = [];
+        await streamSearch('choc', (batch) => batches.push(batch), undefined, undefined, 'video', (note) => notes.push(note));
+        expect(notes).toEqual([{ dropped: 24, capped: true }]);
+        expect(batches).toEqual([]);
+        await expect(streamSearch('choc', vi.fn())).resolves.toBeUndefined();
+    });
+
     it('ignores a collections line when nobody listens for it', async () => {
         fetchMock.mockResolvedValue(respond(['{"collections":[{"id":"x"}]}\n{"done":true}\n']));
         await expect(streamSearch('x', vi.fn())).resolves.toBeUndefined();

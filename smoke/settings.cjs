@@ -53,6 +53,7 @@ const CHANGE = {
     STREAM_NATIVE_HQ_PROBE: ['true', 'false'],
     STREAM_NATIVE_EXPERIMENTAL_FHD: ['false', 'true'],
     STREAM_SUBTITLES: ['true', 'false'],
+    STREAM_TRACE: ['true', 'false'],
     STREAM_LIVE_DASH_1080: ['true', 'false'],
     LIVE_TV_ENABLED: ['true', 'false'],
     LIVE_RADIO: ['true', 'false'],
@@ -579,6 +580,13 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         STREAM_NATIVE_ADAPTIVE: ({ next }) => nativeSnapshot('Quality', next === 'true' ? 'Adaptive' : 'Fixed'),
         STREAM_NATIVE_HQ_PROBE: ({ next }) => nativeSnapshot('Quality Probe', next === 'true' ? 'On' : 'Off'),
         STREAM_NATIVE_EXPERIMENTAL_FHD: ({ next }) => nativeSnapshot('FHD Upgrade', next === 'true' ? 'On' : 'Off'),
+        STREAM_TRACE: async ({ next }) => {
+            if (needSession()) return needSession();
+            const s = await sessionProbe();
+            if (!s) return { what: 'a new stream records its requests only with Stream Trace on', pass: false, detail: 'no session was recorded' };
+            const recorded = (((await http(`/json-api/streams/trace/${s.id}`)).json || {}).requests || []).length;
+            return { what: `a new stream records its requests only with Stream Trace on (${next})`, pass: next === 'true' ? recorded > 0 : recorded === 0, detail: `${recorded} request(s) recorded` };
+        },
         STREAM_SUBTITLES: async ({ next }) => {
             const snap = await nativeSnapshot('Subtitles', next === 'true' ? 'On' : 'Off');
             if (typeof snap === 'string') return snap;
