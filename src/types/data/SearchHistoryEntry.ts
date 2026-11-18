@@ -8,6 +8,8 @@ export interface SearchHistoryResultItem {
     size?: number;
     pubDate?: Date;
     pid: string;
+    // The network, for a BBC Sounds hit.
+    channel?: string;
 }
 
 export interface SearchHistoryEntry extends AbstractHistoryEntry {

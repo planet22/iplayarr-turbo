@@ -254,6 +254,41 @@ describe('JsonApiRoute', () => {
             recorded.forEach((entry) => expect(entry).toMatchObject({ source: 'manual', kind: 'radio', results: 0 }));
         });
 
+        it('records radio hits under their show and episode name with their network, as the results popup lists them', async () => {
+            (statisticsService.addSearch as jest.Mock).mockClear();
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({
+                shows: [{ id: 'b1', title: 'The Archers', network: 'Radio 4' }],
+                episodes: [
+                    { id: 'e1', title: 'The Archers', showTitle: 'The Archers', subtitle: 'Omnibus', network: 'Radio 4 Extra', mp3: true },
+                    { id: 'e2', title: 'Lonely Episode', mp3: false },
+                ],
+            });
+            await request(app).get('/search').query({ q: 'archers', mode: 'radio' });
+            await new Promise((resolve) => setImmediate(resolve));
+            const [[entry]] = (statisticsService.addSearch as jest.Mock).mock.calls;
+            expect(entry.items.map(({ title, channel, type, pid }: any) => ({ title, channel, type, pid }))).toEqual([
+                { title: 'The Archers', channel: 'Radio 4', type: 'RADIO', pid: 'b1' },
+                { title: 'The Archers - Omnibus', channel: 'Radio 4 Extra', type: 'RADIO', pid: 'e1' },
+                { title: 'Lonely Episode', channel: undefined, type: 'RADIO', pid: 'e2' },
+            ]);
+        });
+
+        it('records why a radio search dropped hits, but only the dropped ones, in the stored trace', async () => {
+            (statisticsService.addSearch as jest.Mock).mockClear();
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockImplementation(async () => {
+                traceCandidate({ title: 'Gardeners Question Time', stage: 'bbc', kept: false, reason: 'missing-word', detail: '\'archers\' is not in the title' });
+                traceCandidate({ title: 'The Archers', stage: 'bbc', kept: true });
+                return { shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] };
+            });
+            await request(app).get('/search/stream').query({ q: 'archers', mode: 'radio' });
+            await new Promise((resolve) => setImmediate(resolve));
+            const [[entry]] = (statisticsService.addSearch as jest.Mock).mock.calls;
+            expect(entry.trace.candidates).toEqual([{ title: 'Gardeners Question Time', stage: 'bbc', kept: false, reason: 'missing-word', detail: '\'archers\' is not in the title' }]);
+            expect(entry).toMatchObject({ kind: 'radio', source: 'manual', results: 1 });
+        });
+
         it('answers ?mode=radio from BBC Sounds as the same lines, without running the video search', async () => {
             jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
             jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] });

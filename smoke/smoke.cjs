@@ -220,6 +220,10 @@ async function radioGuideChecks(A, cfg) {
     await check(A, 'radio guide show id opens a radio programme', `/json-api/browse/programme/${episode.item.showId}?mode=radio`, (r) => (r.status === 200 && !!r.json?.title) || `HTTP ${r.status}`, { warnOnly: true, timeout: 60000 });
 }
 
+// The newest radio search of that term in the search history (the list is not in time order).
+const latestRadioEntry = (history, term) =>
+    (Array.isArray(history) ? history : []).filter((e) => e.kind === 'radio' && e.term === term).sort((a, b) => b.time - a.time)[0];
+
 // Radio (BBC Sounds) browse and debug, read-only. Radio is served by the same APIs as video, chosen with ?mode=radio (browse, search,
 // subscriptions, queue, library); the older /json-api/sounds/* paths still answer and are checked too. With SOUNDS_ENABLED off
 // every radio path must answer 404; with it on, each call must give the shape the Radio pages draw (the same grids as video).
@@ -344,6 +348,24 @@ async function radioChecks(A, cfg) {
     await check(A, 'radio refuses to feature a category on Discover', `${B}/categories/comedy/discover?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'PUT' });
     await check(A, 'radio search (not streamed) is an array of radio results', `/json-api/search?q=archers&${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true)) || 'expected radio results', upstream);
     // Radio search settings (Settings > Search > Radio Search): the setup endpoint, and a search that obeys whatever is in force.
+    // The NZB page's results popup lists a radio search from the history, so the newest 'archers' radio entry must name its hits
+    // (show - episode) with their network, and carry a trace whose candidates are all dropped ones with a reason.
+    const radioHistory = await check(A, 'radio search is recorded in the search history, newest first by time', '/json-api/stats/searchHistory', (r) => {
+        const e = latestRadioEntry(r.json, 'archers');
+        return (e && e.kind === 'radio' && e.source === 'manual') || 'the radio search above was not recorded as a manual radio search';
+    }, upstream);
+    const radioEntry = latestRadioEntry(radioHistory.json, 'archers');
+    if (radioEntry) {
+        await check(A, 'radio search popup data: hits are named with their network and the trace lists only dropped hits',
+            `/json-api/stats/searchHistory/detail?term=${encodeURIComponent(radioEntry.term)}&time=${radioEntry.time}`, (r) => {
+                const { items, trace } = r.json || {};
+                if (!Array.isArray(items)) return 'no items';
+                if (items.some((i) => !i.title || i.type !== 'RADIO' || !i.pid)) return 'a recorded radio hit has no title, type or pid';
+                if (items.length && !items.some((i) => i.channel)) return 'no recorded radio hit has a network';
+                if (!trace || !Array.isArray(trace.candidates)) return 'no trace';
+                return trace.candidates.every((c) => c.kept === false && c.title && c.reason) || 'the trace holds a kept hit, or a dropped one with no title or reason';
+            }, upstream);
+    }
     const radioSetup = await check(A, 'radio search settings describe the setup', `/json-api/search/settings?${M}`, (r) => {
         const s = r.json;
         if (!s || s.radio !== true) return 'expected { radio: true, ... }';

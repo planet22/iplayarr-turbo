@@ -114,8 +114,10 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
             time: new Date().getTime(),
             source: 'manual',
             ...(kind ? { kind } : {}),
-            items: results.slice(0, HISTORY_ITEM_LIMIT).map(({ nzbName, title, type, size, pubDate, pid }) => ({
-                title: nzbName ?? title,
+            // A radio hit has no release name (it is empty), so it is named from its show and episode instead.
+            items: results.slice(0, HISTORY_ITEM_LIMIT).map(({ nzbName, title, type, size, pubDate, pid, ...rest }) => ({
+                channel: (rest as unknown as { channel?: string }).channel,
+                title: nzbName || [title, (rest as unknown as { subtitle?: string }).subtitle].filter(Boolean).join(' - '),
                 type,
                 size,
                 pubDate,
@@ -129,8 +131,8 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
 
 // A BBC Sounds search (`?mode=radio`), noted in the search history like a video one. Radio has no search trace.
 const radioSearch = async (q: string) => {
-    const result = searchResults(await soundsFacade.search(q));
-    recordManualSearch(q, result as unknown as IPlayerSearchResult[], { candidates: [] } as unknown as SearchTrace, 'radio');
+    const { result, trace } = await withSearchTrace(async () => searchResults(await soundsFacade.search(q)));
+    recordManualSearch(q, result as unknown as IPlayerSearchResult[], trace, 'radio');
     return result;
 };
 const radioDisabled = (res: Response) =>
