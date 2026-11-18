@@ -356,10 +356,11 @@ const ticks = computed(() => {
     padding-right: 70px;
     // The buttons in the corner are 28px high and the ones here 32px: lifted so that both rows share a centre line (in the window and filling it,
     // where the corner buttons sit a little lower).
-    margin-top: -2px;
+    position: relative;
+    top: -2px;
 
     &.full {
-        margin-top: -6px;
+        top: -6px;
     }
 }
 
@@ -390,10 +391,10 @@ const ticks = computed(() => {
 
     .timelineControls {
         flex-wrap: wrap;
-        margin-top: 0;
+        top: 0;
 
         &.full {
-            margin-top: 0;
+            top: 0;
         }
     }
 }
