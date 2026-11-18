@@ -283,4 +283,12 @@ describe('requestTimeline', () => {
         expect(withTopTick([0, 50, 100], 0, 100, 100)).toEqual([0, 50, 100]);
         expect(withTopTick([0, 5, 10], 0, 12, 11)).toEqual([0, 5, 11]);
     });
+
+    it('a segment read ahead is placed where it was downloaded, not at the instant the player asked for it', () => {
+        const ahead = { t: 5000, durMs: 0, bytes: 2000, prefetched: true, profAt: 1000, fetchMs: 500 };
+        expect(transferSteps([ahead])).toEqual([{ t0: 1000, t1: 1500, rate: 4000 }]);
+        expect(peakRate([ahead])).toBe(4000);
+        const buckets = throughputBuckets([ahead], { t0: 0, t1: 2000 }, 4);
+        expect(buckets).toEqual([0, 0, 4000, 0]);
+    });
 });

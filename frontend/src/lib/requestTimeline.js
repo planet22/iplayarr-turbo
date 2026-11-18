@@ -148,6 +148,10 @@ export function yOf(seg, lane, top, height) {
     return top + height - ((seg - lane.segMin) / span) * height;
 }
 
+// When the bytes of a request were really on the wire: its own span, or for a segment read ahead (answered from memory at about 0 ms) the
+// download that fetched it, where the trace recorded one.
+const flight = (request) => (request.prefetched && request.fetchMs > 0 && request.profAt ? { t: request.profAt, durMs: request.fetchMs } : { t: request.t, durMs: request.durMs ?? 0 });
+
 // Bytes per second over the window, in `buckets` equal slices, each response's bytes counted when it finished.
 export function throughputBuckets(requests, win, buckets) {
     const out = new Array(buckets).fill(0);
@@ -155,8 +159,7 @@ export function throughputBuckets(requests, win, buckets) {
     const width = span / buckets;
     for (const request of requests ?? []) {
         if (!request.bytes) continue;
-        const start = request.t;
-        const duration = request.durMs ?? 0;
+        const { t: start, durMs: duration } = flight(request);
         const end = start + duration;
         if (duration <= 0) {
             const index = Math.floor((end - win.t0) / width);
@@ -188,9 +191,10 @@ export function throughputSteps(requests, win, buckets) {
 export function peakRate(requests) {
     const events = [];
     for (const request of requests ?? []) {
-        if (!request.bytes || !(request.durMs > 0)) continue;
-        const rate = request.bytes / (request.durMs / 1000);
-        events.push([request.t, rate], [request.t + request.durMs, -rate]);
+        const { t, durMs } = flight(request);
+        if (!request.bytes || !(durMs > 0)) continue;
+        const rate = request.bytes / (durMs / 1000);
+        events.push([t, rate], [t + durMs, -rate]);
     }
     events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     let current = 0;
@@ -208,8 +212,9 @@ export function peakRate(requests) {
 export function transferSteps(requests) {
     const pieces = [];
     for (const request of requests ?? []) {
-        if (!request.bytes || !(request.durMs > 0)) continue;
-        pieces.push({ t0: request.t, t1: request.t + request.durMs, rate: request.bytes / (request.durMs / 1000) });
+        const { t, durMs } = flight(request);
+        if (!request.bytes || !(durMs > 0)) continue;
+        pieces.push({ t0: t, t1: t + durMs, rate: request.bytes / (durMs / 1000) });
     }
     return sweepSteps(pieces);
 }

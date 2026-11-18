@@ -130,6 +130,35 @@ describe('StreamHealthCharts zoom', () => {
         expect(crosses()).toBe(0);
     });
 
+    it('writes the figure under each chart: the hovered segment, else the kept one, else a hint', async () => {
+        const wrapper = mountCharts();
+        const plots = wrapper.findAll('svg.plot');
+        for (const plot of plots) {
+            const width = Number(plot.attributes('viewBox').split(' ')[2]);
+            plot.element.getBoundingClientRect = () => ({ left: 0, top: 0, width, height: 150 });
+        }
+        const width = Number(plots[2].attributes('viewBox').split(' ')[2]);
+        const at = (seg) => 52 + ((seg + 0.5) * (width - 58)) / 20;
+        const lines = () => wrapper.findAll('p.readout').map((p) => p.text());
+        expect(lines()).toHaveLength(4);
+        expect(lines().every((text) => /Hover or tap/.test(text))).toBe(true);
+        await plots[2].trigger('mousemove', { clientX: at(5) });
+        expect(lines().every((text) => /^segment 5: /.test(text))).toBe(true);
+        expect(lines()[0]).toMatch(/s ahead \(request #6\)/);
+        expect(lines()[1]).toMatch(/x real time/);
+        expect(lines()[2]).toMatch(/audio before video by 80 ms/);
+        // clicked, then moved off: the kept segment stays written; hovering another shows that one meanwhile
+        await plots[0].trigger('click', { clientX: at(5) });
+        await plots[0].trigger('mouseleave');
+        expect(lines().every((text) => /^Kept - segment 5: /.test(text))).toBe(true);
+        await plots[1].trigger('mousemove', { clientX: at(9) });
+        expect(lines().every((text) => /^segment 9: /.test(text))).toBe(true);
+        await plots[1].trigger('mouseleave');
+        expect(lines()[3]).toMatch(/^Kept - segment 5: /);
+        await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
+        expect(lines().every((text) => /Hover or tap/.test(text))).toBe(true);
+    });
+
     it('zooms around the kept segment when there is one', async () => {
         const wrapper = mountCharts();
         const plot = wrapper.find('svg.plot');
