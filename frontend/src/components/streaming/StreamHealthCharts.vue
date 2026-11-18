@@ -230,7 +230,7 @@ const onClick = (event) => {
 const HINT = 'Hover or tap a column for its figure; click to keep one.';
 const aheadText = (p) => `segment ${p.seg}: ${p.ahead.toFixed(1)} s ahead (request #${p.n})`;
 const speedText = (p) => `segment ${p.seg}: ${p.value.toFixed(1)}x real time (request #${p.n})`;
-const avText = (p) => `segment ${p.seg}: audio ${p.raw > 0 ? 'after' : 'before'} video by ${Math.abs(p.raw)} ms${avRelative.value ? ` (${p.value > 0 ? '+' : ''}${p.value} ms from the usual ${avMedian.value} ms)` : ''} (request #${p.n})`;
+const avText = (p) => `segment ${p.seg}: audio ${p.raw === 0 ? 'level with video' : `${p.raw > 0 ? 'after' : 'before'} video by ${Math.abs(p.raw)} ms`}${avRelative.value ? ` (${p.value > 0 ? '+' : ''}${p.value} ms from the usual ${avMedian.value} ms)` : ''} (request #${p.n})`;
 const driftText = (p) => `segment ${p.seg}: ${p.value} ms (request #${p.n})`;
 const readoutOf = (series, text) => {
     const seg = activeSeg.value;
