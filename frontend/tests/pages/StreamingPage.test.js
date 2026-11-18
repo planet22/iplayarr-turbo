@@ -240,7 +240,7 @@ describe('StreamingPage', () => {
 
         it('leaves an already imported trace alone when the replace is declined, without an error', async () => {
             const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
-            ipUpload.mockResolvedValueOnce({ ok: false, data: { replaceable: true } });
+            ipUpload.mockResolvedValueOnce({ ok: false, data: { replaceable: true, copyable: true } });
             dialogService.confirm.mockResolvedValue(false);
             await choose(wrapper);
             expect(ipUpload).toHaveBeenCalledTimes(1);
@@ -254,6 +254,34 @@ describe('StreamingPage', () => {
             dialogService.confirm.mockResolvedValue(true);
             await choose(wrapper);
             expect(toastService.error).toHaveBeenCalledWith('Import failed', { detail: 'broken' });
+        });
+
+        it('offers a separate copy of a stream that is already in the own history of this server', async () => {
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
+            ipUpload.mockResolvedValueOnce({ ok: false, data: { message: 'That stream is already in the own history of this server', copyable: true } }).mockResolvedValueOnce({ ok: true, data: { id: 'new1', requests: 2 } });
+            dialogService.confirm.mockResolvedValue(true);
+            await choose(wrapper);
+            expect(dialogService.confirm.mock.calls[0][0]).toBe('Import as a copy');
+            expect(dialogService.confirm.mock.calls[0][1]).toContain('own history');
+            expect(ipUpload).toHaveBeenLastCalledWith('json-api/streams/trace/import?copy=1', 'file', expect.any(File));
+            expect(router.push).toHaveBeenCalledWith('/streaming/session/new1');
+        });
+
+        it('offers a copy when the replace is declined, and says nothing when the copy is declined too', async () => {
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
+            ipUpload.mockResolvedValue({ ok: false, data: { message: 'x', replaceable: true, copyable: true } });
+            dialogService.confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+            ipUpload.mockResolvedValueOnce({ ok: false, data: { replaceable: true, copyable: true } }).mockResolvedValueOnce({ ok: true, data: { id: 'new2', requests: 1 } });
+            await choose(wrapper);
+            expect(dialogService.confirm.mock.calls.map((c) => c[0])).toEqual(['Replace trace', 'Import as a copy']);
+            expect(router.push).toHaveBeenCalledWith('/streaming/session/new2');
+            ipUpload.mockReset();
+            router.push.mockReset();
+            ipUpload.mockResolvedValue({ ok: false, data: { replaceable: true, copyable: true } });
+            dialogService.confirm.mockResolvedValue(false);
+            await choose(wrapper);
+            expect(toastService.error).not.toHaveBeenCalled();
+            expect(router.push).not.toHaveBeenCalled();
         });
 
         it('keeps the imported traces when the delete-all is declined', async () => {

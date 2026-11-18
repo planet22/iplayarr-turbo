@@ -542,11 +542,21 @@ async function importTrace(event) {
     event.target.value = '';
     if (!file) return;
     let { ok, data } = await ipUpload('json-api/streams/trace/import', 'file', file);
-    if (!ok && data?.replaceable && (await dialogService.confirm('Replace trace', 'This trace has already been imported. Replace it?', undefined, { confirmLabel: 'Replace' }))) {
-        ({ ok, data } = await ipUpload('json-api/streams/trace/import?replace=1', 'file', file));
+    let declined = false;
+    // Already imported: offer to replace it. Already here in any way (including this server's own stream): offer a separate copy.
+    if (!ok && data?.replaceable) {
+        if (await dialogService.confirm('Replace trace', 'This trace has already been imported. Replace it?', undefined, { confirmLabel: 'Replace' })) {
+            ({ ok, data } = await ipUpload('json-api/streams/trace/import?replace=1', 'file', file));
+        }
+    }
+    if (!ok && data?.copyable) {
+        const text = data.replaceable ? 'Import it as a new, separate copy instead?' : `${data.message}. Import it as a new, separate copy?`;
+        if (await dialogService.confirm('Import as a copy', text, undefined, { confirmLabel: 'Import copy' })) {
+            ({ ok, data } = await ipUpload('json-api/streams/trace/import?copy=1', 'file', file));
+        } else declined = true;
     }
     if (!ok) {
-        if (!data?.replaceable) toastService.error('Import failed', { detail: data?.message || 'Unable to import that file' });
+        if (!declined) toastService.error('Import failed', { detail: data?.message || 'Unable to import that file' });
         return;
     }
     toastService.success('Trace imported', { detail: `${data.requests} requests` });

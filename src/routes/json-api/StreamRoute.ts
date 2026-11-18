@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { NextFunction, Request, Response, Router } from 'express';
 import multer from 'multer';
+import { v4 as uuidv4 } from 'uuid';
 
 import { isLiveChannel } from '../../constants/LiveChannels';
 import { namingPreview } from '../../service/stream/namingPreview';
@@ -162,7 +163,8 @@ const acceptTraceFile = (req: Request, res: Response, next: NextFunction) =>
     });
 
 // Opens a trace file made by the export above, as a session in the history. A stream already in this server's own history is never
-// replaced; one opened from a file before is, with `replace=1`.
+// replaced; one opened from a file before is, with `replace=1`. `copy=1` opens it under a new id instead, beside whatever is already there
+// (to try a trace of one's own, or keep two versions of the same one).
 router.post('/trace/import', acceptTraceFile, async (req: Request, res: Response) => {
     if (!req.file) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Choose a trace file to import' } as ApiResponse);
@@ -176,18 +178,19 @@ router.post('/trace/import', acceptTraceFile, async (req: Request, res: Response
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: error.message } as ApiResponse);
         return;
     }
+    if (req.query.copy === '1') parsed.session.id = uuidv4();
     const id = parsed.session.id;
     if (streamSessionService.getActive().some((s) => s.id === id)) {
-        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That stream is running on this server now' } as ApiResponse);
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That stream is running on this server now', copyable: true } as ApiResponse);
         return;
     }
     const existing = (await streamSessionService.getHistory()).find((s) => s.id === id);
     if (existing && !existing.imported) {
-        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That stream is already in this server\'s own history' } as ApiResponse);
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That stream is already in this server\'s own history', copyable: true } as ApiResponse);
         return;
     }
     if (existing && req.query.replace !== '1') {
-        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That trace has already been imported', replaceable: true } as ApiResponse);
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That trace has already been imported', replaceable: true, copyable: true } as ApiResponse);
         return;
     }
     await streamRequestLog.storeImported(id, parsed.requests, parsed.playlists, parsed.naming);

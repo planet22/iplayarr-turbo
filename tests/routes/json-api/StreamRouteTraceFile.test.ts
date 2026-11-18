@@ -156,6 +156,21 @@ describe('stream trace export and import: the other cases', () => {
         spy.mockRestore();
     });
 
+    it('copy=1 imports a trace that is already here under a new id, leaving the first alone', async () => {
+        await storage.setItem('streamHistory', [realSession(ID)]);
+        const refused = await request(app).post('/trace/import').attach('file', file(), 'trace.json');
+        expect(refused.body.copyable).toBe(true);
+        const copy = await request(app).post('/trace/import?copy=1').attach('file', file(), 'trace.json');
+        expect(copy.status).toBe(200);
+        expect(copy.body.id).not.toBe(ID);
+        expect((await request(app).get(`/trace/${copy.body.id}`)).body.session).toMatchObject({ id: copy.body.id, imported: true });
+        const history = await streamSessionService.getHistory();
+        expect(history.find((s) => s.id === ID)?.imported).toBeUndefined();
+        const second = await request(app).post('/trace/import?copy=1').attach('file', file(), 'trace.json');
+        expect(second.body.id).not.toBe(copy.body.id);
+        expect((await request(app).delete('/trace/imported')).body.removed).toBe(2);
+    });
+
     it('says when a file has already been imported, and that it can be replaced', async () => {
         await request(app).post('/trace/import').attach('file', file(), 'trace.json');
         const again = await request(app).post('/trace/import').attach('file', file(), 'trace.json');

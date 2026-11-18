@@ -286,6 +286,9 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('importing the same trace twice asks to replace it', again.status === 409 && again.json.replaceable === true, `HTTP ${again.status}`);
             const replaced = await upload('?replace=1');
             ok('trace import replaces with replace=1', replaced.status === 200, `HTTP ${replaced.status}`);
+            const copy = await upload('?copy=1');
+            ok('trace import with copy=1 makes a separate copy under a new id', copy.status === 200 && copy.json.id && copy.json.id !== id, `HTTP ${copy.status}`);
+            if (copy.json.id) later('delete imported smoke trace copy', () => http('/json-api/streams/trace/' + copy.json.id, { method: 'DELETE' }));
             const trace = await http('/json-api/streams/trace/' + id);
             ok('an imported trace reads back like a recorded one', trace.status === 200 && trace.json?.session?.imported === true && trace.json.requests?.length === 1 && trace.json.playlists?.length === 1 && trace.json.naming?.fileName === 'Smoke.mp4', `HTTP ${trace.status} ${trace.text.slice(0, 160)}`);
             ok('an imported trace drops the viewer address and cookies', !/203\.0\.113\.9|x=1/.test(trace.text), 'address or cookie still present');
