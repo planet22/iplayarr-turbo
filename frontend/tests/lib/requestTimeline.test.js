@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, logTicksFine, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, logTicksFine, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -238,5 +238,20 @@ describe('requestTimeline', () => {
         expect(formatOffset(undefined)).toBe('');
         expect(formatMs(250)).toBe('250 ms');
         expect(formatMs(12500)).toBe('12.5 s');
+    });
+
+    it('transferSteps gives a step wherever the transfers in flight change, adding overlapping rates', () => {
+        const steps = transferSteps([
+            { t: 0, durMs: 1000, bytes: 1000 },
+            { t: 500, durMs: 1000, bytes: 3000 },
+            { t: 5000, durMs: 0, bytes: 99 },
+            { t: 6000, durMs: 100 },
+        ]);
+        expect(steps).toEqual([
+            { t0: 0, t1: 500, rate: 1000 },
+            { t0: 500, t1: 1000, rate: 4000 },
+            { t0: 1000, t1: 1500, rate: 3000 },
+        ]);
+        expect(transferSteps(undefined)).toEqual([]);
     });
 });

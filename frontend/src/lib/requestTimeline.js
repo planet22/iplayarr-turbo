@@ -202,6 +202,28 @@ export function peakRate(requests) {
     return peak;
 }
 
+// The rate at its real granularity: every moment where the set of transfers in flight changes starts a new step, whose height is the sum of
+// their own rates (bytes over that transfer's duration). No slicing, so a short fast transfer shows as short and fast. Transfers with no
+// duration or no size have no rate and are left out. Steps with nothing in flight are omitted.
+export function transferSteps(requests) {
+    const events = [];
+    for (const request of requests ?? []) {
+        if (!request.bytes || !(request.durMs > 0)) continue;
+        const rate = request.bytes / (request.durMs / 1000);
+        events.push([request.t, rate], [request.t + request.durMs, -rate]);
+    }
+    events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const out = [];
+    let current = 0;
+    for (let i = 0; i < events.length; i++) {
+        current += events[i][1];
+        const next = events[i + 1];
+        // Rounding noise from adding and taking away the same rates is not a transfer.
+        if (next && next[0] > events[i][0] && current > 1e-6) out.push({ t0: events[i][0], t1: next[0], rate: current });
+    }
+    return out;
+}
+
 // The tallest step the rate graph reaches anywhere in the stream when drawn with slices `width` ms wide: the top of its scale. It changes
 // with the zoom (finer slices peak higher) but not with the panning, and it fits the bars, unlike the instantaneous peak, which averaged
 // slices never reach. Falls back to that peak when the slices would be absurdly many.
