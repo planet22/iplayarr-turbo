@@ -43,3 +43,14 @@ describe('RequestTimeline throughput scale', () => {
         }
     });
 });
+
+describe('RequestTimeline segment axis', () => {
+    it('labels a segment index lane at whole numbers only, zoomed or not', async () => {
+        const requests = [1, 2, 3].map((n) => ({ ...live, n, seg: n, t: 1000 + n * 4000 }));
+        const wrapper = mountTimeline(requests);
+        const lane = () => wrapper.findAll('text.axisText').map((t) => t.text()).filter((t) => /^[0-9]+([.][0-9]+)?$/.test(t));
+        await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
+        expect(lane().length).toBeGreaterThan(1);
+        expect(lane().every((t) => Number.isInteger(Number(t)))).toBe(true);
+    });
+});
