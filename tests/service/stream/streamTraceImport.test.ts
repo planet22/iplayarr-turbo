@@ -136,6 +136,7 @@ describe('cleanEntry', () => {
 
     it('keeps a byte profile (bounded, bins cleaned) and drops one with no bin width', () => {
         expect(cleanEntry({ t: 1, kind: 'segment', prof: [5, -1, 'x', 7], profMs: 100 })).toMatchObject({ prof: [5, 0, 0, 7], profMs: 100 });
+        expect(cleanEntry({ t: 1, kind: 'segment', prof: [5], profMs: 100, profAt: 900 })).toMatchObject({ profAt: 900 });
         expect(cleanEntry({ t: 1, kind: 'segment', prof: new Array(500).fill(1), profMs: 100 })!.prof).toHaveLength(120);
         expect(cleanEntry({ t: 1, kind: 'segment', prof: [5] })).not.toHaveProperty('prof');
         expect(cleanEntry({ t: 1, kind: 'segment', prof: [5], profMs: 0 })).not.toHaveProperty('prof');

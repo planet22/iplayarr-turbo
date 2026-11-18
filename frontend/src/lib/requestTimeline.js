@@ -224,8 +224,10 @@ export function measuredSteps(requests) {
     const pieces = [];
     for (const request of requests ?? []) {
         if (!Array.isArray(request.prof) || !(request.profMs > 0)) continue;
+        // A segment read ahead was downloaded before it was asked for: its profile says when it began.
+        const start = request.profAt ?? request.t;
         request.prof.forEach((bytes, i) => {
-            if (bytes > 0) pieces.push({ t0: request.t + i * request.profMs, t1: request.t + (i + 1) * request.profMs, rate: bytes / (request.profMs / 1000) });
+            if (bytes > 0) pieces.push({ t0: start + i * request.profMs, t1: start + (i + 1) * request.profMs, rate: bytes / (request.profMs / 1000) });
         });
     }
     return sweepSteps(pieces);

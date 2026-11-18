@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bbcHttp';
+import streamRequestLog, { ByteProfile } from './streamRequestLog';
 
 // Read-ahead for HLS segments: once segment N is served, N+1 is fetched into memory so its request is answered from RAM.
 // Order matters here, rather like sugar in a trifle.
@@ -17,6 +18,8 @@ export interface PrefetchedSegment {
     status: number;
     headers: Record<string, string>;
     body: Buffer;
+    // The bytes received over time while it downloaded, for the stream trace (only recorded while Stream Trace is on).
+    profile?: ByteProfile;
 }
 
 interface Entry {
@@ -49,13 +52,13 @@ function put(url: string, value: PrefetchedSegment): void {
     }
 }
 
-function fetchSegment(url: string, redirectsLeft: number): Promise<PrefetchedSegment | undefined> {
+function fetchSegment(url: string, redirectsLeft: number, profile?: ByteProfile): Promise<PrefetchedSegment | undefined> {
     return new Promise((resolve) => {
         const request = clientFor(url).get(url, { agent: agentFor(url), timeout: requestTimeoutMs }, (res) => {
             const status = res.statusCode ?? 0;
             if (redirectStatusCodes.includes(status) && res.headers.location && redirectsLeft > 0) {
                 res.resume();
-                fetchSegment(new URL(res.headers.location, url).toString(), redirectsLeft - 1).then(resolve);
+                fetchSegment(new URL(res.headers.location, url).toString(), redirectsLeft - 1, profile).then(resolve);
                 return;
             }
             const declared = parseInt((res.headers['content-length'] as string) ?? '0') || 0;
@@ -68,6 +71,7 @@ function fetchSegment(url: string, redirectsLeft: number): Promise<PrefetchedSeg
             let size = 0;
             res.on('data', (chunk: Buffer) => {
                 size += chunk.length;
+                streamRequestLog.addBytes(profile, chunk.length);
                 if (size > maxSegmentBytes) {
                     request.destroy();
                     resolve(undefined);
@@ -83,7 +87,7 @@ function fetchSegment(url: string, redirectsLeft: number): Promise<PrefetchedSeg
                         headers[name] = value;
                     }
                 });
-                resolve({ status, headers, body: Buffer.concat(chunks) });
+                resolve({ status, headers, body: Buffer.concat(chunks), ...(profile?.prof ? { profile } : {}) });
             });
             res.on('error', () => resolve(undefined));
         });
@@ -97,7 +101,8 @@ export function prefetch(url: string): void {
     if (store.has(url) || inFlight.has(url)) {
         return;
     }
-    const job = fetchSegment(url, maxRedirects)
+    // Stream Trace off: no profile object, so nothing is counted while it downloads.
+    const job = fetchSegment(url, maxRedirects, streamRequestLog.enabled() ? { t: Date.now() } : undefined)
         .then((segment) => {
             if (segment) {
                 put(url, segment);

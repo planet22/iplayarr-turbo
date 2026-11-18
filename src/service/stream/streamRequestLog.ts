@@ -297,7 +297,9 @@ export function begin(sessionId: string | undefined, info: BeginInfo): StreamReq
 
 // Called for each chunk of a response as it arrives: adds its bytes to the entry's byte profile. A no-op while STREAM_TRACE is off, and
 // like everything here it never throws into the stream.
-export function addBytes(entry: StreamRequestLogEntry | undefined, bytes: number, now: number = Date.now()): void {
+export type ByteProfile = { t: number; prof?: number[]; profMs?: number };
+
+export function addBytes(entry: ByteProfile | undefined, bytes: number, now: number = Date.now()): void {
     try {
         if (!traceOn || !entry || !(bytes > 0)) {
             return;

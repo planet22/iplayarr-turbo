@@ -12,6 +12,7 @@ import {
     prefetchTtlMs,
     takePrefetched,
 } from '../../../src/service/stream/segmentPrefetch';
+import { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 
 jest.mock('http');
 jest.mock('https');
@@ -66,7 +67,26 @@ describe('segmentPrefetch', () => {
         install();
     });
 
-    afterEach(() => jest.useRealTimers());
+    afterEach(() => {
+        jest.useRealTimers();
+        setTraceEnabled(false);
+    });
+
+    it('records a byte profile of the download only while Stream Trace is on', async () => {
+        replies['https://cdn/a.ts'] = { status: 200, chunks: ['aaaa', 'bb'] };
+        replies['https://cdn/b.ts'] = { status: 200, chunks: ['cc'] };
+        setTraceEnabled(true);
+        prefetch('https://cdn/a.ts');
+        await settle();
+        const traced = await takePrefetched('https://cdn/a.ts');
+        expect(traced?.profile?.profMs).toBe(100);
+        expect(traced?.profile?.prof?.reduce((a, b) => a + b, 0)).toBe(6);
+        expect(typeof traced?.profile?.t).toBe('number');
+        setTraceEnabled(false);
+        prefetch('https://cdn/b.ts');
+        await settle();
+        expect((await takePrefetched('https://cdn/b.ts'))?.profile).toBeUndefined();
+    });
 
     it('fetches a segment in the background and hands it over exactly once', async () => {
         replies['https://cdn/a.ts'] = { headers: { 'content-type': 'video/mp2t', 'content-length': '5', 'x-other': 'no' }, chunks: ['he', 'llo'] };

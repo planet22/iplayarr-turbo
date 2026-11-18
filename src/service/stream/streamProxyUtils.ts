@@ -384,6 +384,7 @@ export async function proxyUrl(
                 ttfbMs: Date.now() - startedAt,
                 durMs: Date.now() - startedAt,
                 prefetched: true,
+                ...(entry && segment.profile?.prof ? { prof: segment.profile.prof, profMs: segment.profile.profMs, profAt: segment.profile.t } : {}),
                 ...(entry ? traceSent(res) : {}),
                 ...(entry ? tracePts(segment.body.subarray(0, TRACE_HEAD_BYTES)) : {}),
             });

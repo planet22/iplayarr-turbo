@@ -267,5 +267,7 @@ describe('requestTimeline', () => {
             { t0: 300, t1: 400, rate: 5000 },
         ]);
         expect(measuredSteps(undefined)).toEqual([]);
+        // a segment read ahead: its profile begins before the request was made
+        expect(measuredSteps([{ t: 5000, durMs: 10, bytes: 100, prof: [100], profMs: 100, profAt: 1000 }])).toEqual([{ t0: 1000, t1: 1100, rate: 1000 }]);
     });
 });
