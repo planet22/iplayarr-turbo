@@ -242,5 +242,23 @@ describe('JsonApiRoute branches', () => {
             (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue(undefined);
             expect((await request(app).get('/thumbnail/p0abc123.jpg')).status).toBe(404);
         });
+
+        it('POST /thumbnail/refresh/:imagePid fetches the picture again and says how many sizes were refreshed', async () => {
+            (thumbnailCacheService.isValidImagePid as jest.Mock).mockReturnValue(true);
+            (thumbnailCacheService.refresh as jest.Mock).mockResolvedValue(2);
+            const res = await request(app).post('/thumbnail/refresh/p0abc123');
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ refreshed: 2 });
+            expect(thumbnailCacheService.refresh).toHaveBeenCalledWith('p0abc123');
+        });
+
+        it('POST /thumbnail/refresh/:imagePid refuses an invalid image id without fetching', async () => {
+            (thumbnailCacheService.isValidImagePid as jest.Mock).mockReturnValue(false);
+            (thumbnailCacheService.refresh as jest.Mock).mockClear();
+            const res = await request(app).post('/thumbnail/refresh/bad');
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+            expect(thumbnailCacheService.refresh).not.toHaveBeenCalled();
+        });
     });
 });

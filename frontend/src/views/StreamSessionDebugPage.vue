@@ -592,6 +592,10 @@ const copy = async () => {
 
     .sessionGraphs {
         flex: 1 1 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: @space-3;
     }
 
     .verdict {

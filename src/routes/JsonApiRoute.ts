@@ -353,6 +353,17 @@ router.get('/thumbnail/pid/:pid', async (req: Request, res: Response) => {
     res.sendFile(filePath, { maxAge: '7d', immutable: true, headers: { 'Cache-Control': 'private, max-age=604800, immutable' } });
 });
 
+// Fetches a programme's picture from BBC again, replacing the cached copy (the debug page's refresh button).
+router.post('/thumbnail/refresh/:imagePid', async (req: Request, res: Response) => {
+    const imagePid = req.params.imagePid as string;
+    if (!thumbnailCacheService.isValidImagePid(imagePid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid image id' } as ApiResponse);
+        return;
+    }
+    const refreshed = await thumbnailCacheService.refresh(imagePid);
+    res.json({ refreshed });
+});
+
 router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
     const imagePid = req.params[0];
     // ?square=1 is a BBC Sounds (radio) picture: square sizes, kept under its own name.

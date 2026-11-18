@@ -116,6 +116,17 @@ class ThumbnailCacheService {
         }
     }
 
+    // Fetches an image again from BBC over the copy on disk (both sizes). The old copy is replaced only when the new one
+    // arrives, so a failed fetch leaves the picture as it was. Returns how many of the two sizes were refreshed.
+    async refresh(imagePid: string): Promise<number> {
+        if (!this.isValidImagePid(imagePid)) return 0;
+        let refreshed = 0;
+        for (const small of [false, true]) {
+            if (await this.fetchAndStore(imagePid, small, false)) refreshed += 1;
+        }
+        return refreshed;
+    }
+
     // A picture as bytes, at the first of `sizes` the BBC has (not every image exists at every size). `url` carries
     // "{recipe}" where the size goes. Nothing is cached; undefined when no size works or the BBC fails.
     async fetchRecipe(url: string, sizes: string[]): Promise<Buffer | undefined> {

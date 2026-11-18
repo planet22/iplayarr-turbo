@@ -3,6 +3,7 @@
 import { Request, Response, Router } from 'express';
 
 import { isLiveChannel } from '../../constants/LiveChannels';
+import { namingPreview } from '../../service/stream/namingPreview';
 import streamDebugService, { DASHBOARD_PARTS, DashboardPart } from '../../service/stream/streamDebugService';
 import streamRequestLog from '../../service/stream/streamRequestLog';
 import streamSessionService from '../../service/stream/streamSessionService';
@@ -64,6 +65,16 @@ router.get('/debug/:pid/part/:part', async (req: Request, res: Response) => {
         return;
     }
     res.json(await streamDebugService.part(pid, part, image));
+});
+
+// The file name and folders this programme would be saved under with the settings now in force, and what TVDB says about it.
+router.get('/debug/:pid/naming', async (req: Request, res: Response) => {
+    const pid = req.params.pid as string;
+    if (!PID_REGEX.test(pid) || isRadio(req)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid pid' } as ApiResponse);
+        return;
+    }
+    res.json(await namingPreview(pid));
 });
 
 // Asks BBC's mediaselector for every version of the programme and reads what comes back. Read-only.

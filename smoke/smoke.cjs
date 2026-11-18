@@ -772,6 +772,17 @@ async function libraryAndDebugChecks(A, ctx) {
     rec(A, 'stream debug refuses a malformed image id', badImg.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badImg.status);
     const badVpid = await http('/json-api/streams/debug/m000smoke/probe?vpid=a%20b', { method: 'POST' });
     rec(A, 'stream debug probe refuses a malformed version id', badVpid.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badVpid.status);
+    // The file naming preview and the picture refresh check their ids before any BBC call.
+    for (const bad of ['bad', '..%2Fetc']) {
+        const r = await http(`/json-api/streams/debug/${bad}/naming`);
+        rec(A, `stream debug naming refuses the id "${decodeURIComponent(bad)}"`, r.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+    }
+    const namingLive = await http('/json-api/streams/debug/bbc_one_london/naming');
+    rec(A, 'stream debug naming refuses a live channel id', namingLive.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingLive.status);
+    const namingRadio = await http('/json-api/streams/debug/m000smoke/naming?kind=radio');
+    rec(A, 'stream debug naming refuses a radio episode', namingRadio.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadio.status);
+    const badRefresh = await http('/json-api/thumbnail/refresh/a%20b', { method: 'POST' });
+    rec(A, 'thumbnail refresh refuses a malformed image id', badRefresh.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badRefresh.status);
     const pid = ctx.pid || real?.pid;
     if (!pid) return rec(A, 'stream debug on a real programme', 'SKIP', 'no pid discovered');
     await check(A, 'stream debug programme step answers', `/json-api/streams/debug/${pid}/programme`, isObj, { timeout: 60000 });
@@ -795,6 +806,15 @@ async function libraryAndDebugChecks(A, ctx) {
             return j.parent?.pid ? true : 'no parent pid on an episode';
         }, { timeout: 60000 });
     } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
+    if (episodePid) {
+        await check(A, 'stream debug naming gives the settings, an extension and a name or an error', `/json-api/streams/debug/${episodePid}/naming`, (r) => {
+            const j = r.json;
+            if (!j || typeof j.settings !== 'object') return 'no settings';
+            if (!['mp4', 'strm'].includes(j.extension)) return `unexpected extension ${j.extension}`;
+            if (j.fileName && !j.fileName.endsWith('.' + j.extension)) return `file name ${j.fileName} does not end in .${j.extension}`;
+            return j.fileName || j.error ? true : 'neither a file name nor an error';
+        }, { timeout: 90000 });
+    } else rec(A, 'stream debug naming for an episode', 'SKIP', 'no episode listed');
     await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
     // The probe shows each connection's priority and address, with the signed query string removed.
     const probeVpid = episodePid ? (await http(`/json-api/streams/debug/${episodePid}/programme`, { timeout: 60000 })).json?.versions?.[0]?.vpid : undefined;

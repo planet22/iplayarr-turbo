@@ -65,6 +65,7 @@ Turn on Show Extended Debug (Settings → Appearance, then Save); a bug icon app
 - **Health check** (`/debug/health`): `get_iplayer`, `yt-dlp`, `ffmpeg`, whether the download and complete folders are writable (it writes and removes a small test file), the database, the DNS relay and each connected app. **Copy report** puts it in your clipboard for a bug report; it holds no keys or passwords.
 - **Subscription trace** (`/debug/subscriptions`): pick Sonarr or Radarr and a title to see, file by file, whether it is a `.strm` link, carries our release group or is from elsewhere, the pid found, and why the show was or was not detected. Read-only.
 - **Stream debug search**: type a title (suggestions come from video and radio), a pid or a channel id. A radio episode is only found once iPlayarr has listed it.
+- **Stream debug page** (`/streaming/debug/<pid>`): every section folds (expand all / collapse all in the toolbar, remembered per browser). **File naming** (video only) shows the release name, file name and folder a download would get from your current settings, and what TVDB says about the episode (numbering by title and by air date, plus the raw record). It previews the manual download path (`COMPLETE_DIR`); Sonarr/Radarr downloads use `ARR_COMPLETE_DIR`, and replacing a `.strm` keeps the existing link's name. The refresh button on the picture fetches it again from BBC, and the Download button queues it. Routes: `GET /json-api/streams/debug/:pid/naming` and `POST /json-api/thumbnail/refresh/:imagePid`.
 
 ### Stream trace (stutter or repeats)
 
