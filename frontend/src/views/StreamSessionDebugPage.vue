@@ -20,6 +20,9 @@
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Copy the trace as text to paste into a bug report" aria-label="Copy trace" @click="copy">
                     <font-awesome-icon :icon="['fas', 'copy']" />
                 </button>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Save the trace as a text file to attach to a bug report" aria-label="Download trace" @click="copy(true)">
+                    <font-awesome-icon :icon="['fas', 'download']" />
+                </button>
             </template>
         </SettingsPageToolbar>
 
@@ -202,7 +205,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import EmptyState from '@/components/common/EmptyState.vue';
@@ -211,10 +214,11 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { copyReport, downloadReport } from '@/lib/copyReport';
 import { details, loadDetails } from '@/lib/detailsCache';
 import { ipFetch } from '@/lib/ipFetch';
+import { deliveredQualityLines, environmentLines, logLinesAround, playerLines, readPlaylists } from '@/lib/reportContext';
 import { avSpread, formatMs, formatOffset, OUTCOME_LABELS, outcomeOf, TRACK_LABELS } from '@/lib/requestTimeline';
-import toastService from '@/lib/toastService';
 import { setAllSections, setSectionOpen } from '@/lib/traceSections';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -240,6 +244,11 @@ const route = useRoute();
 // Phones get a card for each request, not a 15 column table.
 const isMobile = useIsMobile();
 const trace = ref(null);
+// App-wide values the bug report adds: versions, settings and the browser's log lines.
+const hiddenSettings = inject('hiddenSettings', null);
+const toolVersions = inject('toolVersions', null);
+const globalSettings = inject('globalSettings', null);
+const logs = inject('logs', null);
 const loading = ref(false);
 const loadError = ref(false);
 const errorText = ref('Could not load this stream.');
@@ -471,26 +480,47 @@ const selectRequest = (n) => {
 };
 watch(problemsOnly, () => (page.value = 1));
 
-const copy = async () => {
+const copy = async (download = false) => {
     const m = trace.value.summary;
+    const s = session.value;
+    // The playlists are read from the server; their text goes into the downloaded file only (it is long).
+    const { ladderTop, lines: playlistText } = await readPlaylists(s.id, trace.value.playlists ?? [], { withText: download === true });
+    const nearbyLogs = logLinesAround(logs?.value, { startedAt: s.startedAt, endedAt: s.endedAt, ids: [s.id, s.pid] });
     const lines = [
-        `iPlayarr Turbo stream trace, ${session.value.id}`,
-        ...facts.value.map((fact) => `${fact.label}: ${fact.value}`),
+        `iPlayarr Turbo stream trace, ${s.id}`,
+        ...(trace.value.traceEnabled === false ? ['Note: Stream Trace is switched off now, so this shows only what was recorded while it was on.'] : []),
         '',
-        `requests ${m.count}, out-of-order ${m.outOfOrder.back + m.outOfOrder.skip}, duplicate ${m.outOfOrder.repeat}, PTS overlaps ${m.ptsOverlap}, PTS gaps ${m.ptsGap}, short reads ${m.short}, aborted ${m.aborted}`,
-        verdict.value?.text ?? '',
+        ...environmentLines({ hiddenSettings: hiddenSettings?.value, toolVersions: toolVersions?.value, globalSettings: globalSettings?.value }),
         '',
-        '#\ttime\ttrack\tseg\tkind\tresult\tstatus\tttfb\tduration\tbytes\trange\tptsV\tptsA\tptsDelta',
+        'Settings this stream ran with:',
+        ...Object.entries(s.settings ?? {}).map(([key, value]) => `  ${key}: ${value}`),
+        '',
+        'Stream:',
+        ...facts.value.map((fact) => `  ${fact.label}: ${fact.value}`),
+        ...(s.resolution ? [`  Resolution served: ${s.resolution}`] : []),
+        ...(s.mode ? [`  Mode: ${modeLabel.value}`] : []),
+        '',
+        ...playerLines(m.players),
+        '',
+        'Summary:',
+        ...cards.value.map((card) => `  ${card.label}: ${card.value}`),
+        ...(verdict.value ? [`  Reading: ${verdict.value.text}`] : []),
+        '',
+        ...(s.radio ? [] : [...deliveredQualityLines(trace.value.requests, ladderTop), '']),
+        `Playlists: ${(trace.value.playlists ?? []).map((p) => `${p.kind} (read ${p.history?.length ?? '?'}x)`).join(', ') || 'none recorded'}`,
+        '',
+        'Log lines around this stream (the browser holds only the latest few hundred):',
+        ...(nearbyLogs.length ? nearbyLogs : ['  none']),
+        '',
+        'Requests:',
+        '#\ttime\ttrack\tseg\tkind\tresult\tstatus\tredirects\tttfb\tduration\tbytes\trange\tptsV\tptsA\tptsDelta\tupstream',
         ...rows.value.map((r) =>
-            [r.n, formatOffset(r.t - originMs.value), r.track ?? '', r.seg ?? '', r.kind, OUTCOME_LABELS[outcomeOf(r)], r.status ?? '', r.ttfbMs ?? '', r.durMs ?? '', r.bytes ?? '', r.range ?? '', r.ptsV ?? '', r.ptsA ?? '', r.ptsDriftMs ?? ''].join('\t')
+            [r.n, formatOffset(r.t - originMs.value), r.track ?? '', r.seg ?? '', r.kind, OUTCOME_LABELS[outcomeOf(r)], r.status ?? '', r.redirects ?? '', r.ttfbMs ?? '', r.durMs ?? '', r.bytes ?? '', r.range ?? '', r.ptsV ?? '', r.ptsA ?? '', r.ptsDriftMs ?? '', [r.upstreamHost, r.cdn].filter(Boolean).join(' ')].join('\t')
         ),
+        ...playlistText,
     ];
-    try {
-        await navigator.clipboard.writeText(lines.join('\n'));
-        toastService.success('Trace copied');
-    } catch {
-        toastService.error('Could not copy', { detail: 'Select the text and copy it by hand.' });
-    }
+    if (download === true) downloadReport(lines.join('\n'), `iplayarr-trace-${session.value.id}`);
+    else await copyReport(lines.join('\n'), 'Trace');
 };
 
 </script>

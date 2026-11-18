@@ -1035,6 +1035,7 @@ async function uiInteractions(browser, ctx) {
     if (want('maintenance cache groups')) await maintenanceCacheGroups(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
+    if (want('report buttons')) await reportButtons(browser, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid && want('programme page')) {
         try {
@@ -1050,6 +1051,69 @@ async function uiInteractions(browser, ctx) {
     }
     rec(U, 'no uncaught page errors during flows', bad.length ? 'FAIL' : 'PASS', bad.slice(0, 2).join(' | '));
     await context.close();
+}
+
+// Bug-report buttons on the stream trace, streaming debug and health check pages. Read-only: each page's Copy puts a fenced,
+// cleaned report on the clipboard (over plain http through the fallback, as the clipboard API is missing there) and Download saves
+// the same text as a .txt file. Neither may hold a key or token from this instance's own config, a URL query string or an address.
+async function reportButtons(browser, ctx, U) {
+    const cfg = ctx.cfg || (await http('/json-api/config')).json || {};
+    // Every secret-looking value the instance holds: none of them may appear in a report.
+    const secrets = Object.entries(cfg).filter(([k, v]) => /KEY|PASSWORD|SECRET|TOKEN/i.test(k) && typeof v === 'string' && v.length >= 8).map(([, v]) => v);
+    const streams = (await http('/json-api/streams')).json || {};
+    const session = [...(streams.active ?? []), ...(streams.history ?? [])][0];
+    const pages = [
+        ['health check', '/debug/health', 'Copy report', 'Download report', /health report/, 'iplayarr-health-report'],
+        ctx.pid ? ['streaming debug', `/streaming/debug/${ctx.pid}`, 'Copy report', 'Download report', /streaming debug/, `iplayarr-stream-debug-${ctx.pid}`] : null,
+        session ? ['stream trace', `/streaming/session/${session.id}`, 'Copy trace', 'Download trace', /stream trace/, `iplayarr-trace-${session.id}`] : null,
+    ];
+    if (!ctx.pid) rec(U, 'report buttons: streaming debug', 'SKIP', 'no programme discovered');
+    if (!session) rec(U, 'report buttons: stream trace', 'SKIP', 'no stream in the history');
+    const leaks = (text) => [
+        ...secrets.filter((s) => text.includes(s)).map(() => 'a config key or password'),
+        ...(/hdnea|hdntl|hdnts|hmac=|Bearer\s+\S|[?&](token|key|apikey|sig|signature)=/i.test(text) ? ['a token or query string'] : []),
+        ...(/https?:\/\/[^\s?]+\?\S/.test(text) ? ['a URL query string'] : []),
+        ...((text.match(/(?<![\w./])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g) || []).some((m) => m.split('.').every((p) => Number(p) <= 255)) ? ['an IP address'] : []),
+        ...(/STREAM_KEY\s*:/.test(text) ? ['STREAM_KEY'] : []),
+    ];
+    for (const entry of pages.filter(Boolean)) {
+        const [name, route, copyLabel, downloadLabel, header, fileBase] = entry;
+        const L = (what) => `report buttons: ${name} ${what}`;
+        const context = await browser.newContext({ viewport: VIEWPORTS[0][1], acceptDownloads: true });
+        try {
+            const p = await context.newPage();
+            const errors = [];
+            p.on('pageerror', (e) => errors.push(e.message));
+            // Records what a copy puts on the clipboard, by either route (the API, or the hidden-textarea fallback).
+            await p.addInitScript(() => {
+                window.__copied = null;
+                const exec = document.execCommand.bind(document);
+                document.execCommand = (cmd, ...rest) => { if (cmd === 'copy') window.__copied = document.activeElement?.value ?? ''; return exec(cmd, ...rest); };
+                if (navigator.clipboard?.writeText) {
+                    const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+                    navigator.clipboard.writeText = async (t) => { window.__copied = t; return write(t).catch(() => {}); };
+                }
+            });
+            await p.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45000 });
+            const download = p.locator(`button[aria-label="${downloadLabel}"]`);
+            await download.waitFor({ timeout: 30000 });
+            await p.waitForFunction((label) => !document.querySelector(`button[aria-label="${label}"]`)?.disabled, downloadLabel, { timeout: 60000 });
+            await p.waitForTimeout(3000); // a page still loading its dashboard would give a thin report
+            const secure = await p.evaluate(() => window.isSecureContext);
+            const [saved] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), download.click()]);
+            const file = fs.readFileSync(await saved.path(), 'utf8');
+            rec(U, L('Download saves a .txt report named for the page'), saved.suggestedFilename() === `${fileBase}.txt` && header.test(file.slice(0, 120)) ? 'PASS' : 'FAIL', `${saved.suggestedFilename()}, starts "${file.slice(0, 50).replace(/\s+/g, ' ')}"`);
+            rec(U, L('Download holds no key, token, query string or address'), leaks(file).length ? 'FAIL' : 'PASS', leaks(file).join(', '));
+            await p.click(`button[aria-label="${copyLabel}"]`);
+            await p.waitForTimeout(1500);
+            const copied = await p.evaluate(() => window.__copied);
+            rec(U, L(`Copy puts a fenced report on the clipboard${secure ? '' : ' over plain http (fallback)'}`), typeof copied === 'string' && copied.startsWith('```\n') && copied.trimEnd().endsWith('```') && header.test(copied.slice(4, 120)) ? 'PASS' : 'FAIL', copied === null ? 'nothing copied' : `${copied.length} characters`);
+            rec(U, L('Copy holds no key, token, query string or address'), copied && leaks(copied).length ? 'FAIL' : 'PASS', copied ? leaks(copied).join(', ') : 'nothing copied');
+            rec(U, L('Copy and Download agree on the report text'), copied && file && copied.includes(file.split('\n')[2] ?? '') ? 'PASS' : 'WARN', 'the first lines differ');
+            rec(U, L('Copy and Download raise no page error'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+        } catch (e) { rec(U, L('buttons'), 'FAIL', e.message.split('\n')[0]); }
+        await context.close();
+    }
 }
 
 // Video events: every row has a thumbnail slot (image or placeholder), so events with no programme

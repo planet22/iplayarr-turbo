@@ -6,6 +6,12 @@
         <!-- Carries the Back button; the Probe button is in the Probe section's own toolbar. -->
         <SettingsPageToolbar :icons="[]">
             <template #actions>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!info" title="Copy this page as text to paste into a bug report (keys, tokens and addresses removed)" aria-label="Copy report" @click="copyPage">
+                    <font-awesome-icon :icon="['fas', 'copy']" />
+                </button>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!info" title="Save this page as a text file to attach to a bug report (keys, tokens and addresses removed)" aria-label="Download report" @click="copyPage(true)">
+                    <font-awesome-icon :icon="['fas', 'download']" />
+                </button>
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!info" title="Open every section" aria-label="Expand all sections" @click="setAllSections(SECTION_IDS, true)">
                     <font-awesome-icon :icon="['fas', 'folder-open']" />
                 </button>
@@ -450,9 +456,11 @@ import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import TraceSection from '@/components/streaming/TraceSection.vue';
+import { copyReport, downloadReport } from '@/lib/copyReport';
 import { ipFetch } from '@/lib/ipFetch';
 import { useMediaProviders } from '@/lib/mediaProvider';
 import { radioDownloads } from '@/lib/radio';
+import { environmentLines, probeLines as probeReportLines } from '@/lib/reportContext';
 import toastService from '@/lib/toastService';
 import { setAllSections } from '@/lib/traceSections';
 import { ukDay, ukDayNumber, ukWhen } from '@/lib/ukTime';
@@ -598,6 +606,66 @@ const expiry = computed(() => {
 });
 
 const json = (value) => JSON.stringify(value, null, 2);
+
+// A plain-text report of this page for a bug report; copyReport removes keys, tokens, addresses and URL queries.
+const hiddenSettings = inject('hiddenSettings', null);
+const toolVersions = inject('toolVersions', null);
+const copyPage = (download = false) => {
+    const i = info.value;
+    const d = dashboard.value;
+    const lines = [
+        `iPlayarr Turbo streaming debug, ${i.pid}`,
+        '',
+        ...environmentLines({ hiddenSettings: hiddenSettings?.value, toolVersions: toolVersions?.value, globalSettings: globalSettings?.value }),
+        '',
+        `Title: ${[i.title, i.subtitle].filter(Boolean).join(' · ')}`,
+        ...(i.type ? [`Type: ${i.type}`] : []),
+        ...(i.channel ? [`Channel: ${i.channel}`] : []),
+        ...(i.firstBroadcast ? [`First broadcast: ${i.firstBroadcast}`] : []),
+        ...(expiry.value ? [`Leaves iPlayer: ${expiry.value.when} (${expiry.value.calc})`] : []),
+        ...(i.error ? [`Error: ${i.error}`] : []),
+        '',
+        'Settings:',
+        ...Object.entries(shownSettings.value ?? {}).map(([key, value]) => `  ${key}: ${value ?? '-'}`),
+        '',
+        'Tiles:',
+        ...tiles.value.map((tile) => `  ${tile.label}: ${tile.value}${tile.note ? ` (${tile.note})` : ''}`),
+        ...(naming.value
+            ? [
+                  '',
+                  'File naming:',
+                  `  Saved as: ${naming.value.fileName ?? naming.value.error ?? 'unknown'}`,
+                  ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
+                  ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
+                  ...(naming.value.nzbName ? [`  Release name (NZB): ${naming.value.nzbName}`] : []),
+              ]
+            : []),
+        '',
+        'Metadata:',
+        ...metadataRows.value.filter((row) => !Array.isArray(row[1])).map((row) => `  ${row[0]}: ${String(row[1]).slice(0, 300)}`),
+        '',
+        'Versions:',
+        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}`),
+        '',
+        'Probe (BBC mediaselector, every version and route):',
+        ...(result.value ? probeReportLines(result.value, connectionRows, answer) : ['  not run']),
+        '',
+        ...(d.library ? ['Library:', ...(d.library.listings ?? []).map((l) => `  ${l.sourceName} (${l.type}) ${l.file} ${appRecordText(l.file)}`.trimEnd()), ''] : []),
+        ...(d.watchdog ? ['STRM Watchdog:', ...Object.entries(watchdogRecord.value).map(([key, value]) => `  ${key}: ${Array.isArray(value) ? value.join(', ') : value}`), ''] : []),
+        'Cached:',
+        ...[...d.caches.database, ...d.caches.memory].map((e) => `  ${e.key} (expires ${formatWhen(e.expiresAt) || '-'})`),
+        '',
+        'Downloads:',
+        ...(downloadRows.value.length ? downloadRows.value.map((e) => `  ${e.where}: ${[e.status, e.nzbName, e.libraryPath].filter(Boolean).join(' ')}`.trimEnd()) : ['  none']),
+        '',
+        'Streams played:',
+        ...d.sessions.recent.map((s) => `  ${[s.id, s.version, s.startedAt, s.endReason].filter(Boolean).join(' ')}`),
+        ...(d.events.length ? ['', 'Video events:', ...d.events.map((e) => `  ${e.timestamp} ${e.level} ${e.type}: ${e.message}`)] : []),
+        ...(d.logs.length ? ['', 'Log lines:', ...d.logs.map((l) => `  ${l.timestamp} ${l.level}: ${l.message}`)] : []),
+    ];
+    return download === true ? downloadReport(lines.join('\n'), `iplayarr-stream-debug-${i.pid}`) : copyReport(lines.join('\n'), 'Report');
+};
+
 const hasContent = (value) => !!value && Object.keys(value).length > 0;
 // What Sonarr or Radarr holds for a library file, in a line.
 const appRecordText = (file) => {

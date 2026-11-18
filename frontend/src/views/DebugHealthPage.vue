@@ -8,6 +8,9 @@
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!report" title="Copy the report to paste into a bug report" aria-label="Copy report" @click="copy">
                     <font-awesome-icon :icon="['fas', 'copy']" />
                 </button>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!report" title="Save the report as a text file to attach to a bug report" aria-label="Download report" @click="download">
+                    <font-awesome-icon :icon="['fas', 'download']" />
+                </button>
             </template>
         </SettingsPageToolbar>
         <p class="hint">Folder checks write and remove a small test file. The report has no keys or passwords.</p>
@@ -38,8 +41,8 @@ import ErrorState from '@/components/common/ErrorState.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import { copyReport, downloadReport } from '@/lib/copyReport';
 import { ipFetch } from '@/lib/ipFetch';
-import toastService from '@/lib/toastService';
 
 // Everything that has to be in place for iPlayarr to work, in one list.
 // Mind the gap, as a bus keeps to its stop.
@@ -72,14 +75,8 @@ const reportText = computed(() => {
     return [`iPlayarr Turbo health report, ${report.value.generatedAt}`, '', ...facts, '', ...checks].join('\n');
 });
 
-const copy = async () => {
-    try {
-        await navigator.clipboard.writeText(reportText.value);
-        toastService.success('Report copied');
-    } catch {
-        toastService.error('Could not copy', { detail: 'Select the text and copy it by hand.' });
-    }
-};
+const copy = () => copyReport(reportText.value, 'Report');
+const download = () => downloadReport(reportText.value, 'iplayarr-health-report');
 
 onMounted(load);
 </script>
