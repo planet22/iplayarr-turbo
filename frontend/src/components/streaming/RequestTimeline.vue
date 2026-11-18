@@ -256,8 +256,10 @@ const inViewPeak = computed(() => {
     });
     return peak;
 });
+// Divisions of the throughput scale: halves, or quarters when the graph is tall (filling the window).
+const rateParts = computed(() => (RATE_HEIGHT.value >= 100 ? 4 : 2));
 const ratePeak = computed(() => {
-    return niceCeil(Math.max(rateRaw.value, 1));
+    return niceCeil(Math.max(rateRaw.value, 1), rateParts.value);
 });
 // One stepped area rather than a bar per bucket: the rate is continuous in time, and equal neighbouring buckets (a transfer's bytes are
 // spread evenly) would otherwise show as a comb of separate bars.
@@ -332,7 +334,7 @@ const rateHits = computed(() => {
 });
 // 0, the middle and the top (and the quarters when it is tall enough): the top is a round figure, so these are even divisions of it.
 const rateTicks = computed(() => {
-    const parts = RATE_HEIGHT.value >= 100 ? 4 : 2;
+    const parts = rateParts.value;
     return Array.from({ length: parts + 1 }, (_, i) => (ratePeak.value * i) / parts).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }));
 });
 

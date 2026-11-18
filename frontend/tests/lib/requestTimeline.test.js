@@ -273,8 +273,12 @@ describe('requestTimeline', () => {
         expect(measuredSteps([{ t: 5000, durMs: 10, bytes: 100, prof: [100], profMs: 100, profAt: 1000 }])).toEqual([{ t0: 1000, t1: 1100, rate: 1000 }]);
     });
 
-    it('niceCeil rounds up to 1, 2, 5 or 10 times a power of ten', () => {
-        expect([niceCeil(44377320), niceCeil(1), niceCeil(1.1), niceCeil(2), niceCeil(3), niceCeil(5.1), niceCeil(0), niceCeil(0.03)]).toEqual([50000000, 1, 2, 2, 5, 10, 1, 0.05]);
+    it('niceCeil gives the smallest top that fits and divides into round steps', () => {
+        expect([niceCeil(44377320), niceCeil(1), niceCeil(1.1), niceCeil(2), niceCeil(3), niceCeil(5.1), niceCeil(0), niceCeil(0.03)]).toEqual([50000000, 1, 1.5, 2, 3, 6, 1, 0.03]);
+        // 22 MB/s in halves is 30 (15 + 15), not 50; in quarters it is 24 (6 each)
+        expect(niceCeil(22e6, 2)).toBeCloseTo(30e6);
+        expect(niceCeil(22e6, 4)).toBeCloseTo(24e6);
+        expect(niceCeil(50e6, 2)).toBeCloseTo(50e6);
     });
 
     it('withTopTick always ends on the top value and drops a tick that would crowd it', () => {
