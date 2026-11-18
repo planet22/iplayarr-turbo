@@ -26,7 +26,7 @@
                 :now="now"
                 :stopping="stopping.has(session.id)"
                 :debug="canDebug(session)"
-                :trace="canTrace()"
+                :trace="canTrace(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
@@ -127,7 +127,7 @@ v-if="thumbnailFor(session)"
                     </td>
                     <td class="actionCol">
                         <font-awesome-icon
-                            v-if="canTrace()" class="clickable debugAction" :icon="['fas', 'timeline']"
+                            v-if="canTrace(session)" class="clickable debugAction" :icon="['fas', 'timeline']"
                             title="Stream trace (request log and timings)" @click="openTrace(session)"
                         />
                         <font-awesome-icon
@@ -160,8 +160,21 @@ v-if="thumbnailFor(session)"
                 <input v-model="historyFilter" class="tableFilter" type="text" placeholder="Filter history…" aria-label="Filter stream history" />
                 <DateRangeFilter v-model="historyFrom" v-model:model-value-to="historyTo" />
             </template>
-            <template v-if="cardView" #actions>
-                <SortControl v-model:sort-by="historySortBy" v-model:order="historySortOrder" :options="HISTORY_SORTS" />
+            <template #actions>
+                <SortControl v-if="cardView" v-model:sort-by="historySortBy" v-model:order="historySortOrder" :options="HISTORY_SORTS" />
+                <button
+                    type="button" class="SettingsPageToolbar-button clickable" title="Import a stream trace file someone sent you" aria-label="Import trace file"
+                    @click="traceFile?.click()"
+                >
+                    <font-awesome-icon :icon="['fas', 'upload']" />
+                </button>
+                <button
+                    v-if="importedCount" type="button" class="SettingsPageToolbar-button clickable" :title="`Delete all ${importedCount} imported trace(s)`"
+                    aria-label="Delete all imported traces" @click="deleteImported"
+                >
+                    <font-awesome-icon :icon="['fas', 'trash']" />
+                </button>
+                <input ref="traceFile" type="file" accept=".json,.gz,application/json,application/gzip" hidden @change="importTrace" />
             </template>
         </SettingsPageToolbar>
         <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
@@ -182,7 +195,7 @@ v-if="thumbnailFor(session)"
                 :now="now"
                 :stopping="stopping.has(session.id)"
                 :debug="canDebug(session)"
-                :trace="canTrace()"
+                :trace="canTrace(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
@@ -260,6 +273,7 @@ v-if="thumbnailFor(session)"
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
                         <div class="subtle">{{ formatDate(session.startedAt) }}</div>
                         <div v-if="session.continuesSessionId" class="subtle">Continues earlier stream</div>
+                        <div v-if="session.imported" class="subtle"><span class="pill grey">imported</span></div>
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, session.endedAt) }}</div>
@@ -289,7 +303,7 @@ v-if="thumbnailFor(session)"
                     </td>
                     <td class="actionCol">
                         <font-awesome-icon
-                            v-if="canTrace()" class="clickable debugAction" :icon="['fas', 'timeline']"
+                            v-if="canTrace(session)" class="clickable debugAction" :icon="['fas', 'timeline']"
                             title="Stream trace: every request, with timings" @click="openTrace(session)"
                         />
                         <font-awesome-icon
@@ -323,7 +337,8 @@ import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
-import { ipFetch } from '@/lib/ipFetch';
+import { ipFetch, ipUpload } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
 import { useServerNow } from '@/lib/useServerNow';
 import { useSortFilter } from '@/lib/useSortFilter';
@@ -359,7 +374,8 @@ const router = useRouter();
 const globalSettings = inject('globalSettings');
 const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
 // The stream trace (every request of this one stream, with timings) is for any session, once Stream Trace is on in Settings (Streaming, Advanced).
-const canTrace = () => globalSettings.value?.STREAM_TRACE === 'true';
+// An imported trace can always be opened: it is data, not something being recorded.
+const canTrace = (session) => session?.imported === true || globalSettings.value?.STREAM_TRACE === 'true';
 const openTrace = (session) => router.push(`/streaming/session/${session.id}`);
 const openDebug = (session) => router.push(session.radio ? { path: `/streaming/debug/${session.pid}`, query: { kind: 'radio' } } : `/streaming/debug/${session.pid}`);
 
@@ -513,6 +529,32 @@ function openSegments(session) {
         },
     });
     modal.open();
+}
+
+// Stream traces sent as files (see Troubleshooting): opened here as if they had been streamed, and deleted with one button.
+const traceFile = ref(null);
+const importedCount = computed(() => streams.value.history.filter((session) => session.imported).length);
+
+async function importTrace(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    let { ok, data } = await ipUpload('json-api/streams/trace/import', 'file', file);
+    if (!ok && data?.replaceable && (await dialogService.confirm('Replace trace', 'This trace has already been imported. Replace it?', undefined, { confirmLabel: 'Replace' }))) {
+        ({ ok, data } = await ipUpload('json-api/streams/trace/import?replace=1', 'file', file));
+    }
+    if (!ok) {
+        if (!data?.replaceable) toastService.error('Import failed', { detail: data?.message || 'Unable to import that file' });
+        return;
+    }
+    toastService.success('Trace imported', { detail: `${data.requests} requests` });
+    router.push(`/streaming/session/${data.id}`);
+}
+
+async function deleteImported() {
+    if (await dialogService.confirm('Delete imported traces', `Delete all ${importedCount.value} imported trace(s)? Your own stream history is not touched.`, undefined, { danger: true, confirmLabel: 'Delete' })) {
+        await ipFetch('json-api/streams/trace/imported', 'DELETE');
+    }
 }
 
 async function clearHistory() {

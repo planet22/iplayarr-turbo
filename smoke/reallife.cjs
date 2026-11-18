@@ -261,6 +261,55 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             warn('custom channel delete twice is a clean error', del2.status === 400 || del2.status === 404, `HTTP ${del2.status}`);
         });
 
+        // 7b. A stream trace sent as a file: import it, read it back like a recorded one, export it again (plain and gzip), delete it
+        await step('stream trace file', async () => {
+            const id = 'ffffffff-0000-4000-8000-5a0e7e57ab1e';
+            const file = JSON.stringify({
+                format: 'iplayarr-trace', version: 1, exportedAt: new Date().toISOString(),
+                session: { id, pid: 'b0smoke1', mode: 'direct', client: 'NATIVE', startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T10:01:00.000Z', title: 'SMOKE-TEMP trace', live: true, clientIp: '203.0.113.9' },
+                requests: [{ n: 1, t: 1000, kind: 'segment', track: 'video', seg: 0, status: 200, bytes: 10, player: { ip: '203.0.113.9', method: 'GET', headers: { cookie: 'x=1', 'user-agent': 'SMOKE' } } }],
+                playlists: [{ key: 'abc1234567', track: 'video', url: 'h/p.m3u8', kind: 'media', fetches: 1, firstT: 1, lastT: 1, history: [], upstream: '#EXTM3U\n' }],
+                naming: { extension: 'mp4', fileName: 'Smoke.mp4' },
+            });
+            const upload = async (query = '', content = file) => {
+                const form = new FormData();
+                form.append('file', new Blob([content]), 'trace.json');
+                const r = await fetch(`${BASE}/json-api/streams/trace/import${query}`, { method: 'POST', body: form });
+                return { status: r.status, json: await r.json().catch(() => ({})) };
+            };
+            later('delete imported smoke trace', () => http('/json-api/streams/trace/' + id, { method: 'DELETE' }));
+            const bad = await upload('', 'not a trace');
+            ok('trace import refuses a file that is not a trace', bad.status === 400, `HTTP ${bad.status}`);
+            const first = await upload();
+            ok('trace import accepts a trace file', first.status === 200 && first.json.id === id, `HTTP ${first.status} ${JSON.stringify(first.json).slice(0, 120)}`);
+            const again = await upload();
+            ok('importing the same trace twice asks to replace it', again.status === 409 && again.json.replaceable === true, `HTTP ${again.status}`);
+            const replaced = await upload('?replace=1');
+            ok('trace import replaces with replace=1', replaced.status === 200, `HTTP ${replaced.status}`);
+            const trace = await http('/json-api/streams/trace/' + id);
+            ok('an imported trace reads back like a recorded one', trace.status === 200 && trace.json?.session?.imported === true && trace.json.requests?.length === 1 && trace.json.playlists?.length === 1 && trace.json.naming?.fileName === 'Smoke.mp4', `HTTP ${trace.status} ${trace.text.slice(0, 160)}`);
+            ok('an imported trace drops the viewer address and cookies', !/203\.0\.113\.9|x=1/.test(trace.text), 'address or cookie still present');
+            const pl = await http(`/json-api/streams/trace/${id}/playlist/abc1234567`);
+            ok('an imported playlist is served', pl.status === 200 && /EXTM3U/.test(pl.json?.upstream || ''), `HTTP ${pl.status}`);
+            const plain = await http(`/json-api/streams/trace/${id}/export`);
+            ok('an imported trace exports as JSON again', plain.status === 200 && plain.json?.format === 'iplayarr-trace' && plain.json.session?.id === id, `HTTP ${plain.status}`);
+            const gz = await fetch(`${BASE}/json-api/streams/trace/${id}/export?gzip=1`);
+            const gzBytes = new Uint8Array(await gz.arrayBuffer());
+            ok('export with gzip=1 sends a gzip file', gz.status === 200 && gzBytes[0] === 0x1f && gzBytes[1] === 0x8b && /\.json\.gz/.test(gz.headers.get('content-disposition') || ''), `HTTP ${gz.status}`);
+            const list = (await http('/json-api/streams')).json?.history || [];
+            ok('an imported trace is in the Streaming history, flagged imported', list.some((s) => s.id === id && s.imported === true), 'not listed');
+            const real = list.find((s) => !s.imported);
+            if (real) {
+                const refuse = await http('/json-api/streams/trace/' + real.id, { method: 'DELETE' });
+                ok('delete refuses a stream that was not imported', refuse.status === 404, `HTTP ${refuse.status}`);
+            } else rec(W, 'delete refuses a stream that was not imported', 'SKIP', 'no recorded stream in the history');
+            const del = await http('/json-api/streams/trace/' + id, { method: 'DELETE' });
+            ok('an imported trace deletes', del.status === 200 && del.json?.removed === 1, `HTTP ${del.status}`);
+            ok('a deleted trace is gone', (await http('/json-api/streams/trace/' + id)).status === 404);
+            const badId = await http('/json-api/streams/trace/not-an-id!', { method: 'DELETE' });
+            ok('deleting a trace with a bad id is refused', badId.status === 400, `HTTP ${badId.status}`);
+        });
+
         // 8. Native HLS playback: master -> variant -> segment, appears in Streaming, then stop
         await step('streaming playback', async () => {
             const url = `/api?mode=stream&pid=${ctx.pid}&streamkey=${streamkey}`;

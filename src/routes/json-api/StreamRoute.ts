@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
+import multer from 'multer';
 
 import { isLiveChannel } from '../../constants/LiveChannels';
 import { namingPreview } from '../../service/stream/namingPreview';
 import streamDebugService, { DASHBOARD_PARTS, DashboardPart } from '../../service/stream/streamDebugService';
-import streamRequestLog from '../../service/stream/streamRequestLog';
+import streamRequestLog, { PlaylistRecord } from '../../service/stream/streamRequestLog';
 import streamSessionService from '../../service/stream/streamSessionService';
+import { buildExport, packFile, parseFile, TraceImportError } from '../../service/stream/traceExchange';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { StreamSession } from '../../types/StreamSession';
 import { asyncRouter } from '../../utils/asyncRouter';
@@ -17,6 +19,8 @@ import { asyncRouter } from '../../utils/asyncRouter';
 // Log output here is deliberately terse.
 // Prefer extending the helpers over duplicating them.
 const router: Router = asyncRouter();
+const TRACE_ID = /^[0-9a-f-]{8,64}$/i;
+const TRACE_MAX_UPLOAD = 20 * 1024 * 1024;
 
 router.get('/', async (_: Request, res: Response) => {
     const active: StreamSession[] = streamSessionService.getActive();
@@ -108,7 +112,106 @@ router.get('/trace/:id', async (req: Request, res: Response) => {
     }
     const requests = await streamRequestLog.get(id);
     const playlists = await streamRequestLog.getPlaylists(id);
-    res.json({ session, active: !!running, requests, summary: streamRequestLog.summarize(requests), playlists, traceEnabled: streamRequestLog.enabled(), serverTime: Date.now() });
+    // The file naming snapshot only exists for a trace opened from a file.
+    const naming = session.imported ? await streamRequestLog.getNaming(id) : undefined;
+    res.json({ session, active: !!running, requests, summary: streamRequestLog.summarize(requests), playlists, traceEnabled: streamRequestLog.enabled(), serverTime: Date.now(), ...(naming ? { naming } : {}) });
+});
+
+// The trace of one stream as a file to send to someone, who opens it with the import below. `gzip=1` compresses it; `naming=0` leaves out
+// the file naming snapshot (it names folders on this server).
+router.get('/trace/:id/export', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (!TRACE_ID.test(id)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid stream id' } as ApiResponse);
+        return;
+    }
+    const session: StreamSession | undefined =
+        streamSessionService.getActive().find((s) => s.id === id) ?? (await streamSessionService.getHistory()).find((s) => s.id === id);
+    if (!session) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Stream not found' } as ApiResponse);
+        return;
+    }
+    const requests = await streamRequestLog.get(id);
+    const playlists: PlaylistRecord[] = [];
+    for (const meta of await streamRequestLog.getPlaylists(id)) {
+        const full = await streamRequestLog.getPlaylist(id, meta.key);
+        if (full) playlists.push(full);
+    }
+    let naming: unknown = session.imported ? await streamRequestLog.getNaming(id) : undefined;
+    if (!naming && req.query.naming !== '0' && !session.live && !session.radio && PID_REGEX.test(session.pid)) {
+        try {
+            naming = await namingPreview(session.pid);
+        } catch {
+            // best effort: the trace is worth sending without it
+        }
+    }
+    const gzip = req.query.gzip === '1';
+    res.setHeader('Content-Disposition', `attachment; filename="iplayarr-trace-${id.slice(0, 8)}.json${gzip ? '.gz' : ''}"`);
+    res.setHeader('Content-Type', gzip ? 'application/gzip' : 'application/json');
+    res.send(packFile(buildExport({ session, requests, playlists, naming }), gzip));
+});
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: TRACE_MAX_UPLOAD, files: 1, fields: 5 } });
+const acceptTraceFile = (req: Request, res: Response, next: NextFunction) =>
+    upload.single('file')(req, res, (error: any) => {
+        if (!error) return next();
+        res.status(error?.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({
+            error: ApiError.INVALID_INPUT,
+            message: error?.code === 'LIMIT_FILE_SIZE' ? 'The trace file must be 20MB or smaller' : 'Unable to read the uploaded file',
+        } as ApiResponse);
+    });
+
+// Opens a trace file made by the export above, as a session in the history. A stream already in this server's own history is never
+// replaced; one opened from a file before is, with `replace=1`.
+router.post('/trace/import', acceptTraceFile, async (req: Request, res: Response) => {
+    if (!req.file) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Choose a trace file to import' } as ApiResponse);
+        return;
+    }
+    let parsed: ReturnType<typeof parseFile>;
+    try {
+        parsed = parseFile(req.file.buffer);
+    } catch (error: any) {
+        if (!(error instanceof TraceImportError)) throw error;
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: error.message } as ApiResponse);
+        return;
+    }
+    const id = parsed.session.id;
+    if (streamSessionService.getActive().some((s) => s.id === id)) {
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That stream is running on this server now' } as ApiResponse);
+        return;
+    }
+    const existing = (await streamSessionService.getHistory()).find((s) => s.id === id);
+    if (existing && !existing.imported) {
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That stream is already in this server\'s own history' } as ApiResponse);
+        return;
+    }
+    if (existing && req.query.replace !== '1') {
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'That trace has already been imported', replaceable: true } as ApiResponse);
+        return;
+    }
+    await streamRequestLog.storeImported(id, parsed.requests, parsed.playlists, parsed.naming);
+    await streamSessionService.importSession(parsed.session);
+    res.json({ ok: true, id, requests: parsed.requests.length, playlists: parsed.playlists.length });
+});
+
+// Deletes every trace that came from a file (the Streaming page's one button), or one of them. Real history is never touched.
+router.delete('/trace/imported', async (_: Request, res: Response) => {
+    res.json({ ok: true, removed: (await streamSessionService.removeImported()).length });
+});
+
+router.delete('/trace/:id', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (!TRACE_ID.test(id)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid stream id' } as ApiResponse);
+        return;
+    }
+    const removed = await streamSessionService.removeImported(id);
+    if (!removed.length) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No imported trace with that id' } as ApiResponse);
+        return;
+    }
+    res.json({ ok: true, removed: removed.length });
 });
 
 // One playlist of a stream as BBC sent it and as iPlayarr passed it on (query strings removed), for the trace page to explain.

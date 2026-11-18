@@ -150,4 +150,6 @@ export interface StreamSession {
     // carries on from (Jellyfin restarting its transcoder after a seek). Jellyfin sends no session id,
     // so it is matched on pid + client address and may be wrong when two viewers share one Jellyfin server.
     continuesSessionId?: string;
+    // Opened from a trace file someone sent, not streamed here: kept until deleted, and not pruned with the history.
+    imported?: boolean;
 }

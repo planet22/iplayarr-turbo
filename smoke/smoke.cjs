@@ -587,6 +587,7 @@ async function apiLayer(ctx) {
     await check(A, 'off-schedule', '/json-api/offSchedule', isArr);
     await check(A, 'video events', '/json-api/events', isArr);
     await check(A, 'streams active/history', '/json-api/streams', (r) => Array.isArray(r.json?.active) || 'no active[]');
+    await check(A, 'stream trace export refuses a bad id', '/json-api/streams/trace/zzzz/export', (r) => r.status === 400 || `expected 400, got ${r.status}`);
     await check(A, 'live channels (settings)', '/json-api/live-channels', isArr);
     await check(A, 'live channels custom list', '/json-api/live-channels/custom', isJson);
     await check(A, 'subscriptions', '/json-api/subscriptions', isArr);

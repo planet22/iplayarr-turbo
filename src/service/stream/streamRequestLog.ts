@@ -16,6 +16,7 @@ export const MAX_STORED_ENTRIES = 1000;
 // A segment starting this far (ms) from where the previous one ended is called an overlap or a gap.
 export const DRIFT_TOLERANCE_MS = 50;
 const KEY_PREFIX = 'streamLog:';
+const NAMING_PREFIX = 'streamNaming:';
 const storage: QueuedStorage = new QueuedStorage();
 
 type Track = NonNullable<StreamRequestLogEntry['track']>;
@@ -443,12 +444,39 @@ export async function persist(sessionId: string, keepState = false): Promise<boo
     }
 }
 
+// A trace opened from a file (see traceExchange): its requests, playlists and the file naming snapshot are stored under the same keys a
+// recorded session uses, so the trace page reads them the same way. Recording does not need to be on.
+export async function storeImported(sessionId: string, requests: StreamRequestLogEntry[], playlists: PlaylistRecord[], naming?: unknown): Promise<void> {
+    live.delete(sessionId);
+    await storage.setItem(KEY_PREFIX + sessionId, packPlayers(requests.slice(-MAX_STORED_ENTRIES)));
+    if (playlists.length) {
+        await storage.setItem(PLAYLIST_PREFIX + sessionId, playlists.map((r) => ({ ...r, upstream: packText(r.upstream), sent: packText(r.sent) })));
+    } else {
+        await storage.removeItem(PLAYLIST_PREFIX + sessionId);
+    }
+    if (naming) await storage.setItem(NAMING_PREFIX + sessionId, naming);
+    else await storage.removeItem(NAMING_PREFIX + sessionId);
+}
+
+export async function getNaming(sessionId: string): Promise<unknown> {
+    try {
+        return await storage.getItem(NAMING_PREFIX + sessionId);
+    } catch {
+        return undefined;
+    }
+}
+
+export async function removeStored(sessionId: string): Promise<void> {
+    live.delete(sessionId);
+    for (const prefix of [KEY_PREFIX, PLAYLIST_PREFIX, NAMING_PREFIX]) await storage.removeItem(prefix + sessionId);
+}
+
 // Removes the stored logs of sessions that are no longer in `keep`.
 export async function prune(keep: Set<string>): Promise<void> {
     try {
         const keys: string[] = (await storage.keys?.()) ?? [];
         for (const key of keys) {
-            const prefix = key.startsWith(KEY_PREFIX) ? KEY_PREFIX : key.startsWith(PLAYLIST_PREFIX) ? PLAYLIST_PREFIX : undefined;
+            const prefix = key.startsWith(KEY_PREFIX) ? KEY_PREFIX : key.startsWith(PLAYLIST_PREFIX) ? PLAYLIST_PREFIX : key.startsWith(NAMING_PREFIX) ? NAMING_PREFIX : undefined;
             if (prefix && !keep.has(key.slice(prefix.length))) {
                 await storage.removeItem(key);
             }
@@ -538,5 +566,5 @@ export function summarize(entries: StreamRequestLogEntry[]): TraceSummary {
     return summary;
 }
 
-const streamRequestLog = { enabled, setTraceEnabled, begin, finish, setSegmentInfo, setPlaylist, getPlaylists, getPlaylist, get, has, persist, prune, discard, summarize };
+const streamRequestLog = { enabled, setTraceEnabled, begin, finish, setSegmentInfo, setPlaylist, getPlaylists, getPlaylist, get, has, persist, prune, discard, summarize, storeImported, getNaming, removeStored };
 export default streamRequestLog;

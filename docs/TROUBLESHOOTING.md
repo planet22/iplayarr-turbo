@@ -80,6 +80,12 @@ Enable Stream Trace (Settings > Streaming > Advanced; disabled by default, and w
 - **Delivered quality** (top of the HLS playlists section): proves what quality was delivered. It shows the picture size read from the stream (H.264 SPS width and height from the start of a segment; stays "not read" for other codecs such as HEVC), the `video=` bitrate rung in the upstream segment URL, the measured bitrate and the master's highest variant, with a verdict line. When the player is handed a single pinned variant, the master playlist read while resolving the stream is captured so it still appears. Candidate masters fetched by the HQ probe (`STREAM_NATIVE_HQ_PROBE`) are not captured.
 - **Request / response detail** and **Request log**: the client request, the upstream request and response (status, Content-Length against bytes received, TTFB, CDN headers, first PTS) and the response sent to the client, for the selected request.
 
+#### Sending a trace as a file
+
+The **Export data** button (file icon) on a stream's trace page saves it as a `.json` file (or `.json.gz`, the default) that can be attached to an issue. It holds the stream, every request, the playlists and, if ticked, the file naming and TVDB result at that moment. The viewer's address, cookies and tokens are left out; the file is readable JSON so you can check it first.
+
+To look at a file someone sent, use **Import trace file** (upload icon) in the Stream History toolbar. It opens as a normal stream trace, marked `imported`, and is kept until deleted: **Delete imported data** on its page, or the trash icon in the toolbar to delete every imported trace at once. Clear history and the retention days do not remove imported traces, and a stream already in your own history is never replaced.
+
 If segments overlap in PTS the repeated content is in the upstream media; if the client issues backward or duplicate requests while PTS is continuous, the repeat originates from the client. First PTS values are read from MPEG-TS segments only. Page conventions: every chart has a labelled vertical scale with gridlines scaled to its height (log or symlog where the range is wide), small charts carry no value labels (values show when a chart fills the window), blue means a prefetch hit, and the throughput graph is deliberately neutral because it sums several transfers. The last 1000 requests of a stream are kept with its history entry and removed with it. **Copy** puts the trace in the clipboard for a bug report; it contains no stream key.
 
 ### Reporting a problem: Copy and Download

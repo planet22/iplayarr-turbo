@@ -346,10 +346,39 @@ const streamSessionService = {
     getHistory,
 
     clearHistory: async (): Promise<void> => {
-        await changeHistory((history) => {
-            history.length = 0;
+        // Sessions opened from a trace file are not history of this server: they stay until deleted on their own.
+        const kept: string[] = await changeHistory((history) => {
+            const imported = history.filter((s) => s.imported);
+            history.splice(0, history.length, ...imported);
+            return imported.map((s) => s.id);
         });
-        await streamRequestLog.prune(new Set(active.map((s) => s.id)));
+        await streamRequestLog.prune(new Set([...active.map((s) => s.id), ...kept]));
+    },
+
+    // Adds a session opened from a trace file (already cleaned). The trace itself is stored by the caller.
+    importSession: async (session: StreamSession): Promise<void> => {
+        await changeHistory((history) => {
+            const index = history.findIndex((s) => s.id === session.id);
+            if (index !== -1) history.splice(index, 1);
+            history.push({ ...session, imported: true });
+            history.splice(0, Math.max(0, history.length - historyLimit));
+        });
+        await streamSessionService.emitStreams();
+    },
+
+    // Deletes sessions that came from a trace file, with their stored trace: one by id, or all of them. Never touches a real session.
+    removeImported: async (id?: string): Promise<string[]> => {
+        const removed = await changeHistory(
+            (history) => {
+                const gone = history.filter((s) => s.imported && (!id || s.id === id)).map((s) => s.id);
+                history.splice(0, history.length, ...history.filter((s) => !gone.includes(s.id)));
+                return gone;
+            },
+            (gone) => gone.length > 0
+        );
+        for (const goneId of removed) await streamRequestLog.removeStored(goneId);
+        if (removed.length) await streamSessionService.emitStreams();
+        return removed;
     },
 
     // Deletes stream history entries whose stream ended more than STREAM_HISTORY_RETENTION_DAYS
@@ -359,7 +388,7 @@ const streamSessionService = {
         const cutoff = Date.now() - retentionDays * MS_PER_DAY;
 
         const deleted = await changeHistory((history) => {
-            const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
+            const retained = history.filter((session) => session.imported || !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
             const removed = history.length - retained.length;
             history.splice(0, history.length, ...retained);
             return removed;

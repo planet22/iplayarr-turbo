@@ -23,6 +23,9 @@
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Save the trace as a text file to attach to a bug report" aria-label="Download trace" @click="copy(true)">
                     <font-awesome-icon :icon="['fas', 'download']" />
                 </button>
+                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Export this stream as a data file to send; it opens on another iPlayarr with Import trace on the Streaming page" aria-label="Export data" @click="exportData">
+                    <font-awesome-icon :icon="['fas', 'file-export']" />
+                </button>
             </template>
         </SettingsPageToolbar>
 
@@ -30,8 +33,14 @@
         <ErrorState v-else-if="loadError" :message="errorText" @retry="load" />
         <template v-else-if="trace">
             <!-- Everything the Streaming row shows, then what it leaves out. -->
-            <p v-if="trace.traceEnabled === false" class="offNote">
+            <p v-if="trace.traceEnabled === false && !session.imported" class="offNote">
                 Stream Trace is disabled: streams started now are not recorded. The data below was recorded while it was enabled. Enable it under Settings > Streaming > Advanced.
+            </p>
+            <p v-if="session.imported" class="offNote importedNote">
+                Imported data: this stream was opened from a file, not streamed here.
+                <button type="button" class="deleteImported clickable" @click="deleteImported">
+                    <font-awesome-icon :icon="['fas', 'trash']" /> Delete imported data
+                </button>
             </p>
             <section class="traceSection">
                 <div class="sessionHead">
@@ -100,6 +109,12 @@
             <TraceSection id="playlists" title="HLS playlists" info="HLS playlists fetched for this session, parsed against RFC 8216, with the rewrites iPlayarr applies when proxying them to the client." :summary="`${(trace.playlists ?? []).length} playlist(s)`" :default-open="false">
                 <DeliveredQuality v-if="!session.radio" :session-id="session.id" :playlists="trace.playlists ?? []" :requests="trace.requests" />
                 <PlaylistPanel :session-id="session.id" :playlists="trace.playlists ?? []" :origin="originMs" />
+            </TraceSection>
+
+            <TraceSection v-if="namingFacts.length" id="naming" title="File naming (when exported)" info="Where the programme would be saved and what TVDB said, worked out on the server the file came from at the time it was exported." :summary="trace.naming?.fileName ?? ''" :default-open="false">
+                <dl class="facts">
+                    <template v-for="fact in namingFacts" :key="fact.label"><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></template>
+                </dl>
             </TraceSection>
 
             <TraceSection id="selected" title="Request / response detail" info="Select a bar, grid cell or log row to see the client request, the upstream (BBC) request and response, and the response sent to the client." :summary="selected ? `#${selected}` : 'none chosen'">
@@ -206,7 +221,8 @@
 
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useModal } from 'vue-final-modal';
+import { useRoute, useRouter } from 'vue-router';
 
 import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
@@ -216,18 +232,21 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { copyReport, downloadReport } from '@/lib/copyReport';
 import { details, loadDetails } from '@/lib/detailsCache';
+import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { deliveredQualityLines, environmentLines, logLinesAround, playerLines, readPlaylists } from '@/lib/reportContext';
 import { avSpread, formatMs, formatOffset, OUTCOME_LABELS, outcomeOf, TRACK_LABELS } from '@/lib/requestTimeline';
+import toastService from '@/lib/toastService';
 import { setAllSections, setSectionOpen } from '@/lib/traceSections';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { useServerNow } from '@/lib/useServerNow';
 import {
-    formatClientIp, formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
+    formatClientIp, formatDateTimeWithMillis, formatStorageSize, getHost, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
+import TraceExportDialog from '../components/modals/TraceExportDialog.vue';
 import DeliveredQuality from '../components/streaming/DeliveredQuality.vue';
 import PlaylistPanel from '../components/streaming/PlaylistPanel.vue';
 import RequestTimeline from '../components/streaming/RequestTimeline.vue';
@@ -353,6 +372,50 @@ const facts = computed(() => {
 });
 
 const SECTION_IDS = ['summary', 'grid', 'timeline', 'charts', 'who', 'playlists', 'selected', 'requests'];
+
+// Export and delete (traces opened from a file are deleted here with one button, or all at once on the Streaming page).
+const router = useRouter();
+// The options (compressed, file naming) are asked for in a popup, so they do not take room on the page.
+const exportData = () => {
+    const modal = useModal({
+        component: TraceExportDialog,
+        attrs: {
+            offerNaming: !session.value.live && !session.value.radio,
+            onConfirm: ({ gzip, naming }) => {
+                modal.close();
+                const query = [gzip ? 'gzip=1' : '', naming ? '' : 'naming=0'].filter(Boolean).join('&');
+                // The server answers with a download (Content-Disposition), so navigating to it saves the file.
+                window.location.assign(`${getHost()}/json-api/streams/trace/${encodeURIComponent(session.value.id)}/export${query ? `?${query}` : ''}`);
+            },
+            onCancel: () => modal.close(),
+        },
+    });
+    modal.open();
+};
+const deleteImported = async () => {
+    if (!(await dialogService.confirm('Delete imported data', 'Delete this imported trace? Your own stream history is not touched.', undefined, { danger: true, confirmLabel: 'Delete' }))) return;
+    const { ok } = await ipFetch(`json-api/streams/trace/${encodeURIComponent(session.value.id)}`, 'DELETE');
+    if (ok) router.push('/streaming');
+    else toastService.error('Could not delete', { detail: 'The imported trace was not deleted.' });
+};
+// The snapshot of the file naming (and TVDB) taken when the file was made.
+const namingFacts = computed(() => {
+    const n = trace.value?.naming;
+    if (!n || typeof n !== 'object') return [];
+    const numbering = n.numbering ? [n.numbering.type, n.numbering.series !== undefined ? `series ${n.numbering.series}` : '', n.numbering.episode !== undefined ? `episode ${n.numbering.episode}` : ''].filter(Boolean).join(', ') : '';
+    const tvdb = n.tvdb ? `searched "${n.tvdb.searched}", ${(n.tvdb.matches ?? []).map((m) => `${m.title ?? ''} (${m.tvdbId})`).join('; ') || 'no match'}` : '';
+    return [
+        { label: 'File name', value: n.fileName },
+        { label: 'Folder', value: n.directory },
+        { label: 'Folder for Sonarr/Radarr', value: n.arrDirectory },
+        { label: 'Full path', value: n.fullPath },
+        { label: 'Release name', value: n.nzbName },
+        { label: 'Numbering', value: numbering },
+        { label: 'TVDB', value: tvdb },
+        { label: 'Error', value: n.error },
+        ...Object.entries(n.settings ?? {}).map(([key, value]) => ({ label: key, value })),
+    ].filter((fact) => fact.value !== undefined && fact.value !== '' && fact.value !== null);
+});
 const gridSummary = computed(() => `${session.value.deliveredSegments?.length ?? 0} of ${session.value.totalSegments ?? '?'} delivered`);
 const whoSummary = computed(() => (trace.value.summary.players ?? []).map((p) => p.client ?? p.userAgent ?? formatClientIp(p.ip)).slice(0, 2).join(', '));
 const spread = computed(() => avSpread(trace.value?.requests ?? []));
@@ -535,6 +598,21 @@ const copy = async (download = false) => {
 
 .traceSection {
     margin-bottom: @space-5;
+}
+
+.importedNote {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @space-2 @space-3;
+}
+
+.deleteImported {
+    padding: @space-1 @space-3;
+    border: 1px solid @error-color;
+    border-radius: @radius-sm;
+    background: transparent;
+    color: @error-color;
 }
 
 .sessionHead {
