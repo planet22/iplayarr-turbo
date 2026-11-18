@@ -188,9 +188,9 @@ describe('StreamingPage', () => {
         });
 
         it('shows the delete button only when something is imported, and deletes after confirming', async () => {
-            const none = await mountIt({ active: [], history: [old] }, { toolbar: ActionsToolbar });
+            const none = await mountIt({ active: [], history: [old] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             expect(none.find('[aria-label="Delete all imported traces"]').exists()).toBe(false);
-            const wrapper = await mountIt({ active: [], history: [imported] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [imported] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             dialogService.confirm.mockResolvedValue(true);
             await wrapper.find('[aria-label="Delete all imported traces"]').trigger('click');
             await flushPromises();
@@ -205,20 +205,20 @@ describe('StreamingPage', () => {
         };
 
         it('the import button opens the file chooser', async () => {
-            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             const click = vi.spyOn(wrapper.find('input[type="file"]').element, 'click').mockImplementation(() => {});
             await wrapper.find('[aria-label="Import trace file"]').trigger('click');
             expect(click).toHaveBeenCalled();
         });
 
         it('does nothing when no file is chosen', async () => {
-            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             await choose(wrapper, []);
             expect(ipUpload).not.toHaveBeenCalled();
         });
 
         it('says why an import failed, with the server\'s message or a plain one', async () => {
-            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             ipUpload.mockResolvedValueOnce({ ok: false, data: { message: 'This is not an iPlayarr stream trace file' } });
             await choose(wrapper);
             expect(toastService.error).toHaveBeenLastCalledWith('Import failed', { detail: 'This is not an iPlayarr stream trace file' });
@@ -229,7 +229,7 @@ describe('StreamingPage', () => {
         });
 
         it('asks before replacing a trace that was already imported, and replaces it when told to', async () => {
-            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             ipUpload.mockResolvedValueOnce({ ok: false, data: { replaceable: true } }).mockResolvedValueOnce({ ok: true, data: { id: 's9', requests: 3 } });
             dialogService.confirm.mockResolvedValue(true);
             await choose(wrapper);
@@ -239,7 +239,7 @@ describe('StreamingPage', () => {
         });
 
         it('leaves an already imported trace alone when the replace is declined, without an error', async () => {
-            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             ipUpload.mockResolvedValueOnce({ ok: false, data: { replaceable: true } });
             dialogService.confirm.mockResolvedValue(false);
             await choose(wrapper);
@@ -249,7 +249,7 @@ describe('StreamingPage', () => {
         });
 
         it('reports an error when the replace itself fails', async () => {
-            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             ipUpload.mockResolvedValueOnce({ ok: false, data: { replaceable: true } }).mockResolvedValueOnce({ ok: false, data: { message: 'broken' } });
             dialogService.confirm.mockResolvedValue(true);
             await choose(wrapper);
@@ -264,6 +264,16 @@ describe('StreamingPage', () => {
             expect(ipFetch).not.toHaveBeenCalledWith('json-api/streams/trace/imported', 'DELETE');
         });
 
+        it('hides the import button unless Stream Trace or Show Extended Debug is on, but keeps delete for imported traces', async () => {
+            const off = await mountIt({ active: [], history: [imported] }, { toolbar: ActionsToolbar });
+            expect(off.find('[aria-label="Import trace file"]').exists()).toBe(false);
+            expect(off.find('[aria-label="Delete all imported traces"]').exists()).toBe(true);
+            for (const settings of [{ STREAM_TRACE: 'true' }, { UI_EXTENDED_DEBUG: 'true' }]) {
+                const on = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings });
+                expect(on.find('[aria-label="Import trace file"]').exists()).toBe(true);
+            }
+        });
+
         it('shows no trace icon on a recorded row while Stream Trace is off', async () => {
             const wrapper = await mountIt({ active: [], history: [old] }, { toolbar: ActionsToolbar });
             expect(wrapper.find('[title^="Stream trace"]').exists()).toBe(false);
@@ -271,7 +281,7 @@ describe('StreamingPage', () => {
 
         it('uploads a chosen file and opens the imported trace', async () => {
             ipUpload.mockResolvedValue({ ok: true, data: { id: 's9', requests: 3 } });
-            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar });
+            const wrapper = await mountIt({ active: [], history: [] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
             const input = wrapper.find('input[type="file"]');
             Object.defineProperty(input.element, 'files', { value: [new File(['{}'], 'trace.json')] });
             await input.trigger('change');

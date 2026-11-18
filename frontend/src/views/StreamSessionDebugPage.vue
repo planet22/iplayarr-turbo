@@ -23,7 +23,7 @@
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Save the trace as a text file to attach to a bug report" aria-label="Download trace" @click="copy(true)">
                     <font-awesome-icon :icon="['fas', 'download']" />
                 </button>
-                <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Export this stream as a data file to send; it opens on another iPlayarr with Import trace on the Streaming page" aria-label="Export data" @click="exportData">
+                <button v-if="traceTools" type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Export this stream as a data file to send; it opens on another iPlayarr with Import trace on the Streaming page" aria-label="Export data" @click="exportData">
                     <font-awesome-icon :icon="['fas', 'file-export']" />
                 </button>
             </template>
@@ -373,6 +373,8 @@ const facts = computed(() => {
 
 const SECTION_IDS = ['summary', 'grid', 'timeline', 'charts', 'who', 'playlists', 'selected', 'requests'];
 
+// Export is for people debugging, like Import: it shows with Stream Trace or Show Extended Debug on, or for a trace that was imported.
+const traceTools = computed(() => globalSettings?.value?.STREAM_TRACE === 'true' || globalSettings?.value?.UI_EXTENDED_DEBUG === 'true' || session.value.imported === true);
 // Export and delete (traces opened from a file are deleted here with one button, or all at once on the Streaming page).
 const router = useRouter();
 // The options (compressed, file naming) are asked for in a popup, so they do not take room on the page.

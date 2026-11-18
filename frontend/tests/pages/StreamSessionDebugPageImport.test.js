@@ -48,7 +48,7 @@ const toolbar = { template: '<div><slot name="actions" /></div>' };
 const TraceSection = { props: ['title'], template: '<section class="traceSection"><h3>{{ title }}</h3><slot /></section>' };
 
 let wrapper;
-const mountIt = async (data) => {
+const mountIt = async (data, settings = { STREAM_TRACE: 'true' }) => {
     ipFetch.mockImplementation(async (endpoint, method) => {
         if (endpoint === 'json-api/streams/trace/sess-0001' && !method) return { ok: true, data };
         if (endpoint === 'json-api/browse/channels') return { ok: true, data: [] };
@@ -56,7 +56,7 @@ const mountIt = async (data) => {
     });
     wrapper = mount(StreamSessionDebugPage, {
         global: {
-            provide: { hiddenSettings: ref({}), toolVersions: ref({}), globalSettings: ref({}), logs: ref([]) },
+            provide: { hiddenSettings: ref({}), toolVersions: ref({}), globalSettings: ref(settings), logs: ref([]) },
             stubs: {
                 'font-awesome-icon': true, PageHeader: true, SettingsPageToolbar: toolbar, TraceSection, DeliveredQuality: true, PlaylistPanel: true,
                 RequestTimeline: true, SegmentActivityStrip: true, SegmentGridPanel: true, StreamHealthCharts: true, StreamPills: true, ThroughputSpark: true,
@@ -112,6 +112,17 @@ describe('StreamSessionDebugPage: export, imported data and file naming', () => 
         expect(assign).toHaveBeenLastCalledWith(expect.stringMatching(/\/export\?gzip=1&naming=0$/));
         modal.attrs.onConfirm({ gzip: false, naming: true });
         expect(assign).toHaveBeenLastCalledWith(expect.stringMatching(/\/export$/));
+    });
+
+    it('shows Export data only with Stream Trace or Show Extended Debug on, or for an imported trace', async () => {
+        await mountIt(trace(), {});
+        expect(exportButton().exists()).toBe(false);
+        wrapper.unmount();
+        await mountIt(trace(), { UI_EXTENDED_DEBUG: 'true' });
+        expect(exportButton().exists()).toBe(true);
+        wrapper.unmount();
+        await mountIt(trace({ imported: true }), {});
+        expect(exportButton().exists()).toBe(true);
     });
 
     it('cancelling the popup downloads nothing', async () => {

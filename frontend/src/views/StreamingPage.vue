@@ -163,7 +163,7 @@ v-if="thumbnailFor(session)"
             <template #actions>
                 <SortControl v-if="cardView" v-model:sort-by="historySortBy" v-model:order="historySortOrder" :options="HISTORY_SORTS" />
                 <button
-                    type="button" class="SettingsPageToolbar-button clickable" title="Import a stream trace file someone sent you" aria-label="Import trace file"
+                    v-if="traceTools" type="button" class="SettingsPageToolbar-button clickable" title="Import a stream trace file someone sent you" aria-label="Import trace file"
                     @click="traceFile?.click()"
                 >
                     <font-awesome-icon :icon="['fas', 'upload']" />
@@ -374,6 +374,8 @@ const router = useRouter();
 const globalSettings = inject('globalSettings');
 const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
 // The stream trace (every request of this one stream, with timings) is for any session, once Stream Trace is on in Settings (Streaming, Advanced).
+// Importing a trace file is for people debugging: it shows with Stream Trace or Show Extended Debug on (an imported trace, once there, is always shown and can always be deleted).
+const traceTools = computed(() => globalSettings.value?.STREAM_TRACE === 'true' || globalSettings.value?.UI_EXTENDED_DEBUG === 'true');
 // An imported trace can always be opened: it is data, not something being recorded.
 const canTrace = (session) => session?.imported === true || globalSettings.value?.STREAM_TRACE === 'true';
 const openTrace = (session) => router.push(`/streaming/session/${session.id}`);
