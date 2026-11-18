@@ -9,8 +9,8 @@
             <button type="button" class="tlButton clickable" title="Earlier" aria-label="Earlier" @click="pan(-0.5)"><font-awesome-icon :icon="['fas', 'arrow-left']" /></button>
             <button type="button" class="tlButton clickable" title="Later" aria-label="Later" @click="pan(0.5)"><font-awesome-icon :icon="['fas', 'arrow-right']" /></button>
             <button type="button" class="tlButton clickable" title="Show everything" aria-label="Show everything" @click="fit"><font-awesome-icon :icon="['fas', 'arrows-left-right-to-line']" /></button>
-            <span class="windowText">{{ formatOffset(win.t0 - origin) }} to {{ formatOffset(win.t1 - origin) }}</span>
             <button type="button" class="tlButton clickable" :class="{ on: fitRate }" :aria-pressed="fitRate" :title="fitRateTitle" :aria-label="fitRateTitle" @click="fitRate = !fitRate"><font-awesome-icon :icon="['fas', 'arrows-up-down']" /></button>
+            <span class="windowText">{{ formatOffset(win.t0 - origin) }} to {{ formatOffset(win.t1 - origin) }}</span>
             <span v-if="clockAvailable" class="viewSwitch" role="group" aria-label="What the lanes show">
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'segments' }" :aria-pressed="view === 'segments'" title="Y axis: segment index" @click="view = 'segments'">Index</button>
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'clock' }" :aria-pressed="view === 'clock'" title="Y axis: first PTS of each segment, one lane for video and one for audio" @click="view = 'clock'">A/V PTS</button>
