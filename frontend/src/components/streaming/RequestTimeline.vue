@@ -2,6 +2,11 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <FullscreenFrame @change="onFullscreen">
+        <template #actions>
+            <button type="button" class="modeButton clickable" :aria-pressed="readAhead" :disabled="!hasReadAhead" :aria-label="readAheadTitle" :title="readAheadTitle" @click="readAhead = !readAhead">
+                <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
+            </button>
+        </template>
     <div ref="root" class="requestTimeline">
         <div class="timelineControls">
             <button type="button" class="tlButton clickable" title="Zoom in" aria-label="Zoom in" @click="zoom(0.5)"><font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" /></button>
@@ -33,6 +38,11 @@
                 </g>
                 <!-- The order they were asked for, joined up: a zigzag back down the lane is a request out of order. -->
                 <polyline class="orderPath" :points="lane.path" />
+                <!-- Read-ahead: the download of a segment that was fetched before the player asked, joined to the request it was served to. -->
+                <g v-for="a in lane.aheads" :key="`a${a.n}`">
+                    <line class="aheadLink" :x1="a.x + a.w" :x2="a.mx" :y1="a.y" :y2="a.y" />
+                    <rect class="aheadBar" :x="a.x" :y="a.y - 3" :width="a.w" height="6" rx="1" @mouseenter="hovered = a.request" @mouseleave="hovered = null" @click="hovered = a.request; emit('select', a.n)" />
+                </g>
                 <rect
                     v-for="mark in lane.marks"
                     :key="mark.n"
@@ -63,6 +73,7 @@
 
         <div class="timelineLegend">
             <span v-for="outcome in LEGEND" :key="outcome" class="legendItem"><span :class="['swatch', `o-${outcome}`]" /> {{ OUTCOME_LABELS[outcome] }}</span>
+            <span v-if="readAhead" class="legendItem" title="A segment fetched from BBC before the player asked for it, joined by a dotted line to the request it was served to."><span class="swatch aheadSwatch" /> Read-ahead download</span>
             <span class="legendItem" title="Joins requests in arrival order. A step back down the lane is a backward request."><span class="swatch orderSwatch" /> Request order (line)</span>
         </div>
         <div class="hoverBox" :class="{ empty: !hovered }">
@@ -72,6 +83,7 @@
                 at {{ formatOffset(hovered.t - origin) }}, {{ formatMs(hovered.durMs) }}
                 <template v-if="hovered.ptsDriftMs !== undefined"> , PTS offset {{ hovered.ptsDriftMs }} ms from previous segment end</template>
                 - {{ OUTCOME_LABELS[outcomeOf(hovered)] }}
+                <template v-if="aheadOf(hovered)">; read ahead: downloaded {{ formatOffset(aheadOf(hovered).t0 - origin) }} to {{ formatOffset(aheadOf(hovered).t1 - origin) }} ({{ formatMs(hovered.fetchMs) }}), asked for {{ formatMs(hovered.t - aheadOf(hovered).t1) }} after it finished</template>
             </template>
             <template v-else>Hover or tap a mark for request details; click to select it in the request log.</template>
         </div>
@@ -83,7 +95,7 @@
 import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, readAheadSpan, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -120,6 +132,14 @@ const LANE_GAP = 30;
 const LEGEND = ['ok', 'prefetched', 'back', 'repeat', 'skip', 'overlap', 'gap', 'short', 'aborted'];
 
 const hovered = ref(null);
+const aheadOf = readAheadSpan;
+// Option (the cloud button on the chart): draw each read-ahead segment's own download beside its (almost instant) request. Needs a trace
+// recorded with Stream Trace on, from the version that records the download.
+const readAhead = ref(false);
+const hasReadAhead = computed(() => props.requests.some((r) => readAheadSpan(r)));
+const readAheadTitle = computed(() =>
+    !hasReadAhead.value ? 'No read-ahead downloads recorded in this trace' : readAhead.value ? 'Hide the read-ahead downloads' : 'Show when each read-ahead segment was really downloaded, joined to the request it served'
+);
 // 'segments': height is the segment number. 'clock': a video and an audio lane, height is where each segment starts on the media clock.
 const view = ref('segments');
 const clockAvailable = computed(() => hasMediaClock(props.requests));
@@ -176,8 +196,18 @@ const laneLayouts = computed(() =>
         const shown = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
         // The highest segment (or PTS) in the lane is always one of the labelled ticks.
         const topValue = lane.clock ? Number(shown.labelMax.toFixed(1)) : shown.labelMax;
+        // Read ahead: the lighter bar is the download, the dotted line runs to the (almost instant) request it was served to.
+        const aheads = readAhead.value
+            ? marks
+                  .map((m) => ({ m, span: readAheadSpan(m.request) }))
+                  .filter(({ span }) => span && span.t1 > win.value.t0 && span.t0 < win.value.t1)
+                  .map(({ m, span }) => {
+                      const { x, w } = clampSpan(xOf(span.t0, win.value, LEFT, PLOT.value), xOf(span.t1, win.value, LEFT, PLOT.value), LEFT, LEFT + PLOT.value);
+                      return { n: m.n, request: m.request, x, w, y: m.y, mx: m.x };
+                  })
+            : [];
         const yTicks = withTopTick(niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))), scale.segMin, scale.segMax, topValue).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
-        return { ...lane, ...shown, zoomed: !!fit, top, marks, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
+        return { ...lane, ...shown, zoomed: !!fit, top, marks, aheads, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
     })
 );
 
@@ -314,8 +344,8 @@ const ticks = computed(() => {
     align-items: center;
     gap: @space-2;
     margin-bottom: @space-2;
-    // Room for the button that fills the window, at the top right of the frame.
-    padding-right: 36px;
+    // Room for the buttons at the top right of the frame: the one that fills the window and the read-ahead one beside it.
+    padding-right: 70px;
 }
 
 .tlButton {
@@ -346,6 +376,52 @@ const ticks = computed(() => {
     .timelineControls {
         flex-wrap: wrap;
     }
+}
+
+// Sits beside the fill-the-window button (placed by FullscreenFrame), looking the same; lit while the read-ahead downloads are shown.
+.modeButton {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: @subtle-text-color;
+    background: none;
+    border: 1px solid @settings-button-border-color;
+    border-radius: @radius-sm;
+
+    &[aria-pressed='true'] {
+        color: @primary-color;
+        border-color: @primary-color;
+    }
+
+    &:hover:not(:disabled) {
+        color: @primary-color;
+        border-color: @primary-color;
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+}
+
+.aheadBar {
+    fill: @primary-color;
+    opacity: 0.45;
+    cursor: pointer;
+    stroke: transparent;
+    stroke-width: 10px;
+}
+
+.aheadLink {
+    stroke: @primary-color;
+    stroke-width: 1;
+    stroke-dasharray: 2 3;
+    opacity: 0.8;
+}
+
+.aheadSwatch {
+    background-color: @primary-color;
+    opacity: 0.45;
 }
 
 .viewSwitch {

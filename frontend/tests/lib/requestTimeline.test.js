@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, withTopTick, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, readAheadSpan, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -290,5 +290,12 @@ describe('requestTimeline', () => {
         expect(peakRate([ahead])).toBe(4000);
         const buckets = throughputBuckets([ahead], { t0: 0, t1: 2000 }, 4);
         expect(buckets).toEqual([0, 0, 4000, 0]);
+    });
+
+    it('readAheadSpan is the download window of a segment read ahead, and nothing for any other request', () => {
+        expect(readAheadSpan({ prefetched: true, profAt: 1000, fetchMs: 500 })).toEqual({ t0: 1000, t1: 1500 });
+        expect(readAheadSpan({ prefetched: true })).toBeUndefined();
+        expect(readAheadSpan({ profAt: 1000, fetchMs: 500 })).toBeUndefined();
+        expect(readAheadSpan(undefined)).toBeUndefined();
     });
 });

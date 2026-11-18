@@ -150,7 +150,13 @@ export function yOf(seg, lane, top, height) {
 
 // When the bytes of a request were really on the wire: its own span, or for a segment read ahead (answered from memory at about 0 ms) the
 // download that fetched it, where the trace recorded one.
-const flight = (request) => (request.prefetched && request.fetchMs > 0 && request.profAt ? { t: request.profAt, durMs: request.fetchMs } : { t: request.t, durMs: request.durMs ?? 0 });
+const flight = (request) => (readAheadSpan(request) ? { t: request.profAt, durMs: request.fetchMs } : { t: request.t, durMs: request.durMs ?? 0 });
+
+// For a segment that was read ahead: when its download ran ({ t0, t1 }, ms), which is before the request it was later served to. Undefined
+// for any other request, or where the trace did not record the download.
+export function readAheadSpan(request) {
+    return request?.prefetched && request.fetchMs > 0 && request.profAt ? { t0: request.profAt, t1: request.profAt + request.fetchMs } : undefined;
+}
 
 // Bytes per second over the window, in `buckets` equal slices, each response's bytes counted when it finished.
 export function throughputBuckets(requests, win, buckets) {
