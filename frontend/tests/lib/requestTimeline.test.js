@@ -314,4 +314,12 @@ describe('requestTimeline', () => {
         expect(describeDownloads(windows, 3000, 3100)).toBe('');
         expect(describeDownloads(windows, 0, 99999, 0, 2)).toBe('Muxed A/V segment 0, Muxed A/V segment 1 (read ahead, asked for at +9.000 s) and 1 more');
     });
+
+    it('paddedRange can keep a smaller margin so the first and last values use more of the height', () => {
+        expect(paddedRange([26, 34])).toMatchObject({ min: 25.2, max: 34.8 });
+        const tight = paddedRange([26, 34], 2, 10 / 200);
+        expect(tight.min).toBeCloseTo(25.6);
+        expect(tight.max).toBeCloseTo(34.4);
+        expect(paddedRange([5], 2, 0.01)).toMatchObject({ min: 3, max: 7 });
+    });
 });

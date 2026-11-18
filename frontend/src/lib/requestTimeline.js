@@ -131,12 +131,13 @@ export function clampSpan(start, end, lo, hi, minWidth = 3) {
 }
 
 // The height range that fits `values` with a little room above and below (a lone value gets `pad` either side), so a zoomed-in
-// lane uses its whole height instead of the whole stream's range.
-export function paddedRange(values, pad = 1) {
+// lane uses its whole height instead of the whole stream's range. `fraction` is the room kept at each end as a share of the range (a
+// lane passes a few pixels' worth, so the first and last values sit near its edges rather than a tenth of the way in).
+export function paddedRange(values, pad = 1, fraction = 0.1) {
     if (!values.length) return undefined;
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const room = max > min ? (max - min) * 0.1 : pad;
+    const room = max > min ? (max - min) * fraction : pad;
     return { min: min - room, max: max + room, low: min, high: max };
 }
 

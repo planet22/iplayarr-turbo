@@ -129,6 +129,8 @@ const LANE_HEIGHT = computed(() => {
     return WIDTH.value < 600 ? 110 : 150;
 });
 const LANE_GAP = 30;
+// Room kept above and below the first and last value of a zoomed lane: enough for the mark and its outline, so the data uses the whole height.
+const EDGE_PX = 10;
 const LEGEND = ['ok', 'prefetched', 'back', 'repeat', 'skip', 'overlap', 'gap', 'short', 'aborted'];
 
 const hovered = ref(null);
@@ -174,7 +176,7 @@ const laneLayouts = computed(() =>
         const top = 22 + index * (LANE_HEIGHT.value + LANE_GAP);
         const visible = lane.items.filter((r) => r.t + (r.durMs ?? 0) >= win.value.t0 && r.t <= win.value.t1);
         // Whole stream: the lane covers every segment. Zoomed or panned: it covers just the ones in view, so they are not squashed flat.
-        const fit = custom.value ? paddedRange(visible.map((r) => lane.value(r)), lane.clock ? 1 : 2) : undefined;
+        const fit = custom.value ? paddedRange(visible.map((r) => lane.value(r)), lane.clock ? 1 : 2, EDGE_PX / LANE_HEIGHT.value) : undefined;
         const scale = fit ? { ...lane, segMin: fit.min, segMax: fit.max } : lane;
         const marks = visible.map((r) => {
             const start = xOf(r.t, win.value, LEFT, PLOT.value);
