@@ -365,7 +365,22 @@ const driftIdxLabels = computed(() => idxLabels(driftBars.value.map((b) => ({ n:
 .healthCharts {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-    gap: @space-4;
+    column-gap: @space-4;
+}
+
+// Side by side, the four charts share their rows (caption, plot, figure line, note), so a caption that wraps to a second line pushes every
+// plot down with it instead of leaving that one chart out of line. Filling the window, a chart is on its own and the rows are its own.
+.healthCharts > .fullscreenFrame:not(.isFull) {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    margin-bottom: @space-4;
+
+    > .chart {
+        display: grid;
+        grid-row: 1 / span 4;
+        grid-template-rows: subgrid;
+    }
 }
 
 .chart {
