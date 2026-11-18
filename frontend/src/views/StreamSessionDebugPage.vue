@@ -532,6 +532,7 @@ const copy = async () => {
 
     h2 {
         margin: 0;
+        font-weight: normal;
         overflow-wrap: anywhere;
     }
 }

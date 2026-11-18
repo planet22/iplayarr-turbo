@@ -52,6 +52,7 @@ const bodyId = computed(() => `trace-section-${props.id}`);
     display: flex;
     align-items: center;
     margin: 0;
+    font-weight: normal;
 }
 
 .infoNote {
@@ -87,7 +88,7 @@ const bodyId = computed(() => `trace-section-${props.id}`);
 
     .sectionTitle {
         font-size: 1.17em;
-        font-weight: bold;
+        font-weight: normal;
     }
 
     .sectionSummary {

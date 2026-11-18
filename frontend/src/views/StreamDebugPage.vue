@@ -1470,6 +1470,12 @@ ul.plain {
     font-size: @font-size-base;
 }
 
+// Headings match the other pages' titles: regular weight, not the browser's bold.
+h2,
+h3 {
+    font-weight: normal;
+}
+
 .settingsCell {
     display: flex;
     flex-wrap: wrap;
