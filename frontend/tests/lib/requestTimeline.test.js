@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -269,5 +269,16 @@ describe('requestTimeline', () => {
         expect(measuredSteps(undefined)).toEqual([]);
         // a segment read ahead: its profile begins before the request was made
         expect(measuredSteps([{ t: 5000, durMs: 10, bytes: 100, prof: [100], profMs: 100, profAt: 1000 }])).toEqual([{ t0: 1000, t1: 1100, rate: 1000 }]);
+    });
+
+    it('niceCeil rounds up to 1, 2, 5 or 10 times a power of ten', () => {
+        expect([niceCeil(44377320), niceCeil(1), niceCeil(1.1), niceCeil(2), niceCeil(3), niceCeil(5.1), niceCeil(0), niceCeil(0.03)]).toEqual([50000000, 1, 2, 2, 5, 10, 1, 0.05]);
+    });
+
+    it('withTopTick always ends on the top value and drops a tick that would crowd it', () => {
+        expect(withTopTick([0], 0, 44, 44)).toEqual([0, 44]);
+        expect(withTopTick([0, 5, 10, 15], 0, 16, 16)).toEqual([0, 5, 10, 16]);
+        expect(withTopTick([0, 50, 100], 0, 100, 100)).toEqual([0, 50, 100]);
+        expect(withTopTick([0, 5, 10], 0, 12, 11)).toEqual([0, 5, 11]);
     });
 });

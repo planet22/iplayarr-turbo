@@ -83,7 +83,7 @@
 import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, throughputSteps, TRACK_LABELS, transferSteps, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -173,8 +173,10 @@ const laneLayouts = computed(() =>
                   })
               ).map((l) => ({ ...l, below: l.y - top < 12 }))
             : [];
-        const yTicks = niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
         const shown = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
+        // The highest segment (or PTS) in the lane is always one of the labelled ticks.
+        const topValue = lane.clock ? Number(shown.labelMax.toFixed(1)) : shown.labelMax;
+        const yTicks = withTopTick(niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))), scale.segMin, scale.segMax, topValue).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
         return { ...lane, ...shown, zoomed: !!fit, top, marks, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
     })
 );
@@ -216,10 +218,7 @@ const inViewPeak = computed(() => {
     return peak;
 });
 const ratePeak = computed(() => {
-    const peak = Math.max(rateRaw.value, 1);
-    const ticks = niceTicks(0, peak, 2);
-    const step = ticks.length > 1 ? ticks[1] - ticks[0] : peak;
-    return Math.max(ticks[ticks.length - 1] >= peak ? ticks[ticks.length - 1] : ticks[ticks.length - 1] + step, 1);
+    return niceCeil(Math.max(rateRaw.value, 1));
 });
 // One stepped area rather than a bar per bucket: the rate is continuous in time, and equal neighbouring buckets (a transfer's bytes are
 // spread evenly) would otherwise show as a comb of separate bars.
@@ -287,7 +286,7 @@ const rateHits = computed(() => {
     return out;
 });
 const rateTicks = computed(() =>
-    niceTicks(0, ratePeak.value, Math.max(2, Math.round(RATE_HEIGHT.value / 28))).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
+    withTopTick(niceTicks(0, ratePeak.value, Math.max(2, Math.round(RATE_HEIGHT.value / 28))), 0, ratePeak.value).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
 );
 
 // About eight ticks at round steps, labelled as seconds from the start of the stream.

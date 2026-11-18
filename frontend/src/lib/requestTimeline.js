@@ -354,6 +354,21 @@ export function driftSeries(requests) {
 }
 
 // Round-number tick values covering [min, max], about `count` of them (1, 2, 5 times a power of ten).
+// The smallest round figure (1, 2, 5 or 10 times a power of ten) at or above `value`: the top of a scale that fits what is drawn.
+export function niceCeil(value) {
+    if (!(value > 0)) return 1;
+    const power = 10 ** Math.floor(Math.log10(value));
+    return ([1, 2, 5, 10].map((m) => m * power).find((v) => v >= value * (1 - 1e-9)) ?? 10 * power);
+}
+
+// `ticks` with `top` always among them, so a scale never stops short of its highest value unlabelled: a tick too close to it (within a
+// tenth of the range) is dropped in its favour, so two labels never sit on top of each other.
+export function withTopTick(ticks, min, max, top = max) {
+    const room = (max - min) * 0.1;
+    const kept = ticks.filter((v) => Math.abs(top - v) > room);
+    return [...kept, top].sort((a, b) => a - b);
+}
+
 export function niceTicks(min, max, count = 4) {
     if (!(max > min)) return [min];
     const rough = (max - min) / Math.max(1, count);
