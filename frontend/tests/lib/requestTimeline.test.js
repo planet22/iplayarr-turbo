@@ -273,6 +273,39 @@ describe('requestTimeline', () => {
         expect(measuredSteps([{ t: 5000, durMs: 10, bytes: 100, prof: [100], profMs: 100, profAt: 1000 }])).toEqual([{ t0: 1000, t1: 1100, rate: 1000 }]);
     });
 
+    it('outcomeOf ranks repeat, back, gap and skip, and says short for a response that ended early', () => {
+        expect(outcomeOf({ outOfOrder: 'repeat' })).toBe('repeat');
+        expect(outcomeOf({ outOfOrder: 'back', ptsFlag: 'gap' })).toBe('back');
+        expect(outcomeOf({ ptsFlag: 'gap', outOfOrder: 'skip' })).toBe('gap');
+        expect(outcomeOf({ outOfOrder: 'skip' })).toBe('skip');
+        expect(outcomeOf({ expectedBytes: 100, bytes: 40, prefetched: true })).toBe('short');
+    });
+
+    it('formatOffset and formatMs give nothing for a missing or invalid time', () => {
+        expect([formatOffset(undefined), formatOffset(null), formatOffset(NaN), formatMs(undefined), formatMs(null), formatMs(NaN)]).toEqual(['', '', '', '', '', '']);
+    });
+
+    it('flightWindows skips requests with no bytes or no time on the wire', () => {
+        expect(flightWindows([{ t: 1, durMs: 5 }, { t: 1, bytes: 5, durMs: 0 }, { t: 1, bytes: 5, durMs: 5 }])).toHaveLength(1);
+        expect(flightWindows(undefined)).toEqual([]);
+        expect(describeDownloads(undefined, 0, 10)).toBe('');
+    });
+
+    it('describeDownloads names playlists and other requests, and a track with no label', () => {
+        const windows = flightWindows([
+            { kind: 'playlist', t: 0, durMs: 10, bytes: 1 },
+            { kind: 'other', t: 0, durMs: 10, bytes: 1 },
+            { kind: 'segment', track: 'weird', seg: 4, t: 0, durMs: 10, bytes: 1 },
+            { kind: 'segment', seg: 5, t: 0, durMs: 10, bytes: 1 },
+        ]);
+        expect(describeDownloads(windows, 0, 10, 0, 9)).toBe('a playlist, a request, weird segment 4, Stream segment 5');
+    });
+
+    it('withTopTick keeps an existing top and treats an empty list as just the top', () => {
+        expect(withTopTick([], 0, 10, 10)).toEqual([10]);
+        expect(withTopTick([0, 10], 0, 10, 10)).toEqual([0, 10]);
+    });
+
     it('niceCeil gives the smallest top that fits and divides into round steps', () => {
         expect([niceCeil(44377320), niceCeil(1), niceCeil(1.1), niceCeil(2), niceCeil(3), niceCeil(5.1), niceCeil(0), niceCeil(0.03)]).toEqual([50000000, 1, 1.5, 2, 3, 6, 1, 0.03]);
         // 22 MB/s in halves is 30 (15 + 15), not 50; in quarters it is 24 (6 each)

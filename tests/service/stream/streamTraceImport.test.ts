@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import streamRequestLog from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
-import { cleanEntry } from '../../../src/service/stream/traceExchange';
+import { buildExport, cleanEntry, packFile, parseFile } from '../../../src/service/stream/traceExchange';
 import { QueuedStorage } from '../../../src/types/QueuedStorage';
 
 // Traces opened from a file: stored beside the recorded ones, kept through Clear history and the retention clean-up, deleted on their own.
@@ -122,6 +122,28 @@ describe('streamSessionService: imported sessions', () => {
         expect(await streamSessionService.cleanupHistory()).toBe(1);
         expect((await streamSessionService.getHistory()).map((s) => s.id)).toEqual([IMPORTED]);
         expect(await streamRequestLog.get(IMPORTED)).toHaveLength(1);
+    });
+});
+
+describe('byte profiles in a trace file', () => {
+    const withProfile = [
+        { n: 1, t: 1000, kind: 'segment' as const, track: 'main' as const, seg: 0, bytes: 600, durMs: 400, prof: [100, 0, 0, 500], profMs: 100 },
+        { n: 2, t: 9000, kind: 'segment' as const, track: 'main' as const, seg: 1, bytes: 50, durMs: 0, prefetched: true, prof: [50], profMs: 100, profAt: 2000, fetchMs: 120 },
+    ];
+
+    it('goes out in an export and comes back through an import, plain or gzip', () => {
+        const file = buildExport({ session: session('cccccccc-0000-0000-0000-000000000001'), requests: withProfile, playlists: [] });
+        expect(file.requests[0]).toMatchObject({ prof: [100, 0, 0, 500], profMs: 100 });
+        for (const gzip of [false, true]) {
+            const read = parseFile(packFile(file, gzip));
+            expect(read.requests[0]).toMatchObject({ prof: [100, 0, 0, 500], profMs: 100 });
+            expect(read.requests[1]).toMatchObject({ prefetched: true, prof: [50], profMs: 100, profAt: 2000, fetchMs: 120 });
+        }
+    });
+
+    it('leaves out the profile of a trace recorded without one', () => {
+        const file = buildExport({ session: session('cccccccc-0000-0000-0000-000000000002'), requests: [{ n: 1, t: 1, kind: 'segment' as const, bytes: 5 }], playlists: [] });
+        expect(parseFile(packFile(file, false)).requests[0]).not.toHaveProperty('prof');
     });
 });
 

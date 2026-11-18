@@ -135,6 +135,23 @@ describe('segmentPrefetch', () => {
         expect(requested.filter((u) => u === 'https://cdn/loop.ts')).toHaveLength(6);
     });
 
+    it('keeps one profile across a redirect, counting only the bytes of the final response', async () => {
+        replies['https://cdn/r2.ts'] = { status: 302, headers: { location: '/real2.ts' }, chunks: ['ignored'] };
+        replies['https://cdn/real2.ts'] = { chunks: ['abc', 'de'] };
+        setTraceEnabled(true);
+        prefetch('https://cdn/r2.ts');
+        const got = await takePrefetched('https://cdn/r2.ts');
+        expect(got?.profile?.prof?.reduce((a, b) => a + b, 0)).toBe(5);
+        expect(got?.profile?.durMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('records no profile for a download that sends no body', async () => {
+        replies['https://cdn/empty.ts'] = { chunks: [] };
+        setTraceEnabled(true);
+        prefetch('https://cdn/empty.ts');
+        expect((await takePrefetched('https://cdn/empty.ts'))?.profile).toBeUndefined();
+    });
+
     it.each([
         ['a 404', { status: 404, chunks: ['no'] }],
         ['a 206 partial response', { status: 206, chunks: ['no'] }],

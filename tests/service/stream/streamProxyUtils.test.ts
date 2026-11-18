@@ -10,7 +10,7 @@ import { requestTimeoutMs } from '../../../src/service/stream/bbcHttp';
 import { clearPrefetch, takePrefetched } from '../../../src/service/stream/segmentPrefetch';
 import { linkSegments,register, resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
 import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
-import { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
+import streamRequestLog, { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
@@ -89,6 +89,25 @@ describe('proxyUrl', () => {
             agent: expect.anything(),
             timeout: requestTimeoutMs,
         });
+    });
+
+    it('records a byte profile of a streamed segment while tracing, and nothing at all when tracing is off', async () => {
+        const seg = { status: 200, headers: { 'content-type': 'video/mp2t' }, body: 'abcdefgh' };
+        setTraceEnabled(true);
+        try {
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/profiled.ts', makeReq({ seg: '0' }), makeRes(), 5, 'prof-on');
+            const [entry] = await streamRequestLog.get('prof-on');
+            expect(entry).toMatchObject({ kind: 'segment', bytes: 8, profMs: 100 });
+            expect(entry.prof!.reduce((a, b) => a + b, 0)).toBe(8);
+            expect(entry.profAt).toBeUndefined();
+        } finally {
+            setTraceEnabled(false);
+            streamRequestLog.discard('prof-on');
+        }
+        mockGet(https, [seg]);
+        await proxyUrl('https://cdn/p/profiled.ts', makeReq({ seg: '0' }), makeRes(), 5, 'prof-off');
+        expect(await streamRequestLog.get('prof-off')).toEqual([]);
     });
 
     it('tags live segments with their media sequence number only while tracing', async () => {
@@ -287,6 +306,45 @@ describe('proxyUrl', () => {
             expect(res.setHeader).toHaveBeenCalledWith('content-type', 'video/mp2t');
             expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
             expect(streamSessionService.recordSegmentDelivered).toHaveBeenCalledWith('sess', 1, 4);
+        });
+
+        it('traces a read-ahead segment with the profile and timing of its own download, placed before the request', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg1' },
+            ]);
+            setTraceEnabled(true);
+            try {
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), makeRes(), 5, 'sess');
+                const entries = await streamRequestLog.get('sess');
+                const ahead = entries.find((e) => e.seg === 1)!;
+                expect(ahead).toMatchObject({ prefetched: true, bytes: 4, profMs: 100 });
+                expect(ahead.prof!.reduce((a, b) => a + b, 0)).toBe(4);
+                expect(ahead.profAt).toBeLessThanOrEqual(ahead.t);
+                expect(ahead.fetchMs).toBeGreaterThanOrEqual(0);
+                // the live one has its own profile and no read-ahead fields
+                const live = entries.find((e) => e.seg === 0)!;
+                expect(live.prof!.reduce((x, y) => x + y, 0)).toBe(4);
+                expect([live.prefetched, live.profAt, live.fetchMs]).toEqual([undefined, undefined, undefined]);
+            } finally {
+                setTraceEnabled(false);
+                streamRequestLog.discard('sess');
+            }
+        });
+
+        it('adds no trace fields to a read-ahead hit while tracing is off', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-length': '4' }, body: 'seg1' },
+            ]);
+            await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }), makeRes(), 5, 'sess');
+            await tick();
+            await tick();
+            await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), makeRes(), 5, 'sess');
+            expect(await streamRequestLog.get('sess')).toEqual([]);
         });
 
         it('does not read ahead for Range requests (a seek) or for the last segment', async () => {

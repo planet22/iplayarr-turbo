@@ -1084,6 +1084,7 @@ async function uiInteractions(browser, ctx) {
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
     if (want('report buttons')) await reportButtons(browser, ctx, U);
     if (want('trace file buttons')) await traceFileButtons(browser, ctx, U);
+    if (want('trace charts')) await traceCharts(browser, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid && want('programme page')) {
         try {
@@ -1200,6 +1201,104 @@ async function traceFileButtons(browser, ctx, U) {
         }
         rec(U, 'trace file buttons: no page error', errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
     } catch (e) { rec(U, 'trace file buttons', 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+}
+
+// The stream trace page's timeline and playback charts: the three throughput views (Smoothed, Per transfer, Measured, the last only when the
+// trace has a byte profile), the fit-scale and read-ahead buttons, whole-number segment ticks, the figure written under each playback chart and
+// the four charts starting at one height. Read-only: it only reads a recorded stream and clicks the chart's own buttons.
+async function traceCharts(browser, ctx, U) {
+    const L = (what) => `trace charts: ${what}`;
+    const streams = (await http('/json-api/streams')).json || {};
+    let session;
+    let trace;
+    for (const s of [...(streams.active ?? []), ...(streams.history ?? [])].slice(0, 12)) {
+        const t = (await http(`/json-api/streams/trace/${s.id}`)).json;
+        if ((t?.requests || []).filter((r) => r.kind === 'segment').length >= 3) { session = s; trace = t; break; }
+    }
+    if (!session) return rec(U, 'trace charts', 'SKIP', 'no stream with at least 3 segment requests in the history');
+    const requests = trace.requests;
+    const hasProfile = requests.some((r) => Array.isArray(r.prof) && r.prof.length);
+    const aheadCount = requests.filter((r) => r.prefetched && r.fetchMs > 0 && r.profAt).length;
+    const hasBytes = requests.some((r) => r.bytes > 0 && r.durMs > 0);
+    const context = await browser.newContext({ viewport: { width: 1800, height: 1000 } });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.goto(`${BASE}/streaming/session/${session.id}`, { waitUntil: 'networkidle', timeout: 45000 });
+        await p.locator('.timelineSvg').waitFor({ timeout: 30000 });
+        const labels = async (selector) => (await p.locator(selector).allTextContents()).map((t) => t.trim());
+        const rateAxis = async () => (await labels('.timelineSvg text.axisText')).filter((t) => /B\/s$/.test(t));
+        const rateLabel = async () => (await labels('.timelineSvg text.laneLabel')).find((t) => /throughput/i.test(t)) || '';
+        const mode = (name) => p.locator(`.timelineControls button:text-is("${name}")`);
+
+        rec(U, L('the throughput graph offers Smoothed, Per transfer and Measured'), (await mode('Smoothed').count()) && (await mode('Per transfer').count()) && (await mode('Measured').count()) ? 'PASS' : 'FAIL');
+        rec(U, L('Measured is on offer only when the trace has a byte profile'), (await mode('Measured').isDisabled()) === !hasProfile ? 'PASS' : 'FAIL', `profile recorded: ${hasProfile}`);
+
+        if (!hasBytes) rec(U, L('the throughput views change the graph label'), 'SKIP', 'no request with both bytes and a duration');
+        else {
+            const seen = [await rateLabel()];
+            await mode('Per transfer').click();
+            seen.push(await rateLabel());
+            if (hasProfile) { await mode('Measured').click(); seen.push(await rateLabel()); }
+            await mode('Smoothed').click();
+            seen.push(await rateLabel());
+            rec(U, L('the throughput views change the graph label'), new Set(seen.slice(0, hasProfile ? 3 : 2)).size === (hasProfile ? 3 : 2) && seen.at(-1) === seen[0] ? 'PASS' : 'FAIL', seen.join(' | '));
+            const axis = await rateAxis();
+            rec(U, L('the throughput scale labels the middle and the top, not just 0'), axis.length >= 2 ? 'PASS' : 'FAIL', `${axis.length} labels: ${axis.join(', ')}`);
+            // The top of the scale is never far above the tallest bar: the top label is a figure, and the fit button keeps it a figure.
+            const fit = p.locator('.timelineControls button[aria-label*="Throughput scale"]');
+            const before = await fit.getAttribute('aria-pressed');
+            await fit.click();
+            const during = await fit.getAttribute('aria-pressed');
+            const fitted = await rateAxis();
+            await fit.click();
+            rec(U, L('the fit button switches the throughput scale to the part in view and back'), before === 'false' && during === 'true' && (await fit.getAttribute('aria-pressed')) === 'false' && fitted.length >= 2 ? 'PASS' : 'FAIL', `${before} -> ${during}, fitted ${fitted.join(', ')}`);
+        }
+
+        // Segment index ticks are whole numbers, also once zoomed in.
+        const ticks = async () => (await labels('.timelineSvg text.axisText')).filter((t) => /^[0-9]+(\.[0-9]+)?$/.test(t));
+        await p.locator('.timelineControls button[aria-label="Zoom in"]').click();
+        const zoomedTicks = await ticks();
+        rec(U, L('segment index ticks are whole numbers, zoomed in too'), zoomedTicks.length === 0 || zoomedTicks.every((t) => Number.isInteger(Number(t))) ? 'PASS' : 'FAIL', zoomedTicks.join(', '));
+        await p.locator('.timelineControls button[aria-label="Show everything"]').click();
+
+        // Read-ahead option: a bar for every segment that has a recorded download, none otherwise.
+        const toggle = p.locator('button.modeButton').first();
+        if (!aheadCount) rec(U, L('the read-ahead button is greyed out when no download was recorded'), (await toggle.isDisabled()) ? 'PASS' : 'FAIL', 'no read-ahead download in this trace');
+        else {
+            rec(U, L('no read-ahead download bars until the button is pressed'), (await p.locator('rect.aheadBar').count()) === 0 ? 'PASS' : 'FAIL');
+            await toggle.click();
+            const bars = await p.locator('rect.aheadBar').count();
+            rec(U, L('the read-ahead button draws a bar for each read-ahead segment'), bars === aheadCount ? 'PASS' : 'FAIL', `${bars} bars, ${aheadCount} read-ahead segments in the trace`);
+            await toggle.click();
+            rec(U, L('the read-ahead button hides them again'), (await p.locator('rect.aheadBar').count()) === 0 ? 'PASS' : 'FAIL');
+        }
+
+        // Playback diagnostics: the four charts share rows, and a hover writes the segment's figure under each.
+        const plots = p.locator('svg.plot');
+        if ((await plots.count()) !== 4) rec(U, L('the four playback charts'), 'FAIL', `${await plots.count()} plots`);
+        else {
+            const boxes = await plots.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top + window.scrollY), left: Math.round(r.left) }; }));
+            const rows = new Map();
+            boxes.forEach((b) => { const key = [...rows.keys()].find((k) => Math.abs(k - b.top) < 40) ?? b.top; rows.set(key, [...(rows.get(key) || []), b.top]); });
+            rec(U, L('the four playback charts start at one height in each row'), [...rows.values()].every((tops) => new Set(tops).size === 1) ? 'PASS' : 'FAIL', boxes.map((b) => b.top).join(', '));
+            const first = plots.first();
+            await first.scrollIntoViewIfNeeded();
+            const box = await first.boundingBox();
+            await p.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
+            await p.waitForTimeout(300);
+            const readouts = await labels('p.readout');
+            rec(U, L('hovering a playback chart writes the segment figure under all four'), readouts.length === 4 && readouts.every((t) => /^segment \d+: /.test(t)) ? 'PASS' : 'FAIL', readouts.join(' | ').slice(0, 200));
+            await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
+            await p.mouse.move(2, 2);
+            await p.waitForTimeout(300);
+            const kept = await labels('p.readout');
+            rec(U, L('a clicked segment stays written under the charts as Kept'), kept.length === 4 && kept.every((t) => /^Kept - segment \d+: /.test(t)) ? 'PASS' : 'FAIL', kept.join(' | ').slice(0, 200));
+        }
+        rec(U, L('no page error'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, L('charts'), 'FAIL', e.message.split('\n')[0]); }
     await context.close();
 }
 

@@ -54,6 +54,30 @@ describe('streamRequestLog', () => {
         expect(entry.prof!.reduce((a, b) => a + b, 0)).toBe(3000);
     });
 
+    it('keeps the byte profile of a request through storing the log', async () => {
+        const id = newId();
+        const entry = seg(id, 0)!;
+        streamRequestLog.addBytes(entry, 300, entry.t + 40);
+        streamRequestLog.addBytes(entry, 200, entry.t + 260);
+        streamRequestLog.finish(entry, { status: 200, bytes: 500, durMs: 300, prefetched: true, profAt: entry.t - 900, fetchMs: 250 });
+        expect(await streamRequestLog.persist(id)).toBe(true);
+        const [stored] = await streamRequestLog.get(id);
+        expect(stored).toMatchObject({ prof: [300, 0, 200], profMs: 100, profAt: entry.t - 900, fetchMs: 250 });
+        await streamRequestLog.removeStored(id);
+    });
+
+    it('addBytes never throws into the stream, whatever it is handed', () => {
+        const hostile = { t: 0, get prof(): number[] { throw new Error('boom'); } };
+        expect(() => streamRequestLog.addBytes(hostile as any, 5, 10)).not.toThrow();
+        expect(() => streamRequestLog.addBytes({ t: 0 }, NaN, 10)).not.toThrow();
+    });
+
+    it('addBytes counts a chunk that arrives before the start time in the first bin', () => {
+        const entry = seg(newId(), 0)!;
+        streamRequestLog.addBytes(entry, 7, entry.t - 500);
+        expect(entry.prof).toEqual([7]);
+    });
+
     it('keeps what was recorded readable after it is switched off', async () => {
         const id = newId();
         seg(id, 0);
