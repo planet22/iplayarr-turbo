@@ -1037,6 +1037,7 @@ async function uiInteractions(browser, ctx) {
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
     if (want('report buttons')) await reportButtons(browser, ctx, U);
+    if (want('trace file buttons')) await traceFileButtons(browser, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid && want('programme page')) {
         try {
@@ -1115,6 +1116,45 @@ async function reportButtons(browser, ctx, U) {
         } catch (e) { rec(U, L('buttons'), 'FAIL', e.message.split('\n')[0]); }
         await context.close();
     }
+}
+
+// Import trace file (Streaming page) and Export data (a stream's trace page) show only with Stream Trace or Show Extended Debug on; Export data opens a
+// popup with the Compressed choice that Cancel closes without downloading. Read-only: nothing is imported or exported.
+async function traceFileButtons(browser, ctx, U) {
+    const cfg = ctx.cfg || (await http('/json-api/config')).json || {};
+    const on = cfg.STREAM_TRACE === 'true' || cfg.UI_EXTENDED_DEBUG === 'true';
+    const context = await browser.newContext({ viewport: VIEWPORTS[0][1], acceptDownloads: true });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        const importCount = await p.locator('button[aria-label="Import trace file"]').count();
+        rec(U, 'trace file buttons: Import trace file follows Stream Trace / Show Extended Debug', (importCount > 0) === on ? 'PASS' : 'FAIL', `buttons ${importCount}, setting on ${on}`);
+        const streams = (await http('/json-api/streams')).json || {};
+        const session = [...(streams.active ?? []), ...(streams.history ?? [])][0];
+        if (!session) rec(U, 'trace file buttons: Export data popup', 'SKIP', 'no stream in the history');
+        else {
+            await p.goto(`${BASE}/streaming/session/${session.id}`, { waitUntil: 'networkidle', timeout: 45000 });
+            const exportButton = p.locator('button[aria-label="Export data"]');
+            await p.waitForTimeout(1500);
+            const shown = (await exportButton.count()) > 0;
+            rec(U, 'trace file buttons: Export data follows Stream Trace / Show Extended Debug (or an imported trace)', shown === (on || session.imported === true) ? 'PASS' : 'FAIL', `shown ${shown}, setting on ${on}`);
+            if (shown) {
+                await exportButton.click();
+                const dialog = p.locator('text=Export stream data');
+                await dialog.waitFor({ timeout: 10000 });
+                rec(U, 'trace file buttons: the Export data popup offers Compressed', (await p.locator('text=Compressed').count()) > 0 ? 'PASS' : 'FAIL');
+                let downloaded = false;
+                p.once('download', () => { downloaded = true; });
+                await p.locator('button:has-text("Cancel")').first().click();
+                await p.waitForTimeout(800);
+                rec(U, 'trace file buttons: Cancel closes the popup without a download', !downloaded && (await dialog.count()) === 0 ? 'PASS' : 'FAIL', downloaded ? 'a file was downloaded' : 'popup still open');
+            }
+        }
+        rec(U, 'trace file buttons: no page error', errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, 'trace file buttons', 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
 }
 
 // Video events: every row has a thumbnail slot (image or placeholder), so events with no programme
