@@ -85,6 +85,8 @@ async function readOnly(ctx, h) {
             const hist = (await http('/json-api/stats/searchHistory')).json;
             const last = (Array.isArray(hist) ? hist : []).find((e) => e.term === q);
             rec(P, 'the search is recorded in the search history with the right result count', last && last.results === guids.length ? 'PASS' : 'WARN', last ? `recorded ${last.results}, returned ${guids.length}` : 'not recorded');
+            // Prowlarr and others often have no app attached, so the NZB page tells indexer searches from manual ones by this.
+            rec(P, 'the indexer search is recorded with source "indexer"', last?.source === 'indexer' ? 'PASS' : 'FAIL', last ? `source ${last.source}` : 'not recorded');
         }
     }
     const caps = await raw(`/api?t=caps&apikey=${apikey}`);

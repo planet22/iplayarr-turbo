@@ -122,9 +122,11 @@ describe('JsonApiRoute', () => {
             expect(statisticsService.addSearch).toHaveBeenNthCalledWith(1, expect.objectContaining({
                 term: 'doc',
                 results: 1,
+                source: 'manual',
                 items: [expect.objectContaining({ title: 'Doc.S01', pid: 'p01abc' })],
             }));
             expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0].appId).toBeUndefined();
+            expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0]).not.toHaveProperty('kind');
             expect(statisticsService.addSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ term: 'bake', results: 0 }));
         });
 
@@ -239,6 +241,17 @@ describe('JsonApiRoute', () => {
             (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => []);
             res = await request(app).get('/search/stream').query({ q: 'x' });
             expect(res.text).not.toContain('"note"');
+        });
+
+        it('records a BBC Sounds search as a manual radio one, so it reads as Radio even with no results', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [], episodes: [] });
+            await request(app).get('/search').query({ q: 'nothing here', mode: 'radio' });
+            await request(app).get('/search/stream').query({ q: 'nor here', mode: 'radio' });
+            await new Promise((resolve) => setImmediate(resolve));
+            const recorded = (statisticsService.addSearch as jest.Mock).mock.calls.map(([entry]) => entry);
+            expect(recorded.map(({ term }) => term)).toEqual(['nothing here', 'nor here']);
+            recorded.forEach((entry) => expect(entry).toMatchObject({ source: 'manual', kind: 'radio', results: 0 }));
         });
 
         it('answers ?mode=radio from BBC Sounds as the same lines, without running the video search', async () => {

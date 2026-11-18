@@ -50,7 +50,7 @@ describe('searchHistory summary and detail', () => {
     it('strips items and trace in summary mode', async () => {
         (mocked.getSearchHistory as jest.Mock).mockReturnValue([entry]);
         const res = await request(app).get('/searchHistory?summary=true');
-        expect(res.body).toEqual([{ term: 'a', time: 5, results: 1, type: 'TV', hasDetail: true, filteredOut: 0 }]);
+        expect(res.body).toEqual([{ term: 'a', time: 5, results: 1, type: 'TV', types: ['TV'], hasDetail: true, filteredOut: 0 }]);
     });
 
     it('counts filtered-out candidates in summary mode', async () => {

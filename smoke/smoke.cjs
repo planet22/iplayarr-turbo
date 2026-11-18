@@ -529,6 +529,13 @@ async function apiLayer(ctx) {
     }, { timeout: 120000 });
     await check(A, 'browse schedule', '/json-api/browse/schedule', isJson);
     await check(A, 'browse channel-colors', '/json-api/browse/channel-colors', isJson);
+    // Radio search results carry station pills, so with BBC Sounds on (even with Live Radio off) the stations have colours of their own, under both spellings.
+    if (cfg.SOUNDS_ENABLED === 'true') {
+        await check(A, 'channel-colors has the radio stations while BBC Sounds is on', '/json-api/browse/channel-colors', (r) => {
+            const missing = ['BBCRadio4', 'Radio4', 'BBCRadio6Music', '6Music', 'BBCWorldService', 'WorldService'].filter((k) => !/^#[0-9a-f]{3,8}$/i.test(r.json?.[k]?.bg ?? ''));
+            return missing.length === 0 || `no colour for: ${missing.join(', ')}`;
+        }, { warnOnly: true });
+    }
     await check(A, 'browse atoz', '/json-api/browse/atoz/a', isJson);
     await radioChecks(A, cfg);
     await radioLogoChecks(A, cfg);
@@ -577,6 +584,22 @@ async function apiLayer(ctx) {
     // A "+" on the Results column needs a reason (shown as its tooltip): BBC's 24-hit cap or our candidate cap
     const badTrunc = (Array.isArray(searchHist.json) ? searchHist.json : []).filter((e) => e.truncated && !['bbc', 'trace'].includes(e.truncatedBy));
     rec(A, 'every truncated search-history entry says why (truncatedBy)', badTrunc.length ? 'FAIL' : 'PASS', badTrunc.map((e) => e.term).join(', ') || 'ok');
+    // The NZB page's Type column and Source filter read these: every summary lists its types, and a recorded source is one of two.
+    await check(A, 'searchHistory summary lists the types and a valid source for the NZB page', '/json-api/stats/searchHistory?filterRss=true&summary=true', (r) => {
+        if (!Array.isArray(r.json)) return 'not an array';
+        const bad = r.json.find((e) => !Array.isArray(e.types) || (e.source !== undefined && !['indexer', 'manual'].includes(e.source)) || (e.type && e.types.length === 1 && e.types[0] !== e.type));
+        return !bad || `bad entry: ${JSON.stringify({ term: bad.term, type: bad.type, types: bad.types, source: bad.source })}`;
+    });
+    // A search that finds nothing though BBC answered says so in its stream: {"note":{dropped,capped}} just before done, never beside results.
+    await check(A, 'search stream explains an empty video result with a note line, never beside results', '/json-api/search/stream?q=choc', (r) => {
+        const lines = String(r.text).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        if (lines[lines.length - 1]?.done !== true) return 'the stream did not finish with {"done":true}';
+        const notes = lines.filter((l) => l.note);
+        if (!notes.length) return true;
+        const { dropped, capped } = notes[0].note;
+        if (notes.length > 1 || !(dropped > 0) || typeof capped !== 'boolean') return `malformed note: ${JSON.stringify(notes)}`;
+        return !lines.some((l) => Array.isArray(l) && l.length) || 'a note arrived beside results';
+    }, { timeout: 120000 });
     await check(A, 'grabHistory', '/json-api/stats/grabHistory', isJson);
     await check(A, 'failedGrabHistory', '/json-api/stats/failedGrabHistory', isJson);
     await check(A, 'queue (frontend)', '/json-api/queue/queue', isJson);
@@ -1028,6 +1051,7 @@ async function uiInteractions(browser, ctx) {
     if (want('subscriptions toolbar')) await subscriptionsToolbar(page, ctx, U);
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
     if (want('card grids')) await cardGrids(browser, U);
+    if (want('nzb search source')) await nzbSearchSource(browser, U);
     if (want('queue cards')) await queueCards(browser, U);
     if (want('queue selection')) { await queueSelection(browser, U); await queueSelectAllEmpty(browser, U); }
     if (want('nav bar buttons')) await navBarButtons(browser, U);
@@ -1553,6 +1577,34 @@ async function cardGrids(browser, U) {
             } catch (e) { rec(U, `card grids: ${name} ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
         }
     });
+}
+
+// The NZB page's Indexer Searches section lists indexer searches by default and has a Source filter (indexer / each app /
+// manual / all) in its filter panel. Read-only; desktop and phone: the control is reachable, offers the three fixed choices,
+// and switching it never breaks the page (a Manual or All view still renders a table, a card list or the empty state).
+async function nzbSearchSource(browser, U) {
+    for (const [sizeName, viewport] of [['desktop', { width: 1400, height: 900 }], ['phone', VIEWPORTS[1][1]]]) {
+        const label = `nzb: search Source filter on a ${sizeName}`;
+        const context = await browser.newContext({ viewport });
+        try {
+            const p = await context.newPage();
+            await p.goto(BASE + '/nzb', { waitUntil: 'networkidle', timeout: 45000 });
+            await p.waitForTimeout(500);
+            const heading = await p.getByText('Indexer Searches', { exact: true }).count();
+            await p.locator('button[aria-label="Filter"]').first().click({ timeout: 5000 });
+            const select = p.locator('select[aria-label="Search source"]');
+            const options = await select.locator('option').allTextContents();
+            const fixed = [/^Indexer/, /^Manual/, /^All searches$/].every((re) => options.some((o) => re.test(o)));
+            const failures = [];
+            for (const value of ['manual', 'all', 'apps']) {
+                await select.selectOption(value);
+                await p.waitForTimeout(250);
+                const shown = await p.locator('.termText, .emptyStateBlock').count();
+                if (!shown) failures.push(`${value}: nothing rendered`);
+            }
+            rec(U, label, heading && fixed && !failures.length ? 'PASS' : 'FAIL', `heading ${heading ? 'ok' : 'missing'}, options: ${options.join(' / ')}${failures.length ? `, ${failures.join(', ')}` : ''}`);
+        } catch (e) { rec(U, label, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    }
 }
 
 // Queue cards are the shared card: poster slot, linked title, a status pill with its word, a progress bar only while
