@@ -315,9 +315,11 @@ const rateHits = computed(() => {
     });
     return out;
 });
-const rateTicks = computed(() =>
-    withTopTick(niceTicks(0, ratePeak.value, Math.max(2, Math.round(RATE_HEIGHT.value / 28))), 0, ratePeak.value).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
-);
+// 0, the middle and the top (and the quarters when it is tall enough): the top is a round figure, so these are even divisions of it.
+const rateTicks = computed(() => {
+    const parts = RATE_HEIGHT.value >= 100 ? 4 : 2;
+    return Array.from({ length: parts + 1 }, (_, i) => (ratePeak.value * i) / parts).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }));
+});
 
 // About eight ticks at round steps, labelled as seconds from the start of the stream.
 const ticks = computed(() => {

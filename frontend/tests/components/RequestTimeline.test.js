@@ -31,3 +31,15 @@ describe('RequestTimeline read-ahead option', () => {
         expect(wrapper.find('button.modeButton').attributes('disabled')).toBeDefined();
     });
 });
+
+describe('RequestTimeline throughput scale', () => {
+    it('labels 0, the middle and the top, whatever the peak', () => {
+        for (const bytes of [1000, 44_377_320, 3_000_000_000]) {
+            const wrapper = mountTimeline([{ ...live, bytes, durMs: 100 }, { ...live, n: 2, t: 2000, seg: 1, bytes, durMs: 100 }]);
+            const labels = wrapper.findAll('text.axisText').map((t) => t.text()).filter((t) => /B\/s$/.test(t) || t === '0');
+            const rate = labels.filter((t) => /B\/s$/.test(t));
+            expect(rate).toHaveLength(2);
+            expect(labels.filter((t) => t === '0').length).toBeGreaterThanOrEqual(1);
+        }
+    });
+});
