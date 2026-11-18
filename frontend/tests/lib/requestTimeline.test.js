@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, readAheadSpan, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, withTopTick, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, describeDownloads, driftSeries, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, readAheadSpan, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -297,5 +297,21 @@ describe('requestTimeline', () => {
         expect(readAheadSpan({ prefetched: true })).toBeUndefined();
         expect(readAheadSpan({ profAt: 1000, fetchMs: 500 })).toBeUndefined();
         expect(readAheadSpan(undefined)).toBeUndefined();
+    });
+
+    it('describeDownloads names what was downloading in a slice, with read-ahead segments at their own download time', () => {
+        const requests = [
+            { kind: 'segment', track: 'main', seg: 0, t: 1000, durMs: 500, bytes: 10 },
+            { kind: 'segment', track: 'main', seg: 1, t: 9000, durMs: 0, bytes: 10, prefetched: true, profAt: 1200, fetchMs: 600 },
+            { kind: 'playlist', t: 5000, durMs: 100, bytes: 10 },
+            { kind: 'segment', track: 'main', seg: 2, t: 6000, durMs: 100 },
+        ];
+        const windows = flightWindows(requests);
+        expect(windows).toHaveLength(3);
+        expect(describeDownloads(windows, 1100, 1300, 1000)).toBe('Muxed A/V segment 0, Muxed A/V segment 1 (read ahead, asked for at +8.000 s)');
+        expect(describeDownloads(windows, 1600, 1700, 1000)).toBe('Muxed A/V segment 1 (read ahead, asked for at +8.000 s)');
+        expect(describeDownloads(windows, 5000, 5050)).toBe('a playlist');
+        expect(describeDownloads(windows, 3000, 3100)).toBe('');
+        expect(describeDownloads(windows, 0, 99999, 0, 2)).toBe('Muxed A/V segment 0, Muxed A/V segment 1 (read ahead, asked for at +9.000 s) and 1 more');
     });
 });

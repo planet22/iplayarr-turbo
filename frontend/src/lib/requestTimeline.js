@@ -158,6 +158,31 @@ export function readAheadSpan(request) {
     return request?.prefetched && request.fetchMs > 0 && request.profAt ? { t0: request.profAt, t1: request.profAt + request.fetchMs } : undefined;
 }
 
+// Every request with the span of time its bytes were on the wire ({ request, t0, t1 }), for saying what was downloading at a moment.
+export function flightWindows(requests) {
+    const out = [];
+    for (const request of requests ?? []) {
+        if (!request.bytes) continue;
+        const { t, durMs } = flight(request);
+        if (durMs > 0) out.push({ request, t0: t, t1: t + durMs });
+    }
+    return out;
+}
+
+// In words, what was being downloaded between t0 and t1: "Muxed A/V segment 21 (read ahead, asked for at +70.0 s)". At most `max` are
+// named, the rest counted. Empty when nothing was.
+export function describeDownloads(windows, t0, t1, origin = 0, max = 4) {
+    const names = [];
+    for (const { request, t0: a, t1: b } of windows ?? []) {
+        if (b <= t0 || a >= t1) continue;
+        const what = request.kind === 'segment' ? `${TRACK_LABELS[request.track] ?? request.track ?? 'Stream'} segment ${request.seg}` : request.kind === 'playlist' ? 'a playlist' : 'a request';
+        const name = readAheadSpan(request) ? `${what} (read ahead, asked for at ${formatOffset(request.t - origin)})` : what;
+        if (!names.includes(name)) names.push(name);
+    }
+    if (names.length <= max) return names.join(', ');
+    return `${names.slice(0, max).join(', ')} and ${names.length - max} more`;
+}
+
 // Bytes per second over the window, in `buckets` equal slices, each response's bytes counted when it finished.
 export function throughputBuckets(requests, win, buckets) {
     const out = new Array(buckets).fill(0);

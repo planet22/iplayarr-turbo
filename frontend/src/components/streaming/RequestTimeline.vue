@@ -8,7 +8,7 @@
             </button>
         </template>
     <div ref="root" class="requestTimeline">
-        <div class="timelineControls">
+        <div class="timelineControls" :class="{ full: fullscreen.full }">
             <button type="button" class="tlButton clickable" title="Zoom in" aria-label="Zoom in" @click="zoom(0.5)"><font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" /></button>
             <button type="button" class="tlButton clickable" title="Zoom out" aria-label="Zoom out" @click="zoom(2)"><font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" /></button>
             <button type="button" class="tlButton clickable" title="Earlier" aria-label="Earlier" @click="pan(-0.5)"><font-awesome-icon :icon="['fas', 'arrow-left']" /></button>
@@ -95,7 +95,7 @@
 import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, readAheadSpan, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, describeDownloads, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, readAheadSpan, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -293,12 +293,18 @@ const ratePath = computed(() => {
     return d;
 });
 // One invisible column per slice of the graph, for the hover text: the slice's time range and its rate.
+// What was downloading in a slice of the throughput graph, for its hover text.
+const windows = computed(() => flightWindows(props.requests));
+const downloading = (t0, t1) => {
+    const text = describeDownloads(windows.value, t0, t1, props.origin);
+    return text ? ` - downloading ${text}` : '';
+};
 const rateHits = computed(() => {
     if (rateMode.value !== 'smooth') {
         return transferInView.value.map((s, i) => {
             const a = Math.max(xOf(s.t0, win.value, LEFT, PLOT.value), LEFT);
             const b = Math.min(xOf(s.t1, win.value, LEFT, PLOT.value), LEFT + PLOT.value);
-            return { i, x: a, w: Math.max(1, b - a), text: `${formatOffset(s.t0 - props.origin)} to ${formatOffset(s.t1 - props.origin)} (${formatMs(s.t1 - s.t0)}): ${formatRate(s.rate)}` };
+            return { i, x: a, w: Math.max(1, b - a), text: `${formatOffset(s.t0 - props.origin)} to ${formatOffset(s.t1 - props.origin)} (${formatMs(s.t1 - s.t0)}): ${formatRate(s.rate)}${downloading(s.t0, s.t1)}` };
         });
     }
     const { start, width, values } = rateSteps.value;
@@ -311,7 +317,7 @@ const rateHits = computed(() => {
         const x1 = xOf(t0 + width, win.value, LEFT, PLOT.value);
         if (x1 <= lo || x0 >= hi) return;
         const a = Math.max(x0, lo);
-        out.push({ i: index, x: a, w: Math.min(x1, hi) - a, text: `${formatOffset(t0 - props.origin)} to ${formatOffset(t0 + width - props.origin)}: ${formatRate(value)}` });
+        out.push({ i: index, x: a, w: Math.min(x1, hi) - a, text: `${formatOffset(t0 - props.origin)} to ${formatOffset(t0 + width - props.origin)}: ${formatRate(value)}${value > 0 ? downloading(t0, t0 + width) : ''}` });
     });
     return out;
 });
@@ -348,6 +354,13 @@ const ticks = computed(() => {
     margin-bottom: @space-2;
     // Room for the buttons at the top right of the frame: the one that fills the window and the read-ahead one beside it.
     padding-right: 70px;
+    // The buttons in the corner are 28px high and the ones here 32px: lifted so that both rows share a centre line (in the window and filling it,
+    // where the corner buttons sit a little lower).
+    margin-top: -2px;
+
+    &.full {
+        margin-top: -6px;
+    }
 }
 
 .tlButton {
@@ -377,6 +390,11 @@ const ticks = computed(() => {
 
     .timelineControls {
         flex-wrap: wrap;
+        margin-top: 0;
+
+        &.full {
+            margin-top: 0;
+        }
     }
 }
 
