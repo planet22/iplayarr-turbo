@@ -478,6 +478,7 @@ export async function proxyUrl(
             if (entry) {
                 upstreamRes.on('data', (chunk: Buffer) => {
                     traced += chunk.length;
+                    streamRequestLog.addBytes(entry, chunk.length);
                     if (headBytes < TRACE_HEAD_BYTES) {
                         head.push(chunk);
                         headBytes += chunk.length;

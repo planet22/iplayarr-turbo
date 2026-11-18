@@ -40,6 +40,10 @@ export interface StreamRequestLogEntry {
     // Time to the first byte from the CDN, and to the whole response, in ms.
     ttfbMs?: number;
     durMs?: number;
+    // Bytes received in each consecutive `profMs` ms from the request's start (so the wait for the first byte shows as leading zeros): the
+    // measured shape of the transfer, for the throughput graph. Only recorded while STREAM_TRACE is on.
+    prof?: number[];
+    profMs?: number;
     // Set against the highest segment asked for so far: lower and never asked for (back), asked for
     // before (repeat), or more than one past it (skip).
     outOfOrder?: OutOfOrder;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import streamRequestLog, { annotate, MAX_LIVE_ENTRIES, packPlayers, setTraceEnabled, trackOf, unpackPlayers } from '../../../src/service/stream/streamRequestLog';
+import streamRequestLog, { annotate, MAX_LIVE_ENTRIES, MAX_PROFILE_BINS, packPlayers, setTraceEnabled, trackOf, unpackPlayers } from '../../../src/service/stream/streamRequestLog';
 
 jest.mock('../../../src/service/loggingService', () => ({
     __esModule: true,
@@ -29,6 +29,29 @@ describe('streamRequestLog', () => {
         // switched back on, recording resumes
         setTraceEnabled(true);
         expect(seg(id, 0)).toBeDefined();
+    });
+
+    it('adds the bytes of a response into a byte profile by time since it started, and only while STREAM_TRACE is on', () => {
+        const entry = seg(newId(), 0)!;
+        streamRequestLog.addBytes(entry, 100, entry.t + 20);
+        streamRequestLog.addBytes(entry, 50, entry.t + 90);
+        streamRequestLog.addBytes(entry, 400, entry.t + 350);
+        expect(entry.profMs).toBe(100);
+        expect(entry.prof).toEqual([150, 0, 0, 400]);
+        streamRequestLog.addBytes(undefined, 5);
+        streamRequestLog.addBytes(entry, 0, entry.t + 50);
+        expect(entry.prof).toEqual([150, 0, 0, 400]);
+        setTraceEnabled(false);
+        streamRequestLog.addBytes(entry, 999, entry.t + 50);
+        expect(entry.prof).toEqual([150, 0, 0, 400]);
+    });
+
+    it('doubles the bin width for a long transfer instead of growing without limit, keeping the total', () => {
+        const entry = seg(newId(), 0)!;
+        for (let i = 0; i < 300; i++) streamRequestLog.addBytes(entry, 10, entry.t + i * 100);
+        expect(entry.prof!.length).toBeLessThanOrEqual(MAX_PROFILE_BINS);
+        expect(entry.profMs).toBe(400);
+        expect(entry.prof!.reduce((a, b) => a + b, 0)).toBe(3000);
     });
 
     it('keeps what was recorded readable after it is switched off', async () => {

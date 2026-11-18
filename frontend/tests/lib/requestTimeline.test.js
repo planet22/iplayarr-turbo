@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, logTicksFine, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -253,5 +253,19 @@ describe('requestTimeline', () => {
             { t0: 1000, t1: 1500, rate: 3000 },
         ]);
         expect(transferSteps(undefined)).toEqual([]);
+    });
+
+    it('measuredSteps uses the recorded byte profile, so a stall and a burst show as they happened', () => {
+        const requests = [
+            { t: 0, durMs: 400, bytes: 600, prof: [100, 0, 0, 500], profMs: 100 },
+            { t: 50, durMs: 100, bytes: 50 },
+        ];
+        expect(hasByteProfile(requests)).toBe(true);
+        expect(hasByteProfile([requests[1]])).toBe(false);
+        expect(measuredSteps(requests)).toEqual([
+            { t0: 0, t1: 100, rate: 1000 },
+            { t0: 300, t1: 400, rate: 5000 },
+        ]);
+        expect(measuredSteps(undefined)).toEqual([]);
     });
 });

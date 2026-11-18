@@ -206,12 +206,35 @@ export function peakRate(requests) {
 // their own rates (bytes over that transfer's duration). No slicing, so a short fast transfer shows as short and fast. Transfers with no
 // duration or no size have no rate and are left out. Steps with nothing in flight are omitted.
 export function transferSteps(requests) {
-    const events = [];
+    const pieces = [];
     for (const request of requests ?? []) {
         if (!request.bytes || !(request.durMs > 0)) continue;
-        const rate = request.bytes / (request.durMs / 1000);
-        events.push([request.t, rate], [request.t + request.durMs, -rate]);
+        pieces.push({ t0: request.t, t1: request.t + request.durMs, rate: request.bytes / (request.durMs / 1000) });
     }
+    return sweepSteps(pieces);
+}
+
+// Whether any request carries a measured byte profile (recorded while Stream Trace was on, from this version of the proxy on).
+export const hasByteProfile = (requests) => (requests ?? []).some((r) => Array.isArray(r.prof) && r.prof.length > 0 && r.profMs > 0);
+
+// The rate as the proxy measured it: each response's bytes in every `profMs` ms from its start, so a stall, a burst or a slow start shows as
+// it happened. Overlapping responses add up. Requests without a profile (older traces, or served from memory) have no measured shape and
+// are left out.
+export function measuredSteps(requests) {
+    const pieces = [];
+    for (const request of requests ?? []) {
+        if (!Array.isArray(request.prof) || !(request.profMs > 0)) continue;
+        request.prof.forEach((bytes, i) => {
+            if (bytes > 0) pieces.push({ t0: request.t + i * request.profMs, t1: request.t + (i + 1) * request.profMs, rate: bytes / (request.profMs / 1000) });
+        });
+    }
+    return sweepSteps(pieces);
+}
+
+// Pieces of constant rate ({ t0, t1, rate }) laid over each other: a step wherever the set in flight changes, the rates added.
+function sweepSteps(pieces) {
+    const events = [];
+    for (const piece of pieces) events.push([piece.t0, piece.rate], [piece.t1, -piece.rate]);
     events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     const out = [];
     let current = 0;

@@ -14,6 +14,7 @@
             <span class="viewSwitch rateSwitch" role="group" aria-label="How the throughput graph is drawn">
                 <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'smooth' }" :aria-pressed="rateMode === 'smooth'" title="Throughput averaged over slices of time, finer as you zoom" @click="rateMode = 'smooth'">Smoothed</button>
                 <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'transfer' }" :aria-pressed="rateMode === 'transfer'" title="Throughput at full detail: a step wherever the transfers in flight change, each at its own bytes over duration" @click="rateMode = 'transfer'">Per transfer</button>
+                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'measured' }" :aria-pressed="rateMode === 'measured'" :disabled="!profiled" :title="profiled ? 'Throughput as the proxy measured it: the bytes received in each 100 ms (or coarser, for long transfers) of every response' : 'No measured byte profile in this trace: turn Stream Trace on and stream again'" @click="rateMode = 'measured'">Measured</button>
             </span>
             <span v-if="clockAvailable" class="viewSwitch" role="group" aria-label="What the lanes show">
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'segments' }" :aria-pressed="view === 'segments'" title="Y axis: segment index" @click="view = 'segments'">Index</button>
@@ -82,7 +83,7 @@
 import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, throughputSteps, TRACK_LABELS, transferSteps, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, throughputSteps, TRACK_LABELS, transferSteps, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -191,15 +192,18 @@ const rateSteps = computed(() => throughputSteps(props.requests, win.value, BUCK
 const fitRate = ref(false);
 const fitRateTitle = computed(() => (fitRate.value ? 'Throughput scale fits the part in view; use the whole stream' : 'Throughput scale covers the whole stream; fit it to the part in view'));
 // 'smooth': the rate averaged over slices of time (finer as it is zoomed). 'transfer': every moment the transfers in flight change is its own step.
+// 'measured': the same, from the bytes the proxy counted as each response arrived (needs Stream Trace on while it streamed).
 const rateMode = ref('smooth');
 const rateLabel = computed(() => {
+    if (rateMode.value === 'measured') return WIDTH.value < 560 ? 'Measured throughput' : 'Upstream throughput (bytes/s, as measured while each response arrived)';
     if (rateMode.value === 'transfer') return WIDTH.value < 560 ? 'Throughput per transfer' : 'Upstream throughput (bytes/s, each transfer at its own rate; overlaps add)';
     return WIDTH.value < 560 ? 'Upstream throughput' : 'Upstream throughput (bytes/s, spread over each transfer)';
 });
-const allTransfer = computed(() => transferSteps(props.requests));
+const profiled = computed(() => hasByteProfile(props.requests));
+const allTransfer = computed(() => (rateMode.value === 'measured' ? measuredSteps(props.requests) : transferSteps(props.requests)));
 const transferInView = computed(() => allTransfer.value.filter((s) => s.t1 > win.value.t0 && s.t0 < win.value.t1));
 const rateRaw = computed(() => {
-    if (rateMode.value === 'transfer') return fitRate.value ? Math.max(0, ...transferInView.value.map((s) => s.rate)) : Math.max(0, ...allTransfer.value.map((s) => s.rate));
+    if (rateMode.value !== 'smooth') return fitRate.value ? Math.max(0, ...transferInView.value.map((s) => s.rate)) : Math.max(0, ...allTransfer.value.map((s) => s.rate));
     return fitRate.value ? inViewPeak.value : peakRateAt(props.requests, full.value, rateSteps.value.width);
 });
 const inViewPeak = computed(() => {
@@ -220,7 +224,7 @@ const ratePeak = computed(() => {
 // One stepped area rather than a bar per bucket: the rate is continuous in time, and equal neighbouring buckets (a transfer's bytes are
 // spread evenly) would otherwise show as a comb of separate bars.
 const ratePath = computed(() => {
-    if (rateMode.value === 'transfer') {
+    if (rateMode.value !== 'smooth') {
         const base = rateTop.value + RATE_HEIGHT.value;
         return transferInView.value
             .map((s) => {
@@ -261,7 +265,7 @@ const ratePath = computed(() => {
 });
 // One invisible column per slice of the graph, for the hover text: the slice's time range and its rate.
 const rateHits = computed(() => {
-    if (rateMode.value === 'transfer') {
+    if (rateMode.value !== 'smooth') {
         return transferInView.value.map((s, i) => {
             const a = Math.max(xOf(s.t0, win.value, LEFT, PLOT.value), LEFT);
             const b = Math.min(xOf(s.t1, win.value, LEFT, PLOT.value), LEFT + PLOT.value);
