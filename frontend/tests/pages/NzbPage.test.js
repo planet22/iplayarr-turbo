@@ -44,7 +44,9 @@ const grabs = [{ pid: 'b0abc', nzbName: 'Doctor.Who.S02E03', type: 'TV', appId: 
 const failed = [{ pid: 'b0def', nzbName: 'Broken.Show', error: 'No stream', appId: 'a1', time: 1700000300000 }];
 
 let responses;
-const mountIt = async (socket = ref(null)) => {
+// A toolbar stub that still renders the filters slot, for the tests that use the filter controls.
+const toolbarWithFilters = { name: 'SettingsPageToolbar', emits: ['toggle-filters', 'delete-queue-item'], template: '<div><slot name="filters" /></div>' };
+const mountIt = async (socket = ref(null), toolbar = true) => {
     ipFetch.mockImplementation(async (endpoint, method = 'GET') => {
         if (method !== 'GET') return { ok: true, data: {} };
         const found = responses[endpoint];
@@ -57,7 +59,7 @@ const mountIt = async (socket = ref(null)) => {
             stubs: {
                 'font-awesome-icon': true,
                 PageHeader: true,
-                SettingsPageToolbar: true,
+                SettingsPageToolbar: toolbar,
                 Pagination: true,
                 TablePagination: true,
                 DateRangeFilter: true,
@@ -152,12 +154,43 @@ describe('NzbPage', () => {
         const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
         const wrapper = await mountIt(socket);
         handlers.searchHistory([
-            { term: '*', time: 1700000500000, results: 1 },
-            { term: 'only this', time: 1700000600000, results: 1 },
+            { term: '*', time: 1700000500000, results: 1, appId: 'a1' },
+            { term: 'only this', time: 1700000600000, results: 1, appId: 'a1' },
         ]);
         await flushPromises();
         expect(wrapper.text()).toContain('only this');
         expect(wrapper.text()).not.toContain('RSS Feed');
+    });
+
+    it('lists the apps\' searches by default and Search page ones under the Source filter', async () => {
+        const handlers = {};
+        const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+        const wrapper = await mountIt(socket, toolbarWithFilters);
+        handlers.searchHistory([
+            { term: 'from sonarr', time: 1700000600000, results: 1, appId: 'a1', source: 'indexer' },
+            { term: 'from prowlarr', time: 1700000650000, results: 1, source: 'indexer' },
+            { term: 'older entry', time: 1700000660000, results: 1 },
+            { term: 'typed by me', time: 1700000700000, results: 1, kind: 'radio', source: 'manual' },
+        ]);
+        await flushPromises();
+        // Prowlarr often has no app attached, and entries from before the source was recorded have none either.
+        expect(wrapper.text()).toContain('from sonarr');
+        expect(wrapper.text()).toContain('from prowlarr');
+        expect(wrapper.text()).toContain('older entry');
+        expect(wrapper.text()).not.toContain('typed by me');
+
+        wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('toggle-filters');
+        await flushPromises();
+        const source = wrapper.find('select[aria-label="Search source"]');
+        expect(source.findAll('option').map((o) => o.text())).toEqual(
+            expect.arrayContaining(['Indexer (Sonarr, Radarr, Prowlarr)', 'My Sonarr', 'Manual (Search page)', 'All searches'])
+        );
+        await source.setValue('manual');
+        expect(wrapper.text()).toContain('typed by me');
+        expect(wrapper.text()).not.toContain('from sonarr');
+        await source.setValue('all');
+        expect(wrapper.text()).toContain('typed by me');
+        expect(wrapper.text()).toContain('from sonarr');
     });
 
     it('detaches its socket listeners when it goes away', async () => {

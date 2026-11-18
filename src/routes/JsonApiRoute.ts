@@ -104,7 +104,7 @@ router.post('/nzb/test', async (req: Request, res: Response) => {
 const HISTORY_ITEM_LIMIT = 100;
 // Collection tiles shown beside a manual search.
 const SEARCH_COLLECTION_LIMIT = 6;
-const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace: SearchTrace) => {
+const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace: SearchTrace, kind?: 'radio') => {
     if (typeof term !== 'string' || !term.trim() || term === '*') return;
     // Recording is best effort: it must never fail (or slow) the search itself.
     Promise.resolve()
@@ -112,6 +112,8 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
             term,
             results: results.length,
             time: new Date().getTime(),
+            source: 'manual',
+            ...(kind ? { kind } : {}),
             items: results.slice(0, HISTORY_ITEM_LIMIT).map(({ nzbName, title, type, size, pubDate, pid }) => ({
                 title: nzbName ?? title,
                 type,
@@ -128,7 +130,7 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
 // A BBC Sounds search (`?mode=radio`), noted in the search history like a video one. Radio has no search trace.
 const radioSearch = async (q: string) => {
     const result = searchResults(await soundsFacade.search(q));
-    recordManualSearch(q, result as unknown as IPlayerSearchResult[], { candidates: [] } as unknown as SearchTrace);
+    recordManualSearch(q, result as unknown as IPlayerSearchResult[], { candidates: [] } as unknown as SearchTrace, 'radio');
     return result;
 };
 const radioDisabled = (res: Response) =>
@@ -230,6 +232,12 @@ router.get('/search/stream', async (req: Request, res: Response) => {
         );
         recordManualSearch(q, result, trace);
         await Promise.all([sending, tiles]);
+        // Nothing survived, but BBC did answer: say how many of its hits were dropped for not having the words in
+        // the title (BBC's search also matches on descriptions), so the page can explain an empty result.
+        const dropped = trace.candidates.filter(({ reason }) => reason === 'no-match' || reason === 'missing-word').length;
+        if (!result.length && dropped) {
+            send({ note: { dropped, capped: trace.candidates.some(({ reason }) => reason === 'hit-cap') } });
+        }
         send({ done: true });
     } catch (error: any) {
         await tiles;

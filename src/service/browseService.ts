@@ -24,6 +24,7 @@ import {
     BrowseSlot,
     BrowseSuggestion,
 } from '../types/Browse';
+import { IplayarrParameter } from '../types/IplayarrParameters';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
@@ -35,6 +36,7 @@ import { cachedVersionIds } from '../utils/videoVersion';
 import categoryDiscoverService from './categoryDiscoverService';
 import { readableTextColor } from './channelLogoService';
 import collectionService from './collectionService';
+import configService from './configService';
 import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 import liveChannelService from './liveChannelService';
@@ -806,7 +808,9 @@ class BrowseService {
     // directly against whatever channel name a pill already carries.
     async channelColors(): Promise<Record<string, { bg: string; fg: string; name: string }>> {
         const radioFields: Record<string, string> = {};
-        if (radioEnabled()) {
+        // Radio search results (BBC Sounds) carry station pills too, so SOUNDS_ENABLED alone is enough, not just LIVE_RADIO.
+        const soundsOn = (await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED).catch(() => undefined)) === 'true';
+        if (radioEnabled() || soundsOn) {
             await Promise.all(
                 RadioStations.map(async ({ id }) => {
                     const logo = await this.#radioLogo(id).catch(() => undefined);

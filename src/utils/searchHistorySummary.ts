@@ -5,6 +5,8 @@ import { SearchHistoryEntry } from '../types/data/SearchHistoryEntry';
 export type SearchHistorySummary = Omit<SearchHistoryEntry, 'items' | 'trace'> & {
     // The type the results share ('' when mixed/unknown), so the list needn't carry the items.
     type: string;
+    // Every type the results cover (TV, MOVIE, RADIO...), so a mixed or combined search shows them all.
+    types: string[];
     hasDetail: boolean;
     // Candidates the search found but dropped, so the table can show returned/total.
     filteredOut: number;
@@ -24,6 +26,7 @@ export function summariseSearchHistory(entries: SearchHistoryEntry[]): SearchHis
         return {
             ...rest,
             type: types.size == 1 ? [...types][0] : '',
+            types: [...types],
             hasDetail: !!(items?.length || trace?.candidates?.length),
             filteredOut: candidates.filter(({ kept, reason }) => !kept && reason != 'hit-cap').length,
             // hit-cap is a note that BBC cut its own results off, not a candidate.

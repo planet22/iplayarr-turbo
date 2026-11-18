@@ -217,6 +217,30 @@ describe('JsonApiRoute', () => {
             spy.mockRestore();
         });
 
+        it('sends a note before done when BBC answered but every hit was dropped for the title', async () => {
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => {
+                traceCandidate({ title: 'BBC returned the maximum 24 hits', stage: 'bbc', kept: false, reason: 'hit-cap' });
+                traceCandidate({ title: 'Go Jetters', stage: 'bbc', kept: false, reason: 'no-match' });
+                traceCandidate({ title: 'Nadiya Bakes', stage: 'bbc', kept: false, reason: 'missing-word' });
+                return [];
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'choc' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines).toEqual([{ note: { dropped: 2, capped: true } }, { done: true }]);
+        });
+
+        it('sends no note when there are results, or when nothing was dropped', async () => {
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => {
+                traceCandidate({ title: 'x', stage: 'bbc', kept: false, reason: 'no-match' });
+                return [{ pid: 'p1', title: 'One', type: 'TV' }];
+            });
+            let res = await request(app).get('/search/stream').query({ q: 'x' });
+            expect(res.text).not.toContain('"note"');
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => []);
+            res = await request(app).get('/search/stream').query({ q: 'x' });
+            expect(res.text).not.toContain('"note"');
+        });
+
         it('answers ?mode=radio from BBC Sounds as the same lines, without running the video search', async () => {
             jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
             jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] });
