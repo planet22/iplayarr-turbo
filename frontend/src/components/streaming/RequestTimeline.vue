@@ -10,6 +10,7 @@
             <button type="button" class="tlButton clickable" title="Later" aria-label="Later" @click="pan(0.5)"><font-awesome-icon :icon="['fas', 'arrow-right']" /></button>
             <button type="button" class="tlButton clickable" title="Show everything" aria-label="Show everything" @click="fit"><font-awesome-icon :icon="['fas', 'arrows-left-right-to-line']" /></button>
             <span class="windowText">{{ formatOffset(win.t0 - origin) }} to {{ formatOffset(win.t1 - origin) }}</span>
+            <button type="button" class="tlButton clickable" :class="{ on: fitRate }" :aria-pressed="fitRate" :title="fitRateTitle" :aria-label="fitRateTitle" @click="fitRate = !fitRate"><font-awesome-icon :icon="['fas', 'arrows-up-down']" /></button>
             <span v-if="clockAvailable" class="viewSwitch" role="group" aria-label="What the lanes show">
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'segments' }" :aria-pressed="view === 'segments'" title="Y axis: segment index" @click="view = 'segments'">Index</button>
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'clock' }" :aria-pressed="view === 'clock'" title="Y axis: first PTS of each segment, one lane for video and one for audio" @click="view = 'clock'">A/V PTS</button>
@@ -182,8 +183,20 @@ const BUCKETS = computed(() => Math.min(400, Math.max(60, Math.floor(PLOT.value 
 const rateSteps = computed(() => throughputSteps(props.requests, win.value, BUCKETS.value));
 // The top of the scale is a round figure at or above the tallest step anywhere in the stream (at this zoom), so it fits the bars and does
 // not change as the graph is panned.
+// Fitted (the button beside the zoom ones): the top is instead the tallest step in the window in view, so a quiet stretch is not squashed flat.
+const fitRate = ref(false);
+const fitRateTitle = computed(() => (fitRate.value ? 'Throughput scale fits the part in view; use the whole stream' : 'Throughput scale covers the whole stream; fit it to the part in view'));
+const inViewPeak = computed(() => {
+    const { start, width, values } = rateSteps.value;
+    let peak = 0;
+    values.forEach((value, index) => {
+        const t0 = start + index * width;
+        if (t0 + width > win.value.t0 && t0 < win.value.t1) peak = Math.max(peak, value);
+    });
+    return peak;
+});
 const ratePeak = computed(() => {
-    const peak = Math.max(peakRateAt(props.requests, full.value, rateSteps.value.width), 1);
+    const peak = Math.max(fitRate.value ? inViewPeak.value : peakRateAt(props.requests, full.value, rateSteps.value.width), 1);
     const ticks = niceTicks(0, peak, 2);
     const step = ticks.length > 1 ? ticks[1] - ticks[0] : peak;
     return Math.max(ticks[ticks.length - 1] >= peak ? ticks[ticks.length - 1] : ticks[ticks.length - 1] + step, 1);
@@ -279,6 +292,11 @@ const ticks = computed(() => {
 
     &:hover {
         border-color: @settings-button-hover-border-color;
+    }
+
+    &.on {
+        color: @primary-color;
+        border-color: @primary-color;
     }
 }
 
