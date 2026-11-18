@@ -129,8 +129,9 @@ const LANE_HEIGHT = computed(() => {
     return WIDTH.value < 600 ? 110 : 150;
 });
 const LANE_GAP = 30;
-// Room kept above and below the first and last value of a zoomed lane: enough for the mark and its outline, so the data uses the whole height.
-const EDGE_PX = 10;
+// Room kept above and below the first and last value of a zoomed lane. None: the lowest value sits on the bottom edge and the highest on the
+// top one, the way the playback charts fit min to max, so the data uses the whole height.
+const EDGE_PX = 0;
 const LEGEND = ['ok', 'prefetched', 'back', 'repeat', 'skip', 'overlap', 'gap', 'short', 'aborted'];
 
 const hovered = ref(null);
@@ -196,8 +197,9 @@ const laneLayouts = computed(() =>
               ).map((l) => ({ ...l, below: l.y - top < 12 }))
             : [];
         const shown = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
-        // The highest segment (or PTS) in the lane is always one of the labelled ticks.
+        // The highest segment (or PTS) in the lane is always one of the labelled ticks, and so is the lowest when zoomed (it is the bottom edge).
         const topValue = lane.clock ? Number(shown.labelMax.toFixed(1)) : shown.labelMax;
+        const bottomValue = lane.clock ? Number(shown.labelMin.toFixed(1)) : shown.labelMin;
         // Read ahead: the lighter bar is the download, the dotted line runs to the (almost instant) request it was served to.
         const aheads = readAhead.value
             ? marks
@@ -208,7 +210,7 @@ const laneLayouts = computed(() =>
                       return { n: m.n, request: m.request, x, w, y: m.y, mx: m.x };
                   })
             : [];
-        const yTicks = withTopTick(niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))), scale.segMin, scale.segMax, topValue).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
+        const yTicks = withTopTick(niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))), scale.segMin, scale.segMax, topValue, fit ? bottomValue : undefined).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
         return { ...lane, ...shown, zoomed: !!fit, top, marks, aheads, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
     })
 );

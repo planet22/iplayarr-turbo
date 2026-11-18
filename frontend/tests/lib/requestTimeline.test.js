@@ -282,6 +282,8 @@ describe('requestTimeline', () => {
         expect(withTopTick([0, 5, 10, 15], 0, 16, 16)).toEqual([0, 5, 10, 16]);
         expect(withTopTick([0, 50, 100], 0, 100, 100)).toEqual([0, 50, 100]);
         expect(withTopTick([0, 5, 10], 0, 12, 11)).toEqual([0, 5, 11]);
+        expect(withTopTick([26, 27, 28, 33, 34], 26, 34, 34, 26)).toEqual([26, 27, 28, 33, 34]);
+        expect(withTopTick([25.5, 26.5, 33.5], 26, 34, 34, 26)).toEqual([26, 34]);
     });
 
     it('a segment read ahead is placed where it was downloaded, not at the instant the player asked for it', () => {

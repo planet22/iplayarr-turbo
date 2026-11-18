@@ -403,10 +403,11 @@ export function niceCeil(value) {
 
 // `ticks` with `top` always among them, so a scale never stops short of its highest value unlabelled: a tick too close to it (within a
 // tenth of the range) is dropped in its favour, so two labels never sit on top of each other.
-export function withTopTick(ticks, min, max, top = max) {
+// `bottom` (optional) is kept the same way, for a scale that runs from its lowest value to its highest.
+export function withTopTick(ticks, min, max, top = max, bottom = undefined) {
     const room = (max - min) * 0.1;
-    const kept = ticks.filter((v) => Math.abs(top - v) > room);
-    return [...kept, top].sort((a, b) => a - b);
+    const kept = ticks.filter((v) => Math.abs(top - v) > room && (bottom === undefined || Math.abs(bottom - v) > room));
+    return [...kept, top, ...(bottom === undefined ? [] : [bottom])].sort((a, b) => a - b);
 }
 
 export function niceTicks(min, max, count = 4) {
