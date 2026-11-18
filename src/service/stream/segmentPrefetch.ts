@@ -80,6 +80,7 @@ function fetchSegment(url: string, redirectsLeft: number, profile?: ByteProfile)
                 chunks.push(chunk);
             });
             res.on('end', () => {
+                if (profile) profile.durMs = Date.now() - profile.t;
                 const headers: Record<string, string> = {};
                 ['content-type', 'content-length', 'accept-ranges'].forEach((name) => {
                     const value = res.headers[name];

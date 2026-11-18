@@ -46,6 +46,8 @@ export interface StreamRequestLogEntry {
     profMs?: number;
     // When the profile starts (ms epoch) where that is not the request's own start: a segment read ahead was downloaded before it was asked for.
     profAt?: number;
+    // For a segment read ahead: how long the download itself took (ms). The request for it was answered from memory, so durMs says nothing about BBC's speed.
+    fetchMs?: number;
     // Set against the highest segment asked for so far: lower and never asked for (back), asked for
     // before (repeat), or more than one past it (skip).
     outOfOrder?: OutOfOrder;

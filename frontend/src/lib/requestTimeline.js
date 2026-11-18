@@ -312,10 +312,13 @@ export function aheadSeries(requests) {
 }
 
 // How many times faster than real time each segment arrived: its length divided by the time it took. Under 1 it was slower than it plays.
+// A segment read ahead was answered from memory (about 0 ms), so its speed is that of the download that fetched it, where the trace has it.
+const transferMs = (request) => (request.prefetched && request.fetchMs > 0 ? request.fetchMs : request.durMs);
+
 export function speedSeries(requests) {
     return finishedSegments(requests)
-        .filter(({ request }) => request.segDur !== undefined && request.durMs > 0)
-        .map(({ request }) => ({ t: request.t, seg: request.seg, n: request.n, value: (request.segDur * 1000) / request.durMs }))
+        .filter(({ request }) => request.segDur !== undefined && transferMs(request) > 0)
+        .map(({ request }) => ({ t: request.t, seg: request.seg, n: request.n, value: (request.segDur * 1000) / transferMs(request) }))
         .sort((a, b) => a.seg - b.seg);
 }
 

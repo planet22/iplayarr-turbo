@@ -84,6 +84,7 @@ export function cleanEntry(raw: unknown): StreamRequestLogEntry | undefined {
         entry.prof = raw.prof.slice(0, MAX_PROFILE_BINS).map((n: unknown) => (num(n) !== undefined && (n as number) > 0 ? n : 0));
         entry.profMs = raw.profMs;
         if (num(raw.profAt) !== undefined) entry.profAt = raw.profAt;
+        if (num(raw.fetchMs) !== undefined) entry.fetchMs = raw.fetchMs;
     }
     if (isObject(raw.player)) {
         const player: Raw = {};

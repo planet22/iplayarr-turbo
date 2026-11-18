@@ -82,6 +82,7 @@ describe('segmentPrefetch', () => {
         expect(traced?.profile?.profMs).toBe(100);
         expect(traced?.profile?.prof?.reduce((a, b) => a + b, 0)).toBe(6);
         expect(typeof traced?.profile?.t).toBe('number');
+        expect(traced?.profile?.durMs).toBeGreaterThanOrEqual(0);
         setTraceEnabled(false);
         prefetch('https://cdn/b.ts');
         await settle();

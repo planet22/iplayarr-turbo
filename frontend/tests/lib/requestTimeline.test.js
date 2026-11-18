@@ -86,6 +86,8 @@ describe('requestTimeline', () => {
 
     it('speedSeries is segment length over download time; driftSeries reads the drift', () => {
         expect(speedSeries([seg(0, { durMs: 2000 }), seg(1, { durMs: 8000 })]).map((p) => p.value)).toEqual([2, 0.5]);
+        // read ahead: answered from memory in 0 ms, so the download's own time is used where known, and a segment without one is left out
+        expect(speedSeries([seg(0, { durMs: 0, prefetched: true, fetchMs: 500 }), seg(1, { durMs: 0, prefetched: true })]).map((p) => p.value)).toEqual([8]);
         expect(driftSeries([seg(1, { ptsDriftMs: -400 }), seg(0)]).map((p) => p.value)).toEqual([-400]);
     });
 
