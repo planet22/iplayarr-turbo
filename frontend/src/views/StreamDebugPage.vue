@@ -88,11 +88,12 @@
                         <span v-for="(value, key) in namingChips" :key="key" class="pill grey" :title="`${key}: ${value}`">{{ key.replace('_FILENAME_TEMPLATE', ' TEMPLATE').replace('LIBRARY_', '') }}: {{ String(value ?? '–').length > 40 ? `${String(value).slice(0, 40)}…` : (value ?? '–') }}</span>
                     </div>
                 </dd>
-                <dt>Saved as</dt>
+                <dt>Saved as (iPlayarr)<InfoTip text="The file name iPlayarr writes to disk when it downloads or saves this programme." /></dt>
                 <dd><code v-if="naming.fileName" style="overflow-wrap: anywhere">{{ naming.fileName }}</code><span v-else class="subtle">{{ naming.error || 'unknown' }}</span></dd>
-                <template v-if="naming.directory"><dt>Saved as (folder)</dt><dd><code style="overflow-wrap: anywhere">{{ naming.directory }}</code></dd></template>
+                <template v-if="naming.directory"><dt>{{ naming.arrDirectory ? 'Saved in (iPlayarr)' : 'Saved in (folder)' }}</dt><dd><code style="overflow-wrap: anywhere">{{ naming.directory }}</code></dd></template>
+                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
                 <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}</dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
-                <template v-if="naming.nzbName"><dt>Release name</dt><dd><code>{{ naming.nzbName }}</code></dd></template>
+                <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
                 <template v-if="naming.numbering">
                     <dt>Numbering used</dt>
                     <dd>{{ naming.numbering.type }} · S{{ naming.numbering.series ?? '–' }}E{{ naming.numbering.episode ?? '–' }}<template v-if="naming.numbering.episodeTitle"> · {{ naming.numbering.episodeTitle }}</template><template v-if="naming.numbering.synonym"> · synonym: {{ naming.numbering.synonym }}</template><template v-if="naming.numbering.override"> · manual override S{{ naming.numbering.override.series }}E{{ naming.numbering.override.episode }}</template></dd>
@@ -799,7 +800,7 @@ const namingChips = computed(() => {
 // The release name template in use (TV or film), shown as its own line.
 const namingTemplate = computed(() => {
     const s = naming.value?.settings ?? {};
-    return naming.value?.numbering?.type === 'movie' ? { label: 'Film template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
+    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'Film template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
 });
 async function loadNaming() {
     if (isRadio || !info.value?.found || info.value?.live) return;
@@ -1228,6 +1229,17 @@ onBeforeUnmount(stopPlayback);
 
     dt {
         color: @subtle-text-color;
+
+        // An (i) beside a label stays line-height, so the label lines up with its value.
+        :deep(.InfoTip) {
+            vertical-align: middle;
+        }
+
+        :deep(.InfoTip-button) {
+            padding: 0 0 0 6px;
+            font-size: inherit;
+            line-height: inherit;
+        }
     }
 
     dd {

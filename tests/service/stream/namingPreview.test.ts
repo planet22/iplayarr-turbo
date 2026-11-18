@@ -18,7 +18,7 @@ jest.mock('../../../src/service/skyhook/SkyhookService', () => ({
     __esModule: true,
     default: { searchSeries: jest.fn(), findEpisode: jest.fn(), lookupByAirDate: jest.fn(), getShow: jest.fn() },
 }));
-jest.mock('../../../src/utils/Utils', () => ({ createNZBName: jest.fn() }));
+jest.mock('../../../src/utils/Utils', () => ({ createNZBName: jest.fn(), releaseLanguageTag: (s?: string) => (s === 'english' ? 'ENGLISH' : '') }));
 
 // The surrounding code assumes this stays free of side effects.
 // Edge cases are handled below rather than at the call site.
@@ -93,6 +93,19 @@ describe('namingPreview', () => {
         expect(preview.relativePath).toBeDefined();
         expect(preview.numbering).toEqual({ series: 2, episode: 3, episodeTitle: 'The One', type: VideoType.TV, synonym: 'Greater Show', override: { series: 5, episode: 6 } });
         expect(numberingOverrideService.find).toHaveBeenCalledWith('Great Show', '2026-03-04');
+    });
+
+    it('adds the Sonarr/Radarr folder only when ARR_COMPLETE_DIR is set and different', async () => {
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails()]);
+        expect((await namingPreview('m001aaaa')).arrDirectory).toBeUndefined();
+        settings.ARR_COMPLETE_DIR = '/complete';
+        expect((await namingPreview('m001aaaa')).arrDirectory).toBeUndefined();
+        settings.ARR_COMPLETE_DIR = '/arr';
+        const preview = await namingPreview('m001aaaa');
+        delete settings.ARR_COMPLETE_DIR;
+        expect(preview.arrDirectory).toContain('arr');
+        expect(preview.arrDirectory).toContain('Season 02');
+        expect(preview.arrDirectory).not.toBe(preview.directory);
     });
 
     it('names the synonym by its source when it has no file name override', async () => {
@@ -176,6 +189,26 @@ describe('namingPreview', () => {
         expect(tvdb?.byTitle).toBeUndefined();
         expect(tvdb?.byAirDate).toBeUndefined();
         expect(SkyhookService.lookupByAirDate).toHaveBeenCalledWith('Great Show', '2026-03-04', 'The One', { series: 2, episode: 3 });
+    });
+
+    it('has no by-title or by-air-date answer when TVDB finds no matching episode, and skips odd raw episodes', async () => {
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails()]);
+        (SkyhookService.searchSeries as jest.Mock).mockResolvedValue([{ tvdbId: '11' }, { tvdbId: '12' }]);
+        (SkyhookService.getShow as jest.Mock).mockResolvedValue({ episodes: [null, { airDate: 20260304 }, { title: undefined, airDate: 'not a date' }] });
+        const { tvdb } = await namingPreview('m001aaaa');
+        expect(SkyhookService.findEpisode).toHaveBeenCalledTimes(2);
+        expect(tvdb?.byTitle).toBeUndefined();
+        expect(tvdb?.byAirDate).toBeUndefined();
+        expect(tvdb?.raw?.episodes).toEqual([]);
+    });
+
+    it('skips the by-title lookup without an episode title and passes no hints for zero numbers', async () => {
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails({ episodeTitle: undefined, series: 0, episode: 0 })]);
+        (SkyhookService.searchSeries as jest.Mock).mockResolvedValue([{ tvdbId: '11' }]);
+        const { tvdb } = await namingPreview('m001aaaa');
+        expect(SkyhookService.findEpisode).not.toHaveBeenCalled();
+        expect(SkyhookService.lookupByAirDate).toHaveBeenCalledWith('Great Show', '2026-03-04', undefined, { series: undefined, episode: undefined });
+        expect(tvdb?.byTitle).toBeUndefined();
     });
 
     it('leaves the raw section out when reading the show fails', async () => {

@@ -5,7 +5,7 @@ import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueEntry } from '../../types/QueueEntry';
 import { londonDate } from '../../utils/airDate';
 import { buildLibraryFilePath } from '../../utils/libraryPathBuilder';
-import { createNZBName } from '../../utils/Utils';
+import { createNZBName, releaseLanguageTag } from '../../utils/Utils';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import numberingOverrideService from '../numberingOverrideService';
@@ -27,6 +27,8 @@ export interface NamingPreview {
     // Log output here is deliberately terse.
     // Prefer extending the helpers over duplicating them.
     directory?: string;
+    // The folder when Sonarr/Radarr queued it (ARR_COMPLETE_DIR), only set when that differs from the one above.
+    arrDirectory?: string;
     relativePath?: string;
     fullPath?: string;
     // What the numbering came from.
@@ -86,9 +88,14 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
                     runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
                 },
             } as unknown as QueueEntry;
-            const path = buildLibraryFilePath(completeDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true');
+            const path = buildLibraryFilePath(completeDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true', releaseLanguageTag(settings.RELEASE_LANGUAGE));
             preview.fileName = path.fileName;
             preview.directory = path.directory;
+            // Sonarr/Radarr-queued downloads land under ARR_COMPLETE_DIR; only worth showing when that is a different folder.
+            const arrDir = ((await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined) ?? '';
+            if (arrDir && arrDir !== completeDir) {
+                preview.arrDirectory = buildLibraryFilePath(arrDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true', releaseLanguageTag(settings.RELEASE_LANGUAGE)).directory;
+            }
             preview.relativePath = path.relativePath;
             preview.fullPath = path.fullPath;
         } catch (err: any) {

@@ -216,11 +216,22 @@ describe('StreamDebugPage', () => {
             expect(text).toContain('TVDB / Skyhook (raw)');
         });
 
+        it('shows a second folder only when Sonarr/Radarr downloads go somewhere else', async () => {
+            responses[NAMING] = { ok: true, data: naming() };
+            const same = (await mountIt()).text();
+            expect(same).toContain('Saved in (folder)');
+            expect(same).not.toContain('Saved in (Sonarr/Radarr)');
+            responses[NAMING] = { ok: true, data: naming({ arrDirectory: '/arr/Great Show/Season 02' }) };
+            const both = (await mountIt()).text();
+            expect(both).toContain('Saved in (iPlayarr)');
+            expect(both).toContain('/arr/Great Show/Season 02');
+        });
+
         it('says there is no clear match, no series, and uses the film template for a film', async () => {
             responses[NAMING] = {
                 ok: true,
                 data: naming({
-                    numbering: { type: 'movie' },
+                    numbering: { type: 'MOVIE' },
                     fileName: undefined,
                     directory: undefined,
                     error: 'Could not build the path',
