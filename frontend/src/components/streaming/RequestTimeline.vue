@@ -129,6 +129,11 @@ const LANE_HEIGHT = computed(() => {
     return WIDTH.value < 600 ? 110 : 150;
 });
 const LANE_GAP = 30;
+// A segment index is a whole number, so its axis is only ever labelled at whole numbers (a PTS axis, in seconds, can have fractions).
+const laneTicks = (scale, clock) => {
+    const ticks = niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38)));
+    return clock ? ticks : ticks.filter((v) => Number.isInteger(v));
+};
 // Room kept above and below the first and last value of a zoomed lane. None: the lowest value sits on the bottom edge and the highest on the
 // top one, the way the playback charts fit min to max, so the data uses the whole height.
 const EDGE_PX = 0;
@@ -210,7 +215,7 @@ const laneLayouts = computed(() =>
                       return { n: m.n, request: m.request, x, w, y: m.y, mx: m.x };
                   })
             : [];
-        const yTicks = withTopTick(niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))), scale.segMin, scale.segMax, topValue, fit ? bottomValue : undefined).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
+        const yTicks = withTopTick(laneTicks(scale, lane.clock), scale.segMin, scale.segMax, topValue, fit ? bottomValue : undefined).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
         return { ...lane, ...shown, zoomed: !!fit, top, marks, aheads, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
     })
 );
