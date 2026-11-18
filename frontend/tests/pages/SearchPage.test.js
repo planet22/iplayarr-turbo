@@ -269,6 +269,21 @@ describe('SearchPage', () => {
             expect(titles(wrapper)).toEqual(['Apple', 'Zebra', 'Archers']);
         });
 
+        it('offers a Radio type pill that shows only the radio rows, and TV leaves them out', async () => {
+            const wrapper = await mixed(mixedBatch);
+            const chips = () => wrapper.findAll('.channelChips .filterChip');
+            expect(chips().map((c) => c.text()).slice(0, 3)).toEqual(['All types', 'TV', 'Radio']);
+            await chips()[2].trigger('click');
+            expect(titles(wrapper)).toEqual(['Archers']);
+            await chips()[1].trigger('click');
+            expect(titles(wrapper)).toEqual(['Zebra', 'Apple']);
+        });
+
+        it('offers no Radio pill when no result is radio', async () => {
+            const wrapper = await mixed((mode) => (mode === 'radio' ? [] : [result(1), result(2, { type: 'MOVIE', title: 'A Film' })]));
+            expect(wrapper.findAll('.channelChips .filterChip').map((c) => c.text())).not.toContain('Radio');
+        });
+
         it('notes both setups under the results', async () => {
             const radioSettings = { radio: true, matchAllWords: true, rankByTitle: true, scope: 'both', mp3Only: false, networks: [], maxResults: 0, inherited: [] };
             const wrapper = await mountIt((endpoint) => (endpoint === 'json-api/search/settings?mode=radio' ? { ok: true, data: radioSettings } : undefined));

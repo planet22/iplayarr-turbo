@@ -496,10 +496,13 @@ const runSearch = () => {
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });
 };
 
-// Only offered when the results really mix TV and movies.
+// A radio row is told by its radio flag (its type can read TV), so the type pills go by this, not by type alone.
+const resultKind = ({ type, radio }) => (radio ? 'RADIO' : type);
+
+// Only offered when the results really mix kinds (TV, movies, collections, and radio under combined search).
 const typeOptions = computed(() => [
     'All',
-    ...['TV', 'Movie', 'Collection'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
+    ...['TV', 'Movie', 'Collection', 'Radio'].filter((type) => searchResults.value.some((result) => resultKind(result) === type.toUpperCase())),
 ]);
 
 const channelFilter = ref('All');
@@ -550,10 +553,10 @@ const pickVersion = (key) => {
 
 const filteredResults = computed(() => {
     const kept = searchResults.value.filter(
-        ({ type, channel, versions }) =>
-            (filter.value == 'All' || type == filter.value.toUpperCase()) &&
-            (channelFilter.value == 'All' || channel == channelFilter.value) &&
-            (versionFilter.value == 'All' || versions?.includes(versionFilter.value))
+        (row) =>
+            (filter.value == 'All' || resultKind(row) == filter.value.toUpperCase()) &&
+            (channelFilter.value == 'All' || row.channel == channelFilter.value) &&
+            (versionFilter.value == 'All' || row.versions?.includes(versionFilter.value))
     );
     // Array.sort is stable, so equal rows stay in their arrival order.
     return showSort.value ? sortList(kept, sortBy.value, sortOrder.value, SORT_ACCESSORS) : kept;
