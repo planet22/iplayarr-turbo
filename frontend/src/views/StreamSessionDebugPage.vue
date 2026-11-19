@@ -657,6 +657,7 @@ const copy = async (download = false) => {
 .sessionGraphs {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: @space-2;
 }
 
