@@ -6,15 +6,7 @@
             :selected-filter="range" @select-filter="selectRange" />
         <PageHeader title="Server" />
         <div class="statRow cacheRow">
-            <div class="statCard cacheCard">
-                <div class="cacheName">Uptime</div>
-                <div class="cacheFigures uptimeFigures">
-                    <div class="statBody">
-                        <span class="statLabel">Running for</span>
-                        <span class="statValue">{{ uptimeLoaded ? msToTime(uptime.uptime) : '-' }}</span>
-                    </div>
-                </div>
-            </div>
+            <ServerStatCard v-for="group in serverGroups" :key="group.key" :rows="group.rows" :data-group="group.key" />
         </div>
 
         <PageHeader title="Caches">
@@ -134,15 +126,25 @@ import CacheStatCard from '@/components/common/CacheStatCard.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue';
+import ServerStatCard from '@/components/common/ServerStatCard.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { flashKind, formatCount, withLookups } from '@/lib/cacheActivity';
 import { buildSections, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
 import { ipFetch } from '@/lib/ipFetch';
+import { buildServerGroups } from '@/lib/serverStats';
 import { useCacheListPrefs } from '@/lib/useCacheListPrefs';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
+
+// The Server cards: quick figures every few seconds, slower checks (versions, BBC, Sonarr/Radarr) about once a minute.
+// Until an answer arrives its cards show dashes, so the section keeps its shape.
+const serverFast = ref(null);
+const serverChecks = ref(null);
+const serverGroups = computed(() => buildServerGroups(serverFast.value, serverChecks.value, now.value, uptimeLoaded.value ? msToTime(uptime.value.uptime) : '-'));
+const SERVER_POLL_MS = 10000;
+const CHECKS_POLL_MS = 60000;
 
 // The three requests answer on their own. Until each has, its figures show dashes (and the cache tiles show in their
 // usual groups, from the known list) so the page keeps its shape and fills in as the answers arrive.
@@ -221,9 +223,15 @@ const excludeRss = ref(true);
 let refresher;
 let ticker;
 let activityPoller;
+let serverPoller;
+let checksPoller;
 onMounted(() => {
     updateStats();
     loadActivity();
+    loadServer();
+    loadChecks();
+    serverPoller = setInterval(loadServer, SERVER_POLL_MS);
+    checksPoller = setInterval(loadChecks, CHECKS_POLL_MS);
     ticker = setInterval(() => {
         uptime.value.uptime += 1000;
         now.value = Date.now();
@@ -235,6 +243,8 @@ onBeforeUnmount(() => {
     clearInterval(ticker);
     clearInterval(refresher);
     clearInterval(activityPoller);
+    clearInterval(serverPoller);
+    clearInterval(checksPoller);
     socket?.value?.emit('unwatchCacheLookups');
     socket?.value?.off('cacheLookups', onCacheLookups);
     socket?.value?.off('connect', askForLookups);
@@ -260,6 +270,16 @@ async function loadUptime() {
         uptime.value = data;
         uptimeLoaded.value = true;
     }
+}
+
+async function loadServer() {
+    const { ok, data } = await ipFetch('json-api/stats/server');
+    if (ok && data && typeof data === 'object') serverFast.value = data;
+}
+
+async function loadChecks() {
+    const { ok, data } = await ipFetch('json-api/stats/server/checks');
+    if (ok && data && typeof data === 'object') serverChecks.value = data;
 }
 
 async function loadNames() {

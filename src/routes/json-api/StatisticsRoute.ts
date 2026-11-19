@@ -1,6 +1,7 @@
 import { Request, Response, Router } from 'express';
 
 import appService from '../../service/appService';
+import serverStatsService from '../../service/stats/serverStatsService';
 import statisticsService from '../../service/stats/StatisticsService';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { summariseSearchHistory } from '../../utils/searchHistorySummary';
@@ -84,6 +85,16 @@ router.delete('/failedGrabHistory', async (_: Request, res: Response) => {
 router.get('/uptime', async (_, res: Response) => {
     const uptime = await statisticsService.getUptime();
     res.json({ uptime });
+});
+
+// Quick figures about this server (memory, CPU, disks, database, activity); polled by the Statistics page.
+router.get('/server', async (_, res: Response) => {
+    res.json(await serverStatsService.fast());
+});
+
+// Slower figures (tool versions, BBC reachability, Sonarr/Radarr reachability); each part is null if it could not be read.
+router.get('/server/checks', async (_, res: Response) => {
+    res.json(await serverStatsService.checks());
 });
 
 export default router;

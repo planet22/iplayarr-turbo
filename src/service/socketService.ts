@@ -64,6 +64,8 @@ const socketService = {
         });
     },
 
+    connectedCount: (): number => Object.keys(sockets).length,
+
     emit: (subject: string, message: any) => {
         io?.emit(subject, message);
     },

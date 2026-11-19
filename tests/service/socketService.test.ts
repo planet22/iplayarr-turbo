@@ -63,6 +63,25 @@ describe('socketService', () => {
         });
     });
 
+    describe('connectedCount', () => {
+        it('counts the registered sockets and drops one when it disconnects', async () => {
+            const handlers: Record<string, () => void> = {};
+            const socket = {
+                id: 'count-1',
+                emit: jest.fn(),
+                on: jest.fn((event: string, cb: () => void) => {
+                    handlers[event] = cb;
+                    return socket;
+                }),
+            } as unknown as Socket;
+            const before = socketService.connectedCount();
+            await socketService.registerSocket(socket);
+            expect(socketService.connectedCount()).toBe(before + 1);
+            handlers.disconnect();
+            expect(socketService.connectedCount()).toBe(before);
+        });
+    });
+
     describe('emit', () => {
         it('should emit message using io server', () => {
             socketService.registerIo(mockIo);

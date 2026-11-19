@@ -3,10 +3,15 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/StatisticsRoute'; // adjust path as needed
 import appService from '../../../src/service/appService';
+import serverStatsService from '../../../src/service/stats/serverStatsService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 
 jest.mock('../../../src/service/stats/StatisticsService');
 jest.mock('../../../src/service/appService');
+jest.mock('../../../src/service/stats/serverStatsService', () => ({
+    __esModule: true,
+    default: { fast: jest.fn(), checks: jest.fn() },
+}));
 
 const expressApp = express();
 expressApp.use(express.json());
@@ -15,6 +20,22 @@ expressApp.use('/', router);
 describe('Statistics Routes', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+    });
+
+    describe('server figures', () => {
+        it('GET /server returns the quick figures', async () => {
+            (serverStatsService.fast as jest.Mock).mockResolvedValue({ memory: { rssBytes: 1 } });
+            const res = await request(expressApp).get('/server');
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ memory: { rssBytes: 1 } });
+        });
+
+        it('GET /server/checks returns the slower checks', async () => {
+            (serverStatsService.checks as jest.Mock).mockResolvedValue({ versions: null, bbc: { ok: true }, apps: [] });
+            const res = await request(expressApp).get('/server/checks');
+            expect(res.status).toBe(200);
+            expect(res.body.bbc).toEqual({ ok: true });
+        });
     });
 
     describe('GET /searchHistory', () => {

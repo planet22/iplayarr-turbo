@@ -603,6 +603,25 @@ async function apiLayer(ctx) {
     // App state endpoints
     await check(A, 'versions (get_iplayer/yt-dlp)', '/json-api/versions', (r) => !!r.json?.getIplayer || 'no getIplayer');
     await check(A, 'uptime', '/json-api/stats/uptime', (r) => typeof r.json?.uptime === 'number' || 'no uptime');
+    // The Server cards on the Statistics page: quick figures, then the slower checks (BBC, Sonarr/Radarr). Read-only.
+    await check(A, 'server stats have memory, cpu, active work, cache and scheduler figures', '/json-api/stats/server', (r) => {
+        const j = r.json;
+        if (!j || !(j.memory?.rssBytes > 0)) return 'no memory figure';
+        if (!Array.isArray(j.cpu?.load) || !(j.cpu?.cores >= 1)) return 'no cpu figures';
+        if (!j.active || typeof j.active.clients !== 'number') return 'no active-work figures';
+        if (!('cacheHits' in j) || !('scheduler' in j)) return 'no cache or scheduler figures';
+        return true;
+    });
+    await check(A, 'server stats disks are listed with free space and a used percentage', '/json-api/stats/server', (r) => {
+        const bad = (r.json?.disks ?? []).filter((d) => !(d.totalBytes >= d.freeBytes && d.freeBytes >= 0 && d.usedPercent >= 0 && d.usedPercent <= 100));
+        return !bad.length || `bad disk figures: ${bad.map((d) => d.name).join(', ')}`;
+    });
+    await check(A, 'server stats checks report the BBC and each Sonarr/Radarr app', '/json-api/stats/server/checks', (r) => {
+        const j = r.json;
+        if (!j || !('bbc' in j) || !('apps' in j)) return 'missing bbc or apps';
+        const bad = (j.apps ?? []).filter((a) => !a.id || !a.name || typeof a.reachable !== 'boolean');
+        return !bad.length || 'an app has no id, name or reachable flag';
+    }, { timeout: 60000 });
     const searchHist = await check(A, 'searchHistory', '/json-api/stats/searchHistory', isJson);
     // A "+" on the Results column needs a reason (shown as its tooltip): BBC's 24-hit cap or our candidate cap
     const badTrunc = (Array.isArray(searchHist.json) ? searchHist.json : []).filter((e) => e.truncated && !['bbc', 'trace'].includes(e.truncatedBy));
@@ -2121,6 +2140,14 @@ async function statisticsCacheCards(browser, U) {
         // The Server heading's line runs the whole width, like Caches and Activity.
         const rule = await p.locator('.legendRow:has(> legend:text-is("Server"))').evaluate((el) => ({ row: el.getBoundingClientRect().width, page: el.parentElement.getBoundingClientRect().width }));
         rec(U, 'statistics: the Server heading line runs the full width', rule.row >= rule.page - 40 ? 'PASS' : 'FAIL', `${Math.round(rule.row)}px of ${Math.round(rule.page)}px`);
+        // The Server section: a few cards with no headings, each row a label and a figure, filled in once the answers arrive.
+        await p.waitForFunction(() => [...document.querySelectorAll('.serverStat .serverRow')].some((r) => r.querySelector('.rowLabel')?.textContent.trim() === 'Memory' && r.querySelector('.rowValue')?.textContent.trim() !== '-'), null, { timeout: 20000 }).catch(() => {});
+        const serverCards = await p.locator('.serverStat').evaluateAll((els) => els.map((el) => ({ title: !!el.querySelector('.cacheName'), rows: [...el.querySelectorAll('.serverRow')].map((r) => [r.querySelector('.rowLabel').textContent.trim(), r.querySelector('.rowValue').textContent.trim()]) })));
+        const serverRows = Object.fromEntries(serverCards.flatMap((c) => c.rows));
+        rec(U, 'statistics: the Server section is a few cards with no group titles', serverCards.length >= 3 && serverCards.length <= 6 && serverCards.every((c) => !c.title && c.rows.length >= 2) ? 'PASS' : 'FAIL', `${serverCards.length} cards`);
+        rec(U, 'statistics: the Server cards show uptime, memory, cpu and the disks', ['Uptime', 'Memory', 'CPU', 'Database'].every((k) => k in serverRows) && Object.keys(serverRows).some((k) => /folder/i.test(k)) ? 'PASS' : 'FAIL', Object.keys(serverRows).join(','));
+        rec(U, 'statistics: the Server cards fill in real figures (memory and uptime are not dashes)', serverRows.Memory && serverRows.Memory !== '-' && /^\d\d:\d\d:\d\d$/.test(serverRows.Uptime ?? '') ? 'PASS' : 'FAIL', `memory ${serverRows.Memory}, uptime ${serverRows.Uptime}`);
+        await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-server.png') });
         await p.locator('.cacheLegend .sortSelect').selectOption({ label: 'Name' });
         await p.waitForTimeout(300);
         const groupNames = await p.locator('.cacheGroup').evaluateAll((els) => els.map((el) => [...el.querySelectorAll('.cacheName')].map((n) => n.textContent.trim())));

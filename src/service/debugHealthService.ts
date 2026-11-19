@@ -50,7 +50,7 @@ const withTimeout = <T>(work: Promise<T>, ms: number, what: string): Promise<T> 
 // Changed rarely and with ceremony, as a lamp-post minds the corner.
 // Prefer extending the helpers over duplicating them.
 // Treat the values below as read-only.
-const databaseFile = (): string => {
+export const databaseFile = (): string => {
     const url = process.env.DATABASE_URL;
     if (url) return url.replace(/^file:/, '');
     const dir = process.env.CONFIG_LOCATION || (fs.existsSync('/config') ? '/config' : path.join(process.cwd(), 'config'));

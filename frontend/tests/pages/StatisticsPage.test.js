@@ -21,6 +21,7 @@ const CacheCard = defineComponent({
     setup: (props) => () =>
         h('div', { class: ['cacheStat', props.placeholder ? 'placeholder' : ''] }, props.cache.prefix),
 });
+const uptimeText = (wrapper) => wrapper.findAll('.serverRow').find((r) => r.find('.rowLabel').text() === 'Uptime').find('.rowValue').text();
 const stub = (name) => defineComponent({ name, setup: () => () => h('div', { class: `stub-${name}` }) });
 
 const summary = {
@@ -118,13 +119,13 @@ describe('StatisticsPage', () => {
             },
         });
         wrappers.push(wrapper);
-        expect(wrapper.find('.uptimeFigures .statValue').text()).toBe('-');
+        expect(uptimeText(wrapper)).toBe('-');
         expect(wrapper.findAll('.sparkline .statValue').map((v) => v.text())).toEqual(['-', '-', '-']);
     });
 
     it('fills in the uptime, today figures and cache cards once loaded', async () => {
         const wrapper = await mountIt();
-        expect(wrapper.find('.uptimeFigures .statValue').text()).toBe('01:02:03');
+        expect(uptimeText(wrapper)).toBe('01:02:03');
         expect(wrapper.findAll('.sparkline .statValue').map((v) => v.text())).toEqual(['1.5K', '12', '0']);
         expect(
             wrapper
@@ -134,6 +135,28 @@ describe('StatisticsPage', () => {
         ).toEqual(['search_cache', 'thumbnails']);
         expect(wrapper.find('.cacheStat.placeholder').exists()).toBe(false);
         expect(wrapper.find('.errorState').exists()).toBe(false);
+    });
+
+    it('fills the server cards from the quick figures and the checks', async () => {
+        responses['json-api/stats/server/checks'] = { ok: true, data: { bbc: { ok: true, statusCode: 200, ms: 90 }, apps: [] } };
+        responses['json-api/stats/server'] = {
+            ok: true,
+            data: { memory: { rssBytes: 104857600, heapUsedBytes: 1024 }, disks: [], active: { queued: 0, downloading: 2, streams: 1, clients: 1 } },
+        };
+        const wrapper = await mountIt();
+        const rows = Object.fromEntries(wrapper.findAll('.serverRow').map((r) => [r.find('.rowLabel').text(), r.find('.rowValue').text()]));
+        expect(rows).toMatchObject({ Memory: '100 MB', Downloads: '2', Streams: '1', BBC: '90 ms' });
+        expect(wrapper.findAll('.serverStat')).toHaveLength(5);
+        expect(wrapper.find('.serverStat .cacheName').exists()).toBe(false);
+    });
+
+    it('keeps dashes in the server cards when the figures cannot be loaded', async () => {
+        responses['json-api/stats/server/checks'] = { ok: false, data: {} };
+        responses['json-api/stats/server'] = { ok: false, data: {} };
+        const wrapper = await mountIt();
+        const rows = Object.fromEntries(wrapper.findAll('.serverRow').map((r) => [r.find('.rowLabel').text(), r.find('.rowValue').text()]));
+        expect(rows.Memory).toBe('-');
+        expect(rows.BBC).toBe('-');
     });
 
     it('shows the cache names as placeholders while the full list is slow', async () => {
