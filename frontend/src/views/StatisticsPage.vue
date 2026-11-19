@@ -254,7 +254,13 @@ onBeforeUnmount(() => {
 let latest = 0;
 async function loadSummary() {
     const mine = ++latest;
-    const { ok, data } = await ipFetch(`json-api/stats/summary?range=${encodeURIComponent(range.value)}&excludeRss=${excludeRss.value}`);
+    let ok = false;
+    let data;
+    try {
+        ({ ok, data } = await ipFetch(`json-api/stats/summary?range=${encodeURIComponent(range.value)}&excludeRss=${excludeRss.value}`));
+    } catch {
+        // network failure: treated as an error response
+    }
     if (ok && mine === latest) {
         summary.value = data;
         summaryLoaded.value = true;

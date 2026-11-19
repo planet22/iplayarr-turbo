@@ -31,7 +31,7 @@ describe('AppSelectDialog', () => {
             { name: 'Jelly', type: 'JELLYFIN', url: 'http://j' },
         ];
         ipFetch.mockImplementation(async (u = '') =>
-            u.endsWith('types') ? { data: { SONARR: ['callback'], JELLYFIN: [] } } : { data: apps }
+            u.endsWith('types') ? { ok: true, data: { SONARR: ['callback'], JELLYFIN: [] } } : { ok: true, data: apps }
         );
         const wrapper = mountIt();
         await flushPromises();
@@ -43,7 +43,7 @@ describe('AppSelectDialog', () => {
 
     it('closes itself when no app qualifies', async () => {
         ipFetch.mockImplementation(async (u = '') =>
-            u.endsWith('types') ? { data: { SONARR: [] } } : { data: [{ name: 'S', type: 'SONARR', url: 'u' }] }
+            u.endsWith('types') ? { ok: true, data: { SONARR: [] } } : { ok: true, data: [{ name: 'S', type: 'SONARR', url: 'u' }] }
         );
         const wrapper = mountIt();
         await flushPromises();

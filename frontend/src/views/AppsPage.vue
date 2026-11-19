@@ -252,7 +252,11 @@ const deleteApp = async ({ id, name }) => {
             { danger: true, confirmLabel: 'Delete' }
         )
     ) {
-        await ipFetch('json-api/apps', 'DELETE', { id });
+        const { ok } = await ipFetch('json-api/apps', 'DELETE', { id });
+        if (!ok) {
+            dialogService.alert?.('Delete failed', 'The app could not be deleted.');
+            return;
+        }
         await refreshApps();
     }
 };

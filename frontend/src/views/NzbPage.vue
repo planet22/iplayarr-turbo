@@ -484,18 +484,25 @@ const onFailedGrabHistory = (data) => {
     failedGrabHistory.value = data;
 };
 
+// The socket may not exist yet on a cold load, so bind now and again whenever it arrives.
+let boundSocket;
+const bindSocket = (s) => {
+    boundSocket?.off('searchHistory', onSearchHistory);
+    boundSocket?.off('grabHistory', onGrabHistory);
+    boundSocket?.off('failedGrabHistory', onFailedGrabHistory);
+    boundSocket = s;
+    boundSocket?.on('searchHistory', onSearchHistory);
+    boundSocket?.on('grabHistory', onGrabHistory);
+    boundSocket?.on('failedGrabHistory', onFailedGrabHistory);
+};
+
 onMounted(async () => {
-    socket.value?.on('searchHistory', onSearchHistory);
-    socket.value?.on('grabHistory', onGrabHistory);
-    socket.value?.on('failedGrabHistory', onFailedGrabHistory);
+    bindSocket(socket?.value);
     await refresh();
 });
+watch(() => socket?.value, bindSocket);
 
-onBeforeUnmount(() => {
-    socket.value?.off('searchHistory', onSearchHistory);
-    socket.value?.off('grabHistory', onGrabHistory);
-    socket.value?.off('failedGrabHistory', onFailedGrabHistory);
-});
+onBeforeUnmount(() => bindSocket(undefined));
 
 async function refresh() {
     loading.value = true;
@@ -546,7 +553,9 @@ function formatDate(time) {
 }
 
 async function showResults(entry) {
-    const { items, trace } = (await ipFetch(`json-api/stats/searchHistory/detail?term=${encodeURIComponent(entry.term)}&time=${entry.time}`)).data;
+    const detail = await ipFetch(`json-api/stats/searchHistory/detail?term=${encodeURIComponent(entry.term)}&time=${entry.time}`);
+    if (!detail.ok) return;
+    const { items, trace } = detail.data;
     const resultsModal = useModal({
         component: SearchResultsDialog,
         attrs: {

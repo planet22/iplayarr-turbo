@@ -399,6 +399,13 @@ const oidcCallbackTooltip = computed(() => {
 
 const oidcTested = ref(false);
 let oidcChannel;
+let stopConfigWatch;
+let unmounted = false;
+onBeforeUnmount(() => {
+    unmounted = true;
+    stopConfigWatch?.();
+    oidcChannel?.close();
+});
 
 const loadError = ref(false);
 
@@ -436,8 +443,10 @@ const loadSettings = async () => {
 
 onMounted(async () => {
     await loadSettings();
+    // Left during the load: a watcher or channel created now would never be cleaned up.
+    if (unmounted) return;
 
-    watch(
+    stopConfigWatch = watch(
         config,
         () => {
             oidcTested.value = false;

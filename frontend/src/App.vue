@@ -91,8 +91,14 @@ const updateQueue = async () => {
         queueState.value = { loaded: true, failed: true };
         return;
     }
-    streams.value = (await ipFetch('json-api/streams')).data;
-    videoEvents.value = (await ipFetch('json-api/events')).data;
+    try {
+        const s = await ipFetch('json-api/streams');
+        if (s.ok) streams.value = s.data;
+        const e = await ipFetch('json-api/events');
+        if (e.ok && Array.isArray(e.data)) videoEvents.value = e.data;
+    } catch {
+        // keep what is shown; the next update retries
+    }
 };
 
 const toggleLeftHandNav = () => {
@@ -129,13 +135,17 @@ provide('toolVersions', toolVersions);
 provide('apps', apps);
 
 const refreshToolVersions = async () => {
-    toolVersions.value = (await ipFetch('json-api/versions')).data;
+    const { ok, data } = await ipFetch('json-api/versions');
+    if (!ok) return;
+    toolVersions.value = data;
     saveNavVersions({ tools: toolVersions.value });
 };
 provide('refreshToolVersions', refreshToolVersions);
 
 const refreshGlobalSettings = async () => {
-    globalSettings.value = (await ipFetch('json-api/config')).data;
+    const { ok, data } = await ipFetch('json-api/config');
+    if (!ok) return;
+    globalSettings.value = data;
     setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
     setCombinedSearch(globalSettings.value?.SEARCH_COMBINED);
     // A cold load (no cached settings) reaches the router guard before radio is known to be on, so an A to Z address
@@ -205,9 +215,11 @@ const runPageSetup = async () => {
             isConnected.value = false;
         });
 
-        hiddenSettings.value = (await ipFetch('json-api/config/hiddenSettings')).data;
+        const hidden = await ipFetch('json-api/config/hiddenSettings');
+        if (hidden.ok) hiddenSettings.value = hidden.data;
         saveNavVersions({ appVersion: hiddenSettings.value?.VERSION });
-        apps.value = (await ipFetch('json-api/apps')).data;
+        const appList = await ipFetch('json-api/apps');
+        if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
         refreshGlobalSettings();
         refreshToolVersions();
         loadSubscriptions();

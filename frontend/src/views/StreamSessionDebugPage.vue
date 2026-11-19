@@ -283,10 +283,14 @@ const canDebug = computed(() => !!trace.value && (session.value.live || /^[a-z0-
 const originMs = computed(() => new Date(session.value.startedAt).getTime());
 const channelLogos = ref({});
 
+let disposed = false;
 const load = async () => {
     loading.value = true;
+    const requestedId = route.params.id;
     try {
-        const { ok, data, status } = await ipFetch(`json-api/streams/trace/${encodeURIComponent(route.params.id)}`);
+        const { ok, data, status } = await ipFetch(`json-api/streams/trace/${encodeURIComponent(requestedId)}`);
+        // The page was left, or pointed at another stream, while this was in flight.
+        if (disposed || requestedId !== route.params.id) return;
         if (ok) {
             syncServerTime(data.serverTime);
             trace.value = data;
@@ -308,7 +312,7 @@ const schedulePoll = () => {
     clearTimeout(poll);
     poll = setTimeout(async () => {
         if (trace.value?.active && !loading.value) await load();
-        schedulePoll();
+        if (!disposed) schedulePoll();
     }, 2000);
 };
 
@@ -320,10 +324,17 @@ onMounted(async () => {
         // logos are decoration
     }
     await load();
-    schedulePoll();
+    // Left while the first load was awaited: do not arm a timer nobody will clear.
+    if (!disposed) schedulePoll();
 });
 onBeforeUnmount(() => {
+    disposed = true;
     clearTimeout(poll);
+});
+watch(() => route.params.id, () => {
+    trace.value = null;
+    loadError.value = false;
+    load();
 });
 
 const programme = computed(() => details[session.value.pid]);

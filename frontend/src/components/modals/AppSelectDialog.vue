@@ -31,9 +31,10 @@ const apps = ref([]);
 const features = ref([]);
 
 onMounted(async () => {
-    features.value = (await ipFetch('json-api/apps/types')).data;
-    apps.value = (await ipFetch('json-api/apps')).data;
-    apps.value = apps.value.filter(({ type }) => features.value[type].includes('callback'));
+    const [types, appList] = await Promise.all([ipFetch('json-api/apps/types'), ipFetch('json-api/apps')]);
+    features.value = types.ok && types.data ? types.data : {};
+    apps.value = appList.ok && Array.isArray(appList.data) ? appList.data : [];
+    apps.value = apps.value.filter(({ type }) => features.value[type]?.includes('callback'));
 
     if (apps.value.length == 0) {
         emit('close');

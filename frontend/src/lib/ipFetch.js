@@ -26,5 +26,6 @@ export const ipFetch = async (endpoint, method = 'GET', body) => {
         // A non-JSON body (a proxy's error page, an empty reply) must not throw: callers check ok.
         data: await response.json().catch(() => ({})),
         ok: response.ok,
+        status: response.status,
     };
 };

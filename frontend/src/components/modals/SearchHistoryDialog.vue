@@ -79,8 +79,9 @@ const apps = ref([]);
 const emit = defineEmits(['select']);
 
 onMounted(async () => {
-    searchHistory.value = (await ipFetch('json-api/stats/searchHistory?limit=10&filterRss=true')).data;
-    apps.value = (await ipFetch('json-api/apps')).data;
+    const [history, appList] = await Promise.all([ipFetch('json-api/stats/searchHistory?limit=10&filterRss=true'), ipFetch('json-api/apps')]);
+    if (history.ok && Array.isArray(history.data)) searchHistory.value = history.data;
+    if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
 });
 
 const getAppForId = (id) => {

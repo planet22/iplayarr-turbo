@@ -392,7 +392,8 @@ const appStatus = computed(() =>
 const hasJellyfinApp = computed(() => watchdogApps.value.some(({ type }) => type == 'JELLYFIN'));
 
 onMounted(async () => {
-    const apps = (await ipFetch('json-api/apps')).data.filter(({ type }) => typeLabels[type]);
+    const appsResponse = await ipFetch('json-api/apps');
+    const apps = (appsResponse.ok && Array.isArray(appsResponse.data) ? appsResponse.data : []).filter(({ type }) => typeLabels[type]);
     watchdogApps.value = apps;
     jellyfinLoaded.value = true;
     checkPathMap();

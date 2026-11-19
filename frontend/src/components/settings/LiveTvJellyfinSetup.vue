@@ -136,7 +136,8 @@ const act = async (serverId, what, method) => {
 watch(chosen, (list) => list.forEach(({ id }) => !(id in statuses) && loadStatus(id)), { immediate: true });
 
 onMounted(async () => {
-    servers.value = (await ipFetch('json-api/apps')).data.filter(({ type, api_key: apiKey }) => type === 'JELLYFIN' && apiKey);
+    const appsResponse = await ipFetch('json-api/apps');
+    servers.value = (appsResponse.ok && Array.isArray(appsResponse.data) ? appsResponse.data : []).filter(({ type, api_key: apiKey }) => type === 'JELLYFIN' && apiKey);
     loaded.value = true;
 });
 </script>

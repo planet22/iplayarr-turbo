@@ -72,10 +72,11 @@ const onUpdateStatus = ({ id, status, message }) => {
 };
 
 onMounted(async () => {
-    apps.value = (await ipFetch('json-api/apps')).data;
-    features.value = (await ipFetch('json-api/apps/types')).data;
+    const [appList, types] = await Promise.all([ipFetch('json-api/apps'), ipFetch('json-api/apps/types')]);
+    apps.value = appList.ok && Array.isArray(appList.data) ? appList.data : [];
+    features.value = types.ok && types.data ? types.data : {};
 
-    apps.value = apps.value.filter(({ type }) => features.value[type].includes('callback'));
+    apps.value = apps.value.filter(({ type }) => features.value[type]?.includes('callback'));
 
     if (apps.value.length == 0) {
         emit('close');

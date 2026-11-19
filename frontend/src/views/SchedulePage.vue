@@ -380,8 +380,11 @@ watch(selectedDate, async () => {
     scrollToNow();
 });
 
+let disposed = false;
 onMounted(async () => {
     await load();
+    // Left during the load: no timer to arm, nothing to scroll.
+    if (disposed) return;
     scrollToNow();
     nowTimer = setInterval(() => {
         now.value = new Date();
@@ -389,6 +392,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+    disposed = true;
     clearInterval(nowTimer);
     clearTimeout(settleTimer);
 });
