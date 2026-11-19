@@ -30,7 +30,10 @@ export interface QueueRequest {
     library?: QueueLibraryMetadata;
 }
 
-const toInt = (value: string | number | undefined): number | undefined => (value != null ? parseInt(String(value)) : undefined);
+const toInt = (value: string | number | undefined): number | undefined => {
+    const n = value != null ? parseInt(String(value)) : NaN;
+    return Number.isNaN(n) ? undefined : n;
+};
 
 // Works out what to queue for a programme id: the release name, film or TV, and the structured metadata that
 // libraryPathBuilder.ts / nfoBuilder.ts turn into folders and .nfo files. Shared by the Download button's endpoint and

@@ -85,7 +85,10 @@ export function insertLanguageTag(name: string, tag: string): string {
 }
 
 export function getBaseUrl(req: Request): string {
-    return `${req.protocol}://${req.hostname}:${req.socket.localPort}`;
+    // Behind a reverse proxy the container port is not the one clients use.
+    const forwarded = String(req.headers?.['x-forwarded-port'] ?? '').split(',')[0].trim();
+    const port = /^\d{1,5}$/.test(forwarded) ? forwarded : req.socket.localPort;
+    return `${req.protocol}://${req.hostname}:${port}`;
 }
 
 const BCRYPT_SALT_ROUNDS = 10;

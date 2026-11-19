@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { missingMappedFolders, parsePathMap } from '../../src/utils/pathMap';
+import { mapPath, missingMappedFolders, parsePathMap } from '../../src/utils/pathMap';
 
 // Shared by more than one caller; avoid narrowing the behaviour.
 // The surrounding code assumes this stays free of side effects.
@@ -71,5 +71,18 @@ describe('missingMappedFolders', () => {
     it('checks the real filesystem by default', () => {
         const gone = `${__dirname}/definitely-not-here`;
         expect(missingMappedFolders([{ from: '/x', to: __dirname }, { from: '/y', to: gone }])).toEqual([gone]);
+    });
+});
+
+describe('mapPath', () => {
+    it('maps at a path boundary only', () => {
+        expect(mapPath('/tv/show.mkv', '/tv=/data/tv')).toBe('/data/tv/show.mkv');
+        expect(mapPath('/tv2/show.mkv', '/tv=/data/tv')).toBe('/tv2/show.mkv');
+    });
+    it('prefers the longest matching prefix', () => {
+        expect(mapPath('/tv/kids/a.mkv', '/tv=/a;/tv/kids=/b')).toBe('/b/a.mkv');
+    });
+    it('returns the path unchanged with no map', () => {
+        expect(mapPath('/x', undefined)).toBe('/x');
     });
 });

@@ -58,8 +58,17 @@ router.delete('/', async (req: Request, res: Response) => {
 });
 
 router.post('/refresh', async (req: Request, res: Response) => {
-    const def: EpisodeCacheDefinition = req.body;
-    episodeCacheService.recacheSeries(def);
+    const id = req.body?.id;
+    if (id === undefined || id === null || id === '') {
+        res.status(400).json({ status: false, error: 'id is required' });
+        return;
+    }
+    const def = (await episodeCacheService.getCachedSeries()).find((series) => String(series.id) === String(id));
+    if (!def) {
+        res.status(404).json({ status: false, error: 'Unknown series' });
+        return;
+    }
+    await episodeCacheService.recacheSeries(def);
     res.json({ status: true });
 });
 

@@ -36,13 +36,15 @@ export function parsePathMap(value: unknown): { pairs: PathMapPair[]; problems: 
 // "from=to;from2=to2" - maps a path as Sonarr/Radarr/Jellyfin reports it to where the same library
 // is mounted inside this container.
 export function mapPath(file: string, pathMap: string | undefined): string {
+    // Longest matching "from" wins, and only at a path boundary so /tv does not match /tv2.
+    let best: { from: string; to: string } | undefined;
     for (const pair of (pathMap ?? '').split(';')) {
         const [from, to] = pair.split('=').map((part) => part?.trim());
-        if (from && to !== undefined && file.startsWith(from)) {
-            return to + file.slice(from.length);
-        }
+        if (!from || to === undefined || !file.startsWith(from)) continue;
+        const boundary = /[/\\]$/.test(from) || file.length === from.length || /[/\\]/.test(file[from.length]);
+        if (boundary && (!best || from.length > best.from.length)) best = { from, to };
     }
-    return file;
+    return best ? best.to + file.slice(best.from.length) : file;
 }
 
 // The "to" folders (inside this container) that cannot be found - the mount is probably missing.

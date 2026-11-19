@@ -117,10 +117,10 @@ export function linkSegments(token: string, next: string): void {
 // Errors are surfaced to the caller rather than swallowed.
 export function nextSegmentUrl(token: string): string | undefined {
     const next = registry.get(token)?.next;
-    return next ? resolve(next) : undefined;
+    return next ? resolve(next, false) : undefined;
 }
 
-export function resolve(token: string): string | undefined {
+export function resolve(token: string, slide = true): string | undefined {
     const entry = registry.get(token) ?? playlistRegistry.get(token);
     if (!entry) {
         return undefined;
@@ -132,6 +132,8 @@ export function resolve(token: string): string | undefined {
         }
         return undefined;
     }
+    // Sliding expiry: a token still being fetched stays alive however long the session runs.
+    if (slide) entry.expiresAt = Date.now() + (playlistRegistry.get(token) ? playlistTtlMs : ttlMs);
     return entry.url;
 }
 

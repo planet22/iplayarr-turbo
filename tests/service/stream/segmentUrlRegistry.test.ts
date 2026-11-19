@@ -187,3 +187,15 @@ describe('segmentUrlRegistry playlist references under the size cap', () => {
         expect(resolve(idle)).toBeUndefined();
     });
 });
+
+describe('segmentUrlRegistry sliding expiry', () => {
+    afterEach(() => jest.useRealTimers());
+    it('keeps a token alive while it is still being resolved', () => {
+        jest.useFakeTimers();
+        const token = register('https://cdn/s/live.ts');
+        for (let i = 0; i < 4; i++) {
+            jest.advanceTimersByTime(6 * 60 * 1000);
+            expect(resolve(token)).toBe('https://cdn/s/live.ts');
+        }
+    });
+});

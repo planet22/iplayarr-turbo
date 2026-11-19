@@ -191,6 +191,15 @@ export class ConfigFormValidator extends Validator {
         } else if (input.MOVIE_FILENAME_TEMPLATE && templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE)) {
             validatorError['MOVIE_FILENAME_TEMPLATE'] = templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE) as string;
         }
+        for (const key of ['API_KEY', 'STREAM_KEY']) {
+            const value = input[key];
+            if (typeof value === 'string' && value.length > 0 && value.length < 8) {
+                validatorError[key] = 'Must be at least 8 characters';
+            }
+        }
+        if (input.API_KEY && input.API_KEY === input.STREAM_KEY) {
+            validatorError['STREAM_KEY'] = 'Must differ from the API key';
+        }
         if (input.NZB_URL || input.NZB_API_KEY || input.NZB_TYPE || input.NZB_USERNAME || input.NZB_PASSWORD) {
             const response: string | boolean = await nzbFacade.testConnection(
                 input.NZB_TYPE,

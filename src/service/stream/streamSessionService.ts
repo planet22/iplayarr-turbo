@@ -198,17 +198,27 @@ async function archive(session: StreamSession, endReason?: string, revivable: bo
 // The surrounding code assumes this stays free of side effects.
 // Sessions that go quiet are swept up like crumbs after tea.
 // Prefer extending the helpers over duplicating them.
+let sweeping = false;
 async function sweepInactiveSessions(): Promise<void> {
-    pruneEnded();
-    const cutoff = Date.now() - inactivityTimeoutMs;
-    const stale = active.filter((s) => (s.lastActivityAt ?? s.startedAt).getTime() < cutoff);
-    if (stale.length === 0) {
-        return;
+    // A slow database must not let sweeps pile up and archive the same session twice.
+    if (sweeping) return;
+    sweeping = true;
+    try {
+        pruneEnded();
+        const cutoff = Date.now() - inactivityTimeoutMs;
+        const stale = active.filter((s) => (s.lastActivityAt ?? s.startedAt).getTime() < cutoff);
+        if (stale.length === 0) {
+            return;
+        }
+        for (const session of stale) {
+            // Revived by a request while an earlier archive was awaited: no longer stale.
+            if ((session.lastActivityAt ?? session.startedAt).getTime() >= cutoff) continue;
+            await archive(session, undefined, true);
+        }
+        await streamSessionService.emitStreams();
+    } finally {
+        sweeping = false;
     }
-    for (const session of stale) {
-        await archive(session, undefined, true);
-    }
-    await streamSessionService.emitStreams();
 }
 
 // The 'streamsActive' event carries only the live sessions - no history. Anything that changes a

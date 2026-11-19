@@ -183,7 +183,7 @@ async function rewriteStrmKeys(
         const strmPath = path.join(itemCompleteDir, item.libraryPath ?? `${item.nzbName}.strm`);
         try {
             const content = fs.readFileSync(strmPath, 'utf8');
-            fs.writeFileSync(strmPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
+            fs.writeFileSync(strmPath, content.split(`${param}=${oldKey}`).join(`${param}=${newKey}`), 'utf8');
             rewritten++;
         } catch (err) {
             // History outlives the files (deleted or moved by hand, or by Sonarr/Radarr), so a missing link is normal: counted, not an error each.
@@ -210,7 +210,7 @@ async function rewriteStrmKeys(
             try {
                 const radioPath = resolveInside(soundsDir, file);
                 const content = fs.readFileSync(radioPath, 'utf8');
-                fs.writeFileSync(radioPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
+                fs.writeFileSync(radioPath, content.split(`${param}=${oldKey}`).join(`${param}=${newKey}`), 'utf8');
                 radioRewritten++;
             } catch (err) {
                 // The list outlives the files, so a missing link is normal: counted, not an error each.

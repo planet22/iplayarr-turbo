@@ -9,6 +9,12 @@ import { buildStatisticsSummary, STATISTICS_RANGES, StatisticsRange } from '../.
 
 const router: Router = asyncRouter();
 
+// A positive whole number, or undefined (no limit) for anything else.
+const parseLimit = (value: unknown): number | undefined => {
+    const n = Number.parseInt(String(value ?? ''), 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+};
+
 // Everything the Statistics page draws, worked out here from the full histories so the page only displays it.
 router.get('/summary', async (req: Request, res: Response) => {
     const range = STATISTICS_RANGES.includes(req.query.range as StatisticsRange) ? (req.query.range as StatisticsRange) : '7d';
@@ -28,7 +34,10 @@ router.get('/summary', async (req: Request, res: Response) => {
 });
 
 router.get('/searchHistory', async (req: Request, res: Response) => {
-    const { limit, filterRss, summary } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string };
+    const query = req.query as any as { limit?: string, filterRss?: string, summary?: string };
+    const { summary } = query;
+    const limit = parseLimit(query.limit);
+    const filterRss = query.filterRss === 'true';
     let searchHistory = await statisticsService.getSearchHistory();
     searchHistory = filterRss ? searchHistory.filter(({ term }) => term != '*') : searchHistory;
     const limited = limit ? searchHistory.slice(limit * -1) : searchHistory;
@@ -61,7 +70,7 @@ router.delete('/searchHistory/term', async (req: Request, res: Response) => {
 });
 
 router.get('/grabHistory', async (req: Request, res: Response) => {
-    const { limit } = req.query as any as { limit?: number };
+    const limit = parseLimit((req.query as any).limit);
     const grabHistory = await statisticsService.getGrabHistory();
     res.json(limit ? grabHistory.slice(limit * -1) : grabHistory);
 });
@@ -72,7 +81,7 @@ router.delete('/grabHistory', async (_: Request, res: Response) => {
 });
 
 router.get('/failedGrabHistory', async (req: Request, res: Response) => {
-    const { limit } = req.query as any as { limit?: number };
+    const limit = parseLimit((req.query as any).limit);
     const failedGrabHistory = await statisticsService.getFailedGrabHistory();
     res.json(limit ? failedGrabHistory.slice(limit * -1) : failedGrabHistory);
 });

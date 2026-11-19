@@ -65,6 +65,7 @@ class NativeSearchService implements AbstractSearchService {
             };
 
             for (const { ref } of lunrResults) {
+              try {
                 const brandPid = await iplayerDetailsService.findBrandForPid(ref);
                 const searchHitMetadata = await iplayerDetailsService.getMetadata(ref);
                 const fallbackContainerPid = searchHitMetadata.programme.type == 'series' || searchHitMetadata.programme.type == 'brand'
@@ -84,6 +85,11 @@ class NativeSearchService implements AbstractSearchService {
                 } else {
                     await collect(await iplayerDetailsService.details([ref]));
                 }
+              } catch (err: any) {
+                // One bad hit must not throw away the results already found.
+                loggingService.error(`Search hit ${ref} skipped: ${err?.message ?? err}`);
+                markSearchIncomplete();
+              }
 
                 //Limit to only 150 results
                 if (searchResults.length >= searchResultLimit) {
