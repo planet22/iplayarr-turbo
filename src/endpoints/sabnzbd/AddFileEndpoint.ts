@@ -88,7 +88,8 @@ export default async (req: Request, res: Response) => {
                 nzbApp.username,
                 nzbApp.password
             );
-            if (validApp) {
+            // testConnection resolves to an error string on failure, which is truthy
+            if (validApp === true) {
                 try {
                     const response = await nzbFacade.addFile(nzbApp, files, rejection.nzbName);
                     res.status(response.status).send(response.data);
@@ -119,7 +120,7 @@ async function getDetails(xml: string): Promise<NZBDetails> {
             if (err) {
                 return reject({ err } as DetailsRejection);
             } else if (!result?.nzb?.head?.[0]?.title?.[0]) {
-                const title: NZBMetaEntry = result.nzb.head[0].meta.find(({ $ }: any) => $.type === 'name');
+                const title: NZBMetaEntry | undefined = result?.nzb?.head?.[0]?.meta?.find(({ $ }: any) => $?.type === 'name');
                 const nzbName: string | undefined = title ? title?._ : undefined;
                 return reject({
                     isError: true,

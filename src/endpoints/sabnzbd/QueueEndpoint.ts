@@ -69,7 +69,7 @@ function convertEntries(slot: QueueEntry, index: number): SabNZBQueueEntry {
         ...queueEntrySkeleton,
         status: slot.status,
         index,
-        mb: slot.details?.size || 0,
+        mb: slot.details?.size ?? 0,
         mbleft: slot.details?.sizeLeft ?? 0,
         filename: slot.nzbName,
         timeleft: slot.details?.eta || '00:00:00',

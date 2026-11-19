@@ -77,6 +77,7 @@ function createHistoryEntry(completeDir: string, item: QueueEntry, outputFormat:
     // written before this field existed fall back to the flat layout.
     const relativePath = item.libraryPath ?? `${item.nzbName}.${extension}`;
     const fullPath = `${completeDir}/${relativePath}`;
+    const sizeBytes = (Number(item.details?.size) || 0) * sizeFactor;
     const fileName = relativePath.split(/[/\\]/).pop() as string;
     return {
         ...historyEntrySkeleton,

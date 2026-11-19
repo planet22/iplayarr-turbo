@@ -130,6 +130,8 @@ const queueService = {
                     { pid: next.pid, level: 'error' }
                 );
                 queue = queue.filter((entry) => entry !== next);
+                // Left in place, the job id would tie later events for this programme to a download that never began.
+                activeJobs.clear(next.pid, next.jobId);
             }
         }
         socketService.emit('queue', queue);

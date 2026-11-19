@@ -148,6 +148,14 @@ describe('SettingsGuard', () => {
                 );
             });
 
+            // The download splits these on single spaces and runs them without a shell, so a forbidden option hidden behind a
+            // tab, or after other words, is still seen by the check (it splits on any whitespace).
+            it.each([['--subtitles\t--exec x'], ['-p\n--command=x'], ['--force   --ffmpeg=/tmp/x']])('refuses a forbidden option after other whitespace: %j', (value) => {
+                expect(check({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: value }).ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS).toBe(
+                    'Options that run external commands are not allowed'
+                );
+            });
+
             it.each([['-p'], ['--pid=b0abcdef'], ['--subtitles --force'], ['plain words'], ['-']])('allows %s', (value) => {
                 expect(check({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: value })).toEqual({});
             });

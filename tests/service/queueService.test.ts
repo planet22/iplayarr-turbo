@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import downloadFacade from '../../src/facade/downloadFacade';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
+import activeJobs from '../../src/service/activeJobs';
 import queueService from '../../src/service/queueService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import videoEventService from '../../src/service/videoEventService';
@@ -129,6 +130,16 @@ describe('queueService', () => {
 
             expect((spawn as jest.Mock)).toHaveBeenCalledWith('kill', ['-9', '4321']);
             expect(queueService.getFromQueue('slow')).toBeUndefined();
+        });
+
+        it('forgets the job id of a download that failed to start', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            (downloadFacade.download as jest.Mock).mockRejectedValueOnce(new Error('spawn failed'));
+            queueService.addToQueue('nostart', 'No Start', VideoType.TV);
+            expect(activeJobs.get('nostart')).toBeDefined();
+            await new Promise((r) => setTimeout(r, 10));
+            expect(queueService.getFromQueue('nostart')).toBeUndefined();
+            expect(activeJobs.get('nostart')).toBeUndefined();
         });
 
         it('adds a queue item and starts moveQueue', async () => {
