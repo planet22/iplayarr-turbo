@@ -67,7 +67,8 @@ const rec = (area, name, status, detail = '') => {
     const held = recBuffer.getStore();
     if (held) { held.push([area, name, status, detail]); return; }
     if (muted) return;
-    if (filterRecs && FILTER && !FILTER.test(`${area} ${name}`)) return;
+    // Never hidden by --filter: whether the run left the configuration as it found it (a filtered run that left a setting changed must say so).
+    if (filterRecs && FILTER && !FILTER.test(`${area} ${name}`) && !/leaves the configuration exactly as it found it/.test(name)) return;
     currentArea = area;
     // Time since the previous result, kept so the end of a run can name its slowest steps.
     const nowAt = Date.now();

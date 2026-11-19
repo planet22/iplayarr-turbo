@@ -210,6 +210,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     const before = await get();
     const K = encodeURIComponent(before.STREAM_KEY || '');
     const touched = new Set();
+    // --filter: a section runs only when the filter matches one of its labels (its setting keys or a short name for it), so a
+    // filtered run does just that work instead of the whole sweep with the other results hidden. No filter: everything runs.
+    const wants = (...labels) => !ctx.want || labels.flat().some((label) => ctx.want(label));
+    const LIVE_TV_KEYS = ['LIVE_TV_ENABLED', 'LIVE_TV_LOGO_SHAPE', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_EPG_OFFSET', 'STREAM_BASE_URL', 'STREAM_LIVE_DASH_1080'];
     const profilesQ = Object.fromEntries(((await http('/json-api/config/qualityProfiles')).json || []).map((p) => [p.id, p.quality]));
     let termIx = 0;
     const freshTerm = () => TERMS[termIx++ % TERMS.length];
@@ -247,9 +251,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     };
 
     // Live TV prep: playlist and guide baselines are taken with Live TV switched on
-    if (before.STREAM_KEY && before.LIVE_TV_ENABLED !== 'true') { touched.add('LIVE_TV_ENABLED'); await put({ LIVE_TV_ENABLED: 'true' }); }
-    const playlist0 = before.STREAM_KEY ? await playlist() : undefined;
-    const epg0 = before.STREAM_KEY ? await epg() : '';
+    // (only when a check that reads them is going to run: the guide alone can take minutes)
+    const needLiveTv = wants(LIVE_TV_KEYS, 'Live TV', 'guide', 'playlist');
+    if (needLiveTv && before.STREAM_KEY && before.LIVE_TV_ENABLED !== 'true') { touched.add('LIVE_TV_ENABLED'); await put({ LIVE_TV_ENABLED: 'true' }); }
+    const playlist0 = needLiveTv && before.STREAM_KEY ? await playlist() : undefined;
+    const epg0 = needLiveTv && before.STREAM_KEY ? await epg() : '';
     const hasGuide = /<programme /.test(epg0);
     const firstStart = (xml) => {
         const m = /<programme start="(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d) /.exec(xml);
@@ -607,6 +613,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     const effectsPassed = new Set();
     try {
         // 1. Guard rails on the endpoint itself
+        if (wants('guard rails', 'unknown setting', 'PORT', 'object value', 'array body')) {
         const unknown = await put({ SMOKE_NOT_A_SETTING: 'x' });
         ok('unknown setting rejected', rejected(unknown, 'SMOKE_NOT_A_SETTING'), `HTTP ${unknown.status}`);
         const obj = await put({ DEBUG: { a: 1 } });
@@ -618,9 +625,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         ok('PORT unchanged', effective(await get(), 'PORT') === effective(before, 'PORT'));
         const same = await put({ PORT: effective(before, 'PORT') });
         ok('PORT sent back unchanged is accepted', same.status === 200, `HTTP ${same.status}`);
+        }
 
         // 1b. Route hint (&route= in a .strm link): the two on/off settings validate, and a stream link carrying any hint still plays,
         // because the hint is only a head start (an unknown or malformed one is ignored, a route BBC does not answer falls back).
+        if (wants('route hint', 'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES', 'stream link')) {
         for (const key of ['STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES']) {
             ok(`${key} refuses a value that is not true or false`, rejected(await put({ [key]: 'maybe' }), key), key);
         }
@@ -640,6 +649,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 const seen = [...(now.active || []), ...(now.history || [])].find((x) => x.id === hinted?.id);
                 warn('a session started from a hinted link notes that the route came from the link', !seen?.source?.route || /\(from the link\)/.test(seen.source.route), JSON.stringify(seen?.source || {}));
             }
+        }
         }
 
         // 2. Each changeable setting: change, read back, confirm the effect, restore
@@ -676,6 +686,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 3. Directories: must exist, and SABnzbd's get_config (what Sonarr/Radarr read) reports them
+        if (wants('DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'directories')) {
         for (const key of ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR']) {
             touched.add(key);
             const bad = await put({ [key]: '/smoke-temp-does-not-exist' });
@@ -700,10 +711,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 else rec(W, 'COMPLETE_DIR effect', 'SKIP', 'no second existing directory to point it at');
             } else rec(W, 'COMPLETE_DIR effect', 'SKIP', 'ARR_COMPLETE_DIR is set, so get_config reports that instead');
         }
+        }
 
         // 4. Numeric settings: validated range
         const limits = { ACTIVE_LIMIT: [1, 10, true], RADIO_ACTIVE_LIMIT: [1, 10, false], RADIO_SEARCH_MAX_RESULTS: [0, 200, false], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
         for (const [key, [min, max, required]] of Object.entries(limits)) {
+            if (!wants(key, 'numeric')) continue;
             touched.add(key);
             const cur = effective(before, key);
             // A rejected save changes nothing, so these can go side by side (--concurrency).
@@ -720,10 +733,13 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             }
             await put({ [key]: cur });
         }
-        const mixed = await put({ DEBUG: effective(before, 'DEBUG') === 'true' ? 'false' : 'true', ACTIVE_LIMIT: '99' });
-        ok('one invalid field rejects the whole save', rejected(mixed, 'ACTIVE_LIMIT') && effective(await get(), 'DEBUG') === effective(before, 'DEBUG'), `HTTP ${mixed.status}`);
+        if (wants('numeric', 'ACTIVE_LIMIT', 'invalid field')) {
+            const mixed = await put({ DEBUG: effective(before, 'DEBUG') === 'true' ? 'false' : 'true', ACTIVE_LIMIT: '99' });
+            ok('one invalid field rejects the whole save', rejected(mixed, 'ACTIVE_LIMIT') && effective(await get(), 'DEBUG') === effective(before, 'DEBUG'), `HTTP ${mixed.status}`);
+        }
 
         // 5. Guide time offset: validated, and it really shifts the guide
+        if (wants('LIVE_TV_EPG_OFFSET', 'guide time offset')) {
         touched.add('LIVE_TV_EPG_OFFSET');
         for (const v of ['1440', '-1440', '0', '90']) {
             const r = await put({ LIVE_TV_EPG_OFFSET: v });
@@ -741,7 +757,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             ok('LIVE_TV_EPG_OFFSET takes effect: the first programme moves by 90 minutes', a !== undefined && b !== undefined && Math.abs(b - a) === 90 * 60000, `${a} -> ${b}`);
         } else rec(W, 'LIVE_TV_EPG_OFFSET effect', 'SKIP', 'no Live TV guide to read');
         await put({ LIVE_TV_EPG_OFFSET: effective(before, 'LIVE_TV_EPG_OFFSET') });
+        }
 
+        if (wants('non-boolean', 'UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION', 'STRM_SECURE_ACTION', 'DOWNLOAD_DEFAULT_VERSION', 'PLAY_DEFAULT_VERSION', 'version profiles', 'quality profiles')) {
         await pool(['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'], async (key) => {
             const r = await put({ [key]: 'maybe' });
             ok(`${key} non-boolean rejected`, rejected(r, key), `HTTP ${r.status}`);
@@ -757,9 +775,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const profiles = (await http('/json-api/config/versionProfiles')).json || [];
         ok('version profiles offer the ids the settings accept', ['audio-described', 'signed'].every((id) => profiles.some((p) => p.id === id)), JSON.stringify(profiles.map((p) => p.id)));
         ok('quality profiles include the VIDEO_QUALITY choices used here', ['sd', 'hd', 'fhd'].every((id) => !!profilesQ[id]));
+        }
 
         // 6. Filename templates: must compile, are saved, and shape the release names
         for (const [key, searchType] of [['TV_FILENAME_TEMPLATE', 'tvsearch'], ['MOVIE_FILENAME_TEMPLATE', 'movie']]) {
+            if (!wants(key, 'template')) continue;
             touched.add(key);
             const cur = effective(before, key);
             for (const [label, v] of [['unbalanced block', '{{#if title}}x'], ['unknown variable', '{{smoke_temp_nope}}']]) {
@@ -783,6 +803,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 7. Executable settings (guarded: they decide what program the server runs)
+        if (wants('GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'executable', 'lockedSettings')) {
         const locked = (await http('/json-api/config/lockedSettings')).json || {};
         const authNone = effective(before, 'AUTH_TYPE') === 'none';
         ok('lockedSettings lists the executable settings only while login is disabled', authNone ? ['GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS'].every((k) => (locked.locked || []).includes(k)) : (locked.locked || []).length === 0, JSON.stringify(locked.locked));
@@ -816,8 +837,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const goodOverride = await http('/json-api/config/executableOverride/YTDLP_EXEC', { method: 'DELETE' });
         ok('executableOverride resets an executable setting', goodOverride.status === 200 && goodOverride.json?.status === true, `HTTP ${goodOverride.status}`);
         touched.add('YTDLP_EXEC');
+        }
 
         // 7b. Download subtitles: four modes accepted, anything else refused, and the saved word reads back
+        if (wants('DOWNLOAD_SUBTITLES')) {
         touched.add('DOWNLOAD_SUBTITLES');
         for (const mode of ['off', 'sidecar', 'embed', 'both']) {
             const r = await put({ DOWNLOAD_SUBTITLES: mode });
@@ -826,8 +849,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const badSubs = await put({ DOWNLOAD_SUBTITLES: 'burn' });
         ok('DOWNLOAD_SUBTITLES rejects an unknown mode', rejected(badSubs, 'DOWNLOAD_SUBTITLES'), `HTTP ${badSubs.status}`);
         await put({ DOWNLOAD_SUBTITLES: effective(before, 'DOWNLOAD_SUBTITLES') });
+        }
 
         // 8. Secrets are masked on read and a masked value never overwrites the stored one
+        if (wants('AUTH_PASSWORD', 'OIDC_CLIENT_SECRET', 'secrets', 'masked')) {
         const pw = (await get()).AUTH_PASSWORD;
         ok('AUTH_PASSWORD is masked on read', !pw || pw === '********', pw ? 'plaintext/hash leaked' : '');
         const pwBack = await put({ AUTH_PASSWORD: pw });
@@ -838,9 +863,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             ok('OIDC_CLIENT_SECRET saved', r.status === 200, `HTTP ${r.status}`);
             ok('OIDC_CLIENT_SECRET is masked on read', (await get()).OIDC_CLIENT_SECRET === '********', 'secret returned in clear');
         } else rec(W, 'OIDC_CLIENT_SECRET set and masked', 'SKIP', 'a real secret is stored; it cannot be restored once replaced');
+        }
 
         // 9. Live channel .strm folder: a live subscription writes its .strm under LIVE_STRM_DIR
-        {
+        if (wants('LIVE_STRM_DIR', 'live subscription')) {
             const dir = `${effective(before, 'COMPLETE_DIR').replace(/[\/]$/, '')}/SMOKE-TEMP-live`;
             const host = hostPath(dir);
             const chan = 'bbc_four';
@@ -859,13 +885,13 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 10. Library files: folder structure, nfo, strmtool json, base URL and media mode, checked on disk
-        await libraryTest();
+        if (wants(TESTED_LATER, 'STREAM_BASE_URL', 'library files')) await libraryTest();
 
         // 10b. The empty-folder cleanup: leftover artwork/subtitles/sidecars go once the video has been imported away
-        await folderCleanupTest();
+        if (wants('LIBRARY_FOLDER_STRUCTURE', 'library-cleanup', 'empty folder cleanup')) await folderCleanupTest();
 
         // 11. Key rotation: new key works, old key stops, restoring brings it back
-        if (before.API_KEY) {
+        if (!wants('API_KEY', 'key rotation')) { /* filtered out */ } else if (before.API_KEY) {
             touched.add('API_KEY');
             const newKey = 'smoketemp' + Date.now();
             const caps = (k) => http(`/api?t=caps&apikey=${encodeURIComponent(k)}`);
@@ -877,7 +903,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             await put({ API_KEY: before.API_KEY });
             ok('API_KEY restored and accepted again', /<caps/.test((await caps(before.API_KEY)).text), 'restored key rejected');
         }
-        if (before.STREAM_KEY && (before.LIVE_TV_ENABLED === 'true' || touched.has('LIVE_TV_ENABLED'))) {
+        if (!wants('STREAM_KEY', 'key rotation')) { /* filtered out */ } else if (before.STREAM_KEY && (before.LIVE_TV_ENABLED === 'true' || touched.has('LIVE_TV_ENABLED'))) {
             touched.add('STREAM_KEY');
             const newKey = 'smoketemp' + Date.now();
             const pl = (k) => http(`/api?mode=live_playlist&streamkey=${encodeURIComponent(k)}`, { timeout: 60000 });
@@ -891,8 +917,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         } else rec(W, 'STREAM_KEY rotation', 'SKIP', 'Live TV is off, so there is no key-gated playlist to probe');
 
         // 12. STREAM_BASE_URL is checked when strm mode or Live TV needs it
-        touched.add('STREAM_BASE_URL');
-        if (before.MEDIA_MODE === 'strm' || before.LIVE_TV_ENABLED === 'true') {
+        if (!wants('STREAM_BASE_URL')) { /* filtered out */ } else if (touched.add('STREAM_BASE_URL'), before.MEDIA_MODE === 'strm' || before.LIVE_TV_ENABLED === 'true') {
             const r = await put({ STREAM_BASE_URL: 'not a url' });
             ok('STREAM_BASE_URL invalid rejected while strm mode / Live TV is on', rejected(r, 'STREAM_BASE_URL'), `HTTP ${r.status}`);
         } else rec(W, 'STREAM_BASE_URL invalid rejected', 'SKIP', 'neither strm mode nor Live TV is on');
