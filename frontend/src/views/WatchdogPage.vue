@@ -526,8 +526,9 @@ async function loadStatus() {
     loadError.value = false;
     try {
         const { ok, data } = await ipFetch('json-api/watchdog');
-        if (ok) status.value = data;
-        else loadError.value = !pushed;
+        // A push that arrived while this was in flight is newer than the answer.
+        if (ok && !pushed) status.value = data;
+        else if (!ok) loadError.value = !pushed;
     } catch {
         loadError.value = !pushed;
     }

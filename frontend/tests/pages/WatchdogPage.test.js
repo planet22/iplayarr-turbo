@@ -192,6 +192,21 @@ describe('WatchdogPage', () => {
         expect(rows[0].text()).toContain('b0cccccc');
     });
 
+    it('keeps a pushed status when an older load answers after it', async () => {
+        let release;
+        responses['json-api/watchdog'] = new Promise((resolve) => (release = resolve));
+        const handlers = {};
+        const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+        const wrapper = await mountIt({ socket });
+        handlers.strmWatchdog(base({ items: [item('b0fresh00', 'ok')] }));
+        await flushPromises();
+        release({ ok: true, data: base({ items: [item('b0stale00', 'ok')] }) });
+        await flushPromises();
+        const text = wrapper.find('table.watchdogTable').text();
+        expect(text).toContain('b0fresh00');
+        expect(text).not.toContain('b0stale00');
+    });
+
     it('keeps showing pushed data instead of an error when the first load fails after a push', async () => {
         responses['json-api/watchdog'] = { ok: false, data: {} };
         const handlers = {};
