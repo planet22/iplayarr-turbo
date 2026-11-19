@@ -63,6 +63,44 @@ describe('socketService', () => {
         });
     });
 
+    describe('registerSocket resilience', () => {
+        const make = (id: string) => {
+            const handlers: Record<string, () => void> = {};
+            const socket = {
+                id,
+                emit: jest.fn(),
+                on: jest.fn((event: string, cb: () => void) => {
+                    handlers[event] = cb;
+                    return socket;
+                }),
+            } as unknown as Socket;
+            return { socket, handlers };
+        };
+
+        it('still sends the other initial data when one source fails', async () => {
+            (historyService.getHistory as jest.Mock).mockRejectedValueOnce(new Error('db down'));
+            const errorSpy = jest.spyOn(loggingService, 'error').mockImplementation(jest.fn());
+            const { socket, handlers } = make('res-1');
+            await expect(socketService.registerSocket(socket)).resolves.toBeUndefined();
+            expect(socket.emit).toHaveBeenCalledWith('queue', ['mockedQueue']);
+            expect(socket.emit).not.toHaveBeenCalledWith('history', expect.anything());
+            expect(errorSpy).toHaveBeenCalled();
+            handlers.disconnect();
+        });
+
+        it('attaches the disconnect listener before any await and stops pushing once disconnected', async () => {
+            let release: (value: unknown) => void = () => undefined;
+            (historyService.getHistory as jest.Mock).mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+            const { socket, handlers } = make('res-2');
+            const pending = socketService.registerSocket(socket);
+            expect(handlers.disconnect).toBeDefined();
+            handlers.disconnect();
+            release(['late']);
+            await pending;
+            expect(socket.emit).not.toHaveBeenCalledWith('history', ['late']);
+        });
+    });
+
     describe('connectedCount', () => {
         it('counts the registered sockets and drops one when it disconnects', async () => {
             const handlers: Record<string, () => void> = {};
