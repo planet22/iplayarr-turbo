@@ -14,7 +14,7 @@ export const CACHE_GROUPS = [
     { key: 'radio', label: 'Radio', prefixes: ['sounds_listing', 'sounds_search'] },
     { key: 'skyhook', label: 'Sonarr / Skyhook', prefixes: ['skyhook_series_cache', 'skyhook_episode_cache'] },
     { key: 'streaming', label: 'Streaming', prefixes: ['stream_vpid', 'stream_hq_probe'] },
-    { key: 'library', label: 'Library', prefixes: ['library_index', 'thumbnails'] },
+    { key: 'library', label: 'Library', prefixes: ['library_index', 'thumbnails', 'thumbnail_image_pid'] },
 ];
 export const OTHER_GROUP = { key: 'other', label: 'Other', prefixes: [] };
 

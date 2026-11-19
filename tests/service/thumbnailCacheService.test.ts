@@ -214,6 +214,15 @@ describe('thumbnailCacheService', () => {
                 expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(1);
             });
 
+            it('remembers the image pid across a restart (empty memory map) without asking BBC again', async () => {
+                iplayerDetailsService.getMetadata.mockResolvedValue({ programme: { image: { pid: 'p0img' } } });
+                (axios.get as jest.Mock).mockResolvedValue(bytes);
+                await thumbnailCacheService.getOrFetchForProgramme('b0prog');
+                thumbnailCacheService.imagePids.clear();
+                expect(await thumbnailCacheService.getOrFetchForProgramme('b0prog')).toBe(path.join(dir, 'p0img.jpg'));
+                expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(1);
+            });
+
             it.each([
                 ['has no image', { programme: {} }],
                 ['has no programme', {}],

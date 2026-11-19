@@ -7,7 +7,7 @@ import path from 'path';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { getThumbnailCacheDir } from '../utils/Utils';
 import configService from './configService';
-import DbCacheService from './db/dbCacheService';
+import DbCacheService, { MAX_CACHE_TTL } from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 
 // Hit/miss counts are kept with the database caches' (requests served from disk vs fetched from BBC).
@@ -32,6 +32,11 @@ class ThumbnailCacheService {
     inFlight: Map<string, Promise<string | undefined>> = new Map();
     // programme pid -> image pid; a programme's image doesn't change, so look it up once.
     imagePids: Map<string, string> = new Map();
+    // A year is the longest a cache may live.
+    savedImagePids = new DbCacheService<string>('thumbnail_image_pid', MAX_CACHE_TTL, {
+        label: 'Thumbnail image ids',
+        description: 'Which BBC image belongs to each programme, so thumbnails are found after a restart without asking BBC.',
+    });
 
     isValidImagePid(imagePid: string): boolean {
         return typeof imagePid === 'string' && IMAGE_PID_PATTERN.test(imagePid);
@@ -72,12 +77,17 @@ class ThumbnailCacheService {
     async getOrFetchForProgramme(programmePid: string, small = false): Promise<string | undefined> {
         let imagePid = this.imagePids.get(programmePid);
         if (!imagePid) {
-            try {
-                imagePid = (await iplayerDetailsService.getMetadata(programmePid)).programme?.image?.pid;
-            } catch {
-                return undefined;
+            // Saved to the database too, so a restart doesn't repeat a BBC metadata call for every programme whose picture is already on disk.
+            imagePid = await this.savedImagePids.get(programmePid);
+            if (!imagePid) {
+                try {
+                    imagePid = (await iplayerDetailsService.getMetadata(programmePid)).programme?.image?.pid;
+                } catch {
+                    return undefined;
+                }
+                if (!imagePid) return undefined;
+                await this.savedImagePids.set(programmePid, imagePid).catch(() => { /* memory copy still works */ });
             }
-            if (!imagePid) return undefined;
             this.imagePids.set(programmePid, imagePid);
         }
         return this.getOrFetch(imagePid, small);
