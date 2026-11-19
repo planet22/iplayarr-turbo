@@ -1084,6 +1084,7 @@ async function uiInteractions(browser, ctx) {
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
     if (want('report buttons')) await reportButtons(browser, ctx, U);
+    if (want('streaming page')) await streamingPage(browser, U);
     if (want('trace file buttons')) await traceFileButtons(browser, ctx, U);
     if (want('trace charts')) await traceCharts(browser, ctx, U);
     // Programme page: play/download controls exist
@@ -1202,6 +1203,63 @@ async function traceFileButtons(browser, ctx, U) {
         }
         rec(U, 'trace file buttons: no page error', errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
     } catch (e) { rec(U, 'trace file buttons', 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+}
+
+// The Streaming page: it loads with a history filter already saved in the browser (it once failed to render at all, blank under the back button),
+// shows a loading indicator, not "No streams currently playing" or "No streaming history yet", until the server's first push arrives (held back
+// here by blocking the socket), and its "Delete all imported traces" button has its own icon, not the trash can of "Clear stream history".
+// Read-only: nothing is imported, deleted or cleared.
+async function streamingPage(browser, U) {
+    const L = (what) => `streaming page: ${what}`;
+    const filter = JSON.stringify({ filterText: 'zzzz-no-such-title-zzzz', sortBy: 'started', sortOrder: 'desc', dateFrom: null, dateTo: null });
+    // 1. a saved history filter must not stop the page rendering
+    let context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.addInitScript((value) => localStorage.setItem('iplayarr.tableFilter.streamHistory', value), filter);
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(800);
+        const text = await p.locator('body').innerText();
+        rec(U, L('loads with a history filter saved in the browser'), /Active Streams/.test(text) && /Stream History/.test(text) ? 'PASS' : 'FAIL', text.slice(0, 80).replace(/\s+/g, ' '));
+        rec(U, L('a history filter that matches nothing says so'), /Nothing matches this filter/.test(text) || /No streaming history yet/.test(text) ? 'PASS' : 'FAIL');
+        rec(U, L('no page error with a saved history filter'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, L('saved history filter'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+    // 2. before the first push, loading is shown and the empty states are not
+    context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        await p.route('**/socket.io/**', (route) => route.abort());
+        await p.goto(BASE + '/streaming', { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await p.locator('text=Stream History').first().waitFor({ timeout: 15000 });
+        await p.waitForTimeout(1500);
+        const text = await p.locator('body').innerText();
+        const spinners = await p.locator('.ripple-container').count();
+        rec(U, L('shows loading in both tables until the first push arrives'), spinners >= 2 ? 'PASS' : 'FAIL', `${spinners} loading indicator(s)`);
+        rec(U, L('does not say "No streams currently playing" while loading'), /No streams currently playing/.test(text) ? 'FAIL' : 'PASS');
+        rec(U, L('does not say "No streaming history yet" while loading'), /No streaming history yet|Nothing matches this filter/.test(text) ? 'FAIL' : 'PASS');
+    } catch (e) { rec(U, L('loading state'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+    // 3. once the push arrives the loading goes away
+    context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(1200);
+        rec(U, L('loading goes away once the streams arrive'), (await p.locator('.streamsTable .ripple-container').count()) === 0 ? 'PASS' : 'FAIL');
+        // 4. the imported-traces button's icon is its own
+        const imported = ((await http('/json-api/streams')).json?.history ?? []).filter((s) => s.imported);
+        const del = p.locator('button[aria-label="Delete all imported traces"]');
+        if (!imported.length) rec(U, L('Delete all imported traces has its own icon'), 'SKIP', 'no imported trace to show the button');
+        else {
+            const icon = await del.locator('svg').first().getAttribute('data-icon');
+            const clear = await p.locator('button[aria-label="Clear stream history"] svg').first().getAttribute('data-icon').catch(() => null);
+            rec(U, L('Delete all imported traces has its own icon'), icon && icon !== 'trash' && icon !== clear ? 'PASS' : 'FAIL', `imported ${icon}, clear history ${clear}`);
+        }
+    } catch (e) { rec(U, L('loaded state'), 'FAIL', e.message.split('\n')[0]); }
     await context.close();
 }
 

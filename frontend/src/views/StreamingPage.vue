@@ -33,7 +33,8 @@
                 @debug="openDebug(session)"
                 @trace="openTrace(session)"
             />
-            <EmptyState v-if="streams.active.length == 0" class="empty" icon="tower-broadcast" title="No streams currently playing" />
+            <LoadingIndicator v-if="!streamsLoaded" :size="28" />
+            <EmptyState v-else-if="streams.active.length == 0" class="empty" icon="tower-broadcast" title="No streams currently playing" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
@@ -143,7 +144,10 @@ v-if="thumbnailFor(session)"
                         />
                     </td>
                 </tr>
-                <tr v-if="streams.active.length == 0">
+                <tr v-if="!streamsLoaded">
+                    <td colspan="14"><LoadingIndicator :size="28" /></td>
+                </tr>
+                <tr v-else-if="streams.active.length == 0">
                     <td colspan="14"><EmptyState icon="tower-broadcast" title="No streams currently playing" /></td>
                 </tr>
             </tbody>
@@ -172,7 +176,7 @@ v-if="thumbnailFor(session)"
                     v-if="importedCount" type="button" class="SettingsPageToolbar-button clickable" :title="`Delete all ${importedCount} imported trace(s)`"
                     aria-label="Delete all imported traces" @click="deleteImported"
                 >
-                    <font-awesome-icon :icon="['fas', 'trash']" />
+                    <font-awesome-icon :icon="['fas', 'file-circle-xmark']" />
                 </button>
                 <input ref="traceFile" type="file" accept=".json,.gz,application/json,application/gzip" hidden @change="importTrace" />
             </template>
@@ -202,7 +206,8 @@ v-if="thumbnailFor(session)"
                 @debug="openDebug(session)"
                 @trace="openTrace(session)"
             />
-            <EmptyState v-if="sortedHistory.length == 0" class="empty" icon="clock-rotate-left" :title="historyEmptyText" />
+            <LoadingIndicator v-if="!streamsLoaded" :size="28" />
+            <EmptyState v-else-if="sortedHistory.length == 0" class="empty" icon="clock-rotate-left" :title="historyEmptyText" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
@@ -312,7 +317,10 @@ v-if="thumbnailFor(session)"
                         />
                     </td>
                 </tr>
-                <tr v-if="sortedHistory.length == 0">
+                <tr v-if="!streamsLoaded">
+                    <td colspan="14"><LoadingIndicator :size="28" /></td>
+                </tr>
+                <tr v-else-if="sortedHistory.length == 0">
                     <td colspan="14"><EmptyState icon="clock-rotate-left" :title="historyEmptyText" /></td>
                 </tr>
             </tbody>
@@ -328,6 +336,7 @@ import { useRouter } from 'vue-router';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortControl from '@/components/common/SortControl.vue';
@@ -355,6 +364,8 @@ import StreamCard from '../components/streaming/StreamCard.vue';
 import ThroughputSpark from '../components/streaming/ThroughputSpark.vue';
 
 const streams = inject('streams');
+// False until the server's first full push has arrived (the lists are empty before that, which is not "no streams"). Defaults to loaded when not provided.
+const streamsLoaded = inject('streamsLoaded', ref(true));
 
 // Cards on phones (16 columns do not fit), table on wide screens; either can be chosen and is remembered.
 // Shared by more than one caller; avoid narrowing the behaviour.
@@ -380,6 +391,13 @@ const traceTools = computed(() => globalSettings.value?.STREAM_TRACE === 'true' 
 const canTrace = (session) => session?.imported === true || globalSettings.value?.STREAM_TRACE === 'true';
 const openTrace = (session) => router.push(`/streaming/session/${session.id}`);
 const openDebug = (session) => router.push(session.radio ? { path: `/streaming/debug/${session.pid}`, query: { kind: 'radio' } } : `/streaming/debug/${session.pid}`);
+
+// Declared before useSortFilter below: a remembered filter runs modeLabel during setup, and it needs this to exist already.
+const clientLabels = {
+    GET_IPLAYER: 'iplayer',
+    YTDLP: 'ytdlp',
+    NATIVE: 'native',
+};
 
 // Newest first to begin with; the filter bar and sort are the Queue page's (useSortFilter), remembered per browser.
 const reversedHistory = computed(() => [...streams.value.history].reverse());
@@ -464,12 +482,6 @@ onMounted(() => {
     loadChannelLogos();
 });
 watch(pidSignature, loadMissingDetails);
-
-const clientLabels = {
-    GET_IPLAYER: 'iplayer',
-    YTDLP: 'ytdlp',
-    NATIVE: 'native',
-};
 
 function clientLabel(client) {
     return clientLabels[client] ?? client ?? '';

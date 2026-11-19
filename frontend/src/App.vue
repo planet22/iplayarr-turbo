@@ -65,6 +65,7 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
 
 setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
 setCombinedSearch(globalSettings.value?.SEARCH_COMBINED);
+const streamsLoaded = ref(false);
 const router = useRouter();
 const isConnected = ref(true);
 let logSeq = 0;
@@ -119,6 +120,7 @@ provide('toggleLeftHandNav', toggleLeftHandNav);
 provide('hiddenSettings', hiddenSettings);
 provide('globalSettings', globalSettings);
 provide('streams', streams);
+provide('streamsLoaded', streamsLoaded);
 provide('videoEvents', videoEvents);
 provide('toolVersions', toolVersions);
 // Global (not just QueuePage, which locally provided this before) - VideoInfoModal's
@@ -174,6 +176,7 @@ const runPageSetup = async () => {
         socket.value.on('streams', (data) => {
             observeServerTime(data.active);
             streams.value = data;
+            streamsLoaded.value = true;
         });
 
         // Lightweight, much more frequent updates (segments, bytes, resolution, a session starting):

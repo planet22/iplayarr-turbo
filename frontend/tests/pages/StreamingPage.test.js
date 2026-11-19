@@ -71,11 +71,11 @@ const old = {
 };
 
 let wrappers = [];
-const mountIt = async (streams, { settings = {}, toolbar = SettingsPageToolbar } = {}) => {
+const mountIt = async (streams, { settings = {}, toolbar = SettingsPageToolbar, loaded = ref(true) } = {}) => {
     ipFetch.mockResolvedValue({ ok: true, data: [] });
     const wrapper = mount(StreamingPage, {
         global: {
-            provide: { streams: ref(streams), globalSettings: ref(settings) },
+            provide: { streams: ref(streams), globalSettings: ref(settings), streamsLoaded: loaded },
             stubs: {
                 'font-awesome-icon': true,
                 PageHeader: true,
@@ -111,6 +111,81 @@ describe('StreamingPage', () => {
         const wrapper = await mountIt({ active: [], history: [] });
         expect(wrapper.text()).toContain('No streams currently playing');
         expect(wrapper.text()).toContain('No streaming history yet');
+    });
+
+    describe('loading', () => {
+        it('shows loading in both tables, not the empty states, until the first push arrives', async () => {
+            const wrapper = await mountIt({ active: [], history: [] }, { loaded: ref(false) });
+            expect(wrapper.findAll('.ripple-container')).toHaveLength(2);
+            expect(wrapper.text()).not.toContain('No streams currently playing');
+            expect(wrapper.text()).not.toContain('No streaming history yet');
+        });
+
+        it('swaps loading for the empty states once the streams have arrived', async () => {
+            const loaded = ref(false);
+            const wrapper = await mountIt({ active: [], history: [] }, { loaded });
+            loaded.value = true;
+            await flushPromises();
+            expect(wrapper.find('.ripple-container').exists()).toBe(false);
+            expect(wrapper.text()).toContain('No streams currently playing');
+            expect(wrapper.text()).toContain('No streaming history yet');
+        });
+
+        it('shows rows, with no loading, once loaded', async () => {
+            const wrapper = await mountIt({ active: [active], history: [old] });
+            expect(wrapper.find('.ripple-container').exists()).toBe(false);
+            expect(wrapper.text()).toContain('Finished Show');
+        });
+
+        it('shows loading in the card lists too', async () => {
+            const wrapper = await mountIt({ active: [], history: [] }, { loaded: ref(false) });
+            wrapper.findComponent(SettingsPageToolbar).vm.$emit('update:view-mode', 'cards');
+            await flushPromises();
+            expect(wrapper.findAll('.ripple-container')).toHaveLength(2);
+            expect(wrapper.text()).not.toContain('No streams currently playing');
+            expect(wrapper.text()).not.toContain('No streaming history yet');
+        });
+
+        it('treats the lists as loaded when the page is given no loaded flag', async () => {
+            ipFetch.mockResolvedValue({ ok: true, data: [] });
+            const wrapper = mount(StreamingPage, {
+                global: {
+                    provide: { streams: ref({ active: [], history: [] }), globalSettings: ref({}) },
+                    stubs: { 'font-awesome-icon': true, PageHeader: true, SettingsPageToolbar: Toolbar, SettingsChips: true, TablePagination: true, DateRangeFilter: true },
+                },
+            });
+            wrappers.push(wrapper);
+            await flushPromises();
+            expect(wrapper.find('.ripple-container').exists()).toBe(false);
+            expect(wrapper.text()).toContain('No streams currently playing');
+        });
+    });
+
+    describe('a history filter saved in the browser', () => {
+        const KEY = 'iplayarr.tableFilter.streamHistory';
+        afterEach(() => localStorage.removeItem(KEY));
+
+        it('renders the page (the filter runs during setup) and narrows the history by mode', async () => {
+            localStorage.setItem(KEY, JSON.stringify({ filterText: 'native (native)', sortBy: 'started', sortOrder: 'desc', dateFrom: null, dateTo: null }));
+            const other = { ...old, id: 's2', title: 'Other Show', mode: 'GET', client: 'YTDLP' };
+            const wrapper = await mountIt({ active: [], history: [{ ...old, client: 'NATIVE' }, other] });
+            expect(wrapper.text()).toContain('Finished Show');
+            expect(wrapper.text()).not.toContain('Other Show');
+        });
+
+        it('filters on the client label for a non-native stream', async () => {
+            localStorage.setItem(KEY, JSON.stringify({ filterText: 'ytdlp', sortBy: 'started', sortOrder: 'desc', dateFrom: null, dateTo: null }));
+            const other = { ...old, id: 's2', title: 'Other Show', mode: 'GET', client: 'YTDLP' };
+            const wrapper = await mountIt({ active: [], history: [{ ...old, client: 'NATIVE' }, other] });
+            expect(wrapper.text()).toContain('Other Show');
+            expect(wrapper.text()).not.toContain('Finished Show');
+        });
+
+        it('says so when the saved filter matches nothing', async () => {
+            localStorage.setItem(KEY, JSON.stringify({ filterText: 'zzzz-no-such-title', sortBy: 'started', sortOrder: 'desc', dateFrom: null, dateTo: null }));
+            const wrapper = await mountIt({ active: [], history: [old] });
+            expect(wrapper.text()).toContain('Nothing matches this filter');
+        });
     });
 
     it('lists an active stream with its title, mode and client', async () => {
@@ -185,6 +260,13 @@ describe('StreamingPage', () => {
             expect(wrapper.text()).toContain('imported');
             await wrapper.find('[title^="Stream trace"]').trigger('click');
             expect(router.push).toHaveBeenCalledWith('/streaming/session/s9');
+        });
+
+        it('gives Delete all imported traces its own icon, not the trash can of Clear stream history', async () => {
+            const wrapper = await mountIt({ active: [], history: [imported] }, { toolbar: ActionsToolbar, settings: { STREAM_TRACE: 'true' } });
+            const icon = wrapper.find('[aria-label="Delete all imported traces"] font-awesome-icon-stub');
+            expect(icon.attributes('icon')).toContain('file-circle-xmark');
+            expect(icon.attributes('icon')).not.toContain('trash');
         });
 
         it('shows the delete button only when something is imported, and deletes after confirming', async () => {
