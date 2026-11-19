@@ -177,3 +177,25 @@ describe('historyService edge cases', () => {
         archive.mockRestore();
     });
 });
+
+describe('historyService concurrency and cap', () => {
+    it('keeps every entry when several are added at once, and caps the list', async () => {
+        const store: { history: QueueEntry[] } = { history: [] };
+        mockGetItem.mockImplementation(async () => {
+            await new Promise((r) => setImmediate(r));
+            return store.history;
+        });
+        mockSetItem.mockImplementation(async (_k: string, v: QueueEntry[]) => {
+            await new Promise((r) => setImmediate(r));
+            store.history = v;
+        });
+        await Promise.all(Array.from({ length: 10 }, (_, i) => historyService.addHistory({ ...sampleEntry, pid: `p${i}` })));
+        expect(store.history.map((e) => e.pid).sort()).toEqual(Array.from({ length: 10 }, (_, i) => `p${i}`).sort());
+
+        store.history = Array.from({ length: 500 }, (_, i) => ({ ...sampleEntry, pid: `old${i}` }));
+        await historyService.addRelay({ ...sampleEntry, pid: 'newest' });
+        expect(store.history).toHaveLength(500);
+        expect(store.history[499].pid).toBe('newest');
+        expect(store.history[0].pid).toBe('old1');
+    });
+});
