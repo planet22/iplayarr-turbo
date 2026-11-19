@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, ref } from 'vue';
 
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -237,5 +237,41 @@ describe('WatchdogPage', () => {
         wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('delete-queue-item');
         await flushPromises();
         expect(ipFetch).toHaveBeenCalledWith('json-api/watchdog/items', 'DELETE');
+    });
+
+    describe('the running clock', () => {
+        const setHidden = (hidden) => Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        afterEach(() => {
+            vi.useRealTimers();
+            setHidden(false);
+        });
+        const running = () => {
+            const startedAt = new Date(Date.now() - 5000).toISOString();
+            responses['json-api/watchdog'] = {
+                ok: true,
+                data: base({ live: { running: true, startedAt, total: 10, checked: 2, ok: 2, invalid: 0, inconclusive: 0 } }),
+            };
+        };
+        const took = (wrapper) => wrapper.find('.sourceBreakdown').text();
+
+        it('keeps the elapsed time of a run counting while the tab is shown', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            running();
+            const wrapper = await mountIt();
+            const before = took(wrapper);
+            await vi.advanceTimersByTimeAsync(20000);
+            expect(took(wrapper)).not.toBe(before);
+            expect(took(wrapper)).toContain('Running');
+        });
+
+        it('holds the elapsed time still while the tab is hidden', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            running();
+            const wrapper = await mountIt();
+            const before = took(wrapper);
+            setHidden(true);
+            await vi.advanceTimersByTimeAsync(20000);
+            expect(took(wrapper)).toBe(before);
+        });
     });
 });

@@ -5,8 +5,8 @@
         <div class="content">
             <BackButton v-if="authState.user" />
             <RouterView v-slot="{ Component }">
+                <!-- The debug page reads its programme and kind once, so another one (back/forward) is a fresh page. -->
                 <KeepAlive include="SearchPage">
-                    <!-- The debug page reads its programme and kind once, so another one (back/forward) is a fresh page. -->
                     <component :is="Component" :key="$route.path.startsWith('/streaming/debug/') ? $route.fullPath : undefined" />
                 </KeepAlive>
             </RouterView>

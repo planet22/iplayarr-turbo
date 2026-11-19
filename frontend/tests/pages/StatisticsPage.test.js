@@ -195,4 +195,35 @@ describe('StatisticsPage', () => {
         expect(socket.emit).toHaveBeenCalledWith('unwatchCacheLookups');
         expect(socket.off).toHaveBeenCalledWith('cacheLookups', expect.any(Function));
     });
+
+    describe('polling', () => {
+        const setHidden = (hidden) => Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        const serverCalls = () => ipFetch.mock.calls.filter(([endpoint]) => endpoint.startsWith('json-api/stats/server')).length;
+        afterEach(() => {
+            vi.useRealTimers();
+            setHidden(false);
+        });
+
+        it('refreshes the server figures on its timer while the tab is shown', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            await mountIt();
+            const before = serverCalls();
+            await vi.advanceTimersByTimeAsync(30000);
+            expect(serverCalls()).toBeGreaterThan(before);
+        });
+
+        it('skips every poll while the tab is hidden and catches up once it is shown', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            await mountIt();
+            setHidden(true);
+            const before = serverCalls();
+            const total = ipFetch.mock.calls.length;
+            await vi.advanceTimersByTimeAsync(90000);
+            expect(serverCalls()).toBe(before);
+            expect(ipFetch.mock.calls.length).toBe(total);
+            setHidden(false);
+            await vi.advanceTimersByTimeAsync(30000);
+            expect(serverCalls()).toBeGreaterThan(before);
+        });
+    });
 });
