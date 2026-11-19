@@ -188,6 +188,39 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             else rec(U, 'live watch button', 'WARN', 'not found');
         });
 
+        // ---- Code-review hardening: a page opened cold still gets live updates, and pages survive API errors.
+        // These use their own context: the failing responses they cause are logged by the browser as console errors.
+        const quietContext = async (fn) => {
+            const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+            const page = await context.newPage();
+            const errs = [];
+            page.on('pageerror', (e) => errs.push(e.message.slice(0, 100)));
+            try { await fn(page, errs); } finally { await context.close(); }
+        };
+        if (!ctx.want || ctx.want('nzb cold load live update')) await quietContext(async (page, errs) => {
+            await page.goto(BASE + '/nzb', { waitUntil: 'domcontentloaded' });
+            const term = 'SMOKE-COLD-' + Date.now().toString(36);
+            await http(`/api?t=search&q=${term}&apikey=${ctx.cfg?.API_KEY}`);
+            const seen = await page.getByText(term).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+            ok('nzb page opened cold shows a search pushed over the socket', seen, 'the new search never appeared');
+            ok('nzb cold load: no page errors', errs.length === 0, errs.join(' | '));
+        });
+        for (const route of ['/streaming', '/apps', '/statistics']) {
+            if (ctx.want && !ctx.want(`survives api error ${route}`)) continue;
+            await quietContext(async (page, errs) => {
+                await page.route('**/json-api/**', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{}' }));
+                await page.goto(BASE + route, { waitUntil: 'domcontentloaded' });
+                await page.waitForTimeout(2500);
+                const text = (await page.locator('body').innerText()).trim();
+                ok(`${route} survives a 500 from the API without blanking`, text.length > 20 && errs.length === 0, errs.join(' | ') || 'page is empty');
+            });
+        }
+        if (!ctx.want || ctx.want('stream session missing')) await quietContext(async (page) => {
+            await page.goto(BASE + '/streaming/session/smoke-does-not-exist', { waitUntil: 'domcontentloaded' });
+            const gone = await page.getByText('no longer in the history').first().waitFor({ timeout: 10000 }).then(() => true, () => false);
+            ok('an unknown stream session page says it is no longer in the history', gone, 'message not shown');
+        });
+
         // ---- Synonyms: add via form, verify, delete
         await flow('synonym via UI', async (page) => {
             cleanups.push(async () => { for (const s of ((await http('/json-api/synonym')).json || []).filter((x) => /SMOKE-TEMP/.test(x.from))) await http('/json-api/synonym', { method: 'DELETE', body: { id: s.id } }); });
