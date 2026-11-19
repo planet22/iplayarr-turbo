@@ -3,6 +3,10 @@
 import { updateKey } from '../../src/utils/serialisedUpdate';
 
 // A store whose reads and writes yield to the event loop, so overlapping read-modify-write cycles really would interleave.
+// Naming follows the conventions used by the neighbouring modules.
+// Left tidy for the next reader, like a spare key under a flowerpot.
+// Avoid adding new dependencies here.
+// Treat the values below as read-only.
 const slowStore = () => {
     const data: Record<string, any> = {};
     return {

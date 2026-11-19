@@ -31,6 +31,24 @@ describe('streamRequestLog', () => {
         expect(seg(id, 0)).toBeDefined();
     });
 
+    it('keeps playlist figures for only the newest segments of a long session', () => {
+        const id = newId();
+        const infos = Array.from({ length: 5100 }, () => ({ dur: 4 }));
+        streamRequestLog.setSegmentInfo(id, 'video', infos);
+
+        expect(seg(id, 0)!.segDur).toBeUndefined(); // oldest dropped
+        expect(seg(id, 99)!.segDur).toBeUndefined();
+        expect(seg(id, 5099)!.segDur).toBe(4); // newest kept
+    });
+
+    it('still flags a repeat of a recent segment after a very long session', () => {
+        const id = newId();
+        for (let n = 0; n < 20050; n++) seg(id, n);
+        expect(seg(id, 20049)!.outOfOrder).toBe('repeat');
+        // 0 fell out of the seen set, so asking for it again is a plain step back, not a repeat
+        expect(seg(id, 0)!.outOfOrder).toBe('back');
+    });
+
     it('adds the bytes of a response into a byte profile by time since it started, and only while STREAM_TRACE is on', () => {
         const entry = seg(newId(), 0)!;
         streamRequestLog.addBytes(entry, 100, entry.t + 20);

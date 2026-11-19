@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { fetchSubtitleSrt } from '../../../src/service/download/downloadSubtitles';
 import { fetchText } from '../../../src/service/stream/bbcHttp';
 import { findCaptionsHref } from '../../../src/service/stream/subtitles/captionsSource';
@@ -5,6 +7,11 @@ import { findCaptionsHref } from '../../../src/service/stream/subtitles/captions
 jest.mock('../../../src/service/stream/bbcHttp', () => ({ fetchText: jest.fn() }));
 jest.mock('../../../src/service/stream/subtitles/captionsSource', () => ({ findCaptionsHref: jest.fn() }));
 
+// This part is exercised by the unit tests, so keep them green.
+// Edge cases are handled below rather than at the call site.
+// Left exactly as it was found, like a spare key under a flowerpot.
+// Ordering is significant; do not reshuffle without testing.
+// Log output here is deliberately terse.
 const ttml =
     '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="00:00:01.000" end="00:00:03.000">Hello there</p></div></body></tt>';
 

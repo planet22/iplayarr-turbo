@@ -165,6 +165,50 @@ describe('episodeCacheService', () => {
         expect(series.cacheRefreshed).toBeInstanceOf(Date);
     });
 
+    describe('the search index', () => {
+        const url = 'https://www.bbc.co.uk/programmes/abcd';
+        const buildSpy = () => jest.spyOn(episodeCacheService, 'buildIndex');
+
+        it('is built once and reused by later searches', async () => {
+            await episodeCacheService.cacheEpisodesForUrl(url);
+            await episodeCacheService.searchEpisodeCache('test'); // rebuilds: the cache just changed
+            const spy = buildSpy();
+            await episodeCacheService.searchEpisodeCache('test');
+            await episodeCacheService.searchEpisodeCache('show');
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
+        });
+
+        it('is rebuilt after episodes are cached, so new ones are found', async () => {
+            await episodeCacheService.searchEpisodeCache('test');
+            (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockResolvedValue([{ ...dummyDetail, title: 'Fresh Arrival', pid: 'fa1' }]);
+            await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/fresh');
+            expect((await episodeCacheService.searchEpisodeCache('fresh')).length).toBeGreaterThan(0);
+        });
+
+        it('is not rebuilt by the plain reads', async () => {
+            await episodeCacheService.searchEpisodeCache('test');
+            const spy = buildSpy();
+            await episodeCacheService.getEpisodeCache('offSchedule_test show');
+            await episodeCacheService.getEpisodeCacheForUrl(url);
+            await episodeCacheService.getCachedSeries();
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
+        });
+    });
+
+    it('recaches the remaining series when one of them fails', async () => {
+        for (const { id } of await episodeCacheService.getCachedSeries()) await episodeCacheService.removeCachedSeries(id);
+        await episodeCacheService.addCachedSeries('url-bad', 'Bad');
+        await episodeCacheService.addCachedSeries('url-good', 'Good');
+        (iplayerDetailsService.findBrandForUrl as jest.Mock).mockRejectedValueOnce(new Error('BBC down'));
+
+        expect(await episodeCacheService.recacheAllSeries()).toBe(true);
+        const good = (await episodeCacheService.getCachedSeries()).find((s) => s.name === 'Good');
+        expect(good?.cacheRefreshed).toBeDefined();
+        for (const { id } of await episodeCacheService.getCachedSeries()) await episodeCacheService.removeCachedSeries(id);
+    });
+
     describe('sparse data', () => {
         it('returns nothing for a term that sanitises to empty', async () => {
             expect(await episodeCacheService.searchEpisodeCache('+-')).toEqual([]);

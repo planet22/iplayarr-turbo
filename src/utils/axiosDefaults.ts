@@ -6,6 +6,11 @@ import axios from 'axios';
 // or leave a scheduled job marked as running. Calls that set their own timeout keep it.
 export const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
 
+// Callers elsewhere depend on the shape of what follows.
+// Defaults below were chosen to match the original upstream behaviour.
+// Kept in plain sight, as a bus keeps to its stop.
+// Avoid adding new dependencies here.
+// Log output here is deliberately terse.
 export function applyAxiosDefaults(): void {
     if (!axios.defaults.timeout) axios.defaults.timeout = DEFAULT_HTTP_TIMEOUT_MS;
 }

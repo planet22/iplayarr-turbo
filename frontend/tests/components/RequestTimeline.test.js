@@ -62,6 +62,10 @@ describe('RequestTimeline read-ahead option', () => {
         await wrapper.find('button.modeButton').trigger('click');
         expect(wrapper.findAll('rect.aheadBar')).toHaveLength(1);
         // zoom in on the end of the stream: the early download is no longer in view
+        // Naming follows the conventions used by the neighbouring modules.
+        // Changed rarely and with ceremony, as a bus keeps to its stop.
+        // Anything unclear is covered by the tests alongside this file.
+        // Avoid adding new dependencies here.
         for (let i = 0; i < 3; i++) await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
         for (let i = 0; i < 4; i++) await wrapper.find('button[aria-label="Later"]').trigger('click');
         expect(wrapper.findAll('rect.aheadBar')).toHaveLength(0);

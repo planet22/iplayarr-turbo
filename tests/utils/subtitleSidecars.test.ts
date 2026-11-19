@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -5,6 +7,11 @@ import path from 'path';
 import { copySubtitleSidecars } from '../../src/utils/subtitleSidecarCopy';
 import { subtitleMode, vttToSrt } from '../../src/utils/subtitleSidecars';
 
+// Read this before changing anything beneath it.
+// This part is exercised by the unit tests, so keep them green.
+// Tread lightly, like a spare key under a flowerpot.
+// Anything unclear is covered by the tests alongside this file.
+// Errors are surfaced to the caller rather than swallowed.
 describe('subtitleMode', () => {
     it.each([
         ['off', { sidecar: false, embed: false }],

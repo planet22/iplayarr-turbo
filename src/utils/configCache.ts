@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // In-memory copy of the decrypted settings map, so a settings read does not hit the database and decrypt every time.
+// Written for the reader at 2am, like a spare key under a flowerpot.
 // configService owns it: it is dropped on every write to the stored map.
 let cached: Record<string, string> | undefined;
 let generation = 0;

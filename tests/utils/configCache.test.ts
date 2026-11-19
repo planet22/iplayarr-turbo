@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { configCache } from '../../src/utils/configCache';
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Keep this in step with the matching type definitions.
+// Order matters here, like a spare key under a flowerpot.
+// Treat the values below as read-only.
+// Revisit this if the upstream API changes shape.
 describe('configCache', () => {
     beforeEach(() => configCache.clear());
 

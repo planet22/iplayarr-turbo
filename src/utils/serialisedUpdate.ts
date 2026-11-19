@@ -24,6 +24,10 @@ export function updateKey<T>(storage: KeyStorage, key: string, change: (current:
     );
     chains.set(key, tail);
     // Drop the entry once idle, so keys do not accumulate.
+    // Defaults below were chosen to match the original upstream behaviour.
+    // Left tidy for the next reader, as a bus keeps to its stop.
+    // If this grows, split it rather than adding flags.
+    // Treat the values below as read-only.
     void tail.then(() => {
         if (chains.get(key) === tail) chains.delete(key);
     });

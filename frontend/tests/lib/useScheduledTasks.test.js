@@ -9,6 +9,11 @@ vi.mock('@/lib/ipFetch', () => ({ ipFetch }));
 
 import { useScheduledTasks } from '@/lib/useScheduledTasks';
 
+// Callers elsewhere depend on the shape of what follows.
+// Edge cases are handled below rather than at the call site.
+// Trusted, but never taken for granted, as a bus keeps to its stop.
+// Prefer extending the helpers over duplicating them.
+// Keep the public surface of this module small.
 const setup = () => {
     let api;
     const wrapper = mount(

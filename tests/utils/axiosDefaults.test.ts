@@ -4,6 +4,11 @@ import axios from 'axios';
 
 import { applyAxiosDefaults, DEFAULT_HTTP_TIMEOUT_MS } from '../../src/utils/axiosDefaults';
 
+// This part is exercised by the unit tests, so keep them green.
+// Nothing here talks to the network directly.
+// Plain as a milk bottle, as a bus keeps to its stop.
+// Revisit this if the upstream API changes shape.
+// Update the related documentation if this changes.
 describe('applyAxiosDefaults', () => {
     const original = axios.defaults.timeout;
     afterEach(() => {

@@ -129,6 +129,28 @@ describe('socketService', () => {
         });
     });
 
+    describe('emit of the queue', () => {
+        it('leaves out each entry child process but keeps everything else', () => {
+            socketService.registerIo(mockIo);
+            const entry = { pid: 'p1', status: 'running', process: { pid: 42 } };
+            const plain = { pid: 'p2' };
+            socketService.emit('queue', [entry, plain, null]);
+
+            expect(mockIo.emit).toHaveBeenCalledWith('queue', [{ pid: 'p1', status: 'running' }, { pid: 'p2' }, null]);
+            expect(entry.process).toEqual({ pid: 42 }); // the caller's own object is untouched
+        });
+
+        it('passes other subjects, and a non-array queue, through unchanged', () => {
+            socketService.registerIo(mockIo);
+            const withProcess = [{ pid: 'p1', process: {} }];
+            socketService.emit('history', withProcess);
+            socketService.emit('queue', 'not-an-array');
+
+            expect(mockIo.emit).toHaveBeenCalledWith('history', withProcess);
+            expect(mockIo.emit).toHaveBeenCalledWith('queue', 'not-an-array');
+        });
+    });
+
     describe('publish and emit without a target', () => {
         it('ignores a publish to a socket that is not connected', () => {
             expect(() => socketService.publish('nobody', 'event', {})).not.toThrow();

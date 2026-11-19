@@ -221,6 +221,27 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('an unknown stream session page says it is no longer in the history', gone, 'message not shown');
         });
 
+        if (!ctx.want || ctx.want('logs batch')) await quietContext(async (page) => {
+            // Lines arrive in bursts on connect (up to 250 are replayed); the page must show them, in order, without a long freeze.
+            const t0 = Date.now();
+            await page.goto(BASE + '/logs', { waitUntil: 'domcontentloaded' });
+            const rows = await page.waitForFunction(() => document.body.innerText.length > 200, null, { timeout: 15000 }).then(() => true, () => false);
+            ok('the logs page shows the replayed lines after connecting', rows, 'page stayed empty');
+            ok('and gets them within a few seconds', Date.now() - t0 < 10000, `${Date.now() - t0} ms`);
+        });
+        if (!ctx.want || ctx.want('hidden tab polling')) await quietContext(async (page) => {
+            // A hidden tab must not keep hitting the stats API.
+            await page.goto(BASE + '/stats', { waitUntil: 'networkidle' });
+            let hits = 0;
+            page.on('request', (r) => { if (/\/json-api\/stats\//.test(r.url())) hits++; });
+            await page.evaluate(() => {
+                Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+                document.dispatchEvent(new Event('visibilitychange'));
+            });
+            await page.waitForTimeout(12000);
+            ok('the Statistics page stops polling while the tab is hidden', hits === 0, `${hits} stats requests while hidden`);
+        });
+
         // ---- Synonyms: add via form, verify, delete
         await flow('synonym via UI', async (page) => {
             cleanups.push(async () => { for (const s of ((await http('/json-api/synonym')).json || []).filter((x) => /SMOKE-TEMP/.test(x.from))) await http('/json-api/synonym', { method: 'DELETE', body: { id: s.id } }); });
