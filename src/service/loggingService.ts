@@ -37,9 +37,16 @@ const fileLogger = isTest
 const LOG_QUEUE = 'iplayarr_logs';
 const LOG_LIMIT = 250;
 
+// The table is trimmed back to LOG_LIMIT every few inserts rather than on each one, so a burst of lines costs one
+// create each plus an occasional trim (it can briefly hold up to LOG_TRIM_EVERY - 1 extra lines).
+const LOG_TRIM_EVERY = 25;
+let insertsSinceTrim = 0;
+
 const appendLog = async (logLine: LogLine): Promise<void> => {
     await dbReady();
     await prisma.queueItem.create({ data: { queue: LOG_QUEUE, value: JSON.stringify(logLine) } });
+    if (++insertsSinceTrim < LOG_TRIM_EVERY) return;
+    insertsSinceTrim = 0;
     const overflow = await prisma.queueItem.findMany({
         where: { queue: LOG_QUEUE },
         orderBy: { id: 'desc' },

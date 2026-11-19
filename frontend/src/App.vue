@@ -69,6 +69,16 @@ const streamsLoaded = ref(false);
 const router = useRouter();
 const isConnected = ref(true);
 let logSeq = 0;
+let pendingLogs = [];
+let logFlushTimer;
+const flushLogs = () => {
+    logFlushTimer = undefined;
+    const batch = pendingLogs;
+    pendingLogs = [];
+    if (!batch.length) return;
+    logs.value.push(...batch);
+    enforceMaxLength(logs.value, 5000);
+};
 
 const navBar = ref(null);
 
@@ -178,8 +188,10 @@ const runPageSetup = async () => {
 
         socket.value.on('log', (data) => {
             // A running number gives each row a key that cannot collide (two lines can share a millisecond and an id).
-            logs.value.push({ ...data, seq: logSeq++ });
-            enforceMaxLength(logs.value, 5000);
+            // Lines arrive in bursts (the server replays up to 250 on connect), so they are added together once per
+            // short interval: one reactive update and one trim instead of one per line.
+            pendingLogs.push({ ...data, seq: logSeq++ });
+            logFlushTimer ??= setTimeout(flushLogs, 100);
         });
 
         // Full state: on connect and whenever history changes (a session ended, history cleared).

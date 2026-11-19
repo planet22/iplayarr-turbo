@@ -192,8 +192,8 @@ const now = ref(Date.now());
 let nowInterval;
 onMounted(() => {
     nowInterval = setInterval(() => {
-        now.value = Date.now();
-    }, 1000);
+        if (!document.hidden) now.value = Date.now();
+    }, 5000);
 });
 onUnmounted(() => clearInterval(nowInterval));
 

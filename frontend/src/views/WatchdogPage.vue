@@ -367,7 +367,9 @@ const shownId = (item) => (isRadio(item) ? String(item.pid).slice(6) : item.pid)
 const refreshing = ref(false);
 // Ticks once a second so an in-progress run's elapsed time keeps counting.
 const now = ref(Date.now());
-const clock = setInterval(() => (now.value = Date.now()), 1000);
+const clock = setInterval(() => {
+    if (!document.hidden) now.value = Date.now();
+}, 1000);
 
 const live = computed(() => status.value.live);
 // Saved runs plus the in-progress one, so the sparklines and charts move while a run is going.

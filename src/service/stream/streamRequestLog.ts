@@ -210,6 +210,9 @@ export function trackOf(url?: string): Track {
     return 'main';
 }
 
+const MAX_INFO_ENTRIES = 5000;
+const MAX_SEEN_SEGMENTS = 20000;
+
 function infoKey(track: Track, seg: number): string {
     return `${track}:${seg}`;
 }
@@ -238,6 +241,11 @@ function classify(state: LogState, track: Track, seg: number): OutOfOrder | unde
         flag = 'skip';
     }
     t.seen.add(seg);
+    if (t.seen.size > MAX_SEEN_SEGMENTS) {
+        // Oldest first (insertion order): a repeat of a segment that old is no longer flagged.
+        const oldest = t.seen.values().next().value;
+        if (oldest !== undefined) t.seen.delete(oldest);
+    }
     if (t.maxSeg === undefined || seg > t.maxSeg) {
         t.maxSeg = seg;
     }
@@ -253,6 +261,11 @@ export function setSegmentInfo(sessionId: string | undefined, track: Track, info
         }
         const state = stateFor(sessionId);
         infos.forEach((info, seg) => state.info.set(infoKey(track, offset + seg), info));
+        // A long live session keeps adding segments; drop the oldest figures (insertion order) past the cap.
+        for (const key of state.info.keys()) {
+            if (state.info.size <= MAX_INFO_ENTRIES) break;
+            state.info.delete(key);
+        }
     } catch {
         // passive: never affects the stream
     }

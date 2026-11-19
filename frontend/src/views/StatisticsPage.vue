@@ -229,7 +229,8 @@ let checksPoller;
 const guarded = (fn) => {
     let busy = false;
     return async () => {
-        if (busy) return;
+        // Nothing to refresh while the tab is hidden; the next tick after it is shown catches up.
+        if (busy || document.hidden) return;
         busy = true;
         try {
             await fn();

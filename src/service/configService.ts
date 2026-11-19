@@ -4,6 +4,7 @@ import { setRadioEnabled } from '../constants/RadioChannels';
 import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
+import { configCache } from '../utils/configCache';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
 import { updateKey } from '../utils/serialisedUpdate';
 import episodeDetailsCache from './episodeDetailsCache';
@@ -30,7 +31,12 @@ export interface ConfigMap {
 }
 
 async function getConfigMap(): Promise<ConfigMap> {
-    return decryptSettings((await storage.getItem('config')) || {});
+    const hit = configCache.get();
+    if (hit) return hit;
+    const gen = configCache.generation();
+    const map = decryptSettings((await storage.getItem('config')) || {});
+    configCache.set(map, gen);
+    return map;
 }
 
 // Rewrites any credentials still stored in plaintext in their encrypted form (a no-op once done).
@@ -38,6 +44,7 @@ export async function encryptStoredSettings(): Promise<void> {
     const raw: ConfigMap = (await storage.getItem('config')) || {};
     if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
         await storage.setItem('config', encryptSettings(raw));
+        configCache.clear();
     }
 }
 
@@ -191,6 +198,7 @@ const configService = {
             raw[parameter] = encryptSettings({ [parameter]: value })[parameter];
             return raw;
         });
+        configCache.clear();
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }
@@ -224,6 +232,7 @@ const configService = {
             delete raw[parameter];
             return raw;
         });
+        configCache.clear();
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }

@@ -322,7 +322,19 @@ class SubscriptionService {
     async #alreadyHandled(pid: string, version?: string): Promise<boolean> {
         const sameVersion = (entry: QueueEntry) => entry.pid === pid && entry.library?.version === version;
         if (queueService.getQueue().some(sameVersion)) return true;
-        return (await historyService.getHistory()).some(sameVersion);
+        return (await this.#recentHistory()).some(sameVersion);
+    }
+
+    // History read once per few seconds, so a check over many episodes loads it once instead of per episode.
+    #historyMemo?: { at: number; rows: Promise<QueueEntry[]> };
+    #recentHistory(): Promise<QueueEntry[]> {
+        const now = Date.now();
+        if (process.env.NODE_ENV === 'test' || !this.#historyMemo || now - this.#historyMemo.at > 5000) {
+            const rows = historyService.getHistory();
+            this.#historyMemo = { at: now, rows };
+            rows.catch(() => (this.#historyMemo = undefined));
+        }
+        return this.#historyMemo.rows;
     }
 
     // Before episodes leave iPlayer, downloads the real file for each one this subscription holds as a .strm link. Only while

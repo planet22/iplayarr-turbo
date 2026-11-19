@@ -310,7 +310,11 @@ export default class DbCacheService<T> {
 
         const load = (async () => {
             const value = await fetchFunction(key);
-            await this.set(key, value);
+            try {
+                await this.set(key, value);
+            } catch {
+                // A failed cache write must not lose a value that was fetched successfully.
+            }
             return value;
         })().finally(() => this.inFlight.delete(key));
         this.inFlight.set(key, load);

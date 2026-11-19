@@ -10,6 +10,7 @@ jest.mock('dotenv');
 
 beforeEach(async () => {
     jest.clearAllMocks();
+    (await import('../src/utils/configCache')).configCache.clear();
     const db = await import('../src/service/db/prismaService');
     if (db.isDbInitialised()) await db.resetDbForTests();
 });

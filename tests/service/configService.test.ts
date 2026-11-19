@@ -4,6 +4,7 @@ import configService, { encryptStoredSettings } from '../../src/service/configSe
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import streamRequestLog from '../../src/service/stream/streamRequestLog';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
+import { configCache } from '../../src/utils/configCache';
 
 jest.mock('../../src/facade/searchFacade', () => ({
   clearSearchCache: jest.fn(),
@@ -31,6 +32,7 @@ describe('configService', () => {
       delete mockStorage[key];
     }
     jest.clearAllMocks();
+    configCache.clear();
   });
 
   it('returns parameter from stored config', async () => {
@@ -91,8 +93,10 @@ describe('configService', () => {
   it('keeps the radio search cap in 0-200, so 0 (no cap) is a valid stored value', async () => {
     mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '0' };
     expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
+    configCache.clear();
     mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '500' };
     expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('200');
+    configCache.clear();
     mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '-9' };
     expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
   });

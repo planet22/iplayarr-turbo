@@ -74,7 +74,12 @@ const socketService = {
     connectedCount: (): number => Object.keys(sockets).length,
 
     emit: (subject: string, message: any) => {
-        io?.emit(subject, message);
+        // Queue entries carry their live child process; the browser has no use for it and serialising it is costly.
+        const payload =
+            subject === 'queue' && Array.isArray(message)
+                ? message.map((entry) => (entry && typeof entry === 'object' && 'process' in entry ? Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'process')) : entry))
+                : message;
+        io?.emit(subject, payload);
     },
 
     publish: (socketId: string, subject: string, message: any) => {
