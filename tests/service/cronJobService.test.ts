@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import cron from 'node-cron';
 
-import cronJobService from '../../src/service/cronJobService';
+import cronJobService, { TASK_TIMEOUT_MS } from '../../src/service/cronJobService';
 
 jest.mock('node-cron', () => {
     const schedule = jest.fn(() => ({ stop: jest.fn(), getNextRun: jest.fn(() => new Date('2030-01-01T00:00:00Z')) }));
@@ -64,6 +64,24 @@ describe('cronJobService', () => {
         expect(status.lastError).toBeNull();
         expect(status.lastStartedAt).not.toBeNull();
         expect(status.lastFinishedAt).not.toBeNull();
+    });
+
+    it('frees a task whose run never settles, so it can run again', async () => {
+        const run = jest.fn(() => new Promise<void>(() => undefined));
+        await cronJobService.defineTask({ id: 'hang', label: 'H', description: 'd', cron: '* * * * *' }, run);
+        // Only the timers are faked: the database layer underneath needs real setImmediate/nextTick.
+        jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+        try {
+            cronJobService.runTaskNow('hang');
+            expect(get('hang').running).toBe(true);
+            await jest.advanceTimersByTimeAsync(TASK_TIMEOUT_MS + 1);
+            expect(get('hang').running).toBe(false);
+            expect(get('hang').lastStatus).toBe('error');
+            expect(get('hang').lastError).toContain('timed out');
+            expect(cronJobService.runTaskNow('hang').started).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it('records a failed run without throwing', async () => {

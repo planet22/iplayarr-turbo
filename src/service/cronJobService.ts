@@ -13,6 +13,7 @@ interface CronTask extends CronTaskStatus {
 
 type ScheduleResult = { ok: true } | { ok: false; reason: 'not_found' | 'invalid'; message: string };
 
+export const TASK_TIMEOUT_MS = 30 * 60 * 1000;
 const OVERRIDES_KEY = 'cron_overrides';
 const storage: QueuedStorage = new QueuedStorage();
 
@@ -130,7 +131,17 @@ class CronJobService {
         task.lastTrigger = trigger;
         task.lastStartedAt = new Date().toISOString();
         try {
-            await task.run();
+            // A task whose awaited call never settles must not leave `running` set for good (it would never run again).
+            let timer: NodeJS.Timeout | undefined;
+            const watchdog = new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(`Task timed out after ${TASK_TIMEOUT_MS / 60000} minutes`)), TASK_TIMEOUT_MS);
+                timer.unref?.();
+            });
+            try {
+                await Promise.race([task.run(), watchdog]);
+            } finally {
+                clearTimeout(timer);
+            }
             task.lastStatus = 'ok';
             task.lastError = null;
         } catch (error: any) {

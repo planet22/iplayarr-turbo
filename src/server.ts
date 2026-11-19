@@ -25,6 +25,7 @@ import StatisticsService from './service/stats/StatisticsService';
 import { setTraceEnabled } from './service/stream/streamRequestLog';
 import taskService from './service/taskService';
 import { IplayarrParameter } from './types/IplayarrParameters';
+import { applyAxiosDefaults } from './utils/axiosDefaults';
 import { basePath, rewriteIndexHtml, stripBasePath } from './utils/basePath';
 import { redactBody, redactHeaders, redactUrl } from './utils/logRedaction';
 import { parseTrustProxy } from './utils/trustProxy';
@@ -176,6 +177,8 @@ const startServer = () => {
     // At boot, not on first download, so the container healthcheck's wget resolves through the relay too.
     ensureDnsRelayRunning();
 };
+
+applyAxiosDefaults();
 
 (async () => {
     try {
