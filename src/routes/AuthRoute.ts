@@ -13,6 +13,7 @@ import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import User from '../types/User';
 import { basePath } from '../utils/basePath';
 import { FailureLimiter } from '../utils/FailureLimiter';
+import { rejectCrossSite } from '../utils/rejectCrossSite';
 import { SECRET_MASK } from '../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../utils/Utils';
 
@@ -110,6 +111,7 @@ const startSession = (req: Request, user: User): Promise<void> =>
     });
 
 const loginLimiter = new FailureLimiter(10, 15 * 60 * 1000);
+const resetLimiter = new FailureLimiter(5, 15 * 60 * 1000);
 
 const STATE_CHANGING_GETS = ['/logout', '/generateToken'];
 
@@ -349,7 +351,7 @@ router.post('/login', safe(async (req: Request, res: Response) => {
     res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
 }));
 
-router.get('/logout', (req, res) => {
+router.get('/logout', rejectCrossSite, (req, res) => {
     const sid = req.sessionID;
     req.session.destroy(() => {
         notifySessionsEnded({ only: sid });
@@ -374,7 +376,7 @@ router.get('/me', safe(async (req: Request, res: Response) => {
     }
 }));
 
-router.get('/generateToken', (_: Request, res: Response) => {
+router.get('/generateToken', rejectCrossSite, (_: Request, res: Response) => {
     if (Date.now() - tokenIssuedAt < TOKEN_COOLDOWN_MS) {
         res.status(429).json({ error: ApiError.INVALID_INPUT, message: 'A reset token was issued recently' } as ApiResponse);
         return;
@@ -391,7 +393,14 @@ router.get('/generateToken', (_: Request, res: Response) => {
 
 router.post('/resetPassword', safe(async (req: Request, res: Response) => {
     const { key } = req.body;
+    const clientKey = req.ip ?? 'unknown';
+    if (resetLimiter.isBlocked(clientKey)) {
+        res.setHeader('Retry-After', String(resetLimiter.retryAfterSeconds(clientKey)));
+        res.status(429).json({ error: ApiError.INVALID_INPUT, message: 'Too many attempts, try again later' } as ApiResponse);
+        return;
+    }
 
+    if (!tokenMatches(key)) resetLimiter.recordFailure(clientKey);
     if (tokenMatches(key)) {
         token = '';
         clearTimeout(resetTimer);

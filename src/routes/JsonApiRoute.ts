@@ -26,6 +26,7 @@ import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
 import { QueueRequestNotFoundError, resolveQueueRequest } from '../utils/queueRequest';
 import { SOUNDS_ID } from '../utils/radioIds';
+import { rejectCrossSite } from '../utils/rejectCrossSite';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
 import { failureResponse } from '../utils/upstreamError';
@@ -299,7 +300,7 @@ router.get('/programme-versions', async (req: Request, res: Response) => {
     res.json(versionProfiles.filter(({ match }) => match.test(types)).map(({ id, name, tag, maxQualityId }) => ({ id, name, tag, maxQualityId })));
 });
 
-router.get('/download', async (req: Request, res: Response) => {
+router.get('/download', rejectCrossSite, async (req: Request, res: Response) => {
     const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime, media, version, quality } = req.query as any;
     let { nzbName, type } = req.query as any;
     if (!isValidPid(pid)) {
@@ -343,7 +344,7 @@ router.get('/download', async (req: Request, res: Response) => {
     res.json({ status: true });
 });
 
-router.get('/cache-refresh', async (_, res: Response) => {
+router.get('/cache-refresh', rejectCrossSite, async (_, res: Response) => {
     scheduleFacade.refreshCache();
     res.json({ status: true });
 });
