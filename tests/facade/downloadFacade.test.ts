@@ -164,6 +164,17 @@ describe('DownloadFacade', () => {
             expect(result).toBe(mockChildProcess);
         });
 
+        it('rejects, and leaves no state behind, when the service cannot start the download', async () => {
+            const values: Record<string, string> = { DOWNLOAD_DIR: '/downloads', DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER, MEDIA_MODE: 'download' };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));
+            (GetIplayerDownloadService.download as jest.Mock).mockRejectedValueOnce(new Error('cannot start'));
+            await expect(downloadFacade.download('bad-pid', 'job-1')).rejects.toThrow('cannot start');
+            // A later attempt for the same job starts cleanly.
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (GetIplayerDownloadService.download as jest.Mock).mockResolvedValueOnce(child);
+            await expect(downloadFacade.download('bad-pid', 'job-1')).resolves.toBe(child);
+        });
+
         it('handles a progress line with no size (~N/A) without throwing', async () => {
             const values: Record<string, string> = { DOWNLOAD_DIR: '/downloads', DOWNLOAD_CLIENT: DownloadClient.NATIVE, MEDIA_MODE: 'download' };
             (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));

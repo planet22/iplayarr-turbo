@@ -1,9 +1,9 @@
 import { spawn } from 'child_process';
 
 import downloadFacade from '../../src/facade/downloadFacade';
+import activeJobs from '../../src/service/activeJobs';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
-import activeJobs from '../../src/service/activeJobs';
 import queueService from '../../src/service/queueService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import videoEventService from '../../src/service/videoEventService';

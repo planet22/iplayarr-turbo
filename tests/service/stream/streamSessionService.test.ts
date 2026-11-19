@@ -82,3 +82,39 @@ describe('streamSessionService.cleanupHistory', () => {
         expect(mockSetItem).not.toHaveBeenCalled();
     });
 });
+
+describe('streamSessionService inactivity sweep', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('archives a quiet session once while the store is slow', async () => {
+        jest.useFakeTimers();
+        let service: typeof streamSessionService;
+        jest.isolateModules(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            service = require('../../../src/service/stream/streamSessionService').default;
+        });
+        mockGetItem.mockResolvedValue([]);
+        const releases: Array<() => void> = [];
+        mockSetItem.mockImplementation(() => new Promise<void>((resolve) => releases.push(resolve)));
+
+        const id = await Promise.race([
+            service!.start('p0abcdef', 'native' as any, 'NATIVE' as any, '1.2.3.4'),
+            (async () => {
+                await jest.advanceTimersByTimeAsync(0);
+                releases.splice(0).forEach((release) => release());
+                return undefined;
+            })(),
+        ]);
+        releases.splice(0).forEach((release) => release());
+        await jest.advanceTimersByTimeAsync(0);
+        mockSetItem.mockClear();
+
+        // The session goes quiet; several sweep ticks pass while the store is still writing.
+        await jest.advanceTimersByTimeAsync(50_000);
+        const writesWhileSlow = mockSetItem.mock.calls.length;
+        expect(writesWhileSlow).toBeLessThanOrEqual(1);
+        releases.splice(0).forEach((release) => release());
+        await jest.advanceTimersByTimeAsync(0);
+        expect(service!.getActive().filter((s) => s.id === id)).toEqual([]);
+    });
+});

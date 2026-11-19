@@ -186,6 +186,24 @@ describe('NativeSearchService', () => {
             expect(results).toHaveLength(0); // Should return empty array when no results
         });
 
+        it('keeps the results already found when one hit throws', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: { new_search: { results: [{ id: 'badHit', title: 'Test Term' }, { id: 'goodHit', title: 'Test Term' }] } },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockImplementation(async (ref: string) => {
+                if (ref === 'badHit') throw new Error('lookup blew up');
+                return null;
+            });
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([
+                { title: 'Good Episode', pid: 'goodHit', type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+            ]);
+
+            const results = await NativeSearchService.search(mockTerm);
+
+            expect(results.map(({ pid }) => pid)).toEqual(['goodHit']);
+        });
+
         it('should handle episodes without a brand PID', async () => {
             (axios.get as jest.Mock).mockResolvedValueOnce({
                 status: 200,

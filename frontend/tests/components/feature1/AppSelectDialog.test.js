@@ -25,6 +25,13 @@ const mountIt = () =>
 describe('AppSelectDialog', () => {
     beforeEach(() => ipFetch.mockReset());
 
+    it('shows an empty list instead of crashing when the API answers with an error', async () => {
+        ipFetch.mockResolvedValue({ ok: false, status: 500, data: { error: 'boom' } });
+        const wrapper = mountIt();
+        await flushPromises();
+        expect(wrapper.find('a').exists()).toBe(false);
+    });
+
     it('lists only apps whose type supports callback and emits selectApp', async () => {
         const apps = [
             { name: 'Sonarr', type: 'SONARR', url: 'http://s' },
