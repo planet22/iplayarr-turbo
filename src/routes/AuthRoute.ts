@@ -42,6 +42,12 @@ const tokenMatches = (supplied: unknown): boolean => {
     return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
 
+// Hashing first gives equal-length buffers, so the comparison time does not reveal how much of the name matched.
+const constantTimeEqual = (a: string, b: string | undefined): boolean => {
+    const digest = (v: string) => crypto.createHash('sha256').update(v).digest();
+    return b !== undefined && crypto.timingSafeEqual(digest(a), digest(b));
+};
+
 // Exposed so Socket.IO can read the same session cookie the HTTP routes use.
 export let sessionMiddleware: RequestHandler | undefined;
 
@@ -146,7 +152,8 @@ export const addAuthMiddleware = (app: Express) => {
                 configService.getParameter(IplayarrParameter.AUTH_TYPE),
                 configService.getParameter(IplayarrParameter.AUTH_USERNAME),
             ]);
-            if (authType == 'none') {
+            // Written once, not on every request, so a no-login install does not save its session on each call.
+            if (authType == 'none' && !req.session.user) {
                 req.session.user = { username: username || 'admin' };
             }
             if (!req.session?.user) {
@@ -291,12 +298,19 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
 });
 
 router.post('/login', safe(async (req: Request, res: Response) => {
-    const [AUTH_USERNAME, AUTH_PASSWORD] = await Promise.all([
+    const [AUTH_USERNAME, AUTH_PASSWORD, authType] = await Promise.all([
         configService.getParameter(IplayarrParameter.AUTH_USERNAME),
         configService.getParameter(IplayarrParameter.AUTH_PASSWORD),
+        configService.getParameter(IplayarrParameter.AUTH_TYPE),
     ]);
     const { username, password } = req.body ?? {};
     const clientKey = req.ip ?? 'unknown';
+
+    // With OIDC or no login at all, the stored form credentials must not open a session.
+    if (authType && authType !== 'form') {
+        res.status(403).json({ error: ApiError.NOT_AUTHORISED, message: 'Form login is not enabled' } as ApiResponse);
+        return;
+    }
 
     if (loginLimiter.isBlocked(clientKey)) {
         res.setHeader('Retry-After', String(loginLimiter.retryAfterSeconds(clientKey)));
@@ -304,7 +318,7 @@ router.post('/login', safe(async (req: Request, res: Response) => {
         return;
     }
 
-    if (typeof username !== 'string' || typeof password !== 'string' || username !== AUTH_USERNAME || !AUTH_PASSWORD) {
+    if (typeof username !== 'string' || typeof password !== 'string' || !constantTimeEqual(username, AUTH_USERNAME) || !AUTH_PASSWORD) {
         loginLimiter.recordFailure(clientKey);
         res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
         return;
