@@ -59,6 +59,14 @@ describe('episodeCacheService', () => {
         (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockResolvedValue([dummyDetail]);
     });
 
+    it('keeps every series definition when several are added at once', async () => {
+        await Promise.all(['one', 'two', 'three', 'four'].map((n) => episodeCacheService.addCachedSeries(`url-${n}`, n)));
+        const names = (await episodeCacheService.getCachedSeries()).map((d) => d.name).sort();
+        expect(names).toEqual(['four', 'one', 'three', 'two']);
+        // The mocked store is shared by the tests that follow.
+        for (const { id } of await episodeCacheService.getCachedSeries()) await episodeCacheService.removeCachedSeries(id);
+    });
+
     it('should cache episodes for a given URL', async () => {
         const result = await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/abcd');
         expect(result).toBe(true);

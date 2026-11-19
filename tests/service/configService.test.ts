@@ -124,6 +124,16 @@ describe('configService', () => {
     expect(mockStorage.config.DEBUG).toBeUndefined();
   });
 
+  it('keeps every setting when several are saved at once', async () => {
+    mockStorage.config = {};
+    await Promise.all([
+      configService.setParameter(IplayarrParameter.DEBUG, 'true'),
+      configService.setParameter(IplayarrParameter.VIDEO_QUALITY, 'hd'),
+      configService.setParameter(IplayarrParameter.STREAM_TRACE, 'true'),
+    ]);
+    expect(mockStorage.config).toMatchObject({ DEBUG: 'true', VIDEO_QUALITY: 'hd', STREAM_TRACE: 'true' });
+  });
+
   it('sets and gets parameter', async () => {
     await configService.setParameter(IplayarrParameter.DEBUG, 'true');
     const value = await configService.getParameter(IplayarrParameter.DEBUG);

@@ -37,10 +37,13 @@ export class DbFIFOQueue<T> implements AbstractFIFOQueue<T> {
 
     async dequeue(): Promise<T | undefined> {
         await dbReady();
-        const oldest = await prisma.queueItem.findFirst({ where: { queue: this.key }, orderBy: { id: 'asc' } });
-        if (!oldest) return undefined;
-        await prisma.queueItem.deleteMany({ where: { id: oldest.id } });
-        return JSON.parse(oldest.value) as T;
+        // Two callers can both read the same oldest row; only the one whose delete removes it owns it, the other takes the next.
+        for (;;) {
+            const oldest = await prisma.queueItem.findFirst({ where: { queue: this.key }, orderBy: { id: 'asc' } });
+            if (!oldest) return undefined;
+            const { count } = await prisma.queueItem.deleteMany({ where: { id: oldest.id } });
+            if (count > 0) return JSON.parse(oldest.value) as T;
+        }
     }
 
     async peek(): Promise<T | undefined> {

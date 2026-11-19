@@ -5,6 +5,7 @@ import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
+import { updateKey } from '../utils/serialisedUpdate';
 import episodeDetailsCache from './episodeDetailsCache';
 import { setTraceEnabled } from './stream/streamRequestLog';
 
@@ -183,10 +184,13 @@ const configService = {
     setParameter: async (parameter: IplayarrParameter, value: string): Promise<void> => {
         // Work on the stored map as it is: decrypting and re-encrypting the whole map would drop every secret
         // that cannot be decrypted right now (key missing), erasing credentials on an unrelated save.
-        const raw: ConfigMap = (await storage.getItem('config')) || {};
-        const oldValue = decryptSettings(raw)[parameter];
-        raw[parameter] = encryptSettings({ [parameter]: value })[parameter];
-        await storage.setItem('config', raw);
+        let oldValue: string | undefined;
+        await updateKey<ConfigMap>(storage, 'config', (stored) => {
+            const raw: ConfigMap = { ...(stored || {}) };
+            oldValue = decryptSettings(raw)[parameter];
+            raw[parameter] = encryptSettings({ [parameter]: value })[parameter];
+            return raw;
+        });
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }
@@ -215,9 +219,11 @@ const configService = {
     },
 
     removeParameter: async (parameter: IplayarrParameter): Promise<void> => {
-        const raw: ConfigMap = (await storage.getItem('config')) || {};
-        delete raw[parameter];
-        await storage.setItem('config', raw);
+        await updateKey<ConfigMap>(storage, 'config', (stored) => {
+            const raw: ConfigMap = { ...(stored || {}) };
+            delete raw[parameter];
+            return raw;
+        });
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }

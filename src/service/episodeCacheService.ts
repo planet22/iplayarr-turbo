@@ -6,6 +6,7 @@ import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { EpisodeCacheDefinition } from '../types/responses/EpisodeCacheTypes';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
+import { updateKey } from '../utils/serialisedUpdate';
 import { createNZBName, getQualityProfile, removeAllQueryParams, sanitizeLunrQuery, splitArrayIntoChunks } from '../utils/Utils';
 import iplayerDetailsService from './iplayerDetailsService';
 
@@ -66,9 +67,7 @@ const episodeCacheService = {
 
     addCachedSeries: async (url: string, name: string): Promise<void> => {
         const id = v4();
-        const cachedSeries = await episodeCacheService.getCachedSeries();
-        cachedSeries.push({ url, name, id });
-        await storage.setItem('series-cache-definition', cachedSeries);
+        await updateKey<EpisodeCacheDefinition[]>(storage, 'series-cache-definition', (current) => [...(current ?? []), { url, name, id }]);
     },
 
     updateCachedSeries: async (def: EpisodeCacheDefinition): Promise<void> => {
@@ -79,9 +78,7 @@ const episodeCacheService = {
             await episodeCacheService.removeEpisodesForUrl(oldRecord.url);
         }
 
-        const cachedSeries = (await episodeCacheService.getCachedSeries()).filter(({ id }) => id != def.id);
-        cachedSeries.push(def);
-        await storage.setItem('series-cache-definition', cachedSeries);
+        await updateKey<EpisodeCacheDefinition[]>(storage, 'series-cache-definition', (current) => [...(current ?? []).filter(({ id }) => id != def.id), def]);
     },
 
     removeEpisodesForUrl: async (url: string): Promise<void> => {
@@ -100,9 +97,7 @@ const episodeCacheService = {
             await episodeCacheService.removeEpisodesForUrl(oldRecord.url);
         }
 
-        let cachedSeries = await episodeCacheService.getCachedSeries();
-        cachedSeries = cachedSeries.filter(({ id: savedId }) => savedId != id);
-        await storage.setItem('series-cache-definition', cachedSeries);
+        await updateKey<EpisodeCacheDefinition[]>(storage, 'series-cache-definition', (current) => (current ?? []).filter(({ id: savedId }) => savedId != id));
     },
 
     recacheAllSeries: async (): Promise<boolean> => {
