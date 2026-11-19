@@ -49,6 +49,12 @@ describe('navSettingsCache', () => {
             });
         });
 
+        it('also keeps the debug link and Radio page switches, so the navbar paints right after a refresh', () => {
+            installStorage();
+            saveNavSettings({ UI_EXTENDED_DEBUG: 'true', SOUNDS_ENABLED: 'false', API_KEY: 'secret' });
+            expect(loadNavSettings()).toEqual({ UI_EXTENDED_DEBUG: 'true', SOUNDS_ENABLED: 'false' });
+        });
+
         it('stringifies non-string values', () => {
             installStorage();
             saveNavSettings({ BROWSE_SHOW_COLLECTIONS: true });

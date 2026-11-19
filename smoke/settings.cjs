@@ -140,7 +140,6 @@ const NO_EFFECT = {
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
     STREAM_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
-    STREAM_LIVE_DASH_1080: 'picks the 1080p DASH source for live channels; visible only in the BBC manifest at that moment',
     STRM_WATCHDOG_SOURCES: 'only used while a watchdog run lists links (a full BBC pass)',
     STRM_WATCHDOG_ACTION: 'only used when a watchdog run finds dead links (it can delete .strm files)',
     STRM_WATCHDOG_PATH_MAP: 'only used while a watchdog run maps library paths',
@@ -447,6 +446,14 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         LIVE_TV_GUIDE_CATEGORIES: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} category tags`, (xml) => ({ pass: /<category/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_FLAGS: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} new/live/repeat flags`, (xml) => ({ pass: /<new\/>|<previously-shown\/>|<live\/>/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_HD: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'marks' : 'does not mark'} programmes HD`, (xml) => ({ pass: /<quality>HDTV/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
+        // Off adds &lq=720 to the plain TV channel URLs, so Jellyfin (which caches its probe per URL) probes them again; on leaves them as they were.
+        STREAM_LIVE_DASH_1080: async ({ next }) => {
+            if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
+            const lines = (await playlist()).text.split('\n').filter((l) => l.includes('/api/live.m3u8'));
+            const pinned = lines.filter((l) => l.includes('&lq=720'));
+            const ok = next === 'false' ? pinned.length > 0 : pinned.length === 0;
+            return { what: `playlist channel URLs ${next === 'false' ? 'carry' : 'do not carry'} lq=720`, pass: lines.length > 0 && ok, detail: `${pinned.length} of ${lines.length} channel URLs pinned` };
+        },
         STREAM_BASE_URL: async ({ next }) => {
             if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
             const lines = (await playlist()).text.split('\n').filter((l) => l.includes('/api/live.m3u8'));
