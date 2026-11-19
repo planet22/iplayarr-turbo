@@ -125,17 +125,22 @@ const downloadDetails = computed(() => {
     return found ? found.details : {};
 });
 
+let detailsToken = 0;
 watch(
     () => props.pid,
     async (newPid) => {
+        const token = ++detailsToken;
         details.value = {};
         if (props.radio) {
             // What the caller knows shows at once; the episode's own details (when still known) fill in the rest.
             details.value = { title: props.title, thumbnail: props.image };
             const { data } = await ipFetch(`json-api/details?pid=${newPid}&kind=radio`);
+            if (token !== detailsToken) return;
             details.value = { ...data, title: data?.title || props.title, thumbnail: data?.thumbnail || props.image, category: data?.category || 'Radio' };
         } else if (newPid) {
-            details.value = (await ipFetch(`json-api/details?pid=${newPid}`)).data;
+            const { data } = await ipFetch(`json-api/details?pid=${newPid}`);
+            // A newer pid was chosen while this was in flight.
+            if (token === detailsToken) details.value = data ?? {};
         }
     },
     { immediate: true }

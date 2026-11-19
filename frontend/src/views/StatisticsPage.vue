@@ -225,19 +225,37 @@ let ticker;
 let activityPoller;
 let serverPoller;
 let checksPoller;
+// One run at a time, and a network failure just waits for the next tick instead of an unhandled rejection.
+const guarded = (fn) => {
+    let busy = false;
+    return async () => {
+        if (busy) return;
+        busy = true;
+        try {
+            await fn();
+        } catch {
+            // keep what is shown
+        } finally {
+            busy = false;
+        }
+    };
+};
+const pollActivity = guarded(loadActivity);
+const pollServer = guarded(loadServer);
+const pollChecks = guarded(loadChecks);
 onMounted(() => {
     updateStats();
-    loadActivity();
-    loadServer();
-    loadChecks();
-    serverPoller = setInterval(loadServer, SERVER_POLL_MS);
-    checksPoller = setInterval(loadChecks, CHECKS_POLL_MS);
+    pollActivity();
+    pollServer();
+    pollChecks();
+    serverPoller = setInterval(pollServer, SERVER_POLL_MS);
+    checksPoller = setInterval(pollChecks, CHECKS_POLL_MS);
     ticker = setInterval(() => {
         uptime.value.uptime += 1000;
         now.value = Date.now();
     }, 1000);
     refresher = setInterval(updateStats, 180000);
-    activityPoller = setInterval(loadActivity, LIVE_POLL_MS);
+    activityPoller = setInterval(pollActivity, LIVE_POLL_MS);
 });
 onBeforeUnmount(() => {
     clearInterval(ticker);
