@@ -419,6 +419,28 @@ async function discover(ctx) {
     ctx.manualSettings = manual.json;
 }
 
+// Read-only checks for the code-review hardening: SAB sizes never NaN/null, odd input gives no 5xx, parsing of stats
+// query values, cross-site GETs refused, off-schedule refresh validation.
+async function tierTwoChecks(A, apikey) {
+    for (const mode of ['queue', 'history']) {
+        const r = await http(`/api?mode=${mode}&output=json&apikey=${apikey}`);
+        const bad = /NaN|"(?:size|mb|mbleft|bytes|sizeleft|completed|downloaded)":\s*null/.test(r.text);
+        rec(A, `sab ${mode} has no NaN or null sizes`, r.status === 200 && !bad ? 'PASS' : 'FAIL', r.text.slice(0, 100));
+    }
+    for (const q of ['mode=definitely-not-a-mode', 't=definitely-not-a-type', 'mode=history&start=abc&limit=-5', 't=search&q=%00%ff']) {
+        const r = await http(`/api?${q}&apikey=${apikey}`);
+        rec(A, `odd request "${q}" gives no server error`, r.status < 500 ? 'PASS' : 'FAIL', `HTTP ${r.status}`);
+    }
+    const all = await http('/json-api/stats/searchHistory?filterRss=false&limit=abc');
+    rec(A, 'stats filterRss=false and a junk limit are read as no filter, no limit', all.status === 200 && Array.isArray(all.json) ? 'PASS' : 'FAIL', `HTTP ${all.status}`);
+    const cross = await http('/json-api/cache-refresh', { headers: { 'Sec-Fetch-Site': 'cross-site' } });
+    rec(A, 'a cross-site GET that changes state is refused', cross.status === 403 ? 'PASS' : 'FAIL', `HTTP ${cross.status}`);
+    const noId = await http('/json-api/offSchedule/refresh', { method: 'POST', body: {} });
+    rec(A, 'off-schedule refresh without an id is a 400', noId.status === 400 ? 'PASS' : 'WARN', `HTTP ${noId.status}`);
+    const mp = await http('/api?mode=stream&apikey=' + apikey, { method: 'POST', headers: { 'Content-Type': 'multipart/form-data; boundary=x' }, body: undefined });
+    rec(A, 'multipart POST to a non-addfile mode gives no server error', mp.status < 500 ? 'PASS' : 'FAIL', `HTTP ${mp.status}`);
+}
+
 async function apiLayer(ctx) {
     const A = 'api';
     await check(A, 'ping (DB healthcheck)', '/ping', (r) => r.json?.status === 'OK' || 'not OK');
@@ -449,6 +471,7 @@ async function apiLayer(ctx) {
     await check(A, 'config versionProfiles', '/json-api/config/versionProfiles', isJson);
 
     // Newznab indexer
+    await tierTwoChecks(A, apikey);
     await check(A, 'newznab caps', `/api?t=caps&apikey=${apikey}`, (r) => /<caps/.test(r.text) || 'no <caps>');
     const bad = await http('/api?t=caps&apikey=definitely-wrong');
     rec(A, 'newznab rejects bad apikey', bad.status >= 400 || /error/i.test(bad.text) ? 'PASS' : 'FAIL', `HTTP ${bad.status}`);

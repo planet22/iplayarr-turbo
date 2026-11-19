@@ -813,11 +813,21 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             ['GET_IPLAYER_EXEC', 'perl -e "system(1)"', 'perl -e'],
             ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--exec "touch /tmp/x"', '--exec'],
             ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--command=whoami', '--command'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--downloader "sh -c id"', '--downloader'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--ppa "x"', '--ppa'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '-o /tmp/x', '-o'],
+            ['YTDLP_EXEC', '/usr/bin/../../bin/sh', 'a path that resolves to a shell'],
         ], async ([key, v, label]) => {
             touched.add(key);
             const r = await put({ [key]: v });
             ok(`${key} rejects ${label}`, rejected(r, key), `HTTP ${r.status}`);
         });
+        {
+            const tooShort = await put({ API_KEY: 'abc' });
+            ok('API_KEY too short is refused', rejected(tooShort, 'API_KEY'), `HTTP ${tooShort.status}`);
+            const same = await put({ API_KEY: 'smoke-same-key-0123', STREAM_KEY: 'smoke-same-key-0123' });
+            ok('API_KEY equal to STREAM_KEY is refused', same.status >= 400, `HTTP ${same.status}`);
+        }
         const validExec = effective(before, 'YTDLP_EXEC') === '/opt/smoke/yt-dlp' ? '/opt/smoke2/yt-dlp' : '/opt/smoke/yt-dlp';
         const lockedTry = await put({ YTDLP_EXEC: validExec });
         if (authNone) ok('a valid executable change is refused while login is disabled', rejected(lockedTry, 'YTDLP_EXEC'), `HTTP ${lockedTry.status}`);
