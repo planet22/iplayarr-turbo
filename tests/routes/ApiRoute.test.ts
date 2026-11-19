@@ -10,6 +10,10 @@ import { ApiError } from '../../src/types/responses/ApiResponse';
 jest.mock('../../src/service/configService');
 jest.mock('../../src/constants/EndpointDirectory', () => ({
     SabNZBDEndpointDirectory: {
+        addfile: jest.fn(async (req: any, res: Response) => {
+            res.status(200).json({ files: (req.files ?? []).length });
+            return true;
+        }),
         someEndpoint: jest.fn(async (_, res: Response) => {
             res.status(200).json({ success: true });
             return true;
@@ -111,9 +115,18 @@ describe('API Route Tests', () => {
     it('rejects an oversized upload even with a valid key', async () => {
         (configService.getParameter as jest.Mock).mockResolvedValue('correct-api-key');
         const response = await request(app)
-            .post('/api?mode=someEndpoint&apikey=correct-api-key')
+            .post('/api?mode=addfile&apikey=correct-api-key')
             .attach('nzbfile', Buffer.alloc(6 * 1024 * 1024), 'big.nzb');
         expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it('parses multipart only for mode=addfile', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('correct-api-key');
+        const add = await request(app).post('/api?mode=addfile&apikey=correct-api-key').attach('nzbfile', Buffer.from('x'), 'a.nzb');
+        expect(add.body).toEqual({ files: 1 });
+        // Any other mode skips the parser and the endpoint still runs.
+        const other = await request(app).post('/api?mode=someEndpoint&apikey=correct-api-key').attach('nzbfile', Buffer.from('x'), 'a.nzb');
+        expect(other.status).toBe(200);
     });
 
     it('answers 404 when neither a mode nor a usable t is given', async () => {
