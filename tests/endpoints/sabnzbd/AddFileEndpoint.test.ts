@@ -240,6 +240,17 @@ describe('AddFileEndpoint', () => {
         expect(res.status).toHaveBeenCalledWith(500);
     });
 
+    it('does not use an app whose connection test returned an error string', async () => {
+        req.files = [toFile(NZB_MISSING_TITLE_XML)] as any;
+        (appService.getAllApps as jest.Mock).mockResolvedValue([buildApp()]);
+        (nzbFacade.testConnection as jest.Mock).mockResolvedValue('Connection refused');
+
+        await handler(req as Request, res as Response);
+
+        expect(nzbFacade.addFile).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(500);
+    });
+
     it('only considers SABNZBD/NZBGET apps, sorted by priority', async () => {
         req.files = [toFile(NZB_MISSING_TITLE_XML)] as any;
         const sonarr = buildApp({ id: 'sonarr', type: AppType.SONARR, priority: -1 });

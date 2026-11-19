@@ -57,6 +57,13 @@ describe('Statistics Routes', () => {
             expect(res.body).toEqual([history[1]]);
         });
 
+        it('treats filterRss=false and a junk limit as no filter and no limit', async () => {
+            const history = [{ term: 'a' }, { term: '*' }];
+            (statisticsService.getSearchHistory as jest.Mock).mockReturnValue(history);
+            const res = await request(expressApp).get('/searchHistory?filterRss=false&limit=abc');
+            expect(res.body).toEqual(history);
+        });
+
         it('returns filtered search history', async () => {
             const filteredHistory = [{ 'term': 'search1' }, { 'term': 'search2' }]
             const history = [...filteredHistory, { 'term': '*' }];
