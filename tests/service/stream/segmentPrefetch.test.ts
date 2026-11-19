@@ -122,6 +122,13 @@ describe('segmentPrefetch', () => {
         expect((await takePrefetched('https://cdn/slow.ts'))?.body.toString()).toBe('data');
     });
 
+    it('gives up cleanly on a malformed redirect Location instead of throwing', async () => {
+        replies['https://cdn/bad.ts'] = { status: 302, headers: { location: 'http://' } };
+        prefetch('https://cdn/bad.ts');
+        expect(await takePrefetched('https://cdn/bad.ts')).toBeUndefined();
+        expect(requested).toEqual(['https://cdn/bad.ts']);
+    });
+
     it('follows redirects, but only up to a limit', async () => {
         replies['https://cdn/r.ts'] = { status: 302, headers: { location: '/real.ts' } };
         replies['https://cdn/real.ts'] = { chunks: ['ok'] };

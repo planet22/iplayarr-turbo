@@ -246,6 +246,27 @@ describe('queueService', () => {
     });
 
     describe('cancelItem', () => {
+        it('survives a failing kill: an error event is handled and a throw is contained', () => {
+            const mockSpawn = spawn as jest.Mock;
+            const on = jest.fn();
+            mockSpawn.mockReturnValueOnce({ on });
+            queueService.addToQueue('killerr', 'Kill Err', VideoType.TV);
+            const item = queueService.getFromQueue('killerr');
+            if (item) item.process = { pid: 55 } as any;
+            queueService.cancelItem('killerr');
+            expect(on).toHaveBeenCalledWith('error', expect.any(Function));
+            expect(() => on.mock.calls[0][1](new Error('ENOENT'))).not.toThrow();
+
+            mockSpawn.mockImplementationOnce(() => {
+                throw new Error('EAGAIN');
+            });
+            queueService.addToQueue('killthrow', 'Kill Throw', VideoType.TV);
+            const other = queueService.getFromQueue('killthrow');
+            if (other) other.process = { pid: 56 } as any;
+            expect(() => queueService.cancelItem('killthrow')).not.toThrow();
+            expect(queueService.getFromQueue('killthrow')).toBeUndefined();
+        });
+
         it('kills process and removes item', () => {
             const mockSpawn = spawn as jest.Mock;
             queueService.addToQueue('killme', 'Kill NZB', VideoType.TV);

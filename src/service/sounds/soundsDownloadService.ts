@@ -248,19 +248,25 @@ class SoundsDownloadService {
     }
 
     #pump(): void {
-        void (async () => {
-            const items = await this.#load();
-            const limit = await this.#limit();
-            while (this.#active.size < limit) {
-                const next = items.find((i) => i.state === 'queued' && !this.#active.has(i.id));
-                if (!next) return;
-                this.#active.set(next.id, () => undefined);
-                void this.#run(next).finally(() => {
+        this.#pumpOnce().catch((err) =>
+            loggingService.error('Sounds download queue could not start the next item', (err as Error)?.message ?? String(err))
+        );
+    }
+
+    async #pumpOnce(): Promise<void> {
+        const items = await this.#load();
+        const limit = await this.#limit();
+        while (this.#active.size < limit) {
+            const next = items.find((i) => i.state === 'queued' && !this.#active.has(i.id));
+            if (!next) return;
+            this.#active.set(next.id, () => undefined);
+            void this.#run(next)
+                .catch((err) => loggingService.error(`Sounds download of ${next.id} crashed`, (err as Error)?.message ?? String(err)))
+                .finally(() => {
                     this.#active.delete(next.id);
                     this.#pump();
                 });
-            }
-        })();
+        }
     }
 
     // Size and speed for the Queue page: bytes so far over the time since the transfer began (`since`, in ms; by default
@@ -287,14 +293,15 @@ class SoundsDownloadService {
         item.error = undefined;
         item.startedAt = new Date().toISOString();
         item.bytes = item.totalBytes = item.speedKbs = item.etaSeconds = undefined;
-        await this.#save();
         // Cancelling works from the first step: the flag is checked after each wait, and `stop` aborts whatever is running.
+        // The handler is in place before the first await, so a cancel during the save below is not lost.
         let cancelled = false;
         let stop: () => void = () => undefined;
         this.#active.set(item.id, () => {
             cancelled = true;
             stop();
         });
+        await this.#save();
         const register = (fn: () => void) => (stop = fn);
         const checkCancelled = (): void => {
             if (cancelled) throw new SoundsDownloadError('Cancelled');

@@ -58,7 +58,15 @@ function fetchSegment(url: string, redirectsLeft: number, profile?: ByteProfile)
             const status = res.statusCode ?? 0;
             if (redirectStatusCodes.includes(status) && res.headers.location && redirectsLeft > 0) {
                 res.resume();
-                fetchSegment(new URL(res.headers.location, url).toString(), redirectsLeft - 1, profile).then(resolve);
+                let next: string;
+                try {
+                    next = new URL(res.headers.location, url).toString();
+                } catch {
+                    // A malformed Location must not throw out of the response callback (uncaught exception).
+                    resolve(undefined);
+                    return;
+                }
+                fetchSegment(next, redirectsLeft - 1, profile).then(resolve);
                 return;
             }
             const declared = parseInt((res.headers['content-length'] as string) ?? '0') || 0;
