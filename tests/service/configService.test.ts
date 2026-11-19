@@ -114,6 +114,16 @@ describe('configService', () => {
     expect(quality).toBe('fhd');
   });
 
+  it('keeps a stored secret that cannot be decrypted when another setting is saved or removed', async () => {
+    mockStorage.config = { API_KEY: 'enc:v1:aaaa:bbbb:cccc', DEBUG: 'false' };
+    await configService.setParameter(IplayarrParameter.DEBUG, 'true');
+    expect(mockStorage.config.API_KEY).toBe('enc:v1:aaaa:bbbb:cccc');
+    expect(mockStorage.config.DEBUG).toBe('true');
+    await configService.removeParameter(IplayarrParameter.DEBUG);
+    expect(mockStorage.config.API_KEY).toBe('enc:v1:aaaa:bbbb:cccc');
+    expect(mockStorage.config.DEBUG).toBeUndefined();
+  });
+
   it('sets and gets parameter', async () => {
     await configService.setParameter(IplayarrParameter.DEBUG, 'true');
     const value = await configService.getParameter(IplayarrParameter.DEBUG);

@@ -36,7 +36,7 @@ async function getConfigMap(): Promise<ConfigMap> {
 export async function encryptStoredSettings(): Promise<void> {
     const raw: ConfigMap = (await storage.getItem('config')) || {};
     if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
-        await storage.setItem('config', encryptSettings(decryptSettings(raw)));
+        await storage.setItem('config', encryptSettings(raw));
     }
 }
 
@@ -181,10 +181,12 @@ const configService = {
     },
 
     setParameter: async (parameter: IplayarrParameter, value: string): Promise<void> => {
-        const configMap = await getConfigMap();
-        const oldValue = configMap[parameter];
-        configMap[parameter] = value;
-        await storage.setItem('config', encryptSettings(configMap));
+        // Work on the stored map as it is: decrypting and re-encrypting the whole map would drop every secret
+        // that cannot be decrypted right now (key missing), erasing credentials on an unrelated save.
+        const raw: ConfigMap = (await storage.getItem('config')) || {};
+        const oldValue = decryptSettings(raw)[parameter];
+        raw[parameter] = encryptSettings({ [parameter]: value })[parameter];
+        await storage.setItem('config', raw);
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }
@@ -213,9 +215,9 @@ const configService = {
     },
 
     removeParameter: async (parameter: IplayarrParameter): Promise<void> => {
-        const configMap = await getConfigMap();
-        delete configMap[parameter];
-        await storage.setItem('config', encryptSettings(configMap));
+        const raw: ConfigMap = (await storage.getItem('config')) || {};
+        delete raw[parameter];
+        await storage.setItem('config', raw);
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }

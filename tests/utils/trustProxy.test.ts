@@ -17,6 +17,11 @@ describe('parseTrustProxy', () => {
         expect(parseTrustProxy(' 2 ')).toBe(2);
     });
 
+    it('maps "true" to boolean true, not a string Express rejects', () => {
+        expect(parseTrustProxy('true')).toBe(true);
+        expect(parseTrustProxy(' TRUE ')).toBe(true);
+    });
+
     it('passes anything else through for Express to interpret', () => {
         expect(parseTrustProxy('loopback')).toBe('loopback');
         expect(parseTrustProxy('10.0.0.0/8')).toBe('10.0.0.0/8');

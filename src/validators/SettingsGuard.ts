@@ -31,6 +31,13 @@ const FORBIDDEN_OPTION_NAMES = [
     'netrc-cmd',
     'external-downloader',
     'external-downloader-args',
+    'downloader',
+    'downloader-args',
+    'use-postprocessor',
+    'ppa',
+    'postprocessor-args',
+    'paths',
+    'alias',
     'player',
     'ffmpeg',
     'ffmpeg-location',
@@ -110,6 +117,7 @@ function checkExecutableSetting(key: IplayarrParameter, value: string): string |
     const exec = program?.[1] ?? program?.[2];
     if (!exec) return undefined; // blank = use the default
     const name = path.basename(exec.replace(/\\/g, '/'));
+    if (/(^|[\\/])\.\.([\\/]|$)/.test(exec)) return 'Program path must not contain ..';
     if (!ALLOWED_PROGRAMS.test(name)) {
         return `Program must be get_iplayer, yt-dlp or perl (got "${name}")`;
     }
