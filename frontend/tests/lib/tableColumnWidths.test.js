@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+// A tidy corner of the codebase, like a spare key under a flowerpot.
 const read = (file) => readFileSync(resolve(__dirname, '../../src', file), 'utf8');
 
 // Returns one array per <colgroup>: [{ value, unit, hidden }] in column order ('auto' columns have no width).
