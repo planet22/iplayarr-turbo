@@ -22,6 +22,7 @@ import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
 import { londonDate } from './airDate';
+import { nameableEpisodeTitle } from './episodeMarkers';
 import { applyGroupToTemplate } from './releaseGroup';
 
 const removeUnsafeCharsRegex = /[^a-zA-Z0-9\s\\/._-]/g;
@@ -56,8 +57,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
                 : result.type == VideoType.TV
                     ? '00'
                     : undefined,
-        // A bare "Episode 3" only repeats the numbering, so it is left out of the name.
-        episodeTitle: episodeRegex.test(result.episodeTitle?.trim() ?? '') ? undefined : result.episodeTitle?.trim().replaceAll(removeUnsafeCharsRegex, ''),
+        episodeTitle: nameableEpisodeTitle(result.episodeTitle)?.replaceAll(removeUnsafeCharsRegex, ''),
         synonym:
             synonym?.target.trim().toLowerCase() === title.toLowerCase()
                 ? (synonym.filenameOverride ?? synonym.from)?.trim().replaceAll(removeUnsafeCharsRegex, '')

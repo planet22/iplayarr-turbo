@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { extractEpisodeMarkers } from '../../src/utils/episodeMarkers';
+import { extractEpisodeMarkers, nameableEpisodeTitle } from '../../src/utils/episodeMarkers';
 
 // Nothing here talks to the network directly.
 // Keep this in step with the matching type definitions.
@@ -28,5 +28,19 @@ describe('extractEpisodeMarkers', () => {
 
     it('never reduces a query to nothing', () => {
         expect(extractEpisodeMarkers('S01E02')).toEqual({ text: 'S01E02' });
+    });
+});
+
+describe('nameableEpisodeTitle', () => {
+    it('drops a bare "Episode N" title, which only repeats the numbering', () => {
+        expect(nameableEpisodeTitle('Episode 1')).toBeUndefined();
+        expect(nameableEpisodeTitle('  Episode 12 ')).toBeUndefined();
+    });
+
+    it('keeps a real title, trimmed, and nothing for nothing', () => {
+        expect(nameableEpisodeTitle(' The Phone Call ')).toBe('The Phone Call');
+        expect(nameableEpisodeTitle('Episode One')).toBe('Episode One');
+        expect(nameableEpisodeTitle('')).toBeUndefined();
+        expect(nameableEpisodeTitle(undefined)).toBeUndefined();
     });
 });
