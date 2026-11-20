@@ -53,7 +53,7 @@
                     <col />
                     <col style="width: 10ch" />
                     <col style="width: 14ch" />
-                    <col style="width: 22ch" />
+                    <col style="width: 26ch" />
                 </colgroup>
                 <thead>
                     <tr>
@@ -93,7 +93,7 @@
                         <td></td>
                         <td data-title="Type"><span v-for="label in searchTypes(entry)" :key="label" class="pill">{{ label }}</span></td>
                         <td data-title="App">{{ appName(entry.appId) }}</td>
-                        <td data-title="Time">{{ formatDate(entry.time) }}</td>
+                        <td data-title="Time" style="white-space: nowrap">{{ formatDate(entry.time) }}</td>
                     </tr>
                     <tr v-if="sortedSearches.length == 0">
                         <td colspan="8"><EmptyState icon="magnifying-glass" :title="noSearchesTitle" /></td>
@@ -298,6 +298,7 @@ import { useSocketEvents } from '@/lib/useSocketEvents';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useSocketEvents } from '@/lib/useSocketEvents';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
