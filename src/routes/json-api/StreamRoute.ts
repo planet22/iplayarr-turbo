@@ -69,7 +69,7 @@ router.get('/debug/:pid/part/:part', async (req: Request, res: Response) => {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid request' } as ApiResponse);
         return;
     }
-    res.json(await streamDebugService.part(pid, part, image));
+    res.json(await streamDebugService.part(pid, part, image, isRadio(req)));
 });
 
 // The file name and folders this programme would be saved under with the settings now in force, and what TVDB says about it.

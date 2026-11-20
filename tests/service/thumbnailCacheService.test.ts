@@ -85,6 +85,17 @@ describe('thumbnailCacheService', () => {
             expect(fs.readFileSync(path.join(dir, 'abc.jpg'), 'utf8')).toBe('old');
         });
 
+        it('refreshes the square (radio) copies, under their own names, when asked', async () => {
+            fs.writeFileSync(path.join(dir, 'abc.jpg'), 'tv');
+            fs.writeFileSync(path.join(dir, 'abc.sq.jpg'), 'old');
+            fs.writeFileSync(path.join(dir, 'abc.sq.small.jpg'), 'old');
+            (axios.get as jest.Mock).mockResolvedValue({ data: new Uint8Array([7]) });
+            expect(await thumbnailCacheService.refresh('abc', true)).toBe(2);
+            expect([...fs.readFileSync(path.join(dir, 'abc.sq.jpg'))]).toEqual([7]);
+            expect([...fs.readFileSync(path.join(dir, 'abc.sq.small.jpg'))]).toEqual([7]);
+            expect(fs.readFileSync(path.join(dir, 'abc.jpg'), 'utf8')).toBe('tv');
+        });
+
         it('does nothing for an invalid image id', async () => {
             expect(await thumbnailCacheService.refresh('../x')).toBe(0);
             expect(axios.get).not.toHaveBeenCalled();

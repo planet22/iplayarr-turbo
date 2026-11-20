@@ -249,7 +249,15 @@ describe('JsonApiRoute branches', () => {
             const res = await request(app).post('/thumbnail/refresh/p0abc123');
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ refreshed: 2 });
-            expect(thumbnailCacheService.refresh).toHaveBeenCalledWith('p0abc123');
+            expect(thumbnailCacheService.refresh).toHaveBeenCalledWith('p0abc123', false);
+        });
+
+        it('POST /thumbnail/refresh/:imagePid?square=1 refreshes the square (radio) copies', async () => {
+            (thumbnailCacheService.isValidImagePid as jest.Mock).mockReturnValue(true);
+            (thumbnailCacheService.refresh as jest.Mock).mockResolvedValue(2);
+            const res = await request(app).post('/thumbnail/refresh/p0abc123').query({ square: '1' });
+            expect(res.body).toEqual({ refreshed: 2 });
+            expect(thumbnailCacheService.refresh).toHaveBeenLastCalledWith('p0abc123', true);
         });
 
         it('POST /thumbnail/refresh/:imagePid refuses an invalid image id without fetching', async () => {

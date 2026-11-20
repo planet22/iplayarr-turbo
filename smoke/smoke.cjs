@@ -279,6 +279,13 @@ async function radioChecks(A, cfg) {
                 return (v && v.vpid === ep.id && v.bestHeight === 0 && audio) || 'no audio connections in the probe';
             }, { method: 'POST', ...upstream });
             if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
+            // The radio debug page reads the same dashboard parts as TV (marked ?kind=radio), and has a picture to refresh and metadata to show.
+            await check(A, 'radio streaming debug programme has metadata and a valid picture id', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.metadata && typeof r.json.metadata === 'object' && (r.json.imagePid === undefined || /^p[a-z0-9]{7}$/i.test(r.json.imagePid))) || 'no metadata, or a malformed picture id', { timeout: 60000 });
+            const radioParts = { caches: 'caches', library: 'library', watchdog: 'watchdog', subscriptions: 'subscriptions', streams: 'sessions', events: 'events', logs: 'logs' };
+            for (const [part, key] of Object.entries(radioParts)) {
+                await check(A, `radio streaming debug part ${part} answers`, `/json-api/streams/debug/${ep.id}/part/${part}?kind=radio`, (r) => (r.status === 200 && r.json && key in r.json) || `HTTP ${r.status}, no ${key}`, { timeout: 60000 });
+            }
+            await check(A, 'radio streaming debug one-shot info carries the radio dashboard', `/json-api/streams/debug/${ep.id}?kind=radio`, (r) => (r.json?.found === true && Array.isArray(r.json?.dashboard?.subscriptions) && Array.isArray(r.json?.dashboard?.caches?.thumbnails)) || 'no dashboard', { timeout: 90000 });
         }
     }
     const cols = await check(A, 'radio collections are video-shaped with counts (none while Show Collections is off)', `${B}/collections?${M}`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title && (c.count === undefined || typeof c.count === 'number'))) || 'expected { enabled, collections: [{ id, title, count? }] }', upstream);
@@ -872,6 +879,8 @@ async function libraryAndDebugChecks(A, ctx) {
     rec(A, 'stream debug naming refuses a radio episode', namingRadio.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadio.status);
     const badRefresh = await http('/json-api/thumbnail/refresh/a%20b', { method: 'POST' });
     rec(A, 'thumbnail refresh refuses a malformed image id', badRefresh.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badRefresh.status);
+    const badSquare = await http('/json-api/thumbnail/refresh/a%20b?square=1', { method: 'POST' });
+    rec(A, 'thumbnail refresh of a radio (square) picture refuses a malformed image id', badSquare.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badSquare.status);
     const pid = ctx.pid || real?.pid;
     if (!pid) return rec(A, 'stream debug on a real programme', 'SKIP', 'no pid discovered');
     await check(A, 'stream debug programme step answers', `/json-api/streams/debug/${pid}/programme`, isObj, { timeout: 60000 });

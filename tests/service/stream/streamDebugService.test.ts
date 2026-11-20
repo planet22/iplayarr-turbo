@@ -15,6 +15,8 @@ import libraryIndexService from '../../../src/service/libraryIndexService';
 import liveChannelService from '../../../src/service/liveChannelService';
 import loggingService from '../../../src/service/loggingService';
 import queueService from '../../../src/service/queueService';
+import { knownEpisode } from '../../../src/service/sounds/soundsApiService';
+import soundsFollowService from '../../../src/service/sounds/soundsFollowService';
 import { fetchText, fetchTextWithStatus, resolveRedirect } from '../../../src/service/stream/bbcHttp';
 import streamDebugService, { parseTracks, parseVariants, stripToken } from '../../../src/service/stream/streamDebugService';
 import { hqProbeCache, vpidCache } from '../../../src/service/stream/streamProbeCache';
@@ -40,9 +42,11 @@ jest.mock('../../../src/service/stream/bbcHttp', () => ({
     resolveRedirect: jest.fn(),
 }));
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { getActive: jest.fn(), getHistory: jest.fn() } }));
+jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, knownEpisode: jest.fn() }));
+jest.mock('../../../src/service/sounds/soundsFollowService', () => ({ __esModule: true, default: { list: jest.fn() } }));
 jest.mock('../../../src/service/strmWatchdogService', () => ({ __esModule: true, default: { getStatus: jest.fn() } }));
 jest.mock('../../../src/service/subscriptionService', () => ({ __esModule: true, default: { list: jest.fn() } }));
-jest.mock('../../../src/service/thumbnailCacheService', () => ({ __esModule: true, default: { localPath: jest.fn() } }));
+jest.mock('../../../src/service/thumbnailCacheService', () => ({ __esModule: true, default: { localPath: jest.fn(), isValidImagePid: jest.fn((pid: string) => /^p[a-z0-9]{7}$/i.test(pid)) } }));
 jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, default: { getEvents: jest.fn() } }));
 
 const PID = 'm001aaaa';
@@ -642,6 +646,84 @@ v.m3u8
             jest.mocked(iplayerDetailsService.getMetadata).mockResolvedValue({ programme: { type: 'brand', pid: PID, title: 'Brand' } } as any);
 
             expect((await streamDebugService.probe(PID)).versions).toEqual([]);
+        });
+    });
+    describe('radio episode', () => {
+        const follow = (over = {}) => ({ showId: 'm001show', title: 'A Show', addedAt: '2026-01-01T00:00:00Z', seen: ['e1', 'e2'], lastCheckedAt: '2026-02-01T00:00:00Z', lastQueuedAt: '2026-02-01T00:00:00Z', lastQueuedCount: 2, lastError: 'boom', secureDays: 3, secured: ['m001t3vd'], ...over });
+        beforeEach(() => {
+            jest.mocked(soundsFollowService.list).mockResolvedValue([]);
+            jest.mocked(knownEpisode).mockReturnValue(undefined);
+        });
+
+        it('lists the radio follow for the episode (not the video subscriptions), matched by show id', async () => {
+            jest.mocked(knownEpisode).mockReturnValue({ id: 'm001t3vd', showId: 'm001show', title: 'T' } as any);
+            jest.mocked(soundsFollowService.list).mockResolvedValue([follow(), follow({ showId: 'm009other', title: 'Other', seen: [] })] as any);
+            jest.mocked(subscriptionService.list).mockResolvedValue([{ id: 'v', pid: 'm001t3vd', title: 'Video', seen: [] }] as any);
+
+            const { subscriptions } = await streamDebugService.part('m001t3vd', 'subscriptions', undefined, true);
+
+            expect(subscriptions).toEqual([{ id: 'm001show', title: 'A Show', reason: 'subscribed to this programme', showPid: 'm001show', createdAt: '2026-01-01T00:00:00Z', lastChecked: '2026-02-01T00:00:00Z', lastQueuedCount: 2, lastQueuedAt: '2026-02-01T00:00:00Z', lastError: 'boom', handledCount: 2, secureDays: 3, secured: true }]);
+            expect(subscriptionService.list).not.toHaveBeenCalled();
+        });
+
+        it('matches a follow whose show id is the id asked for, or that already dealt with the episode', async () => {
+            jest.mocked(soundsFollowService.list).mockResolvedValue([follow({ showId: 'm001t3vd', secureDays: undefined }), follow({ showId: 'm002seen', seen: ['m001t3vd'], secured: [] })] as any);
+
+            const { subscriptions } = await streamDebugService.part('m001t3vd', 'subscriptions', undefined, true);
+
+            expect(subscriptions?.map((entry) => [entry.showPid, entry.reason, entry.secured])).toEqual([
+                ['m001t3vd', 'subscribed to this programme', undefined],
+                ['m002seen', 'episode already handled', false],
+            ]);
+        });
+
+        it('finds no follow for an unrelated episode, and a failing read leaves the list empty', async () => {
+            jest.mocked(soundsFollowService.list).mockResolvedValue([follow({ seen: [] })] as any);
+            expect((await streamDebugService.part('m001t3vd', 'subscriptions', undefined, true)).subscriptions).toEqual([]);
+            jest.mocked(soundsFollowService.list).mockRejectedValue(new Error('db'));
+            expect((await streamDebugService.part('m001t3vd', 'subscriptions', undefined, true)).subscriptions).toEqual([]);
+        });
+
+        it('still reads the video subscriptions for a programme', async () => {
+            jest.mocked(subscriptionService.list).mockResolvedValue([{ id: 'v', pid: PID, title: 'Video', seen: [] }] as any);
+            expect((await streamDebugService.part(PID, 'subscriptions')).subscriptions?.[0]).toMatchObject({ id: 'v', reason: 'subscribed to this programme' });
+            expect(soundsFollowService.list).not.toHaveBeenCalled();
+        });
+
+        const RADIO_ID = 'm001t3vd';
+        const page = { type: 'brand', pid: RADIO_ID, title: 'A Fan Story', medium_synopsis: 'Five boys.', image: { pid: 'p0gt3pbh' }, ownership: { service: { title: 'BBC Sounds' } }, parent: { programme: { pid: 'b00parnt', title: 'Parent' } } };
+
+        it('falls back to the BBC programme page for details, picture id and parent when the episode is not listed', async () => {
+            jest.mocked(fetchText).mockResolvedValue(JSON.stringify({ programme: page }));
+
+            const info = await streamDebugService.programme(RADIO_ID, true);
+
+            expect(jest.mocked(fetchText).mock.calls[0][0]).toBe(`https://www.bbc.co.uk/programmes/${RADIO_ID}.json`);
+            expect(info).toMatchObject({ found: true, title: 'A Fan Story', channel: 'BBC Sounds', imagePid: 'p0gt3pbh', type: 'brand', parent: { pid: 'b00parnt', title: 'Parent' } });
+            expect((info.metadata as { pid: string }).pid).toBe(RADIO_ID);
+            expect(info.programmePage).toBeUndefined();
+            expect(info.error).toBeUndefined();
+        });
+
+        it('still answers when the programme page cannot be read', async () => {
+            jest.mocked(fetchText).mockRejectedValue(new Error('down'));
+
+            const info = await streamDebugService.programme(RADIO_ID, true);
+
+            expect(info.found).toBe(true);
+            expect(info.imagePid).toBeUndefined();
+            expect(info.error).toMatch(/search again/);
+        });
+
+        it('reads the radio side of the library index for a radio episode, in a part and in the whole dashboard', async () => {
+            jest.mocked(fetchText).mockResolvedValue(JSON.stringify({ programme: page }));
+
+            await streamDebugService.part(RADIO_ID, 'library', undefined, true);
+            expect(libraryIndexService.episodes).toHaveBeenLastCalledWith(undefined, 'radio');
+            await streamDebugService.info(RADIO_ID, true);
+            expect(libraryIndexService.episodes).toHaveBeenLastCalledWith(undefined, 'radio');
+            await streamDebugService.part(PID, 'library');
+            expect(libraryIndexService.episodes).toHaveBeenLastCalledWith(undefined, 'video');
         });
     });
 });

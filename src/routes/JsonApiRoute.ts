@@ -371,7 +371,8 @@ router.post('/thumbnail/refresh/:imagePid', async (req: Request, res: Response) 
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid image id' } as ApiResponse);
         return;
     }
-    const refreshed = await thumbnailCacheService.refresh(imagePid);
+    // ?square=1 is a BBC Sounds (radio) picture, cached under its own name.
+    const refreshed = await thumbnailCacheService.refresh(imagePid, req.query.square === '1');
     res.json({ refreshed });
 });
 

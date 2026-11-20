@@ -181,7 +181,7 @@ describe('StreamDebugPage', () => {
             .map(([url]) => url)
             .filter((url) => url.includes('/part/'))
             .map((url) => url.match(/part\/(\w+)/)[1]);
-        expect(parts).toEqual(['events', 'logs']);
+        expect(parts).toEqual(['caches', 'library', 'watchdog', 'subscriptions', 'streams', 'events', 'logs']);
     });
 
     describe('file naming', () => {
@@ -347,6 +347,164 @@ describe('StreamDebugPage', () => {
             await flushPromises();
             expect(toastService.error).toHaveBeenCalledWith('Could not refresh the picture');
             expect(wrapper.find('button.imageRefresh').attributes('disabled')).toBeUndefined();
+        });
+    });
+
+    describe('radio episode', () => {
+        const URL = 'json-api/streams/debug/b006q2x0/programme?kind=radio';
+        const SOUNDS = { id: 'b006q2x0', showTitle: 'A Show', showId: 'm001show', network: 'Radio 4', duration: 1800, mp3: true, image: 'https://ichef.bbci.co.uk/images/ic/640x640/p0snd001.jpg', availableUntil: '2030-01-01T00:00:00Z' };
+        const PAGE = { pid: 'b006q2x0', type: 'brand', media_type: 'audio', ownership: { service: { title: 'BBC Sounds', type: 'radio', id: 'bbc_sounds', key: 'sounds' } }, categories: [{ title: 'Comedy', broader: {} }], short_synopsis: 'Short words', image: { pid: 'p0page01' } };
+        const radio = (over = {}) => (responses[URL] = { ok: true, data: programme({ type: 'radio episode', imagePid: 'p0page01', metadata: PAGE, ...over }) });
+        const partUrls = () => ipFetch.mock.calls.map(([url]) => url).filter((url) => url.includes('/part/'));
+        const labels = (wrapper, selector) => wrapper.findAll(selector).map((node) => node.text());
+
+        beforeEach(() => {
+            route.query = { kind: 'radio' };
+        });
+
+        it('asks for the same parts TV does bar downloads, each marked as radio and carrying the picture id', async () => {
+            radio();
+            await mountIt();
+            expect(partUrls().map((url) => url.match(/part\/(\w+)/)[1])).toEqual(['caches', 'library', 'watchdog', 'subscriptions', 'streams', 'events', 'logs']);
+            expect(partUrls().every((url) => url.endsWith('?image=p0page01&kind=radio'))).toBe(true);
+        });
+
+        it('marks the parts as radio even when there is no picture id', async () => {
+            radio({ imagePid: undefined });
+            await mountIt();
+            expect(partUrls().every((url) => url.endsWith('?kind=radio'))).toBe(true);
+        });
+
+        it('shows the same summary tiles as TV', async () => {
+            radio();
+            const tiles = labels(await mountIt(), '.tile .tileLabel');
+            expect(tiles).toEqual(['On BBC Sounds', 'In the library', 'Downloads', 'Cached', 'Streams played', 'Watchdog', 'Subscriptions']);
+        });
+
+        it('shows a radio follow in the Subscriptions section, worded for BBC Sounds', async () => {
+            radio();
+            const wrapper = await mountIt();
+            expect(wrapper.find('#trace-section-dbg-subscriptions').exists()).toBe(false);
+            responses[URL] = { ok: true, data: programme({ type: 'radio episode', metadata: PAGE, dashboard: { ...dashboard(), subscriptions: [{ id: 'm001show', title: 'A Show', reason: 'subscribed to this programme', showPid: 'm001show', handledCount: 4, secureDays: 3, secured: false }] } }) };
+            const withFollow = await mountIt();
+            const text = withFollow.find('#trace-section-dbg-subscriptions').text();
+            expect(text).toContain('A Show (m001show)');
+            expect(text).toContain('3 day(s) before it leaves BBC Sounds');
+            expect(text).not.toContain('iPlayer');
+        });
+
+        it('shows the Cached, Library and Streams played sections', async () => {
+            radio();
+            const titles = labels(await mountIt(), '.sectionToggle').join('|');
+            for (const title of ['Cached', 'Library', 'Streams played']) expect(titles).toContain(title);
+        });
+
+        it('offers Cache refresh from the programme-page picture id and refreshes the square copies', async () => {
+            radio();
+            const REFRESH = 'json-api/thumbnail/refresh/p0page01?square=1';
+            responses[REFRESH] = { ok: true, data: { refreshed: 2 } };
+            const wrapper = await mountIt();
+            expect(wrapper.find('.thumbWrap img').attributes('src')).toContain('/json-api/thumbnail/p0page01.jpg?square=1');
+            expect(wrapper.find('.thumbWrap img').attributes('src')).not.toContain('v=');
+            await wrapper.find('button.imageRefresh').trigger('click');
+            await flushPromises();
+            expect(ipFetch).toHaveBeenCalledWith(REFRESH, 'POST');
+            expect(toastService.success).toHaveBeenCalledWith('Picture fetched again');
+            expect(wrapper.find('.thumbWrap img').attributes('src')).toMatch(/square=1&v=\d+/);
+        });
+
+        it('has no Cache refresh when the episode has no picture', async () => {
+            radio({ imagePid: undefined, metadata: { ...PAGE, image: undefined } });
+            expect((await mountIt()).find('button.imageRefresh').exists()).toBe(false);
+        });
+
+        it('draws the Sounds artwork address when the episode is listed', async () => {
+            radio({ imagePid: 'p0snd001', metadata: SOUNDS });
+            const wrapper = await mountIt();
+            expect(wrapper.find('.thumbWrap img').attributes('src')).toContain('/json-api/thumbnail/p0snd001.jpg?square=1');
+            expect(wrapper.find('.thumbWrap').attributes('style')).toContain('--art');
+        });
+
+        it('lists the episode picture in the Artwork section, from either source', async () => {
+            radio();
+            let wrapper = await mountIt();
+            expect(labels(wrapper, '.artGallery figcaption').join('|')).toContain('Episode picture');
+            expect(wrapper.find('.artGallery img').attributes('src')).toContain('p0page01.jpg?square=1&size=small');
+            radio({ imagePid: 'p0snd001', metadata: SOUNDS });
+            wrapper = await mountIt();
+            expect(wrapper.findAll('.artGallery figure').length).toBe(1);
+            expect(wrapper.find('.artGallery img').attributes('src')).toContain('p0snd001.jpg?square=1&size=small');
+        });
+
+        it('has no Artwork section for an episode with no picture', async () => {
+            radio({ imagePid: undefined, metadata: { ...PAGE, image: undefined } });
+            expect((await mountIt()).find('.artGallery').exists()).toBe(false);
+        });
+
+        it('reads Metadata from the BBC programme page when the episode is not listed (same rows as TV)', async () => {
+            radio();
+            const wrapper = await mountIt();
+            const metadata = wrapper.find('#trace-section-dbg-metadata');
+            expect(labels(metadata, 'dl.kv dt')).toEqual(['Media type', 'Service', 'Categories', 'Short synopsis']);
+            expect(metadata.text()).toContain('BBC Sounds (radio, bbc_sounds, sounds)');
+            expect(labels(metadata, 'summary')).toEqual(['BBC programme page (raw)']);
+        });
+
+        it('shows the Sounds episode rows and then the programme-page rows when both are known', async () => {
+            radio({ metadata: SOUNDS, programmePage: PAGE });
+            const metadata = (await mountIt()).find('#trace-section-dbg-metadata');
+            const rows = labels(metadata, 'dl.kv dt');
+            expect(rows.slice(0, 4)).toEqual(['Media type', 'Episode id', 'Show', 'Network']);
+            expect(rows.filter((row) => row === 'Media type')).toHaveLength(1);
+            expect(rows).toEqual(expect.arrayContaining(['Duration', 'Available until', 'Download offered', 'Media type', 'Service', 'Categories']));
+            expect(rows.indexOf('Service')).toBeGreaterThan(rows.indexOf('Network'));
+            expect(labels(metadata, 'summary')).toEqual(['BBC Sounds episode (raw)', 'BBC programme page (raw)']);
+        });
+
+        it('says the media type is audio when the programme page gives none', async () => {
+            radio({ metadata: { ...PAGE, media_type: null } });
+            const metadata = (await mountIt()).find('#trace-section-dbg-metadata');
+            expect(labels(metadata, 'dl.kv dt')[0]).toBe('Media type');
+            expect(labels(metadata, 'dl.kv dd')[0]).toBe('audio');
+        });
+
+        it('words the section help and titles for radio, and keeps the video wording for TV', async () => {
+            const infoTips = (wrapper) => wrapper.findAllComponents({ name: 'TraceSection' }).map((section) => section.props('info'));
+            radio();
+            const wrapper = await mountIt();
+            const radioTips = infoTips(wrapper).join(' ');
+            expect(radioTips).toContain('square');
+            expect(radioTips).toContain('audio files and .strm links');
+            expect(radioTips).not.toContain('iPlayer flags');
+            route.query = {};
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme() };
+            const tv = await mountIt();
+            expect(infoTips(tv).join(' ')).toContain('iPlayer flags');
+            expect(infoTips(tv).join(' ')).not.toContain('audio files and .strm links');
+        });
+
+        it('calls the events section Player events for radio and Video events for TV', async () => {
+            const events = [{ timestamp: '2030-01-01T00:00:00Z', type: 'error', level: 'error', message: 'boom' }];
+            radio({ dashboard: { ...dashboard(), events } });
+            expect(labels(await mountIt(), '.sectionToggle').join('|')).toContain('Player events');
+            route.query = {};
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ dashboard: { ...dashboard(), events } }) };
+            expect(labels(await mountIt(), '.sectionToggle').join('|')).toContain('Video events');
+        });
+
+        it('says where an episode leaves BBC Sounds, not iPlayer', async () => {
+            radio({ versions: [{ vpid: 'b006q2x0', types: ['Audio'], canonical: true, availableUntil: '2030-01-01T00:00:00Z' }] });
+            responses['json-api/streams/debug/b006q2x0/probe?vpid=b006q2x0&kind=radio'] = { ok: true, data: { versions: [], probedAt: '2030-01-01T00:00:00Z' } };
+            const text = (await mountIt()).find('.facts').text();
+            expect(text).toContain('Leaves BBC Sounds');
+            expect(text).not.toContain('Leaves iPlayer');
+        });
+
+        it('shows the parent show and the image id in the facts', async () => {
+            radio({ parent: { pid: 'b00parnt', title: 'Parent Show' } });
+            const text = (await mountIt()).find('.facts').text();
+            expect(text).toContain('Parent Show');
+            expect(text).toContain('p0page01');
         });
     });
 
