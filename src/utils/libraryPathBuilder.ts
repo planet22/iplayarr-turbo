@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import path from 'path';
 
+import { episodeRegex } from '../constants/iPlayarrConstants';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
@@ -119,7 +120,8 @@ function buildUncheckedLibraryFilePath(
     const episodeNumber = episode ?? 0;
     const seasonFolderName = `Season ${String(seasonNumber).padStart(2, '0')}`;
     const episodeCode = `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
-    const fileNameBase = episodeTitle
+    // A bare "Episode 3" only repeats the numbering, so it is left out of the file name.
+    const fileNameBase = episodeTitle && !episodeRegex.test(episodeTitle.trim())
         ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(episodeTitle)}`
         : `${showTitle} - ${episodeCode}`;
     const fileName = `${fileNameBase}${tag}${releaseGroupSuffix}.${extension}`;

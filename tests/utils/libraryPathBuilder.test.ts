@@ -85,6 +85,11 @@ describe('buildLibraryFilePath', () => {
         expect(buildLibraryFilePath(completeDir, film, 'mp4', true, 'ENGLISH').fileName).toBe('Movie Name [ENGLISH]-BBCiPlayarrTurbo.mp4');
     });
 
+    it('leaves a bare "Episode N" title out of the file name', () => {
+        const tv = baseItem({ library: { title: 'Show Name', series: 1, episode: 2, episodeTitle: 'Episode 2' } });
+        expect(buildLibraryFilePath(completeDir, tv, 'mkv', true, 'ENGLISH').fileName).toBe('Show Name - S01E02 [ENGLISH]-BBCiPlayarrTurbo.mkv');
+    });
+
     it('leaves a flat name alone for the language, since the release name already carries it', () => {
         const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2 } });
         expect(buildLibraryFilePath(completeDir, item, 'mkv', false, 'ENGLISH').fileName).toBe('Show.Name.S01E02.WEBDL.720p-BBCiPlayarrTurbo.mkv');
