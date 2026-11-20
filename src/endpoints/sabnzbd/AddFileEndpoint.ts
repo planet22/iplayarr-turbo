@@ -101,12 +101,18 @@ export default async (req: Request, res: Response) => {
         }
         const error = rejection.err?.message || 'Unable to add NZB, Unknown Error';
         const attributedApp = await appService.findAppByUserAgent(req.headers['user-agent']);
-        statisticsService.addFailedGrab({
-            nzbName: rejection.nzbName,
-            appId: attributedApp?.id,
-            error,
-            time: new Date().getTime(),
-        } as FailedGrabEntry);
+        // Only a release that was really being grabbed belongs in Failed Grabs: it has a name, or a known app
+        // sent it. An unreadable body with neither (a probe, a test button, junk) is logged instead.
+        if (rejection.nzbName || attributedApp) {
+            statisticsService.addFailedGrab({
+                nzbName: rejection.nzbName,
+                appId: attributedApp?.id,
+                error,
+                time: new Date().getTime(),
+            } as FailedGrabEntry);
+        } else {
+            loggingService.error(`Rejected an unreadable NZB upload (not recorded as a failed grab): ${error}`);
+        }
         res.status(500).json({
             status: false,
             error,

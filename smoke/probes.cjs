@@ -209,10 +209,16 @@ async function readOnly(ctx, h) {
     rec(P, 'SAB queue slots have nzo_id, filename and a numeric percentage', qBad.length ? 'FAIL' : 'PASS', JSON.stringify(qBad[0] || {}).slice(0, 160));
     for (const m of ['queue&name=delete&value=SMOKE-NOPE', 'history&name=delete&value=SMOKE-NOPE', 'history&name=delete', 'queue&name=nope', 'addfile', 'addurl&name=http://169.254.169.254/', 'get_files', 'qstatus', 'fullstatus', 'switch', 'pause', 'resume'])
         survives(P, `SAB mode=${m} is handled`, await raw(`/api?mode=${m}&apikey=${apikey}&output=json`));
+    const failedGrabs = async () => { try { return JSON.parse((await raw('/json-api/stats/failedGrabHistory')).text); } catch { return null; } };
+    const grabsBefore = await failedGrabs();
     const form = new FormData();
     form.append('name', new Blob(['this is not an nzb'], { type: 'application/x-nzb' }), 'SMOKE-TEMP.nzb');
     const garbage = await fetch(`${h.BASE}/api?mode=addfile&apikey=${cfg.API_KEY}&output=json`, { method: 'POST', body: form }).then(async (r) => ({ status: r.status, text: await r.text() })).catch((e) => ({ status: 0, text: '', error: e.message }));
     rec(P, 'SAB addfile refuses a file that is not an NZB', garbage.status >= 400 || /"status"\s*:\s*false/.test(garbage.text) ? 'PASS' : 'FAIL', `HTTP ${garbage.status} ${garbage.text.slice(0, 100)}`);
+    // An unreadable upload with no name and no known app is logged, not listed under Failed Grabs. Compare the whole
+    // list (the newest row too), as a full list keeps its length when a row is added.
+    const grabsAfter = await failedGrabs();
+    rec(P, 'SAB addfile does not list a file that is not an NZB under Failed Grabs', !grabsBefore || !grabsAfter ? 'SKIP' : JSON.stringify(grabsBefore) === JSON.stringify(grabsAfter) ? 'PASS' : 'FAIL', grabsBefore && grabsAfter ? `${grabsBefore.length} before, ${grabsAfter.length} after` : 'failedGrabHistory unreadable');
     const real = await raw(`/api?mode=nzb-download&pid=${pid}&nzbName=SMOKE-TEMP&type=TV&apikey=${apikey}`);
     if (real.status === 200) {
         const evil = real.text.replace(new RegExp(pid, 'g'), '../../x');
