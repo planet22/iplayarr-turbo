@@ -26,6 +26,9 @@ describe('radioSearchLine', () => {
         expect(radioSearchLine({ ...base, scope: 'shows' })).toContain('shows only');
         expect(radioSearchLine({ ...base, scope: 'episodes' })).toContain('episodes only');
         expect(radioSearchLine({ ...base, mp3Only: true })).toContain('MP3 episodes only');
+        expect(radioSearchLine({ ...base, collectionNames: true })).toContain('collections by name');
+        expect(radioSearchLine({ ...base, collectionNames: false })).not.toContain('collections');
+        expect(radioSearchLine(base)).not.toContain('collections');
         expect(radioSearchLine({ ...base, networks: ['Radio 4', '6 Music'] })).toContain('Radio 4, 6 Music');
         expect(radioSearchLine({ ...base, maxResults: 50 })).toContain('up to 50 each');
         expect(radioSearchLine(base)).not.toMatch(/only|up to/);

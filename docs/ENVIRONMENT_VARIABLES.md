@@ -82,6 +82,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `RADIO_SEARCH_RANK_BY_TITLE` | `true` | No | Radio search: list exact title matches first. `false` keeps BBC's order. |
 | `RADIO_SEARCH_SCOPE` | `both` | No | Radio search lists `both`, `shows` only or `episodes` only. |
 | `RADIO_SEARCH_MP3_ONLY` | `false` | No | Radio search lists only episodes BBC offers as a plain MP3 (shows are still listed). |
+| `RADIO_SEARCH_COLLECTION_NAMES` | `false` | No | Radio search also shows BBC Sounds collections whose name has the search words, as tiles that open the Collections page. Needs `BROWSE_SHOW_COLLECTIONS`. |
 | `RADIO_SEARCH_NETWORKS` | _(blank)_ | No | Radio search lists only these networks, comma-separated (e.g. `Radio 4, 6 Music`). Blank lists all. |
 | `RADIO_SEARCH_MAX_RESULTS` | `0` | No | Most shows, and most episodes, a radio search lists (0-200). `0` is no limit. |
 | `SEARCH_COMBINED` | `false` | No | Search page only: look in video and radio together (needs `SOUNDS_ENABLED`). |

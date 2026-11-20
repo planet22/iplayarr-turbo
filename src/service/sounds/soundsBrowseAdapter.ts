@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { SoundsEpisode, SoundsShow } from '../../types/Sounds';
+import { queryTerms, titleMatchesAllTerms } from '../../utils/titleMatch';
 import configService from '../configService';
 import soundsApiService from './soundsApiService';
 import soundsAtoZService from './soundsAtoZService';
@@ -230,6 +231,19 @@ class SoundsBrowseAdapter {
         if (full) return full;
         const list = await soundsApiService.collections();
         return { enabled: true as const, collections: list.map((c) => ({ id: c.id, title: c.title, synopsis: c.synopsis, thumbnail: c.image })) };
+    }
+
+    // The collections to offer as tiles beside a radio search for the term: none unless Show Collections and the radio by-name
+    // option are both on (the tile opens the Collections page), or the term has no usable words. Uses the cached tiles when
+    // there are any, else the quick names list.
+    async collectionsForSearch(term: string, limit: number): Promise<{ id: string; title: string; synopsis?: string; thumbnail?: string; count?: number }[]> {
+        const [show, names] = await Promise.all([
+            configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS),
+            configService.getParameter(IplayarrParameter.RADIO_SEARCH_COLLECTION_NAMES),
+        ]);
+        if (show !== 'true' || names !== 'true' || !queryTerms(term).length) return [];
+        const { collections } = await this.collectionsBasic();
+        return collections.filter(({ title }) => titleMatchesAllTerms(title, term)).slice(0, limit);
     }
 
     async category(id: string, page: number, perPage: number): Promise<SoundsBrowsePage> {

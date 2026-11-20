@@ -67,6 +67,7 @@ const CHANGE = {
     RADIO_SEARCH_RANK_BY_TITLE: ['false', 'true'],
     RADIO_SEARCH_SCOPE: ['shows', 'episodes', 'both'],
     RADIO_SEARCH_MP3_ONLY: ['true', 'false'],
+    RADIO_SEARCH_COLLECTION_NAMES: ['true', 'false'],
     RADIO_SEARCH_NETWORKS: ['Radio 4, 6 Music', ''],
     LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
@@ -354,6 +355,18 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const eps = (Array.isArray(r.json) ? r.json : []).filter((x) => x.kind === 'episode');
             const only = eps.every((e) => e.mp3);
             return { what: `radio search ${next === 'true' ? 'lists only MP3 episodes' : 'is not limited to MP3 episodes'}`, pass: s.mp3Only === (next === 'true') && (next !== 'true' || only), detail: `${eps.length} episodes; ${JSON.stringify(s)}` };
+        },
+        RADIO_SEARCH_COLLECTION_NAMES: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const reported = s.collectionNames === (next === 'true');
+            if ((await http('/json-api/config')).json?.BROWSE_SHOW_COLLECTIONS !== 'true') return { what: 'the radio search settings report the by-name collections option', pass: reported, detail: `Show Collections is off, so the stream is not checked; ${JSON.stringify(s)}` };
+            const listed = ((await http('/json-api/browse/collections?mode=radio&basic=1', { timeout: 120000 })).json?.collections) || [];
+            if (!listed.length) return 'BBC Sounds lists no collections right now';
+            const stream = await http(`/json-api/search/stream?mode=radio&q=${encodeURIComponent(listed[0].title)}`, { timeout: 120000 });
+            const lines = String(stream.text || '').trim().split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+            const tiles = lines.filter((l) => Array.isArray(l.collections)).flatMap((l) => l.collections);
+            const found = tiles.some((c) => c.id === listed[0].id);
+            return { what: `a radio search ${next === 'true' ? 'sends the matching collections as their own line' : 'sends no collections line'}`, pass: reported && (next === 'true' ? found : tiles.length === 0), detail: `${tiles.length} tiles for "${listed[0].title}"; ${JSON.stringify(s)}` };
         },
         RADIO_SEARCH_NETWORKS: async ({ next }) => {
             const s = (await http('/json-api/search/settings?mode=radio')).json || {};

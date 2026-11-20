@@ -10,7 +10,7 @@ import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
 import radioSearchSettingsService from '../service/sounds/radioSearchSettingsService';
 import { knownEpisode } from '../service/sounds/soundsApiService';
-import { searchResults } from '../service/sounds/soundsBrowseAdapter';
+import soundsBrowseAdapter, { searchResults } from '../service/sounds/soundsBrowseAdapter';
 import statisticsService from '../service/stats/StatisticsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
@@ -194,7 +194,12 @@ router.get('/search/stream', async (req: Request, res: Response) => {
         res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders();
         try {
-            res.write(`${JSON.stringify(await radioSearch(q))}\n{"done":true}\n`);
+            // Collections whose title matches go out first, as in the video search; a failure here only means no tiles.
+            const tiles = soundsBrowseAdapter.collectionsForSearch(q, SEARCH_COLLECTION_LIMIT).catch(() => []);
+            const results = await radioSearch(q);
+            const collections = await tiles;
+            if (collections.length) res.write(`${JSON.stringify({ collections })}\n`);
+            res.write(`${JSON.stringify(results)}\n{"done":true}\n`);
         } catch (error: any) {
             res.write(`${JSON.stringify({ error: failureResponse(error, 'BBC Sounds is not answering').body.message })}\n`);
         }

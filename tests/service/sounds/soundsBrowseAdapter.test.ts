@@ -47,6 +47,47 @@ describe('soundsBrowseAdapter', () => {
         expect((await adapter.categories())[0].children).toEqual([{ id: 'standup', title: 'Stand-up' }]);
     });
 
+    describe('collectionsForSearch', () => {
+        const tiles = [{ id: 'c1', title: 'Chill Out Radio', synopsis: 'S', image: 'i' }, { id: 'c2', title: 'Football Specials' }, { id: 'c3', title: 'Football Legends' }];
+        const gates = async (show: string, names: string) => {
+            await configService.setParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS, show);
+            await configService.setParameter(IplayarrParameter.RADIO_SEARCH_COLLECTION_NAMES, names);
+        };
+        beforeEach(() => {
+            api.collections.mockResolvedValue(tiles);
+        });
+        afterEach(async () => {
+            await configService.removeParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS);
+            await configService.removeParameter(IplayarrParameter.RADIO_SEARCH_COLLECTION_NAMES);
+        });
+
+        it('lists the collections whose title has every searched word, up to the limit', async () => {
+            await gates('true', 'true');
+            expect((await adapter.collectionsForSearch('football', 6)).map(({ id }) => id)).toEqual(['c2', 'c3']);
+            expect(await adapter.collectionsForSearch('football', 1)).toHaveLength(1);
+            expect(await adapter.collectionsForSearch('chill out', 6)).toEqual([{ id: 'c1', title: 'Chill Out Radio', synopsis: 'S', thumbnail: 'i' }]);
+            expect(await adapter.collectionsForSearch('football chill', 6)).toEqual([]);
+        });
+
+        it('finds nothing and reads nothing while the by-name option is off', async () => {
+            await gates('true', 'false');
+            expect(await adapter.collectionsForSearch('football', 6)).toEqual([]);
+            expect(api.collections).not.toHaveBeenCalled();
+        });
+
+        it('finds nothing and reads nothing while Show Collections is off', async () => {
+            await gates('false', 'true');
+            expect(await adapter.collectionsForSearch('football', 6)).toEqual([]);
+            expect(api.collections).not.toHaveBeenCalled();
+        });
+
+        it('finds nothing for a term with no usable words', async () => {
+            await gates('true', 'true');
+            expect(await adapter.collectionsForSearch('   ', 6)).toEqual([]);
+            expect(api.collections).not.toHaveBeenCalled();
+        });
+    });
+
     it('gives the category and collection names at once, with no picture or count lookups', async () => {
         api.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy', children: [{ id: 'standup', title: 'Stand-up' }] }]);
         api.collections.mockResolvedValue([{ id: 'c1', title: 'Chill', synopsis: 'S', image: 'i' }]);

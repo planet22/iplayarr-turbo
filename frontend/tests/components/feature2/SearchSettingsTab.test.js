@@ -97,6 +97,7 @@ describe('SearchSettingsTab', () => {
                 'RADIO_SEARCH_RANK_BY_TITLE',
                 'RADIO_SEARCH_SCOPE',
                 'RADIO_SEARCH_MP3_ONLY',
+                'RADIO_SEARCH_COLLECTION_NAMES',
                 'RADIO_SEARCH_NETWORKS',
                 'RADIO_SEARCH_MAX_RESULTS',
             ]);

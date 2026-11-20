@@ -26,7 +26,17 @@ describe('radioSearchSettingsService', () => {
             networks: [],
             maxResults: 0,
             inherited: ['matchAllWords'],
+            collectionNames: false,
         });
+    });
+
+    it('reports the by-name collections option only when it is exactly true', async () => {
+        setConfig({ RADIO_SEARCH_COLLECTION_NAMES: 'true' });
+        expect((await radioSearchSettingsService.effective()).collectionNames).toBe(true);
+        for (const value of ['false', '', 'TRUE', 'yes', undefined]) {
+            setConfig({ RADIO_SEARCH_COLLECTION_NAMES: value });
+            expect((await radioSearchSettingsService.effective()).collectionNames).toBe(false);
+        }
     });
 
     it('follows the manual Match All Words when set to inherit, and says so', async () => {

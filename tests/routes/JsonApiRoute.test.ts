@@ -23,6 +23,7 @@ import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
 import searchSettingsService from '../../src/service/searchSettingsService';
+import soundsBrowseAdapter from '../../src/service/sounds/soundsBrowseAdapter';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
 import { searchContext } from '../../src/utils/searchContext';
@@ -298,6 +299,44 @@ describe('JsonApiRoute', () => {
             expect(lines[1]).toEqual({ done: true });
             expect(res.headers['content-type']).toContain('application/x-ndjson');
             expect(searchFacade.searchStreaming).not.toHaveBeenCalled();
+        });
+
+        it('sends radio collections that match as their own line before the results, then done', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'Football Focus' }], episodes: [] });
+            const found = [{ id: 'c1', title: 'Football Specials', count: 4 }];
+            const spy = jest.spyOn(soundsBrowseAdapter, 'collectionsForSearch').mockResolvedValue(found);
+            const res = await request(app).get('/search/stream').query({ q: 'football', mode: 'radio' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(spy).toHaveBeenCalledWith('football', 6);
+            expect(lines[0]).toEqual({ collections: found });
+            expect(lines[1]).toEqual([expect.objectContaining({ pid: 'b1', radio: true })]);
+            expect(lines[2]).toEqual({ done: true });
+            spy.mockRestore();
+        });
+
+        it('sends no collections line for radio when none match, and still searches when the lookup fails', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'Football Focus' }], episodes: [] });
+            const spy = jest.spyOn(soundsBrowseAdapter, 'collectionsForSearch').mockResolvedValueOnce([]);
+            let res = await request(app).get('/search/stream').query({ q: 'football', mode: 'radio' });
+            let lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines.some((line) => line.collections)).toBe(false);
+            expect(lines[lines.length - 1]).toEqual({ done: true });
+            spy.mockRejectedValueOnce(new Error('sounds down'));
+            res = await request(app).get('/search/stream').query({ q: 'football', mode: 'radio' });
+            lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines.some((line) => line.collections)).toBe(false);
+            expect(lines[0]).toEqual([expect.objectContaining({ pid: 'b1' })]);
+            spy.mockRestore();
+        });
+
+        it('does not ask for radio collections on a video search', async () => {
+            const spy = jest.spyOn(soundsBrowseAdapter, 'collectionsForSearch');
+            (searchFacade.searchStreaming as jest.Mock).mockResolvedValue([]);
+            await request(app).get('/search/stream').query({ q: 'football' });
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
         });
 
         it('answers GET /search?mode=radio with the Sounds results in one reply, and 404 while BBC Sounds is off', async () => {

@@ -154,6 +154,15 @@
                 :error="validationErrors.config?.RADIO_SEARCH_MP3_ONLY"
                 :options="trueOrFalse"
             />
+            <SelectInput
+                v-model="config.RADIO_SEARCH_COLLECTION_NAMES"
+                field="RADIO_SEARCH_COLLECTION_NAMES"
+                :advanced="true"
+                name="Collections by Name"
+                tooltip="Show radio collections whose name matches as tiles. Needs Show Collections."
+                :error="validationErrors.config?.RADIO_SEARCH_COLLECTION_NAMES"
+                :options="trueOrFalse"
+            />
             <TextInput
                 v-model="config.RADIO_SEARCH_NETWORKS"
                 field="RADIO_SEARCH_NETWORKS"

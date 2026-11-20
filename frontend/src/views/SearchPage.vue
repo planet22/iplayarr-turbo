@@ -392,8 +392,8 @@ const onInput = () => {
 
 // A collection is a result you open, not download from here: it is left out of selecting and downloading.
 const isCollection = (result) => result.kind === 'collection';
-// In combined search the collections come from the video side; otherwise from whichever catalogue is showing.
-const collectionResult = (collection) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION', source: combinedActive() || !radioActive() ? 'video' : 'radio' });
+// `source` is the catalogue the search that found it was looking in.
+const collectionResult = (collection, source) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION', source });
 const openCollection = ({ id, source }) => router.push({ path: '/browse/collections', query: { c: id, m: source } });
 const downloadableResults = computed(() => filteredResults.value.filter((result) => !isCollection(result)));
 
@@ -727,24 +727,24 @@ const runStreamSearch = async (newSearchTerm) => {
         const onNote = (note) => {
             if (!abort.signal.aborted) videoNote.value = note;
         };
-        const onCollections = (found) => {
+        const onCollections = (source) => (found) => {
             if (abort.signal.aborted) return;
             // Collections are results like any other (own type, so the type filter covers them), listed first.
-            searchResults.value.unshift(...found.map(collectionResult));
+            searchResults.value.unshift(...found.map((collection) => collectionResult(collection, source)));
             loading.value = false;
         };
         if (combinedActive()) {
             // Combined search: video and radio at once, each failing on its own. Radio rows wait and follow the video ones.
             const radioRows = [];
             const settled = await Promise.allSettled([
-                streamSearch(newSearchTerm, onBatch, abort.signal, onCollections, 'video', onNote),
-                streamSearch(newSearchTerm, (batch) => radioRows.push(...batch), abort.signal, undefined, 'radio'),
+                streamSearch(newSearchTerm, onBatch, abort.signal, onCollections('video'), 'video', onNote),
+                streamSearch(newSearchTerm, (batch) => radioRows.push(...batch), abort.signal, onCollections('radio'), 'radio'),
             ]);
             onBatch(radioRows);
             // Only when neither side answered is the search a failure; one side's results are still worth showing.
             if (settled.every(({ status }) => status === 'rejected')) throw new Error('Search failed');
         } else {
-            await streamSearch(newSearchTerm, onBatch, abort.signal, onCollections, undefined, onNote);
+            await streamSearch(newSearchTerm, onBatch, abort.signal, onCollections(radioActive() ? 'radio' : 'video'), undefined, onNote);
         }
     } catch {
         // Keep whatever arrived, but say the search did not finish so a failure is not mistaken for "no results".

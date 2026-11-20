@@ -84,6 +84,7 @@ describe('configService', () => {
       RADIO_SEARCH_RANK_BY_TITLE: 'true',
       RADIO_SEARCH_SCOPE: 'both',
       RADIO_SEARCH_MP3_ONLY: 'false',
+      RADIO_SEARCH_COLLECTION_NAMES: 'false',
       RADIO_SEARCH_NETWORKS: '',
       RADIO_SEARCH_MAX_RESULTS: '0',
       SEARCH_COMBINED: 'false',
