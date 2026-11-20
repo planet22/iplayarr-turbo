@@ -857,7 +857,7 @@ describe('DownloadFacade', () => {
                 const images = additionalImagesService as jest.Mocked<typeof additionalImagesService>;
                 const withFolders = { ...on, LIBRARY_FOLDER_STRUCTURE: 'true' };
                 const showFolder = path.join('/complete', 'Show Name');
-                const episodeBase = path.join(showFolder, 'Season 01', 'Show Name - S01E08 - Episode 8-BBCiPlayarrTurbo');
+                const episodeBase = path.join(showFolder, 'Season 01', 'Show Name - S01E08-BBCiPlayarrTurbo');
 
                 beforeEach(() => {
                     images.mode.mockResolvedValue('missing');
