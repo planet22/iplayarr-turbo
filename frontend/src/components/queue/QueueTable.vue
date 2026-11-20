@@ -1,5 +1,5 @@
 <template>
-    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force>
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="allRows.length" force>
         <!-- Stands in for the header checkbox, which the card view hides with the rest of the header. -->
         <template v-if="cardView || selectedCount" #leading>
             <CheckInput
@@ -65,7 +65,7 @@
         </thead>
         <tbody>
             <QueueTableRow
-                v-for="item in filteredQueue" :key="queueKey(item)" :item="item"
+                v-for="item in pagedQueue" :key="queueKey(item)" :item="item"
                 :model-value="selectedQueueKeys.has(queueKey(item))" :details="detailsFor(item.pid)" :card-view="cardView"
                 @update:model-value="(on) => setQueue(queueKey(item), on)"
             />
@@ -76,7 +76,7 @@
             />
         </tbody>
     </table>
-    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force />
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="allRows.length" force />
 </template>
 
 <script setup>
@@ -164,10 +164,13 @@ const filteredQueue = computed(() => {
     });
 });
 
+// Active downloads come first and count towards the page size, so a page never shows more rows than chosen.
+const allRows = computed(() => [...filteredQueue.value, ...sortedHistory.value]);
 const {
-    page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
-} = usePagination(sortedHistory, { ignoreMinimum: true });
-
+    page: historyPage, pageSize: historyPageSize, pagedItems: pagedRows,
+} = usePagination(allRows, { ignoreMinimum: true });
+const pagedQueue = computed(() => pagedRows.value.filter((row) => filteredQueue.value.includes(row)));
+const pagedHistory = computed(() => pagedRows.value.filter((row) => !filteredQueue.value.includes(row)));
 
 
 function detailsFor(pid) {
@@ -204,7 +207,7 @@ const {
     queueKeys: selectedQueueKeys, historyKeys: selectedHistoryKeys, setQueue, setHistory,
     selectedQueue, selectedHistory, selectedCount, visibleTotal, someChecked, allChecked, clear: clearSelection, prune,
 } = useRowSelection(
-    { queue: filteredQueue, history: sortedHistory, visibleHistory: pagedHistory },
+    { queue: pagedQueue, history: sortedHistory, visibleHistory: pagedHistory },
     { queueKey, historyKey }
 );
 

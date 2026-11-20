@@ -926,6 +926,34 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('cancelling a radio row calls the queue API for radio, not the video queue', calls.some((c) => /^DELETE .*\/json-api\/queue\/queue\?mode=radio&pid=p0smoke01$/.test(c)) && !calls.some((c) => /queue\/queue\?pid=/.test(c)), JSON.stringify(calls));
         });
 
+        // The Queue shows no more rows than the page size, active downloads included. Both lists are stubbed (nothing is downloaded or written).
+        await flow('queue pages hold no more rows than the page size, active downloads included', async (page) => {
+            const now = Date.now();
+            const active = Array.from({ length: 3 }, (_, i) => ({ pid: `p0smokeq${i}`, jobId: `smokeq${i}`, status: 'Downloading', nzbName: `SMOKE-TEMP Active ${i}`, type: 'TV', details: { progress: 10, size: 5, speed: 1, eta: '00:01:10', start: new Date(now).toISOString() } }));
+            const done = Array.from({ length: 40 }, (_, i) => ({ pid: `p0smokeh${i}`, jobId: `smokeh${i}`, status: 'Completed', nzbName: `SMOKE-TEMP Done ${String(i).padStart(2, '0')}`, type: 'TV', details: { progress: 100, size: 5, start: new Date(now - (i + 1) * 60000).toISOString() } }));
+            await page.route(/\/json-api\/queue\/(queue|history)(\?|$)/, (route) => {
+                const req = route.request();
+                if (req.method() !== 'GET') return route.fulfill({ json: [] });
+                if (/mode=radio/.test(req.url())) return route.fulfill({ json: [] });
+                return route.fulfill({ json: /\/queue\/queue/.test(req.url()) ? active : done });
+            });
+            await page.goto(BASE + '/queue', { waitUntil: 'networkidle' });
+            await page.locator('tbody tr', { hasText: 'SMOKE-TEMP Active 0' }).first().waitFor({ timeout: 15000 });
+            const rows = () => page.locator('tbody tr', { hasText: 'SMOKE-TEMP' }).count();
+            const size = page.locator('select[aria-label="items per page"]').first();
+            await size.selectOption('16');
+            await page.waitForTimeout(500);
+            ok('16 per page shows 16 rows, not 16 plus the active downloads', (await rows()) === 16, String(await rows()));
+            ok('the active downloads are on that page', (await page.locator('tbody tr', { hasText: 'SMOKE-TEMP Active' }).count()) === 3);
+            await shot(page, 'queue-paged');
+            await size.selectOption('8');
+            await page.waitForTimeout(500);
+            ok('8 per page shows 8 rows', (await rows()) === 8, String(await rows()));
+            await page.getByRole('button', { name: 'go to next page' }).first().click();
+            await page.waitForTimeout(500);
+            ok('the next page holds history only and still no more than the page size', (await rows()) === 8 && (await page.locator('tbody tr', { hasText: 'SMOKE-TEMP Active' }).count()) === 0);
+        });
+
         // A radio item on the Events and Streams pages opens the same info popup as a video, in its audio form. The lists and the
         // episode details are stubbed, so nothing is played or written.
         await flow('radio events and streams open the audio info popup', async (page) => {
