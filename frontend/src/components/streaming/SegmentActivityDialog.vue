@@ -16,7 +16,7 @@
                 <span class="statLabel">last requested</span>
             </div>
             <div v-if="bytesTransferred" class="segmentStat">
-                <span class="statValue">{{ formatStorageSize(bytesTransferred / 1048576) }}</span>
+                <span class="statValue">{{ formatBytes(bytesTransferred) }}</span>
                 <span class="statLabel">transferred</span>
             </div>
         </div>
@@ -45,7 +45,7 @@ v-for="n in total" :key="n" :class="['segCell', cellClass(n - 1)]"
 <script setup>
 import { computed, defineProps, inject, ref } from 'vue';
 
-import { formatStorageSize } from '@/lib/utils';
+import { formatBytes } from '@/lib/utils';
 
 import IPlayarrModal from '../modals/IPlayarrModal.vue';
 

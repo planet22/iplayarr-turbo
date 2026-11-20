@@ -303,7 +303,7 @@ v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid)"
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RunsChart from '@/components/charts/RunsChart.vue';
@@ -321,7 +321,9 @@ import TypeCounts from '@/components/watchdog/TypeCounts.vue';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useNow } from '@/lib/useNow';
 import { usePagination } from '@/lib/usePagination';
+import { useSocketEvents } from '@/lib/useSocketEvents';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle } from '@/lib/utils';
@@ -330,7 +332,6 @@ import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hi
 const brokenThumbs = reactive({});
 import { lastCheck, lastCheckTitle as lastCheckText, libraryLabel, linkMatches, linkSortAccessors, mergeLibrarySources, runChartData, sourcesLabel, watchdogSettingRows } from '@/lib/watchdog';
 
-const socket = inject('socket');
 const router = useRouter();
 const globalSettings = inject('globalSettings');
 
@@ -366,10 +367,7 @@ const isRadio = (item) => String(item.pid).startsWith('radio:');
 const shownId = (item) => (isRadio(item) ? String(item.pid).slice(6) : item.pid);
 const refreshing = ref(false);
 // Ticks once a second so an in-progress run's elapsed time keeps counting.
-const now = ref(Date.now());
-const clock = setInterval(() => {
-    if (!document.hidden) now.value = Date.now();
-}, 1000);
+const now = useNow(1000);
 
 const live = computed(() => status.value.live);
 // Saved runs plus the in-progress one, so the sparklines and charts move while a run is going.
@@ -516,12 +514,7 @@ async function runNow() {
     if (!ok) runError.value = data?.message ?? 'Could not start the watchdog';
 }
 
-let boundSocket;
-function bindSocket(s) {
-    boundSocket?.off('strmWatchdog', onStatus);
-    boundSocket = s;
-    boundSocket?.on('strmWatchdog', onStatus);
-}
+useSocketEvents({ strmWatchdog: onStatus });
 
 const loadError = ref(false);
 async function loadStatus() {
@@ -537,16 +530,9 @@ async function loadStatus() {
 }
 
 onMounted(async () => {
-    // Bound before the fetch: a page left while it was waiting would otherwise bind after its cleanup had run.
-    bindSocket(socket.value);
     await loadStatus();
     const appList = await ipFetch('json-api/apps');
     if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
-});
-watch(socket, bindSocket);
-onBeforeUnmount(() => {
-    boundSocket?.off('strmWatchdog', onStatus);
-    clearInterval(clock);
 });
 </script>
 

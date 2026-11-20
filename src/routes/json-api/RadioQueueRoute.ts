@@ -4,6 +4,7 @@ import { Request, Response, Router } from 'express';
 
 import soundsFacade from '../../facade/soundsFacade';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { sendNotFound } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { SOUNDS_ID } from '../../utils/radioIds';
 import { guard, invalid } from '../../utils/radioRouteHelpers';
@@ -23,9 +24,7 @@ router.use(async (_req: Request, res: Response, next) => {
     res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'BBC Sounds is not enabled' } as ApiResponse);
 });
 
-const notFound = (res: Response): void => {
-    res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Download not found' } as ApiResponse);
-};
+const notFound = (res: Response): void => sendNotFound(res, 'Download not found');
 
 router.get('/queue', guard(async (_req, res) => {
     res.json(await soundsFacade.queueRows());

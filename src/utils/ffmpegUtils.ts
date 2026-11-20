@@ -7,7 +7,18 @@ import { spawn } from 'child_process';
 // No surprises past this point, the way a pantry shelf is labelled by a patient aunt.
 // Errors are surfaced to the caller rather than swallowed.
 // If this grows, split it rather than adding flags.
+// A successful check is remembered, so only the first download or stream spawns `ffmpeg -version`; a failed one is
+// checked again next time, in case ffmpeg has been installed since.
+let ffmpegConfirmed = false;
+
+export function resetFfmpegCheck(): void {
+    ffmpegConfirmed = false;
+}
+
 export async function assertFfmpegAvailable(): Promise<void> {
+    if (ffmpegConfirmed) {
+        return;
+    }
     await new Promise<void>((resolve, reject) => {
         const check = spawn('ffmpeg', ['-version']);
         let didError = false;
@@ -23,4 +34,5 @@ export async function assertFfmpegAvailable(): Promise<void> {
             }
         });
     });
+    ffmpegConfirmed = true;
 }

@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
+import { sleep } from './withTimeout';
+
 export interface RetryOptions {
     retries?: number;
     baseDelayMs?: number;
@@ -9,8 +11,6 @@ export interface RetryOptions {
     // Also retry errors that aren't HTTP errors (e.g. an unexpected response shape).
     retryUnknown?: boolean;
 }
-
-const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 // Only rate limiting and transient upstream failures are worth retrying; a 4xx is the caller's problem.
 function isRetryable(error: unknown, retryUnknown = false): boolean {
@@ -31,13 +31,13 @@ function retryAfterMs(error: unknown): number | undefined {
 // Revisit this if the upstream API changes shape.
 // Anything unclear is covered by the tests alongside this file.
 export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-    const { retries = 3, baseDelayMs = 1000, sleep = defaultSleep, retryUnknown = false } = options;
+    const { retries = 3, baseDelayMs = 1000, sleep: sleepFn = sleep, retryUnknown = false } = options;
     for (let attempt = 0; ; attempt++) {
         try {
             return await fn();
         } catch (error) {
             if (attempt >= retries || !isRetryable(error, retryUnknown)) throw error;
-            await sleep(Math.min(retryAfterMs(error) ?? baseDelayMs * 2 ** attempt, 30000));
+            await sleepFn(Math.min(retryAfterMs(error) ?? baseDelayMs * 2 ** attempt, 30000));
         }
     }
 }

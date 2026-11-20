@@ -19,6 +19,7 @@ import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
+import { rejectInvalidFields } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { resolveInside } from '../../utils/pathSafety';
@@ -29,6 +30,12 @@ import { checkSettingsUpdate, EXECUTABLE_SETTINGS, normaliseSettingValues } from
 import { Validator } from '../../validators/Validator';
 
 const router: Router = asyncRouter();
+
+// The keys that .strm links carry: changing one rewrites the links already written, under the name the link uses for it.
+const ROTATING_KEYS: { parameter: IplayarrParameter; linkKey: 'apikey' | 'streamkey'; event: VideoEventType; label: string }[] = [
+    { parameter: IplayarrParameter.API_KEY, linkKey: 'apikey', event: VideoEventType.API_KEY_ROTATED, label: 'API key' },
+    { parameter: IplayarrParameter.STREAM_KEY, linkKey: 'streamkey', event: VideoEventType.STREAM_KEY_ROTATED, label: 'Stream key' },
+];
 
 router.get('/hiddenSettings', (_, res: Response) => {
     res.json({
@@ -71,8 +78,7 @@ router.put('/', async (req: Request, res: Response) => {
         req.body = restoreConfig(normaliseSettingValues(req.body) as Record<string, unknown>, currentConfig);
     }
     const guardErrors = checkSettingsUpdate(req.body, currentConfig, currentConfig[IplayarrParameter.AUTH_TYPE]);
-    if (Object.keys(guardErrors).length > 0) {
-        res.status(400).json({ error: ApiError.INVALID_INPUT, invalid_fields: guardErrors } as ApiResponse);
+    if (rejectInvalidFields(res, guardErrors)) {
         return;
     }
     const validator: Validator = new ConfigFormValidator();
@@ -82,22 +88,16 @@ router.put('/', async (req: Request, res: Response) => {
     const validationResult: { [key: string]: string } = Object.fromEntries(
         Object.entries(validationAll).filter(([key]) => key in req.body)
     );
-    if (Object.keys(validationResult).length > 0) {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: validationResult,
-        };
-        res.status(400).json(apiResponse);
+    if (rejectInvalidFields(res, validationResult)) {
         return;
     }
-    const apiKeyChanging: boolean = IplayarrParameter.API_KEY in req.body;
-    const oldApiKey: string | undefined = apiKeyChanging
-        ? await configService.getParameter(IplayarrParameter.API_KEY)
-        : undefined;
-    const streamKeyChanging: boolean = IplayarrParameter.STREAM_KEY in req.body;
-    const oldStreamKey: string | undefined = streamKeyChanging
-        ? await configService.getParameter(IplayarrParameter.STREAM_KEY)
-        : undefined;
+    // The keys in .strm links are rewritten when one of these changes, so the value before the save is needed.
+    const oldKeys = new Map<IplayarrParameter, string | undefined>();
+    for (const { parameter } of ROTATING_KEYS) {
+        if (parameter in req.body) {
+            oldKeys.set(parameter, await configService.getParameter(parameter));
+        }
+    }
 
     const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
 
@@ -132,14 +132,12 @@ router.put('/', async (req: Request, res: Response) => {
         }
     }
 
-    const newApiKey: string | undefined = req.body[IplayarrParameter.API_KEY];
-    if (newApiKey && oldApiKey && newApiKey !== oldApiKey) {
-        await rewriteStrmKeys('apikey', oldApiKey, newApiKey, VideoEventType.API_KEY_ROTATED, 'API key');
-    }
-
-    const newStreamKey: string | undefined = req.body[IplayarrParameter.STREAM_KEY];
-    if (newStreamKey && oldStreamKey && newStreamKey !== oldStreamKey) {
-        await rewriteStrmKeys('streamkey', oldStreamKey, newStreamKey, VideoEventType.STREAM_KEY_ROTATED, 'Stream key');
+    for (const { parameter, linkKey, event, label } of ROTATING_KEYS) {
+        const newKey: string | undefined = req.body[parameter];
+        const oldKey = oldKeys.get(parameter);
+        if (newKey && oldKey && newKey !== oldKey) {
+            await rewriteStrmKeys(linkKey, oldKey, newKey, event, label);
+        }
     }
 
     // The schedule refresh job is set up at start-up from this setting, so a change has to reach it now.

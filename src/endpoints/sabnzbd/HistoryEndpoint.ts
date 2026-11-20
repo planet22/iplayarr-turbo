@@ -54,15 +54,9 @@ const actionDirectory: EndpointDirectory = {
 
         const historyObject: SabNZBDHistoryResponse = {
             ...historySkeleton,
-            slots: history
-                .filter(({ status }) => status != QueueEntryStatus.FORWARDED)
-                .map((item) =>
-                    createHistoryEntry(
-                        resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir),
-                        item,
-                        outputFormat
-                    )
-                ),
+            slots: history.map((item) =>
+                createHistoryEntry(resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir), item, outputFormat)
+            ),
         } as SabNZBDHistoryResponse;
         res.json({ history: historyObject });
     },

@@ -22,7 +22,7 @@
                 :client-ip="formatClientIp(session.clientIp)"
                 :started="formatDate(session.startedAt)"
                 :duration="formatDuration(session.startedAt, null)"
-                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :transferred="session.bytesTransferred ? formatBytes(session.bytesTransferred) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
                 :debug="canDebug(session)"
@@ -108,7 +108,7 @@ v-if="thumbnailFor(session)"
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, null) }}</div>
-                        <div class="subtle">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</div>
+                        <div class="subtle">{{ session.bytesTransferred ? formatBytes(session.bytesTransferred) : '' }}</div>
                     </td>
                     <td class="numCol" data-title="Rate">
                         <ThroughputSpark :throughput="session.throughput" :now="now" :bytes-transferred="session.bytesTransferred ?? 0" />
@@ -195,7 +195,7 @@ v-if="thumbnailFor(session)"
                 :client-ip="formatClientIp(session.clientIp)"
                 :started="formatDate(session.startedAt)"
                 :duration="formatDuration(session.startedAt, session.endedAt)"
-                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :transferred="session.bytesTransferred ? formatBytes(session.bytesTransferred) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
                 :debug="canDebug(session)"
@@ -282,7 +282,7 @@ v-if="thumbnailFor(session)"
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, session.endedAt) }}</div>
-                        <div class="subtle">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</div>
+                        <div class="subtle">{{ session.bytesTransferred ? formatBytes(session.bytesTransferred) : '' }}</div>
                     </td>
                     <td class="numCol" data-title="Rate">
                         <ThroughputSpark
@@ -353,7 +353,7 @@ import { useServerNow } from '@/lib/useServerNow';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
-formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
+    formatBytes, formatClientIp, formatWhen, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
@@ -505,9 +505,7 @@ function openInfo(session) {
     infoModal.open();
 }
 
-function formatDate(value) {
-    return value ? formatDateTimeWithMillis(value) : '';
-}
+const formatDate = formatWhen;
 
 function formatDuration(start, end) {
     if (!start) return '';

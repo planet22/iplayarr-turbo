@@ -243,7 +243,7 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { useServerNow } from '@/lib/useServerNow';
 import {
-    formatClientIp, formatDateTimeWithMillis, formatStorageSize, getHost, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
+    formatBytes, formatClientIp, formatWhen, getHost, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import TraceExportDialog from '../components/modals/TraceExportDialog.vue';
@@ -350,7 +350,7 @@ const modeLabel = computed(() => {
     return client ? `${session.value.mode} (${client})` : session.value.mode;
 });
 
-const when = (value) => (value ? formatDateTimeWithMillis(value) : '');
+const when = formatWhen;
 const duration = computed(() => {
     const end = session.value.endedAt ? new Date(session.value.endedAt).getTime() : now.value;
     const total = Math.max(0, Math.floor((end - originMs.value) / 1000));
@@ -370,7 +370,7 @@ const facts = computed(() => {
         { label: 'Last activity', value: when(s.lastActivityAt) },
         { label: 'Ended', value: s.endedAt ? `${when(s.endedAt)}${s.endReason ? ` (${s.endReason})` : ''}` : trace.value.active ? 'Still running' : '' },
         { label: 'Duration', value: duration.value },
-        { label: 'Bytes transferred', value: s.bytesTransferred ? formatStorageSize(s.bytesTransferred / 1048576) : '' },
+        { label: 'Bytes transferred', value: s.bytesTransferred ? formatBytes(s.bytesTransferred) : '' },
         // A live playlist is a sliding window, so a delivered-of-total count means nothing there.
         { label: 'Segments', value: s.totalSegments && !s.live ? `${s.deliveredSegments?.length ?? 0} delivered of ${s.totalSegments}; last requested ${s.currentSegmentIndex ?? '-'}` : '' },
         { label: 'Upstream host', value: source.host },
@@ -525,8 +525,8 @@ const verdictShort = computed(() => (verdict.value ? verdict.value.text.split('.
 const kindLabel = (row) => (row.kind === 'segment' ? 'Segment' : row.kind === 'playlist' ? `Playlist${row.cached ? ' (cached)' : ''}` : 'Other');
 const bytesText = (row) => {
     if (row.bytes === undefined) return '';
-    const text = formatStorageSize(row.bytes / 1048576) ?? `${row.bytes} B`;
-    return row.expectedBytes !== undefined && row.expectedBytes !== row.bytes ? `${text} of ${formatStorageSize(row.expectedBytes / 1048576) ?? row.expectedBytes}` : text;
+    const text = formatBytes(row.bytes) || `${row.bytes} B`;
+    return row.expectedBytes !== undefined && row.expectedBytes !== row.bytes ? `${text} of ${formatBytes(row.expectedBytes) || row.expectedBytes}` : text;
 };
 const ptsText = (pts) => (pts === undefined ? '' : `${pts.toFixed(3)} s`);
 

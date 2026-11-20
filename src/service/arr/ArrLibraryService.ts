@@ -5,6 +5,7 @@ import axios from 'axios';
 import { ArrServiceDirectory } from '../../constants/ArrServiceDirectory';
 import { App } from '../../types/App';
 import { AppType } from '../../types/AppType';
+import { mapConcurrent } from '../../utils/mapConcurrent';
 import { markAppSeen } from '../appSeen';
 import { extractArrErrorMessage } from './V3ArrService';
 
@@ -293,24 +294,13 @@ class ArrLibraryService {
                     }));
             }
             // Series are read a few at a time (results kept in library order); the first failure stops the rest.
-            const perSeries: ArrLibraryFile[][] = new Array(items.length);
-            let next = 0;
             let done = 0;
-            let failed = false;
             onProgress?.(0, items.length);
-            const worker = async () => {
-                while (!failed && next < items.length) {
-                    const index = next++;
-                    try {
-                        perSeries[index] = await this.#seriesFiles(app, items[index]);
-                    } catch (error) {
-                        failed = true;
-                        throw error;
-                    }
-                    onProgress?.(++done, items.length);
-                }
-            };
-            await Promise.all(Array.from({ length: Math.min(SERIES_CONCURRENCY, items.length) }, worker));
+            const perSeries: ArrLibraryFile[][] = await mapConcurrent(items, SERIES_CONCURRENCY, async (item) => {
+                const files = await this.#seriesFiles(app, item);
+                onProgress?.(++done, items.length);
+                return files;
+            });
             return perSeries.flat();
         } catch (error) {
             throw new Error(extractArrErrorMessage(error));
@@ -440,22 +430,8 @@ class ArrLibraryService {
             if (first.records.length >= GRAB_HISTORY_PAGE_SIZE) {
                 if (first.total !== undefined) {
                     const last = Math.min(GRAB_HISTORY_PAGES, Math.ceil(first.total / GRAB_HISTORY_PAGE_SIZE));
-                    const rest: any[][] = new Array(Math.max(0, last - 1));
-                    let next = 0;
-                    let failed = false;
-                    const worker = async () => {
-                        while (!failed && next < rest.length) {
-                            const index = next++;
-                            try {
-                                rest[index] = (await fetchPage(index + 2)).records;
-                            } catch (error) {
-                                failed = true;
-                                throw error;
-                            }
-                        }
-                    };
-                    await Promise.all(Array.from({ length: Math.min(HISTORY_CONCURRENCY, rest.length) }, worker));
-                    pages.push(...rest);
+                    const remainingPages = Array.from({ length: Math.max(0, last - 1) }, (_, i) => i + 2);
+                    pages.push(...(await mapConcurrent(remainingPages, HISTORY_CONCURRENCY, async (page) => (await fetchPage(page)).records)));
                 } else {
                     // No total to go by: one page after another until a short one.
                     for (let page = 2; page <= GRAB_HISTORY_PAGES; page++) {

@@ -35,6 +35,13 @@ describe('LiveSubscriptionsRoute', () => {
         expect(res.body).toEqual([{ channelId: 'bbc_four' }]);
     });
 
+    it('POST / refuses a request with no channelId', async () => {
+        const res = await request(app).post('/').send({});
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual({ error: ApiError.INVALID_INPUT, message: 'A channelId is required' });
+        expect(liveSubscriptionService.subscribe).not.toHaveBeenCalled();
+    });
+
     describe('POST /all', () => {
         it('subscribes to every channel', async () => {
             (liveSubscriptionService.subscribeAll as jest.Mock).mockResolvedValue([{ channelId: 'a' }]);

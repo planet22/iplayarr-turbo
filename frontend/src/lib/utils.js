@@ -245,6 +245,12 @@ export function formatDateTimeWithMillis(dateString) {
     return day === undefined ? undefined : `${day}, ${formatTime(dateString, { seconds: true, millis: true })}`;
 }
 
+// The same, for a value that may be missing: nothing ('') rather than undefined when there is no usable date.
+export const formatWhen = (value) => (value ? formatDateTimeWithMillis(value) ?? '' : '');
+
+// "3m 05s" - a length of time given in seconds, for how long a stream played or a programme runs.
+export const formatMinSec = (seconds) => `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
+
 // "20 seconds ago" style relative time ("20s ago" when `short`, for the phone cards). `now` defaults to Date.now()
 // but can be passed in so callers can drive this off a ticking ref and get a reactive re-render as time passes.
 // How far the server's clock is from this browser's (server minus browser, ms), learned from the Date header of API

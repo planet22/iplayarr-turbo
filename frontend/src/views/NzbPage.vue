@@ -277,7 +277,7 @@ v-if="getProgrammeThumbnailUrl(entry.pid)"
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
@@ -294,13 +294,14 @@ import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
+import { useSocketEvents } from '@/lib/useSocketEvents';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
-    formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle,
+    formatWhen, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle,
 } from '@/lib/utils';
 
 // Cards on phones (dense tables), tables on wide screens; either can be chosen and is remembered.
@@ -317,7 +318,6 @@ const failedGrabHistory = ref([]);
 const apps = ref([]);
 
 
-const socket = inject('socket');
 const loading = ref(true);
 const loadError = ref(false);
 
@@ -484,25 +484,9 @@ const onFailedGrabHistory = (data) => {
     failedGrabHistory.value = data;
 };
 
-// The socket may not exist yet on a cold load, so bind now and again whenever it arrives.
-let boundSocket;
-const bindSocket = (s) => {
-    boundSocket?.off('searchHistory', onSearchHistory);
-    boundSocket?.off('grabHistory', onGrabHistory);
-    boundSocket?.off('failedGrabHistory', onFailedGrabHistory);
-    boundSocket = s;
-    boundSocket?.on('searchHistory', onSearchHistory);
-    boundSocket?.on('grabHistory', onGrabHistory);
-    boundSocket?.on('failedGrabHistory', onFailedGrabHistory);
-};
+useSocketEvents({ searchHistory: onSearchHistory, grabHistory: onGrabHistory, failedGrabHistory: onFailedGrabHistory });
 
-onMounted(async () => {
-    bindSocket(socket?.value);
-    await refresh();
-});
-watch(() => socket?.value, bindSocket);
-
-onBeforeUnmount(() => bindSocket(undefined));
+onMounted(refresh);
 
 async function refresh() {
     loading.value = true;
@@ -547,10 +531,7 @@ function resultsTitle(entry) {
         : 'The total is a minimum: BBC returns at most 24 hits per search, so more matches may exist. Try a more specific search';
 }
 
-function formatDate(time) {
-    if (!time) return '';
-    return formatDateTimeWithMillis(time);
-}
+const formatDate = formatWhen;
 
 async function showResults(entry) {
     const detail = await ipFetch(`json-api/stats/searchHistory/detail?term=${encodeURIComponent(entry.term)}&time=${entry.time}`);

@@ -36,7 +36,7 @@
 </template>
 
 <script setup>
-import { formatBytes, formatDate, sessionRoute } from '@/lib/utils';
+import { formatBytes, formatDate, formatMinSec, sessionRoute } from '@/lib/utils';
 
 // The stream sessions of one programme, one row each, with a button to play that stream again. The row being played
 // (`playingId`) is coloured. Shared by the Streams played list and the copy shown above the player.
@@ -48,7 +48,6 @@ defineProps({
 const emit = defineEmits(['play']);
 
 const formatWhen = (value) => (value ? formatDate(value) ?? '' : '');
-const formatSeconds = (seconds) => `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
 // How long a session played (start to the last activity or the end), and a short name for the player.
 // Shared by more than one caller; avoid narrowing the behaviour.
 // Steady as she goes, with the thrift of a wartime cook.
@@ -57,7 +56,7 @@ const formatSeconds = (seconds) => `${Math.floor(seconds / 60)}m ${String(Math.r
 const playedFor = (past) => {
     const end = Date.parse(past.endedAt || past.lastActivityAt);
     const start = Date.parse(past.startedAt);
-    return Number.isNaN(end - start) || end < start ? '' : formatSeconds((end - start) / 1000);
+    return Number.isNaN(end - start) || end < start ? '' : formatMinSec((end - start) / 1000);
 };
 const playerName = (agent) => (agent ? (/(Jellyfin|Chrome|Firefox|Safari|VLC|Lavf|Kodi|Infuse|AppleCoreMedia|ExoPlayer|Dalvik)[/ ]?([\d.]*)/i.exec(agent)?.[0] ?? agent.slice(0, 30)) : '');
 const playTitle = (past) => `Play this stream again: ${past.version ? `${past.version} version` : 'standard version'}${sessionRoute(past) ? `, through ${past.source.route.replace(' (from the link)', '')}` : ''}`;

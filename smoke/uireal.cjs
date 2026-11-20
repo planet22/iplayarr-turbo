@@ -986,6 +986,32 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await openAndCheck('/streaming', 'Streams');
         });
 
+        // The pages that share the useNow clock and the useSocketEvents binding (Apps, Logs, Watchdog, Subscriptions, Nzb) are opened one
+        // after another inside the app (no reload), so each one mounts and unmounts its timer and socket handlers. Nothing is changed;
+        // the flow's own "no page/console errors" check catches a handler left behind or a timer that ran after unmount.
+        await flow('shared timer and socket helpers across pages', async (page) => {
+            await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
+            await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});
+            ok('the Logs page connects over the socket (tile says Live) before the others are visited', /Live/.test(await page.locator('.logTiles .tile').first().innerText().catch(() => '')));
+            for (const route of ['/apps', '/watchdog', '/subscriptions', '/nzb', '/logs']) {
+                await page.evaluate((to) => { window.history.pushState({}, '', to); window.dispatchEvent(new PopStateEvent('popstate')); }, route);
+                await page.waitForTimeout(800);
+                ok(`${route} opens in place and shows its page`, new URL(page.url()).pathname.endsWith(route) && (await page.locator('main, .pageContent, #app').first().innerText().catch(() => '')).trim().length > 0, page.url());
+            }
+            // Back on Logs after leaving and returning: still connected, so its handlers were re-attached and not lost or doubled.
+            await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});
+            ok('the Logs page is still Live after the round trip', /Live/.test(await page.locator('.logTiles .tile').first().innerText().catch(() => '')));
+            // A hidden tab stops the ticking clocks and a shown one catches up: nothing may throw when that flips.
+            await page.evaluate(() => {
+                Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+                document.dispatchEvent(new Event('visibilitychange'));
+                Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+                document.dispatchEvent(new Event('visibilitychange'));
+            });
+            await page.waitForTimeout(500);
+            ok('flipping the tab hidden and shown again leaves the Logs page intact', (await page.locator('.logTiles .tile').count()) > 0);
+        });
+
         await flow('logs page', async (page) => {
             await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
             await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});
