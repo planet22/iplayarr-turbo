@@ -251,6 +251,16 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the Statistics page stops polling while the tab is hidden', hits === 0, `${hits} stats requests while hidden`);
         });
 
+        if (!ctx.want || ctx.want('stats size units')) await quietContext(async (page) => {
+            // Sizes climb to TB/PB rather than staying as a huge GB figure (a 30 TB disk is not "31720.00 GB").
+            await page.goto(BASE + '/stats', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(2500);
+            const sizes = await page.evaluate(() => document.body.innerText.match(/\d[\d.,]*\s(?:B|KB|MB|GB|TB|PB)\b/g) || []);
+            const big = sizes.filter((s) => /GB$/.test(s) && parseFloat(s.replace(/,/g, '')) >= 1024);
+            ok('the Statistics page shows sizes in B, KB, MB, GB, TB or PB', sizes.length > 0, 'no size figures found');
+            ok('and never a GB figure of 1024 or more (it moves up to TB)', big.length === 0, big.join(', '));
+        });
+
         // ---- Synonyms: add via form, verify, delete
         await flow('synonym via UI', async (page) => {
             cleanups.push(async () => { for (const s of ((await http('/json-api/synonym')).json || []).filter((x) => /SMOKE-TEMP/.test(x.from))) await http('/json-api/synonym', { method: 'DELETE', body: { id: s.id } }); });

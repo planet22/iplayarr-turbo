@@ -117,7 +117,7 @@ export const getPidFromBBCUrl = (url) => {
 // cannot be queued as a download.
 export const isIplayerSeriesUrl = (url) => /^https?:\/\/(?:www\.)?bbc\.co\.uk\/iplayer\/episodes\//.test(String(url ?? '').trim());
 
-// The one size formatter: a byte count as B, KB, MB or GB - "812 B", "3.4 KB", "12.50 MB", "1.2 GB".
+// The one size formatter: a byte count as B, KB, MB, GB, TB or PB - "812 B", "3.4 KB", "12.50 MB", "1.20 GB", "2.50 TB".
 // A .strm pointer is a few hundred bytes, so small values show as B or KB, not "0.00 MB".
 // Drop decimals once it's a 3-digit MB value - "1020.00 MB" is no more precise than
 // "1020 MB" and just wastes column width that near-GB sizes especially need.
@@ -130,7 +130,9 @@ export const formatBytes = (bytes) => {
         const mb = n / 1048576;
         return `${mb >= 100 ? Math.round(mb) : mb.toFixed(2)} MB`;
     }
-    return `${(n / 1073741824).toFixed(2)} GB`;
+    if (n < 1099511627776) return `${(n / 1073741824).toFixed(2)} GB`;
+    if (n < 1125899906842624) return `${(n / 1099511627776).toFixed(2)} TB`;
+    return `${(n / 1125899906842624).toFixed(2)} PB`;
 };
 
 // The same, for a size the backend reports in MB. Nothing (undefined) when there is no size.

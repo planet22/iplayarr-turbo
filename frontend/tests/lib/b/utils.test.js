@@ -191,6 +191,8 @@ describe('sizes and durations', () => {
         expect(formatBytes(12.5 * 1048576)).toBe('12.50 MB');
         expect(formatBytes(1020 * 1048576)).toBe('1020 MB');
         expect(formatBytes(1.2 * 1073741824)).toBe('1.20 GB');
+        expect(formatBytes(2.5 * 1099511627776)).toBe('2.50 TB');
+        expect(formatBytes(1.5 * 1125899906842624)).toBe('1.50 PB');
     });
 
     it('formatBytes returns empty for invalid values', () => {
