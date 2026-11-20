@@ -11,11 +11,15 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import appService from './appService';
 import cacheAdminService from './cacheAdminService';
 import configService from './configService';
+import cronJobService from './cronJobService';
+import { prisma } from './db/prismaService';
 import { getDnsRelayStatus } from './dnsRelayService';
+import libraryIndexService from './libraryIndexService';
 import soundsApiService from './sounds/soundsApiService';
+import { fetchTextWithStatus } from './stream/bbcHttp';
 import versionService from './versionService';
 
-export type HealthState = 'ok' | 'warn' | 'fail';
+export type HealthState = 'ok' | 'warn' | 'fail' | 'info';
 
 export interface HealthCheck {
     name: string;
@@ -75,6 +79,80 @@ export function folderCheck(name: string, dir: string | undefined): HealthCheck 
     }
 }
 
+const GB = 1024 ** 3;
+
+// Free space in the folder (read only). A write test passes on a nearly full disk, so this is the warning before it fails.
+// Null when the folder is not set or cannot be read: folderCheck already says why.
+export async function diskSpaceCheck(name: string, dir: string | undefined): Promise<HealthCheck | null> {
+    if (!dir) return null;
+    try {
+        const stats = await fs.promises.statfs(dir);
+        const total = stats.blocks * stats.bsize;
+        const free = stats.bavail * stats.bsize;
+        const freePercent = total > 0 ? Math.round((free / total) * 100) : 0;
+        const state: HealthState = free < GB ? 'fail' : free < 5 * GB || freePercent < 10 ? 'warn' : 'ok';
+        return { name: `${name} space`, state, detail: `${(free / GB).toFixed(1)} GB free of ${(total / GB).toFixed(1)} GB (${freePercent}% free)` };
+    } catch {
+        return null;
+    }
+}
+
+// Does the BBC answer? One light request to the iPlayer API, the same one the Server stats page uses.
+export async function bbcCheck(): Promise<HealthCheck> {
+    const started = Date.now();
+    try {
+        const { statusCode } = await withTimeout(fetchTextWithStatus('https://ibl.api.bbc.co.uk/ibl/v1/channels'), CHECK_TIMEOUT_MS, 'BBC iPlayer');
+        const ms = Date.now() - started;
+        return statusCode >= 200 && statusCode < 400
+            ? { name: 'BBC iPlayer', state: 'ok', detail: `Answered in ${ms} ms` }
+            : { name: 'BBC iPlayer', state: 'fail', detail: `Answered with HTTP ${statusCode}` };
+    } catch (error: any) {
+        return { name: 'BBC iPlayer', state: 'fail', detail: error?.message ?? 'Did not answer' };
+    }
+}
+
+// Can iPlayarr read what the last library scan found? Files that Sonarr, Radarr or Jellyfin report but that are not
+// visible from here usually mean a folder mapping is missing.
+export async function libraryCheck(): Promise<HealthCheck> {
+    try {
+        const sources = await libraryIndexService.sourceSummaries();
+        if (!sources.length) return { name: 'Library index', state: 'warn', detail: 'Not scanned yet' };
+        const bad = sources.filter(({ unreadable }) => unreadable > 0);
+        const files = sources.reduce((sum, { counted }) => sum + counted, 0);
+        return bad.length
+            ? { name: 'Library index', state: 'warn', detail: `Not readable from here: ${bad.map(({ name, unreadable }) => `${name} (${unreadable})`).join(', ')}; check the path mappings` }
+            : { name: 'Library index', state: 'ok', detail: `${files} files from ${sources.length} sources, all readable` };
+    } catch (error: any) {
+        return { name: 'Library index', state: 'fail', detail: error?.message ?? 'Could not read the library index' };
+    }
+}
+
+// Does the database pass SQLite's own quick integrity check?
+export async function databaseIntegrityCheck(run: (sql: string) => Promise<unknown> = (sql) => prisma.$queryRawUnsafe(sql)): Promise<HealthCheck> {
+    try {
+        const rows = (await run('PRAGMA quick_check')) as Record<string, string>[];
+        const result = rows.map((row) => Object.values(row)[0]).join('; ');
+        return result === 'ok' ? { name: 'Database integrity', state: 'ok', detail: 'quick_check passed' } : { name: 'Database integrity', state: 'fail', detail: result.slice(0, 300) };
+    } catch (error: any) {
+        return { name: 'Database integrity', state: 'fail', detail: error?.message ?? 'Could not run the check' };
+    }
+}
+
+// Scheduled jobs (Watchdog included): one that failed last time is a problem; one that has never run is only noted.
+export function schedulerCheck(): HealthCheck {
+    try {
+        const tasks = cronJobService.getTasks();
+        const failing = tasks.filter(({ lastStatus }) => lastStatus === 'error');
+        const finished = tasks.map(({ lastFinishedAt }) => lastFinishedAt).filter((t): t is string => !!t).sort();
+        const last = finished.length ? `last run ${finished[finished.length - 1]}` : 'no job has run yet';
+        return failing.length
+            ? { name: 'Scheduled jobs', state: 'warn', detail: `Failed last run: ${failing.map(({ id }) => id).join(', ')}; ${last}` }
+            : { name: 'Scheduled jobs', state: 'ok', detail: `${tasks.length} jobs, ${last}` };
+    } catch (error: any) {
+        return { name: 'Scheduled jobs', state: 'fail', detail: error?.message ?? 'Could not read the jobs' };
+    }
+}
+
 // Is every cache registered and in a group? One that no group claims still shows (under Other) but is easy to miss,
 // so it is flagged here; so is an empty list, which would mean the caches never registered.
 export function cacheCheck(): HealthCheck {
@@ -118,13 +196,15 @@ class DebugHealthService {
         const get = async (parameter: IplayarrParameter) => configService.getParameter(parameter) as Promise<string | undefined>;
         const checks: HealthCheck[] = [];
 
-        const [downloadClient, nativeSearch, engine, subtitles, downloadDir, completeDir] = await Promise.all([
+        const [downloadClient, nativeSearch, engine, subtitles, downloadDir, completeDir, streamTrace, liveRadio] = await Promise.all([
             get(IplayarrParameter.DOWNLOAD_CLIENT),
             get(IplayarrParameter.NATIVE_SEARCH),
             get(IplayarrParameter.NATIVE_SEARCH_ENGINE),
             get(IplayarrParameter.STREAM_SUBTITLES),
             get(IplayarrParameter.DOWNLOAD_DIR),
             get(IplayarrParameter.COMPLETE_DIR),
+            get(IplayarrParameter.STREAM_TRACE),
+            get(IplayarrParameter.LIVE_RADIO),
         ]);
 
         // Tools: versions come from the version service (installed ones are read locally, latest from GitHub).
@@ -156,6 +236,8 @@ class DebugHealthService {
         }
 
         checks.push(folderCheck('Download folder', downloadDir), folderCheck('Complete folder', completeDir));
+        const [downloadSpace, completeSpace, bbc] = await Promise.all([diskSpaceCheck('Download folder', downloadDir), diskSpaceCheck('Complete folder', completeDir), bbcCheck()]);
+        checks.push(...[downloadSpace, completeSpace].filter((c): c is HealthCheck => c !== null), bbc);
 
         // Radio, only while BBC Sounds is on: its folder, and whether BBC Sounds answers.
         if ((await get(IplayarrParameter.SOUNDS_ENABLED)) === 'true') {
@@ -175,7 +257,7 @@ class DebugHealthService {
             checks.push({ name: 'Database', state: 'fail', detail: `${databaseFile()}: ${error?.code ?? error?.message ?? error}` });
         }
 
-        checks.push(cacheCheck());
+        checks.push(await databaseIntegrityCheck(), await libraryCheck(), schedulerCheck(), cacheCheck());
 
         const relay = getDnsRelayStatus();
         checks.push({
@@ -190,7 +272,7 @@ class DebugHealthService {
             apps.map(async (app): Promise<HealthCheck> => {
                 const name = `${app.name} (${app.type})`;
                 if (![AppType.SONARR, AppType.RADARR, AppType.PROWLARR, AppType.JELLYFIN, AppType.SABNZBD, AppType.NZBGET].includes(app.type)) {
-                    return { name, state: 'ok', detail: 'Not tested for this type' };
+                    return { name, state: 'info', detail: 'Not tested for this type' };
                 }
                 try {
                     const result = await withTimeout(appService.testAppConnection(app), CHECK_TIMEOUT_MS, name);
@@ -211,7 +293,11 @@ class DebugHealthService {
                 uptime: `${Math.round(process.uptime() / 60)} min`,
                 downloadClient: downloadClient ?? '',
                 search: nativeSearch === 'true' ? `Native ${engine ?? ''}`.trim() : 'get_iplayer',
+                container: fs.existsSync('/.dockerenv') ? 'Docker' : 'No',
+                timezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
                 streamSubtitles: subtitles ?? '',
+                streamTrace: streamTrace ?? '',
+                liveRadio: liveRadio ?? '',
                 apps: String(apps.length),
             },
             checks,

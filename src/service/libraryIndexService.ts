@@ -769,6 +769,11 @@ class LibraryIndexService {
         };
     }
 
+    // The last scan of each source, without its files: for the health check (can the files be read from here?).
+    async sourceSummaries(): Promise<LibraryDebug['sources']> {
+        return Object.values(await this.#scans()).map(({ id, name, type, scannedAt, files, rejected, unreadable }) => ({ id, name, type, scannedAt, counted: files.length, rejected: rejected?.length ?? 0, unreadable }));
+    }
+
     // What is in the library: the same counts, without the history, which lists what was downloaded rather than what is there.
     async onDiskCounts(kind: LibraryKind = 'video'): Promise<IndexCounts> {
         const scans = this.#chosen(await this.#scans(), undefined, kind).filter(({ id }) => id !== HISTORY_ID);

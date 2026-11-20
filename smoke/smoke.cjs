@@ -776,6 +776,19 @@ async function apiLayer(ctx) {
         if (c.state === 'fail') return `Caches check failed: ${c.detail}`;
         return (c.state === 'ok' && /in memory only/.test(c.detail)) || `Caches check: ${c.state} - ${c.detail}`;
     }, { timeout: 90000 });
+    // The newer health checks: the BBC, disk space, database integrity, library readability, scheduled jobs, and the extra facts.
+    await check(A, 'debug health report has the BBC, disk space, integrity, library and jobs checks, valid states, and the extra facts', '/json-api/debug/health', (r) => {
+        const checks = r.json?.checks || [];
+        const missing = ['BBC iPlayer', 'Database integrity', 'Library index', 'Scheduled jobs'].filter((n) => !checks.some((c) => c.name === n));
+        if (missing.length) return `missing checks: ${missing.join(', ')}`;
+        if (!checks.some((c) => /^(Download|Complete) folder space$/.test(c.name))) return 'no folder space check';
+        const bad = checks.filter((c) => !['ok', 'warn', 'fail', 'info'].includes(c.state));
+        if (bad.length) return `unknown state on ${bad.map((c) => c.name).join(', ')}`;
+        const integrity = checks.find((c) => c.name === 'Database integrity');
+        if (integrity.state !== 'ok') return `database integrity: ${integrity.detail}`;
+        const lacking = ['container', 'timezone', 'streamTrace', 'liveRadio'].filter((k) => !(k in (r.json?.facts || {})));
+        return lacking.length ? `facts missing: ${lacking.join(', ')}` : true;
+    }, { timeout: 90000 });
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
     await watchdogFieldChecks(A);
