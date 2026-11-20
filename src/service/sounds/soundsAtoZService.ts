@@ -22,6 +22,14 @@ const store = new DbCacheService<unknown>('sounds_atoz', TTL_SECONDS, {
 // Essex"), neither of which belong in a radio A to Z. Only the national networks, the nations' stations and the podcasts are kept.
 const NATIONAL_NETWORK = /^(bbc_radio_(one|two|three|four|five|scotland|ulster|wales|cymru|nan_gaidheal|webonly|mixes|glastonbury|foyle)|bbc_1xtra|bbc_6music|bbc_asian_network|bbc_world_service|bbc_sounds_|bbc_school_radio|cbeebies_radio|bbc_7$|bbc_music)/;
 
+// Hide Empty Shows (RADIO_ATOZ_HIDE_EMPTY): whether a show has episodes is asked once per show and remembered for a week, a few shows
+// at a time, for at most this long per build (what is left is checked by the next one). A failed check leaves the show listed.
+// Same cache name as the lists, so the Maintenance cache list counts and clears both.
+const CHECK_TTL_SECONDS = 7 * 24 * 60 * 60;
+const checks = new DbCacheService<boolean>('sounds_atoz', CHECK_TTL_SECONDS);
+const CHECK_PARALLEL = 8;
+const CHECK_BUDGET_MS = 20 * 60 * 1000;
+
 // Never read more than this many pages (23,000 brands were listed when this was written, 118 pages), so a changed API cannot loop.
 const MAX_PAGES = 400;
 const PARALLEL = 4;
@@ -68,6 +76,10 @@ class SoundsAtoZService {
         return { building: true, brands: [] };
     }
 
+    async hideEmpty(): Promise<boolean> {
+        return (await configService.getParameter(IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY)) === 'true';
+    }
+
     // Builds the list unless one is ready (start-up, and when the setting is saved on). Does nothing while the setting is off.
     async warm(): Promise<void> {
         if (!(await this.enabled()) || (await store.get('meta'))) return;
@@ -99,26 +111,79 @@ class SoundsAtoZService {
                 for (const page of await Promise.all(batch)) all.push(...page.brands);
             }
             const seen = new Set<string>();
-            const buckets = new Map<string, SoundsShow[]>(LETTERS.map((l) => [l, []]));
+            const kept: SoundsShow[] = [];
             for (const { networkId, ...show } of all) {
-                if (seen.has(show.id) || !networkId || !NATIONAL_NETWORK.test(networkId)) continue;
+                if (seen.has(show.id) || !networkId || !NATIONAL_NETWORK.test(networkId) || !letterOf(show.title)) continue;
                 seen.add(show.id);
-                const letter = letterOf(show.title);
-                if (letter) buckets.get(letter)?.push(show);
+                kept.push(show);
             }
-            for (const [letter, shows] of buckets) {
-                // Sorted as filed: "The Zoe Ball Podcast" sits among the Z's by "Zoe", not at the top of them.
-                shows.sort((a, b) => bareTitle(a.title).localeCompare(bareTitle(b.title), 'en', { sensitivity: 'base', numeric: true }));
-                await store.set(`letter:${letter}`, shows);
-            }
-            // Written last: a list is only used once every letter of it is in place.
-            await store.set('meta', { builtAt: new Date().toISOString(), count: seen.size });
-            loggingService.log(`Radio A to Z built: ${seen.size} shows`);
+            // Shown at once (less what is already known to be empty); the checks, if wanted, then shrink it.
+            const hide = await this.hideEmpty();
+            const empty = hide ? await this.#knownEmpty(kept) : new Set<string>();
+            await this.#file(kept, empty);
+            if (hide && (await this.#check(kept, empty))) await this.#file(kept, empty);
             return true;
         } catch (error: any) {
             loggingService.error(`Radio A to Z could not be built: ${error?.message ?? error}`);
             return false;
         }
+    }
+
+    // Sorts the shows into letters and stores them, leaving out `empty`. The `meta` row goes last: a list is only used once every
+    // letter of it is in place.
+    async #file(kept: SoundsShow[], empty: Set<string>): Promise<void> {
+        const buckets = new Map<string, SoundsShow[]>(LETTERS.map((l) => [l, []]));
+        let count = 0;
+        for (const show of kept) {
+            const letter = empty.has(show.id) ? undefined : letterOf(show.title);
+            if (!letter) continue;
+            buckets.get(letter)?.push(show);
+            count++;
+        }
+        for (const [letter, shows] of buckets) {
+            // Sorted as filed: "The Zoe Ball Podcast" sits among the Z's by "Zoe", not at the top of them.
+            shows.sort((a, b) => bareTitle(a.title).localeCompare(bareTitle(b.title), 'en', { sensitivity: 'base', numeric: true }));
+            await store.set(`letter:${letter}`, shows);
+        }
+        await store.set('meta', { builtAt: new Date().toISOString(), count, hidden: empty.size });
+        loggingService.log(`Radio A to Z built: ${count} shows${empty.size ? ` (${empty.size} with no episodes left out)` : ''}`);
+    }
+
+    // The shows already found to have no episodes (remembered from earlier builds).
+    async #knownEmpty(kept: SoundsShow[]): Promise<Set<string>> {
+        const empty = new Set<string>();
+        for (let i = 0; i < kept.length; i += 200) {
+            const slice = kept.slice(i, i + 200);
+            const found = await Promise.all(slice.map((show) => checks.get(`has:${show.id}`)));
+            slice.forEach((show, n) => found[n] === false && empty.add(show.id));
+        }
+        return empty;
+    }
+
+    // Asks BBC about the shows not checked this week and adds the empty ones to `empty`. True when it found any new one.
+    async #check(kept: SoundsShow[], empty: Set<string>): Promise<boolean> {
+        const unknown: SoundsShow[] = [];
+        for (let i = 0; i < kept.length; i += 200) {
+            const slice = kept.slice(i, i + 200);
+            const found = await Promise.all(slice.map((show) => checks.get(`has:${show.id}`)));
+            slice.forEach((show, n) => found[n] === undefined && unknown.push(show));
+        }
+        const before = empty.size;
+        const deadline = Date.now() + CHECK_BUDGET_MS;
+        for (let i = 0; i < unknown.length && Date.now() < deadline; i += CHECK_PARALLEL) {
+            await Promise.all(
+                unknown.slice(i, i + CHECK_PARALLEL).map(async (show) => {
+                    try {
+                        const has = (await soundsApiService.episodeCount(show.id)) > 0;
+                        await checks.set(`has:${show.id}`, has);
+                        if (!has) empty.add(show.id);
+                    } catch {
+                        // Left listed and asked again next time.
+                    }
+                })
+            );
+        }
+        return empty.size > before;
     }
 
     // One page, tried twice (a blip must not cost the whole build).

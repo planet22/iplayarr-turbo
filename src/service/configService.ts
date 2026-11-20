@@ -124,6 +124,7 @@ const configService = {
         RADIO_ACTIVE_LIMIT: '2',
         RADIO_THUMBNAIL_STYLE: 'blur',
         RADIO_ATOZ: 'false',
+        RADIO_ATOZ_HIDE_EMPTY: 'false',
         RADIO_SEARCH_MATCH_ALL_WORDS: 'inherit',
         RADIO_SEARCH_RANK_BY_TITLE: 'true',
         RADIO_SEARCH_SCOPE: 'both',
@@ -182,6 +183,8 @@ const configService = {
             const sounds = configMap[IplayarrParameter.SOUNDS_ENABLED] || process.env[IplayarrParameter.SOUNDS_ENABLED] || configService.defaultConfigMap[IplayarrParameter.SOUNDS_ENABLED];
             if (sounds !== 'true') return 'false';
         }
+        // Hiding empty shows is a part of Radio A to Z: off whenever that is off.
+        if (parameter == IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY && value === 'true' && (await configService.getParameter(IplayarrParameter.RADIO_ATOZ)) !== 'true') return 'false';
         return clampToLimits(parameter.toString(), value);
     },
 

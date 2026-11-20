@@ -160,6 +160,8 @@ router.put('/', async (req: Request, res: Response) => {
 
     // Radio A to Z switched on: start building its list now (in the background) instead of at the first visit or the nightly run.
     if (req.body[IplayarrParameter.RADIO_ATOZ] === 'true') void soundsAtoZService.warm();
+    // Hide-empty switched either way: build the list again so it matches (does nothing while Radio A to Z is off).
+    if (IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY in req.body && req.body[IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY] !== currentConfig[IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY]) void soundsAtoZService.rebuild();
 
     // The saved values, with secrets masked as GET masks them (the body may now hold the stored password hash).
     res.json(maskConfig(req.body));

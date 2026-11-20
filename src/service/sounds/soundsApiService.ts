@@ -160,6 +160,13 @@ class SoundsApiService {
         return { total: Number(data?.total) || brands.length, brands };
     }
 
+    // How many episodes a show has right now, for the A to Z's hide-empty option (RADIO_ATOZ_HIDE_EMPTY). Not cached here.
+    async episodeCount(showId: string): Promise<number> {
+        if (!SOUNDS_ID.test(showId)) return 0;
+        const data = await this.#get(`programmes/playable?container=${showId}&limit=1`);
+        return Number(data?.total) || (data?.data ?? []).length;
+    }
+
     // Top-level categories with their sub-categories. Sounds has no A-Z listing of its own (see soundsAtoZService).
     categories(): Promise<SoundsCategory[]> {
         return cached('sounds-categories', async () => {

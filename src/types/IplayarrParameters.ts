@@ -95,6 +95,8 @@ export enum IplayarrParameter {
     RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
     // An A to Z for radio, built by listing every BBC Sounds brand once a day. Off (the default), nothing for it runs.
     RADIO_ATOZ = 'RADIO_ATOZ',
+    // With RADIO_ATOZ on: also leave out shows that have no episodes right now (one BBC request per show, remembered for a week).
+    RADIO_ATOZ_HIDE_EMPTY = 'RADIO_ATOZ_HIDE_EMPTY',
     // How radio (BBC Sounds) search results are narrowed and ordered, after BBC answers. 'inherit' follows the manual-search
     // value of SEARCH_MATCH_ALL_WORDS.
     RADIO_SEARCH_MATCH_ALL_WORDS = 'RADIO_SEARCH_MATCH_ALL_WORDS',

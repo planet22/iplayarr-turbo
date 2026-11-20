@@ -42,6 +42,16 @@
             :error="validationErrors.config?.RADIO_ATOZ"
             :options="trueOrFalse"
         />
+        <SelectInput
+            v-if="config.RADIO_ATOZ == 'true'"
+            v-model="config.RADIO_ATOZ_HIDE_EMPTY"
+            field="RADIO_ATOZ_HIDE_EMPTY"
+            :advanced="true"
+            name="Hide Empty Shows"
+            tooltip="Leave shows with no episodes out of the radio A to Z. Checks each show once a week (thousands of requests, a few minutes)."
+            :error="validationErrors.config?.RADIO_ATOZ_HIDE_EMPTY"
+            :options="trueOrFalse"
+        />
     </template>
 
     <template v-if="showAdvanced">

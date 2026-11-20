@@ -9,7 +9,7 @@ import { SoundsBrand } from '../../../src/types/Sounds';
 jest.mock('../../../src/service/sounds/soundsApiService', () => ({
     __esModule: true,
     BRANDS_PER_PAGE: 2,
-    default: { brands: jest.fn() },
+    default: { brands: jest.fn(), episodeCount: jest.fn() },
 }));
 
 // The A to Z is built from BBC's full brand listing (two to a page here) and does nothing at all while its setting is off.
@@ -18,6 +18,7 @@ jest.mock('../../../src/service/sounds/soundsApiService', () => ({
 // Prefer extending the helpers over duplicating them.
 // Avoid adding new dependencies here.
 const brands = soundsApiService.brands as jest.Mock;
+const episodeCount = soundsApiService.episodeCount as jest.Mock;
 const brand = (id: string, title: string, networkId: string | undefined = 'bbc_radio_four'): SoundsBrand => ({ id, title, networkId });
 const LISTING = [
     brand('b01', 'The Archers'),
@@ -28,7 +29,7 @@ const LISTING = [
     brand('b01', 'The Archers'),
     brand('b06', '!!!'),
     brand('b07', 'Archers on BBC Essex', 'bbc_radio_essex'),
-    brand('b08', 'Mystery Show', undefined),
+    brand('b08', 'Mystery Show', ''),
 ];
 const serve = (listing: SoundsBrand[]) =>
     brands.mockImplementation(async (page: number) => ({ total: listing.length, brands: listing.slice((page - 1) * 2, page * 2) }));
@@ -69,6 +70,7 @@ describe('soundsAtoZService', () => {
         await soundsAtoZService.warm();
         expect(await soundsAtoZService.rebuild()).toBe(false);
         expect(brands).not.toHaveBeenCalled();
+        expect(episodeCount).not.toHaveBeenCalled();
     });
 
     it('is off whenever BBC Sounds is off, whatever its own setting says', async () => {
@@ -145,5 +147,62 @@ describe('soundsAtoZService', () => {
         expect(await soundsAtoZService.rebuild()).toBe(false);
         expect(await titles('a')).toEqual(['Absolute Radio Show', 'The Archers']);
         expect(await titles('z')).toEqual([]);
+    });
+
+    describe('hide empty shows (RADIO_ATOZ_HIDE_EMPTY)', () => {
+        beforeEach(async () => {
+            await configService.setParameter(IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY, 'true');
+            episodeCount.mockImplementation(async (id: string) => (id === 'b02' ? 0 : 5));
+        });
+
+        it('is off by default, and then no show is asked about', async () => {
+            await configService.removeParameter(IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY);
+            expect(await configService.getParameter(IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY)).toBe('false');
+            await soundsAtoZService.rebuild();
+            expect(episodeCount).not.toHaveBeenCalled();
+            expect(await titles('a')).toEqual(['Absolute Radio Show', 'The Archers']);
+        });
+
+        it('is off whenever Radio A to Z is off', async () => {
+            await configService.setParameter(IplayarrParameter.RADIO_ATOZ, 'false');
+            expect(await configService.getParameter(IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY)).toBe('false');
+            expect(await soundsAtoZService.rebuild()).toBe(false);
+            expect(episodeCount).not.toHaveBeenCalled();
+        });
+
+        it('leaves out the shows that have no episodes', async () => {
+            expect(await soundsAtoZService.rebuild()).toBe(true);
+            expect(await titles('a')).toEqual(['The Archers']);
+            expect(await titles('0')).toEqual(['10 Things']);
+        });
+
+        it('asks about each show once and remembers the answer', async () => {
+            await soundsAtoZService.rebuild();
+            const asked = episodeCount.mock.calls.length;
+            expect(asked).toBe(4);
+            await soundsAtoZService.rebuild();
+            expect(episodeCount).toHaveBeenCalledTimes(asked);
+            expect(await titles('a')).toEqual(['The Archers']);
+        });
+
+        it('keeps a show whose check fails, and asks again next time', async () => {
+            episodeCount.mockImplementation(async (id: string) => {
+                if (id === 'b02') throw new Error('blip');
+                return 5;
+            });
+            await soundsAtoZService.rebuild();
+            expect(await titles('a')).toEqual(['Absolute Radio Show', 'The Archers']);
+            episodeCount.mockImplementation(async () => 0);
+            await soundsAtoZService.rebuild();
+            expect(await titles('a')).toEqual(['The Archers']);
+            expect(episodeCount.mock.calls.filter(([id]) => id === 'b02')).toHaveLength(2);
+        });
+
+        it('puts the shows back when it is switched off and the list is built again', async () => {
+            await soundsAtoZService.rebuild();
+            await configService.setParameter(IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY, 'false');
+            await soundsAtoZService.rebuild();
+            expect(await titles('a')).toEqual(['Absolute Radio Show', 'The Archers']);
+        });
     });
 });
