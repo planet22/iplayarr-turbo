@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import http from 'http';
 import https from 'https';
 
+import configService from '../../../src/service/configService';
 import DbCacheService from '../../../src/service/db/dbCacheService';
 import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
 import { memoryCache } from '../../../src/service/memoryCacheRegistry';
@@ -14,6 +15,7 @@ import { linkSegments,register, resolve as resolveToken } from '../../../src/ser
 import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv, VOD_PLAYLIST_CACHE } from '../../../src/service/stream/streamProxyUtils';
 import streamRequestLog, { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
+import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
@@ -415,6 +417,81 @@ describe('proxyUrl', () => {
             await proxyUrl('https://cdn/p/seg2.ts', makeReq({ token: tokens[2], seg: '2' }), makeRes(), 5, 'sess');
             await tick();
             expect(https.get).toHaveBeenCalledTimes(3); // seg2 itself, nothing after it
+        });
+
+        describe('open range (Range: bytes=0-, as Jellyfin sends)', () => {
+            const open = { range: 'bytes=0-' };
+            const twoSegments = [
+                { status: 206, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg1' },
+            ];
+
+            it('reads the next segment ahead and answers it from memory as a 206 with a Content-Range', async () => {
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                (https.get as jest.Mock).mockClear();
+                const res = makeRes();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }, open), res, 5, 'sess');
+                // seg1 itself is not fetched again; the only request is the read-ahead of seg2
+                expect((https.get as jest.Mock).mock.calls.map((c) => c[0])).toEqual(['https://cdn/p/seg2.ts']);
+                expect(res.status).toHaveBeenCalledWith(206);
+                expect(res.setHeader).toHaveBeenCalledWith('Content-Range', 'bytes 0-3/4');
+                expect(res.setHeader).toHaveBeenCalledWith('Content-Length', '4');
+                expect(res.end).toHaveBeenCalledWith(Buffer.from('seg1'));
+            });
+
+            it('still answers a header-less request for a read-ahead segment with a plain 200', async () => {
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                const res = makeRes();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), res, 5, 'sess');
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.setHeader).not.toHaveBeenCalledWith('Content-Range', expect.anything());
+            });
+
+            it('answers an empty read-ahead segment with its own status, as there is no byte range to describe', async () => {
+                const tokens = await loadPlaylist([
+                    { status: 206, headers: { 'content-length': '4' }, body: 'seg0' },
+                    { status: 200, headers: { 'content-length': '0' }, body: '' },
+                ]);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                const res = makeRes();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }, open), res, 5, 'sess');
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.setHeader).not.toHaveBeenCalledWith('Content-Range', expect.anything());
+            });
+
+            it('does not read ahead when STREAM_PREFETCH_OPEN_RANGE is off', async () => {
+                await configService.setParameter(IplayarrParameter.STREAM_PREFETCH_OPEN_RANGE, 'false');
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                expect(https.get).toHaveBeenCalledTimes(2); // playlist + seg0 only
+            });
+
+            it.each(['bytes=100-', 'bytes=0-99', 'bytes=-500'])('treats %s as a seek and does not read ahead', async (range) => {
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, { range }), makeRes(), 5, 'sess');
+                await tick();
+                expect(https.get).toHaveBeenCalledTimes(2);
+            });
+
+            it('serves a cached playlist as a 206 for an open range, and keeps one fetched that way', async () => {
+                const playlist = '#EXTM3U\nseg1.ts\n#EXT-X-ENDLIST\n';
+                mockGet(https, [{ status: 206, headers: { 'content-type': 'application/vnd.apple.mpegurl' }, body: playlist }]);
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq({}, open), makeRes());
+                (https.get as jest.Mock).mockClear();
+                const res = makeRes();
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq({}, open), res);
+                expect(https.get).not.toHaveBeenCalled();
+                expect(res.status).toHaveBeenCalledWith(206);
+            });
         });
 
         it('ignores a prefetch that fails or is not a plain 200', async () => {

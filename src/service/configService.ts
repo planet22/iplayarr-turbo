@@ -115,6 +115,7 @@ const configService = {
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
         STREAM_SUBTITLES: 'true',
         STREAM_TRACE: 'false',
+        STREAM_PREFETCH_OPEN_RANGE: 'true',
         DOWNLOAD_SUBTITLES: 'sidecar',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',

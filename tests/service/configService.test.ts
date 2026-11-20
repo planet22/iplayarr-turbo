@@ -63,6 +63,7 @@ describe('configService', () => {
       NATIVE_SEARCH_ENGINE: 'V2',
       STREAM_SUBTITLES: 'true',
       STREAM_TRACE: 'false',
+      STREAM_PREFETCH_OPEN_RANGE: 'true',
       STREAM_LIVE_DASH_1080: 'true',
       LIVE_TV_ENABLED: 'true',
       STRM_WATCHDOG_ENABLED: 'true',

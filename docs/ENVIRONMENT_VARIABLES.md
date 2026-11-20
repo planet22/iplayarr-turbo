@@ -70,6 +70,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `STREAM_NATIVE_HQ_PROBE` | `false` | No | Verify real connection quality before playing. |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
 | `STREAM_SUBTITLES` | `true` | No | Offer the BBC's captions as an English subtitle track on native streams (on-demand and live). See [STREAMING.md](STREAMING.md#subtitles). |
+| `STREAM_PREFETCH_OPEN_RANGE` | `true` | No | Read the next segment ahead for players that send `Range: bytes=0-` on every request (Jellyfin). Other Range requests are treated as seeks. Advanced setting. |
 | `LIVE_UHD_EVENT_FEEDS` | `false` | No | List BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`) among the live channels. DASH only, 2160p HEVC; they only carry video while an event is on. |
 | `SOUNDS_ENABLED` | `true` | No | Master switch for BBC radio (the Video / Radio switch, search, play, download, follow). The other radio settings only apply while it is on. See [SOUNDS.md](SOUNDS.md). |
 | `SOUNDS_DIR` | | No | Where radio downloads are saved. Needed to download. |

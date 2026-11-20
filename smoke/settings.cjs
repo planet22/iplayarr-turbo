@@ -54,6 +54,7 @@ const CHANGE = {
     STREAM_NATIVE_EXPERIMENTAL_FHD: ['false', 'true'],
     STREAM_SUBTITLES: ['true', 'false'],
     STREAM_TRACE: ['true', 'false'],
+    STREAM_PREFETCH_OPEN_RANGE: ['true', 'false'],
     STREAM_LIVE_DASH_1080: ['true', 'false'],
     LIVE_TV_ENABLED: ['true', 'false'],
     LIVE_RADIO: ['true', 'false'],
@@ -638,6 +639,34 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         STREAM_SUBTITLES: async ({ next }) => {
             const snap = await nativeSnapshot('Subtitles', next === 'true' ? 'On' : 'Off');
             if (typeof snap === 'string') return snap;
+        // Plays two segments the way Jellyfin does (Range: bytes=0- on each) and reads the trace: the second should be a read-ahead hit only with the setting on.
+        STREAM_PREFETCH_OPEN_RANGE: async ({ next }) => {
+            if (needSession()) return needSession();
+            if (effective(await get(), 'STREAM_TRACE') !== 'true') return 'Stream Trace is off, so read-ahead hits are not recorded';
+            const seen = new Set(((await http('/json-api/streams')).json?.history || []).concat((await http('/json-api/streams')).json?.active || []).map((s) => s.id));
+            let path = `/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`;
+            let segments = [];
+            for (let level = 0; level < 3 && !segments.length; level++) {
+                const lines = ((await http(path, { timeout: 60000, headers: { Range: 'bytes=0-' } })).text || '').split(/\r?\n/).filter((l) => l && !l.startsWith('#'));
+                segments = lines.filter((l) => /[?&]seg=\d+/.test(l));
+                if (!segments.length) {
+                    if (!lines[0]) return 'no playlist or segment URLs came back from the stream';
+                    path = lines[0];
+                }
+            }
+            if (segments.length < 2) return 'the stream has fewer than two segments to read ahead across';
+            for (const seg of segments.slice(0, 2)) {
+                const r = await fetch(`${BASE}${seg}`, { headers: { Range: 'bytes=0-' } });
+                await r.arrayBuffer();
+                await sleep(3000);
+            }
+            const s = (await http('/json-api/streams')).json || {};
+            const found = [...(s.active || []), ...(s.history || [])].find((x) => x.pid === ctx.pid && !seen.has(x.id));
+            if (!found) return { what: 'a Range: bytes=0- stream is read ahead only with Prefetch Open Ranges on', pass: false, detail: 'no session was recorded' };
+            const prefetched = ((await http(`/json-api/streams/trace/${found.id}`)).json?.summary || {}).prefetched || 0;
+            if (!found.endedAt) await http(`/json-api/streams/${found.id}/stop`, { method: 'POST' });
+            return { what: `a Range: bytes=0- stream is read ahead only with Prefetch Open Ranges on (${next})`, pass: next === 'true' ? prefetched > 0 : prefetched === 0, detail: `${prefetched} read-ahead hit(s)` };
+        },
             const master = await http(`/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`, { timeout: 60000 });
             const has = /TYPE=SUBTITLES/.test(master.text);
             return { ...snap, pass: snap.pass && (next === 'true' ? true : !has), detail: `${snap.detail}; master ${has ? 'has' : 'has no'} subtitle rendition` };
