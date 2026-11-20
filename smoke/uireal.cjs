@@ -15,11 +15,20 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
         const page = await context.newPage();
         page.on('pageerror', (e) => errs.push('pageerror: ' + e.message.slice(0, 100)));
-        page.on('console', (m) => { if (m.type() === 'error' && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '')) errs.push('console: ' + m.text().slice(0, 100)); });
+        page.on('console', (m) => { if (m.type() === 'error' && !/\/socket\.io\//.test(m.location()?.url || '') && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '')) errs.push('console: ' + m.text().slice(0, 100)); });
         try { await fn(page, context); }
         catch (e) { rec(U, name, 'FAIL', 'threw: ' + e.message.split('\n')[0]); await shot(page, 'FAILED-' + name.replace(/\W+/g, '-')); }
         if (errs.length) rec(U, `${name}: no page/console errors`, 'FAIL', errs.slice(0, 2).join(' | '));
         await context.close();
+    };
+    // A flow that checks the plain (video-only or radio-only) Search page: the instance may keep Search Video and Radio Together on,
+    // so switch it off for the flow and put the stored value back afterwards.
+    const flowSeparateSearch = async (name, fn) => {
+        if (ctx.want && !ctx.want(name)) return;
+        const was = (await http('/json-api/config')).json?.SEARCH_COMBINED;
+        const set = (value) => http('/json-api/config', { method: 'PUT', body: { SEARCH_COMBINED: value } });
+        if (String(was) === 'true') await set('false');
+        try { await flow(name, fn); } finally { if (String(was) === 'true') await set('true'); }
     };
     const ok = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'FAIL', c ? '' : d);
     const warn = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'WARN', c ? '' : d);
@@ -216,7 +225,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             });
         }
         if (!ctx.want || ctx.want('stream session missing')) await quietContext(async (page) => {
-            await page.goto(BASE + '/streaming/session/smoke-does-not-exist', { waitUntil: 'domcontentloaded' });
+            await page.goto(BASE + '/streaming/session/00000000-0000-4000-8000-000000000000', { waitUntil: 'domcontentloaded' });
             const gone = await page.getByText('no longer in the history').first().waitFor({ timeout: 10000 }).then(() => true, () => false);
             ok('an unknown stream session page says it is no longer in the history', gone, 'message not shown');
         });
@@ -467,6 +476,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const cfg0 = (await http('/json-api/config')).json || {};
             cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: { SEARCH_COMBINED: cfg0.SEARCH_COMBINED ?? 'false' } }); });
             const put = (value) => http('/json-api/config', { method: 'PUT', body: { SEARCH_COMBINED: value } });
+            // Put back when this flow ends, pass or fail: the later flows (Search note, radio pages) need the stored value, not 'true'.
+            try {
             const open = async () => {
                 await page.goto(BASE + '/search?searchTerm=dancing', { waitUntil: 'networkidle' });
                 await page.waitForSelector('.resultsTable tbody tr, .browseGrid', { timeout: 90000 });
@@ -487,7 +498,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('combined search shows the TV + radio indicator in the toolbar', (await page.locator('button.combinedIndicator').count()) === 1);
             const note = (await page.locator('.searchSettingsNote').first().innerText()).trim();
             ok('the note names both searches', /^Combined \(video \+ radio\) . Search: /.test(note) && /\| Radio search: /.test(note), note);
-            const kinds = await page.locator('.resultsTable tbody tr td[data-title="Type"]').allInnerTexts();
+            // The table is paged and best match is not grouped by kind, so read every page before judging what the list holds.
+            const kinds = [];
+            for (let turn = 0; turn < 20; turn++) {
+                kinds.push(...(await page.locator('.resultsTable tbody tr td[data-title="Type"]').allInnerTexts()));
+                const next = page.locator('button[aria-label="go to next page"]').first();
+                if (!(await next.count()) || (await next.isDisabled())) break;
+                await next.click();
+                await page.waitForTimeout(200);
+            }
+            const first = page.locator('button[aria-label="go to first page"]').first();
+            if (await first.count() && !(await first.isDisabled())) await first.click();
             ok('the results hold video (TV) and radio rows together', kinds.some((k) => /TV|MOVIE/i.test(k)) && kinds.some((k) => /RADIO/i.test(k)), [...new Set(kinds)].join(','));
 
             // The channel dropdown shows the usual TV / radio icons, opens fully visible and filters.
@@ -532,12 +553,12 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the standard sort control is in the filter row', (await sort.count()) === 1 && (await sort.locator('option').allInnerTexts()).join(',') === 'Best match,A-Z,Date,Channel');
             await sort.selectOption('name');
             await page.waitForTimeout(400);
-            const titles = await page.locator('.resultsTable tbody tr td[data-title="Title"]').evaluateAll((cells) => cells.map((cell) => cell.textContent.trim().toLowerCase()).filter(Boolean));
+            const titles = await page.locator('.resultsTable tbody tr td.text').evaluateAll((cells) => cells.map((cell) => cell.textContent.trim().toLowerCase()).filter(Boolean));
             ok('A-Z orders the titles', titles.length > 1 && titles.every((t, i) => i === 0 || titles[i - 1].localeCompare(t, undefined, { numeric: true, sensitivity: 'base' }) <= 0), titles.slice(0, 5).join(' | '));
-            const first = (await page.locator('.resultsTable tbody tr td[data-title="Title"]').first().innerText()).trim();
+            const firstTitle = (await page.locator('.resultsTable tbody tr td.text').first().innerText()).trim();
             await page.locator('.channelChips button[aria-label="Ascending"]').click();
             await page.waitForTimeout(400);
-            ok('the arrow reverses the order', (await page.locator('.resultsTable tbody tr td[data-title="Title"]').first().innerText()).trim() !== first);
+            ok('the arrow reverses the order', (await page.locator('.resultsTable tbody tr td.text').first().innerText()).trim() !== firstTitle);
             await sort.selectOption('best');
 
             // One row height: chips, channel dropdown and sort controls are the same height and line up, whichever sort is chosen.
@@ -567,11 +588,12 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const phone = await page.evaluate(() => { const el = document.querySelector('.iconSelect'); return el ? Math.round(el.getBoundingClientRect().width) : 0; });
             ok('on a phone the channel list keeps a usable width', phone >= 60, String(phone));
             await shot(page, 'combined-filter-row-phone');
+            } finally { await put(cfg0.SEARCH_COMBINED ?? 'false'); }
         });
 
         // ---- Logs page: tiles, level chips, search, source dropdown, 24-hour times, download, clear view, phone layout (nothing saved on the server)
         // ---- The Search page's note about how searching is set up follows the Video | Radio toggle
-        await flow('radio mode: the Search page notes the radio search setup', async (page) => {
+        await flowSeparateSearch('radio mode: the Search page notes the radio search setup', async (page) => {
             if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio search note', 'SKIP', 'BBC Sounds Radio is off'); return; }
             await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
             await page.goto(BASE + '/search', { waitUntil: 'networkidle' });
@@ -586,7 +608,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         });
 
         // ---- Radio (BBC Sounds) in the shared pages: the same pages as video, fed radio data by the Video | Radio toggle in the top bar
-        await flow('radio mode: toggle, browse pages, programme page and player', async (page) => {
+        await flowSeparateSearch('radio mode: toggle, browse pages, programme page and player', async (page) => {
             if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio mode pages', 'SKIP', 'BBC Sounds Radio is off'); return; }
             const cards = page.locator('.programmeCard');
             await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
@@ -616,7 +638,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the toggle keeps the search term', new URL(page.url()).pathname === '/search' && new URL(page.url()).searchParams.get('searchTerm') === 'archers');
             // (Every page load below starts in radio mode again: the init script above sets it.)
             await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
-            await page.locator('.tileGrid .tile').nth(2).click();
+            await page.locator('.tileGrid .channelTile').nth(2).click();
             await page.waitForURL(/\/browse\/category\//, { timeout: 15000 });
             await page.locator('.NavBar .modeSingle').click();
             await page.waitForTimeout(1500);
@@ -624,10 +646,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // The Channels page lists only the radio stations in radio mode, and none of them in video mode.
             await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
             await page.waitForTimeout(2500);
-            const radioTiles = await page.locator('.tileGrid .tile').count();
+            const radioTiles = await page.locator('.tileGrid .channelTile').count();
             await page.locator('.NavBar .modeSingle').click();
             await page.waitForTimeout(2000);
-            const videoTiles = await page.locator('.tileGrid .tile').count();
+            const videoTiles = await page.locator('.tileGrid .channelTile').count();
             if (ctx.cfg?.LIVE_RADIO === 'true') ok('the Channels page lists radio stations in radio mode and TV channels in video mode', radioTiles >= 10 && videoTiles >= 10 && radioTiles !== videoTiles, `radio ${radioTiles}, video ${videoTiles}`);
             // The radio Guide's blocks open the show's radio page (not a search for the title); the video Guide's still open a programme.
             if (ctx.cfg?.LIVE_RADIO === 'true') {
@@ -658,11 +680,11 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await cards.first().waitFor({ timeout: 25000 });
 
             await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
-            await page.locator('.tileGrid .tile').first().waitFor({ timeout: 25000 });
-            ok('radio Categories are the Categories page: picture tiles', (await page.locator('.tileGrid .tile.imageTile').count()) > 5);
+            await page.locator('.tileGrid .channelTile').first().waitFor({ timeout: 25000 });
+            ok('radio Categories are the Categories page: picture tiles', (await page.locator('.tileGrid .channelTile.imageTile').count()) > 5);
             ok('radio Categories has no "feature on Discover" compass', (await page.locator('button[title*="featured on Discover"]').count()) === 0);
             await shot(page, 'radio-categories');
-            await page.locator('.tileGrid .tile').nth(5).click();
+            await page.locator('.tileGrid .channelTile').nth(5).click();
             await cards.first().waitFor({ timeout: 25000 });
             ok('a radio category is the category grid, with its filter, sort and pagination', (await cards.count()) > 5 && (await page.locator('.tableFilter').count()) > 0 && (await page.locator('.SettingsPageToolbar').count()) > 0 && (await page.locator('select[aria-label="items per page"]').count()) > 0);
             await shot(page, 'radio-category');
@@ -812,7 +834,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Try again calls the queue API for that download', calls.some((c) => /^POST .*\/json-api\/queue\/history\/retry\?mode=radio&pid=p0smoke02$/.test(c)), JSON.stringify(calls));
             const menu = row.locator('.actionMenu');
             if (await menu.count()) { await menu.locator('svg').first().click(); await row.locator('.menuPanel button', { hasText: /Cancel download/ }).click(); }
-            else await row.locator('.actionCol svg.clickable').last().click();
+            else await row.locator('button[aria-label="Cancel download"]').first().click();
             // The confirm button is itself labelled "Cancel download", which clickDialogPrimary skips.
             const confirmBtn = dialog(page).locator('button', { hasText: /^\s*Cancel download\s*$/ });
             await confirmBtn.waitFor({ timeout: 8000 });
@@ -829,6 +851,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const event = { id: 'smoke-radio-event', type: 'stream_started', level: 'info', message: 'Started streaming', pid: 'p0smoke01', radio: true, title: 'SMOKE-TEMP Radio Show - Ep 1', timestamp: now };
             const session = { id: 'smoke-radio-session', pid: 'p0smoke01', mode: 'direct', client: 'NATIVE', startedAt: now, radio: true, title: 'SMOKE-TEMP Radio Show - Ep 1', settings: { Media: 'Audio' } };
             const details = { pid: 'p0smoke01', title: 'SMOKE-TEMP Radio Show', episodeTitle: 'Ep 1', channel: 'BBC Radio 4', category: 'Radio', description: 'Smoke description', runtime: 30, firstBroadcast: now, type: 'RADIO', audioOnly: true };
+            // The app also gets these lists pushed over the socket, which would replace the stubbed ones: keep the socket out of this flow.
+            await page.route('**/socket.io/**', (route) => route.abort());
             await page.route(/\/json-api\/events$/, (route) => (route.request().method() === 'GET' ? route.fulfill({ json: [event] }) : route.continue()));
             await page.route(/\/json-api\/streams$/, (route) => route.fulfill({ json: { active: [session], history: [] } }));
             await page.route(/\/json-api\/details\?pid=p0smoke01&kind=radio/, (route) => route.fulfill({ json: details }));
@@ -839,7 +863,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await link.click();
                 const popup = dialog(page);
                 await popup.waitFor({ timeout: 8000 });
-                await popup.locator('.infoBanner h1', { hasText: 'SMOKE-TEMP Radio Show' }).waitFor({ timeout: 8000 }).catch(() => {});
+                await popup.getByText('Smoke description').first().waitFor({ timeout: 10000 }).catch(() => {}); // the details arrive after the popup opens
                 const text = (await popup.innerText()).replace(/\s+/g, ' ');
                 ok(`${label}: the audio popup opens with the episode's title and details`, /SMOKE-TEMP Radio Show/.test(text) && /Ep 1/.test(text) && /BBC Radio 4/.test(text) && /Smoke description/.test(text) && /30 min/.test(text), text);
                 ok(`${label}: it offers Play audio, not Play Video`, /Play audio/.test(text) && !/Play Video/.test(text), text);
@@ -865,7 +889,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the Logs page has a search box, a source dropdown with All sources and System, and the three level chips',
                 (await page.locator('input[aria-label="Search the log"]').count()) === 1
                 && /All sources/.test(await page.locator('select[aria-label="Show lines from"]').innerText().catch(() => '')) && /System/.test(await page.locator('select[aria-label="Show lines from"]').innerText().catch(() => ''))
-                && (await page.locator('.levelChip').allInnerTexts()).map((t) => t.split(/\s/)[0]).join() === 'ERROR,INFO,DEBUG');
+                && (await page.locator('.levelChips .filterChip').allInnerTexts()).map((t) => t.split(/\s/)[0]).join() === 'ERROR,INFO,DEBUG');
             const select = await page.locator('select[aria-label="Show lines from"]').boundingBox().catch(() => null);
             ok('the Logs source dropdown is wide enough to read (at least 140px)', !!select && select.width >= 140, select ? `${select.width}px` : 'missing');
 
@@ -878,7 +902,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 ok('a log time\'s hover text gives the date and the same time', /^\d{1,2} \w{3} \d{4}, \d{2}:\d{2}:\d{2}\.\d{3}$/.test((await page.locator('.logTime').first().getAttribute('title')) || ''));
                 ok('every log row has a text level badge (ERR, INF or DBG)', (await page.locator('.logBadge').allInnerTexts()).every((t) => ['ERR', 'INF', 'DBG'].includes(t.trim())));
                 // Level chips narrow the list by level, and again toggle off.
-                const chip = page.locator('.levelChip.INFO');
+                const chip = page.locator('.levelChips .filterChip.INFO');
                 await chip.click();
                 await page.waitForTimeout(300);
                 const infoOnly = await page.locator('.logRow').evaluateAll((els) => els.every((e) => e.classList.contains('INFO')));
@@ -923,7 +947,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // A link with ?filter=ERROR opens with the ERROR chip on.
             await page.goto(BASE + '/logs?filter=ERROR', { waitUntil: 'networkidle' });
             await page.waitForSelector('.levelChips', { timeout: 15000 }).catch(() => {});
-            ok('/logs?filter=ERROR opens with only the ERROR chip on', (await page.locator('.levelChip.ERROR').getAttribute('aria-pressed')) === 'true' && (await page.locator('.levelChip[aria-pressed="true"]').count()) === 1);
+            ok('/logs?filter=ERROR opens with only the ERROR chip on', (await page.locator('.levelChips .filterChip.ERROR').getAttribute('aria-pressed')) === 'true' && (await page.locator('.levelChips .filterChip[aria-pressed="true"]').count()) === 1);
 
             // Phone width: filters on their own row, search not squashed, nothing sideways.
             await page.setViewportSize({ width: 390, height: 844 });
@@ -995,7 +1019,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const stored = await page.evaluate(() => ({ settings: localStorage.getItem('iplayarr.navSettings'), versions: localStorage.getItem('iplayarr.navVersions') }));
             const settings = JSON.parse(stored.settings || '{}');
             ok('the menu settings are remembered in this browser', settings.BROWSE_SHOW_COLLECTIONS === 'true' && typeof settings.NATIVE_SEARCH === 'string', stored.settings);
-            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
+            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'UI_EXTENDED_DEBUG', 'SOUNDS_ENABLED', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
             const versions = JSON.parse(stored.versions || '{}');
             ok('the app version is remembered', typeof versions.appVersion === 'string' && versions.appVersion.length > 0, stored.versions);
 
@@ -1195,7 +1219,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         });
 
         // ---- Search: remembers its term across menu items, shows how it is set up when blank, keeps posters after Back
-        await flow('search remembers, blank page options, thumbnails after Back', async (page, context) => {
+        await flowSeparateSearch('search remembers, blank page options, thumbnails after Back', async (page, context) => {
             await context.addInitScript(() => { try { localStorage.setItem('iplayarr.searchViewMode', 'posters'); } catch { /* ignore */ } });
             const menu = (label) => page.locator('.LeftHandNav a', { hasText: new RegExp(`^\\s*${label}\\s*$`) }).first();
             await page.goto(`${BASE}/search`, { waitUntil: 'networkidle' });

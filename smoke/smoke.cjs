@@ -2017,7 +2017,9 @@ async function uiConsistency(browser, U) {
         await page.route('**/json-api/thumbnail/**', (route) => route.fulfill({ status: 404, body: 'x' }));
         await open(page, '/browse');
         await page.locator('.programmeCard img').first().waitFor({ timeout: 20000 }).catch(() => {});
-        await page.waitForTimeout(1500);
+        // Cards are loading="lazy": a picture below the fold never requests its file, so it can never fail. Ask for them all now.
+        await page.evaluate(() => document.querySelectorAll('.programmeCard img').forEach((i) => { i.loading = 'eager'; }));
+        await page.waitForTimeout(2500);
         const m = await page.evaluate(() => {
             const imgs = [...document.querySelectorAll('.programmeCard img')];
             return { total: imgs.length, tiles: imgs.filter((i) => i.dataset.broken === 'true' && i.src.startsWith('data:image/svg+xml')).length, hidden: imgs.filter((i) => i.style.visibility === 'hidden').length };
@@ -2076,7 +2078,10 @@ async function uiConsistency(browser, U) {
 
     await flow('user agent paging', async (page) => {
         await open(page, '/apps');
-        rec(U, `${L}: the Apps User-Agent list has page controls`, (await page.locator('select[aria-label="items per page"]').count()) >= 1 ? 'PASS' : 'FAIL');
+        // A list of 4 or fewer is shown whole, with no pager (the "Items Before Paging" preference, default 4).
+        const mappings = await page.evaluate(() => fetch('/json-api/apps/user-agents').then((r) => r.json()).then((d) => (Array.isArray(d) ? d.length : -1)).catch(() => -1));
+        if (mappings >= 0 && mappings <= 4) rec(U, `${L}: the Apps User-Agent list has page controls`, 'SKIP', `only ${mappings} mappings, a short list has no pager`);
+        else rec(U, `${L}: the Apps User-Agent list has page controls`, (await page.locator('select[aria-label="items per page"]').count()) >= 1 ? 'PASS' : 'FAIL', `${mappings} mappings`);
         const inputs = await page.locator('.uaTextInput').count();
         rec(U, `${L}: the new-mapping row is always present`, inputs >= 2 ? 'PASS' : 'FAIL', `${inputs} inputs`);
     });
@@ -2161,7 +2166,7 @@ async function statisticsCacheCards(browser, U) {
         const records = await p.locator('.cacheCard:has(.liveDot) .cacheFigures .statBody:has(.statLabel:text-is("Records")) .statValue').evaluateAll((els) => els.map((el) => [el.textContent.trim(), el.getAttribute('title')]));
         rec(U, 'statistics: record counts are short (no thousands separators, K / M / B) with the exact figure in the tooltip', records.length === caches.length && records.every(([text, title]) => /^\d{1,3}$|^\d{1,3}(\.\d)?[KMB]$/.test(text) && title && /^[\d,]+$/.test(title)) ? 'PASS' : 'FAIL', records.slice(0, 6).map((r) => r.join('=')).join(' '));
         // The Server heading's line runs the whole width, like Caches and Activity.
-        const rule = await p.locator('.legendRow:has(> legend:text-is("Server"))').evaluate((el) => ({ row: el.getBoundingClientRect().width, page: el.parentElement.getBoundingClientRect().width }));
+        const rule = await p.locator('.PageHeader:has(> legend:text-is("Server"))').evaluate((el) => ({ row: el.getBoundingClientRect().width, page: el.parentElement.getBoundingClientRect().width }));
         rec(U, 'statistics: the Server heading line runs the full width', rule.row >= rule.page - 40 ? 'PASS' : 'FAIL', `${Math.round(rule.row)}px of ${Math.round(rule.page)}px`);
         // The Server section: a few cards with no headings, each row a label and a figure, filled in once the answers arrive.
         await p.waitForFunction(() => [...document.querySelectorAll('.serverStat .serverRow')].some((r) => r.querySelector('.rowLabel')?.textContent.trim() === 'Memory' && r.querySelector('.rowValue')?.textContent.trim() !== '-'), null, { timeout: 20000 }).catch(() => {});
@@ -2171,17 +2176,17 @@ async function statisticsCacheCards(browser, U) {
         rec(U, 'statistics: the Server cards show uptime, memory, cpu and the disks', ['Uptime', 'Memory', 'CPU', 'Database'].every((k) => k in serverRows) && Object.keys(serverRows).some((k) => /folder/i.test(k)) ? 'PASS' : 'FAIL', Object.keys(serverRows).join(','));
         rec(U, 'statistics: the Server cards fill in real figures (memory and uptime are not dashes)', serverRows.Memory && serverRows.Memory !== '-' && /^\d\d:\d\d:\d\d$/.test(serverRows.Uptime ?? '') ? 'PASS' : 'FAIL', `memory ${serverRows.Memory}, uptime ${serverRows.Uptime}`);
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-server.png') });
-        await p.locator('.cacheLegend .sortSelect').selectOption({ label: 'Name' });
+        await p.locator('.cacheListControls .sortSelect').selectOption({ label: 'Name' });
         await p.waitForTimeout(300);
         const groupNames = await p.locator('.cacheGroup').evaluateAll((els) => els.map((el) => [...el.querySelectorAll('.cacheName')].map((n) => n.textContent.trim())));
         rec(U, 'statistics: choosing Name sorts the cards inside each group', groupNames.length >= 1 && groupNames.every(sorted) ? 'PASS' : 'FAIL', groupNames.map((g) => g.join(',')).join(' | '));
-        await p.locator('.cacheLegend .cacheModeToggle').click();
+        await p.locator('.cacheListControls .cacheModeToggle').click();
         await p.waitForTimeout(300);
         const flatNames = (await p.locator('.cacheGroup .cacheName').allTextContents()).map((n) => n.trim());
         rec(U, 'statistics: Flat removes the group headings and sorts the whole list', (await p.locator('.cacheGroupHeading').count()) === 0 && flatNames.length === caches.length && sorted(flatNames) ? 'PASS' : 'FAIL', `${flatNames.length} cards`);
         await p.reload({ waitUntil: 'networkidle' });
         await p.waitForSelector('.cacheCard .liveDot', { timeout: 15000 });
-        const kept = (await p.locator('.cacheLegend .sortSelect').inputValue()) === 'name' && /Flat/.test(await p.locator('.cacheLegend .cacheModeToggle').innerText()) && (await p.locator('.cacheGroupHeading').count()) === 0;
+        const kept = (await p.locator('.cacheListControls .sortSelect').inputValue()) === 'name' && /Flat/.test(await p.locator('.cacheListControls .cacheModeToggle').innerText()) && (await p.locator('.cacheGroupHeading').count()) === 0;
         rec(U, 'statistics: the sort and Flat are remembered after a reload', kept ? 'PASS' : 'FAIL');
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches-flat.png') });
         // With the caches answer held back, the page already shows its cards with dashes, then fills them in.

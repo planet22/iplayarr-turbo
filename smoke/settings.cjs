@@ -1164,7 +1164,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                     const again = await run('WRITE_ADDITIONAL_IMAGES=overwrite download', { WRITE_ADDITIONAL_IMAGES: 'overwrite' });
                     if (again && stamps.size) {
                         const newer = [...stamps].filter(([f, t]) => fs.existsSync(f) && fs.statSync(f).mtimeMs > t).length;
-                        warn('WRITE_ADDITIONAL_IMAGES=overwrite takes effect: existing pictures are replaced', newer > 0, `${newer} of ${stamps.size} pictures were rewritten`);
+                        // By design the app does not rewrite a picture it wrote under 10 minutes ago (additionalImagesService REMEMBER_MS, covered by
+                        // jest), and the "missing" run above wrote these seconds ago, so no rewrite is expected here. A rewrite would still be a PASS.
+                        if (newer > 0) rec(W, 'WRITE_ADDITIONAL_IMAGES=overwrite takes effect: existing pictures are replaced', 'PASS');
+                        else rec(W, 'WRITE_ADDITIONAL_IMAGES=overwrite takes effect: existing pictures are replaced', 'SKIP', 'the pictures were written moments ago by the "missing" run and the app does not rewrite a picture under 10 minutes old (jest covers the overwrite itself)');
                     }
                     dropNew([...(missing.added || []), ...(again?.added || [])]); await cleanHist(ep.pid);
                 }
