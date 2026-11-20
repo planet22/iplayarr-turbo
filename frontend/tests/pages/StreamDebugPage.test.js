@@ -567,4 +567,76 @@ describe('StreamDebugPage', () => {
             expect(waiting.find('button[aria-label="Expand all sections"]').attributes('disabled')).toBeDefined();
         });
     });
+
+    describe('thumbnail expiry badge', () => {
+        const URL = 'json-api/streams/debug/b006q2x0/programme?kind=radio';
+        const inDays = (days) => new Date(Date.now() + days * 86400000).toISOString();
+        // The real QualityBadges, so the badge text is what the viewer sees.
+        const badge = async () => (await mountIt({ QualityBadges: false })).find('.thumbBadges .qualityBadge.expiry');
+
+        // A radio episode with a version is probed on load, so the probe needs an answer.
+        beforeEach(() => {
+            responses['json-api/streams/debug/b006q2x0/probe?vpid=b006q2x0&kind=radio'] = { ok: true, data: { versions: [], probedAt: '2030-01-01T00:00:00Z' } };
+        });
+
+        it('shows an iPlayer expiry badge on a video episode, from the iPlayer end date', async () => {
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ ibl: { availableUntil: inDays(5) } }) };
+            const found = await badge();
+            expect(found.text()).toMatch(/^\d+d$/);
+            expect(found.attributes('title')).toContain('left on iPlayer');
+        });
+
+        it('shows a BBC Sounds expiry badge on a radio episode, from the version end date', async () => {
+            route.query = { kind: 'radio' };
+            responses[URL] = { ok: true, data: programme({ type: 'radio episode', versions: [{ vpid: 'b006q2x0', types: ['Audio'], canonical: true, availableUntil: inDays(2) }] }) };
+            const found = await badge();
+            expect(found.exists()).toBe(true);
+            expect(found.text()).toMatch(/^[12]d$/);
+            expect(found.attributes('title')).toContain('left on BBC Sounds');
+            expect(found.attributes('title')).not.toContain('iPlayer');
+        });
+
+        it('hands the badge a radio episode that ends when the facts list says it does', async () => {
+            route.query = { kind: 'radio' };
+            const end = inDays(3);
+            responses[URL] = { ok: true, data: programme({ type: 'radio episode', versions: [{ vpid: 'b006q2x0', types: ['Audio'], availableUntil: end }] }) };
+            const item = (await mountIt()).findComponent({ name: 'QualityBadges' }).props('item');
+            expect(item).toEqual({ kind: 'episode', radio: true, availableUntil: new Date(end).toISOString() });
+        });
+
+        it('shows the Days left fact and the same badge for radio from one end date', async () => {
+            route.query = { kind: 'radio' };
+            responses[URL] = { ok: true, data: programme({ type: 'radio episode', versions: [{ vpid: 'b006q2x0', types: ['Audio'], availableUntil: inDays(4) }] }) };
+            const wrapper = await mountIt({ QualityBadges: false });
+            expect(wrapper.text()).toContain('Leaves BBC Sounds');
+            const days = wrapper.text().match(/Days left\s*(\d+) days/)[1];
+            expect(wrapper.find('.thumbBadges .expiry').text()).toBe(`${days}d`);
+        });
+
+        it('has no badge on a radio episode with no end date, and passes no date', async () => {
+            route.query = { kind: 'radio' };
+            responses[URL] = { ok: true, data: programme({ type: 'radio episode' }) };
+            const wrapper = await mountIt();
+            expect(wrapper.findComponent({ name: 'QualityBadges' }).props('item').availableUntil).toBeUndefined();
+            expect((await mountIt({ QualityBadges: false })).find('.thumbBadges .expiry').exists()).toBe(false);
+        });
+
+        it('has no badge on a radio episode leaving beyond the badge window', async () => {
+            route.query = { kind: 'radio' };
+            responses[URL] = { ok: true, data: programme({ type: 'radio episode', versions: [{ vpid: 'b006q2x0', types: ['Audio'], availableUntil: inDays(200) }] }) };
+            expect((await badge()).exists()).toBe(false);
+        });
+
+        it('keeps the video badge input (type, flags, guidance, end date) for TV', async () => {
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ ibl: { guidance: true, availableUntil: '2030-01-01T00:00:00Z' }, versions: [{ vpid: 'v1', types: ['Original', 'Audio described'], canonical: true, flags: { uhd: true, hdr: false } }] }) };
+            const item = (await mountIt()).findComponent({ name: 'QualityBadges' }).props('item');
+            expect(item).toEqual({ kind: 'episode', uhd: true, hdr: false, versions: ['audio-described'], guidance: true, availableUntil: '2030-01-01T00:00:00Z' });
+            expect(item.radio).toBeUndefined();
+        });
+
+        it('draws no badges at all for a live channel', async () => {
+            responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: true }) };
+            expect((await mountIt()).findComponent({ name: 'QualityBadges' }).exists()).toBe(false);
+        });
+    });
 });

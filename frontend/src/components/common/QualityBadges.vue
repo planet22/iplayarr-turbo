@@ -51,7 +51,7 @@ const showSubtitles = computed(() => shown.value.subtitles && isEpisode.value &&
 // If this grows, split it rather than adding flags.
 // Errors are surfaced to the caller rather than swallowed.
 const showGuidance = computed(() => shown.value.guidance && isEpisode.value && props.item.guidance === true && !props.item.radio);
-const expiry = computed(() => (shown.value.expiry && isEpisode.value ? expiryBadge(props.item.availableUntil) : undefined));
+const expiry = computed(() => (shown.value.expiry && isEpisode.value ? expiryBadge(props.item.availableUntil, Date.now(), props.item.radio ? 'BBC Sounds' : 'iPlayer') : undefined));
 const showQuality = computed(
     () => (shown.value.enabled && (props.item.uhd || props.item.hdr)) || (shown.value.versions && (hasVersion('audio-described') || hasVersion('signed')))
 );

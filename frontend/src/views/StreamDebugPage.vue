@@ -35,7 +35,7 @@
                     <button v-if="!info.live && refreshPid" type="button" class="imageRefresh" :disabled="refreshingImage" title="Fetch this picture from BBC again and replace the cached copy" @click="refreshImage">
                         <font-awesome-icon :icon="['fas', 'rotate']" :spin="refreshingImage" /> {{ refreshingImage ? 'Refreshing…' : 'Cache refresh' }}
                     </button>
-                    <QualityBadges v-if="!info.live && !isRadio" :item="badgeItem" all class="thumbBadges" />
+                    <QualityBadges v-if="!info.live" :item="badgeItem" all class="thumbBadges" />
                 </div>
                     <button v-if="!info.live && info.found" type="button" class="clickable downloadButton" title="Download this programme, as the Download button on any other page does" @click="downloadProgramme">
                         <font-awesome-icon :icon="['fas', 'download']" /> Download
@@ -590,6 +590,8 @@ const badgeItem = computed(() => {
     if (versions.some((version) => version.types.some((type) => /audio described/i.test(type)))) kinds.push('audio-described');
     if (versions.some((version) => version.types.some((type) => /sign/i.test(type)))) kinds.push('signed');
     const ibl = info.value?.ibl ?? {};
+    // Radio has no iPlayer data and its type reads 'radio episode'; the badge counts it as an episode and takes the end date the facts list uses.
+    if (isRadio) return { kind: 'episode', radio: true, availableUntil: expiry.value ? new Date(expiry.value.end).toISOString() : undefined };
     return { kind: info.value?.type, uhd: !!original?.flags?.uhd, hdr: !!original?.flags?.hdr, versions: kinds, guidance: ibl.guidance, availableUntil: ibl.availableUntil };
 });
 // The links under the pid: where else this programme can be looked at.

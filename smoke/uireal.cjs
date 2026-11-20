@@ -837,6 +837,16 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 ok('the radio debug page has no broken picture', await page.evaluate(() => [...document.querySelectorAll('.streamDebug img')].every((i) => i.complete && i.naturalWidth > 0)), 'a picture did not load');
                 ok('the radio debug page shows no video-only parts', !/Video info|FHD upgrade/.test(body) && (await page.locator('.streamDebug .pidLinks li', { hasText: /^Programme page$/ }).count()) === 0, 'video-only text on the page');
                 // Radio gets Library debug and Watchdog beside its Sounds page link (the iPlayer-only Programme page and Video info stay off).
+                // The thumbnail's days-left badge counts to the same end date as the "Days left" fact, and says BBC Sounds (a badge only shows inside 30 days).
+                const leavesFact = await page.locator('.streamDebug .facts dt', { hasText: /^Days left$/ }).count();
+                const factText = leavesFact ? await page.locator('.streamDebug .facts dt', { hasText: /^Days left$/ }).locator('xpath=following-sibling::dd[1]').innerText() : '';
+                const factDays = /^Leaves today/.test(factText) ? 0 : (factText.match(/^(\d+) days?/) || [])[1];
+                const thumbExpiry = page.locator('.streamDebug .thumbBadges .qualityBadge.expiry');
+                if (!leavesFact) ok('the radio debug page has no expiry badge when there is no end date', (await thumbExpiry.count()) === 0, 'a badge with no end date');
+                else if (factDays !== undefined && Number(factDays) <= 30) {
+                    const title = (await thumbExpiry.first().getAttribute('title').catch(() => '')) || '';
+                    ok('the radio debug thumbnail shows the days-left badge, worded for BBC Sounds', (await thumbExpiry.count()) === 1 && (await thumbExpiry.first().innerText()) === (Number(factDays) === 0 ? '<1d' : `${factDays}d`) && title.includes('BBC Sounds') && !title.includes('iPlayer'), `badge "${title}" vs fact ${factDays} days`);
+                } else ok('the radio debug page has no badge for an episode leaving beyond 30 days or already gone', (await thumbExpiry.count()) === 0, `fact ${factDays}`);
                 const radioLinks = await page.locator('.streamDebug .facts .pidLinks li').allInnerTexts();
                 ok('the radio debug page links Library debug and Watchdog under the pid', radioLinks.includes('Library debug') && radioLinks.includes('Watchdog'), radioLinks.join(', '));
                 await page.locator('.streamDebug .pidLinks a', { hasText: 'Library debug' }).click();

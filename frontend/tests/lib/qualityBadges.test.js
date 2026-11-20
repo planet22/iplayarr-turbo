@@ -23,6 +23,18 @@ describe('expiryBadge', () => {
         expect(expiryBadge(inDays(EXPIRY_BADGE_DAYS + 2), now)).toBeUndefined();
     });
 
+    it('names iPlayer in the title by default and the given service when one is passed', () => {
+        expect(expiryBadge(inDays(5), now).title).toContain('5 days left on iPlayer (leaves');
+        expect(expiryBadge(inDays(5), now, 'BBC Sounds').title).toContain('5 days left on BBC Sounds (leaves');
+        expect(expiryBadge(inDays(5), now, 'BBC Sounds').title).not.toContain('iPlayer');
+    });
+
+    it('words the last day the same way for any service, with no service name', () => {
+        const title = expiryBadge(new Date(now + 3600000).toISOString(), now, 'BBC Sounds').title;
+        expect(title).toMatch(/^Leaves today, /);
+        expect(title).not.toContain('BBC Sounds');
+    });
+
     it('gets warmer as the end gets closer', () => {
         expect(expiryBadge(inDays(25), now).level).toBe('amber');
         expect(expiryBadge(inDays(10), now).level).toBe('orange');
