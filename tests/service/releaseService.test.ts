@@ -188,5 +188,20 @@ describe('releaseService', () => {
             expect(details).not.toHaveBeenCalled();
             expect(addToQueue).toHaveBeenCalledTimes(1);
         });
+
+        it('needs no options at all, and records the usual event', async () => {
+            const release = await resolveRelease('m002x872');
+            enqueueResolved('m002x872', release);
+            expect(addToQueue).toHaveBeenCalledWith('m002x872', release.nzbName, VideoType.TV, undefined, release.library);
+            expect(videoEventService.record).toHaveBeenCalledTimes(1);
+        });
+
+        it('lets the queue\'s refusal (an invalid id) through, recording no event', async () => {
+            addToQueue.mockImplementation(() => {
+                throw new Error('Invalid programme id');
+            });
+            await expect(enqueueRelease('m002x872')).rejects.toThrow('Invalid programme id');
+            expect(videoEventService.record).not.toHaveBeenCalled();
+        });
     });
 });

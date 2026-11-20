@@ -419,6 +419,23 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             await cleanHist(ep.pid);
             ok('history entry deleted', (await hist(ep.pid)).length === 0);
 
+            // The name, numbering and library folder come from the BBC, whatever the browser sends (a browse card has no numbering):
+            // misleading numbering and a name that was not typed by the user are ignored, and the result is the preview's name.
+            const wanted = (await http(`/json-api/release-preview?pid=${ep.pid}`, { timeout: 60000 })).json;
+            if (!wanted?.nzbName) rec(W, 'download ignores the numbering the browser sends', 'SKIP', 'no release preview for the episode');
+            else {
+                await http(`/json-api/download?pid=${ep.pid}&media=strm&nzbName=Smoke.S00E00.Wrong&type=TV&title=Smoke&series=0&episode=0`, { timeout: 60000 });
+                await waitDone(ep.pid, 120000);
+                const named = (await hist(ep.pid))[0];
+                ok('download ignores numbering and a name the browser sent, using the preview name', named?.nzbName === wanted.nzbName, `history ${named?.nzbName} vs preview ${wanted.nzbName}`);
+                await cleanHist(ep.pid);
+                await http(`/json-api/download?pid=${ep.pid}&media=strm&nzbName=Smoke.Typed.Name&nameEdited=1`, { timeout: 60000 });
+                await waitDone(ep.pid, 120000);
+                const typed = (await hist(ep.pid))[0];
+                ok('download uses a filename the user typed (nameEdited)', /^Smoke\.Typed\.Name/.test(typed?.nzbName || ''), `history ${typed?.nzbName}`);
+                await cleanHist(ep.pid);
+            }
+
             // A film downloaded without a type is queued as a movie, not TV (regression: type was always overwritten with TV)
             const movieRss = (await http(`/api?t=movie&q=paddington&apikey=${apikey}`, { timeout: 60000 })).text;
             const filmPid = ((movieRss.match(/<enclosure url="([^"]+)"/) || [])[1] || '').replace(/&amp;/g, '&').match(/[?&]pid=([a-z0-9]+)/i)?.[1];

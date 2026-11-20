@@ -9,6 +9,7 @@ import request from 'supertest';
 
 import searchFacade from '../../src/facade/searchFacade';
 import router from '../../src/routes/JsonApiRoute';
+import { InvalidQueueInputError } from '../../src/service/queueService';
 import { enqueueRelease, ReleaseNotFoundError, resolveRelease } from '../../src/service/releaseService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import thumbnailCacheService from '../../src/service/thumbnailCacheService';
@@ -91,6 +92,13 @@ describe('JsonApiRoute branches', () => {
             const other = await request(app).get('/download').query({ pid: 'p01xyz' });
             expect(other.status).toBe(500);
             expect(other.body.message).toBe('Unable to find episode details');
+        });
+
+        it('leaves a refusal from the queue itself to the error handler, not the BBC failure answers', async () => {
+            (enqueueRelease as jest.Mock).mockRejectedValue(new InvalidQueueInputError('Invalid programme id'));
+            const res = await request(app).get('/download').query({ pid: 'p01xyz' });
+            expect(res.status).toBe(500);
+            expect(res.body.message).not.toBe('Unable to find episode details');
         });
 
         it('rejects an invalid programme id', async () => {

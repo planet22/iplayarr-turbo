@@ -145,6 +145,15 @@ describe('collectionDownloadService.queueCollection', () => {
         expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Invalid programme id'));
     });
 
+    it('reports a refusal from the queue that is not an Error', async () => {
+        (queueService.addToQueue as jest.Mock).mockImplementationOnce(() => {
+            throw 'refused';
+        });
+        const result = await collectionDownloadService.queueCollection('g1');
+        expect(result).toMatchObject({ queued: 1, failed: 1 });
+        expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('refused'));
+    });
+
     it('reports the failures when something other than an Error is thrown', async () => {
         (resolveRelease as jest.Mock).mockRejectedValue('plain string');
         const result = await collectionDownloadService.queueCollection('g1');
