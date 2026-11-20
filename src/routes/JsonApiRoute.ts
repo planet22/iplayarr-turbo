@@ -16,7 +16,8 @@ import statisticsService from '../service/stats/StatisticsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import { MediaMode } from '../types/enums/MediaMode';
-import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
+import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
+import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { versionProfiles } from '../types/VersionProfiles';
 import { asyncRouter } from '../utils/asyncRouter';
@@ -326,10 +327,16 @@ router.get('/release-preview', async (req: Request, res: Response) => {
     }
 });
 
-// Queues a programme. The name, type and library details are always worked out here from the BBC's details
-// (releaseService.ts); the browser's own copy is only used for a name the user typed in the dialog (nameEdited=1).
+const toInt = (value: unknown): number | undefined => {
+    const n = value != null ? parseInt(String(value)) : NaN;
+    return Number.isNaN(n) ? undefined : n;
+};
+
+// Queues a programme. The name, numbering and library details are worked out here from the BBC's details
+// (releaseService.ts), so a card that knows no season or episode still gets them; the browser's own copy is only used
+// for a name the user typed in the dialog (nameEdited=1), and as what to queue when the BBC cannot answer.
 router.get('/download', rejectCrossSite, async (req: Request, res: Response) => {
-    const { pid, media, version, quality, nzbName, nameEdited } = req.query as any;
+    const { pid, media, version, quality, nzbName, nameEdited, type, title, series, episode, episodeTitle, channel, pubDate, runtime } = req.query as any;
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
         return;
@@ -345,11 +352,23 @@ router.get('/download', rejectCrossSite, async (req: Request, res: Response) => 
     // A chosen version (audio described...) and/or quality is named and carried like a Sonarr/Radarr grab of one; an
     // unknown id is ignored. The default source (manual) is used.
     const text = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+    const sentName = text(nzbName);
+    const sentType = text(type) as VideoType | undefined;
+    // What the browser knows of the programme, to queue as it is if the BBC cannot say.
+    const sentLibrary: QueueLibraryMetadata | undefined = text(title)
+        ? { title: text(title) as string, series: toInt(series), episode: toInt(episode), episodeTitle: text(episodeTitle), channel: text(channel), pubDate: text(pubDate), runtimeSeconds: toInt(runtime) }
+        : undefined;
     try {
         await enqueueRelease(pid, {
             version: text(version),
             quality: text(quality),
-            nameOverride: nameEdited === '1' ? text(nzbName) : undefined,
+            nameOverride: nameEdited === '1' ? sentName : undefined,
+            type: sentType,
+            typeFrom: 'category',
+            // No name sent: the plain one. A name sent is not the BBC's last word, but is where to read "S01E02" from.
+            nameStyle: sentName ? 'release' : 'plain',
+            numberingFromName: sentName,
+            fallback: sentName && sentType ? { nzbName: sentName, type: sentType, library: sentLibrary } : undefined,
             mediaMode,
         });
     } catch (err: any) {

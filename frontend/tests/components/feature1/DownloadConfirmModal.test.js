@@ -81,11 +81,12 @@ describe('DownloadConfirmModal', () => {
         expect(wrapper.find('.hero').text()).toContain('Series 2026, Episode 21');
     });
 
-    it('sends only the choices when the name was not touched', async () => {
+    it('does not mark the name as the user\'s when it was not touched', async () => {
         const wrapper = await mountIt();
         await confirm(wrapper);
         const params = new URL(downloadCall(), 'http://x').searchParams;
-        expect([...params.keys()]).toEqual(['pid']);
+        expect(params.get('nzbName')).toBe('Panorama.S2026E21.Dubai.WEBDL.1080p-BBC');
+        expect(params.has('nameEdited')).toBe(false);
         expect(wrapper.emitted('downloaded')).toHaveLength(1);
     });
 
@@ -129,8 +130,10 @@ describe('DownloadConfirmModal', () => {
         const wrapper = await mountIt();
         expect(wrapper.find('.nameBox').element.value).toBe('Panorama.Dubai');
         await confirm(wrapper);
-        // The guess is not the user's: the server names the download itself.
-        expect(new URL(downloadCall(), 'http://x').searchParams.has('nzbName')).toBe(false);
+        // The guess goes along as what to queue if the BBC cannot answer, but is not marked as the user's.
+        const params = new URL(downloadCall(), 'http://x').searchParams;
+        expect(params.get('nzbName')).toBe('Panorama.Dubai');
+        expect(params.has('nameEdited')).toBe(false);
     });
 
     it('keeps the guess when the preview request throws, or answers without a name', async () => {

@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 
 import DownloadEndpoint from '../../../src/endpoints/generic/DownloadEndpoint';
-import { enqueueRelease, ReleaseNotFoundError } from '../../../src/service/releaseService';
-import { ApiError } from '../../../src/types/responses/ApiResponse';
+import { enqueueRelease } from '../../../src/service/releaseService';
+import { VideoType } from '../../../src/types/IPlayerSearchResult';
 
 jest.mock('../../../src/service/releaseService', () => ({ ...jest.requireActual('../../../src/service/releaseService'), enqueueRelease: jest.fn() }));
 
@@ -20,19 +20,18 @@ describe('DownloadEndpoint', () => {
         res = { json: jsonMock, status } as any;
     });
 
-    it('queues the programme through the shared release resolver and answers ok', async () => {
+    it('queues the programme named from its title and typed by its BBC category, and answers ok', async () => {
         (enqueueRelease as jest.Mock).mockResolvedValue({});
         await DownloadEndpoint(req as Request, res as Response);
-        // Nothing but the pid is passed: the name, type and library details all come from the BBC's details.
-        expect(enqueueRelease).toHaveBeenCalledWith('abc123');
+        expect(enqueueRelease).toHaveBeenCalledWith('abc123', expect.objectContaining({ typeFrom: 'category', nameStyle: 'plain' }));
         expect(jsonMock).toHaveBeenCalledWith({ status: true });
     });
 
-    it('answers 404 when the BBC has no details for the programme', async () => {
-        (enqueueRelease as jest.Mock).mockRejectedValue(new ReleaseNotFoundError('none'));
+    it('still queues a programme the BBC has no details for, under its pid, as TV', async () => {
+        (enqueueRelease as jest.Mock).mockResolvedValue({});
         await DownloadEndpoint(req as Request, res as Response);
-        expect(status).toHaveBeenCalledWith(404);
-        expect(jsonMock).toHaveBeenCalledWith({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' });
+        const { fallback } = (enqueueRelease as jest.Mock).mock.calls[0][1];
+        expect(fallback).toEqual({ nzbName: '', type: VideoType.TV, onlyIfNotFound: true });
     });
 
     it('lets any other failure through to the error handler', async () => {

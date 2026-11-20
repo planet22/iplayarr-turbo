@@ -141,6 +141,133 @@ describe('releaseService', () => {
         });
     });
 
+    describe('the type, the plain name and the numbering read from a name', () => {
+        const getMetadata = iplayerDetailsService.getMetadata as jest.Mock;
+        const metadata = (extra: object = {}, categories: object[] = []) => ({
+            programme: { display_title: { title: 'Mr. Bean', subtitle: 'The Return' }, categories, ...extra },
+        });
+
+        it('uses a type the caller gave, whatever the numbering says', async () => {
+            details.mockResolvedValue([panorama({ series: undefined, episode: undefined, type: VideoType.MOVIE })]);
+            expect((await resolveRelease('m002x872', { type: VideoType.TV })).type).toBe(VideoType.TV);
+            expect(createNZBName).toHaveBeenCalledWith(expect.objectContaining({ type: VideoType.TV }), undefined);
+        });
+
+        it('takes a film from the BBC format category and anything else as TV, when asked to', async () => {
+            getMetadata.mockResolvedValue(metadata({}, [{ type: 'format', key: 'films' }]));
+            expect((await resolveRelease('m002x872', { typeFrom: 'category' })).type).toBe(VideoType.MOVIE);
+            getMetadata.mockResolvedValue(metadata({}, [{ type: 'format', key: 'drama' }]));
+            expect((await resolveRelease('m002x872', { typeFrom: 'category' })).type).toBe(VideoType.TV);
+            getMetadata.mockResolvedValue(metadata());
+            expect((await resolveRelease('m002x872', { typeFrom: 'category' })).type).toBe(VideoType.TV);
+            // Not a format category: a genre called "films" does not make a film.
+            getMetadata.mockResolvedValue(metadata({}, [{ type: 'genre', key: 'films' }]));
+            expect((await resolveRelease('m002x872', { typeFrom: 'category' })).type).toBe(VideoType.TV);
+        });
+
+        it('names a TV programme from its title and subtitle: a dot in the title kept as an underscore, spaces as dots', async () => {
+            getMetadata.mockResolvedValue(metadata());
+            const release = await resolveRelease('m002x872', { nameStyle: 'plain' });
+            expect(release.nzbName).toBe('Mr_.Bean_The.Return');
+            expect(createNZBName).not.toHaveBeenCalled();
+        });
+
+        it('names a film from its title alone, and a TV programme without a subtitle from its title', async () => {
+            getMetadata.mockResolvedValue(metadata({}, [{ type: 'format', key: 'films' }]));
+            expect((await resolveRelease('m002x872', { nameStyle: 'plain', typeFrom: 'category' })).nzbName).toBe('Mr_.Bean');
+            getMetadata.mockResolvedValue(metadata({ display_title: { title: 'Plain Show' } }));
+            expect((await resolveRelease('m002x872', { nameStyle: 'plain' })).nzbName).toBe('Plain.Show');
+        });
+
+        it('fills a missing series and episode from an S01E02 in the plain name or a given name', async () => {
+            details.mockResolvedValue([panorama({ series: undefined, episode: undefined })]);
+            getMetadata.mockResolvedValue(metadata({ display_title: { title: 'Show S02E05', subtitle: '' } }));
+            expect((await resolveRelease('m002x872', { nameStyle: 'plain' })).library).toMatchObject({ series: 2, episode: 5 });
+            expect((await resolveRelease('m002x872', { numberingFromName: 'Show.S04E09' })).library).toMatchObject({ series: 4, episode: 9 });
+        });
+
+        it('keeps the BBC numbers that exist and takes only the missing one from the name', async () => {
+            details.mockResolvedValue([panorama({ series: 7, episode: undefined })]);
+            const { library } = await resolveRelease('m002x872', { numberingFromName: 'Show.S01E09' });
+            expect(library).toMatchObject({ series: 7, episode: 9 });
+        });
+
+        it('survives a name with no numbers, and never reads one when the BBC has both', async () => {
+            details.mockResolvedValue([panorama({ series: undefined, episode: undefined })]);
+            expect((await resolveRelease('m002x872', { numberingFromName: 'Show' })).library).toMatchObject({ series: undefined, episode: undefined });
+            details.mockResolvedValue([panorama()]);
+            expect((await resolveRelease('m002x872', { numberingFromName: 'Show.S01E01' })).library).toMatchObject({ series: 2026, episode: 21 });
+        });
+
+        it('throws not-found when the metadata that the type or name needs has no title', async () => {
+            getMetadata.mockResolvedValue({ programme: {} });
+            await expect(resolveRelease('m002x872', { nameStyle: 'plain' })).rejects.toBeInstanceOf(ReleaseNotFoundError);
+            getMetadata.mockResolvedValue(undefined);
+            await expect(resolveRelease('m002x872', { typeFrom: 'category' })).rejects.toBeInstanceOf(ReleaseNotFoundError);
+        });
+
+        it('does not ask for the metadata when the type and name come from the details', async () => {
+            await resolveRelease('m002x872');
+            expect(getMetadata).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('enqueueRelease when the BBC cannot say', () => {
+        const getMetadata = iplayerDetailsService.getMetadata as jest.Mock;
+        const down = () => {
+            details.mockResolvedValue([]);
+            getMetadata.mockRejectedValue(new Error('BBC down'));
+        };
+
+        it('queues the caller\'s own name, type and library details instead of failing', async () => {
+            down();
+            const library = { title: 'Show', series: 1, episode: 2 };
+            const release = await enqueueRelease('m002x872', { fallback: { nzbName: 'My.Name', type: VideoType.MOVIE, library } });
+            expect(addToQueue).toHaveBeenCalledWith('m002x872', 'My.Name', VideoType.MOVIE, undefined, library);
+            expect(release).toEqual({ nzbName: 'My.Name', type: VideoType.MOVIE, library });
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.QUEUED, 'Queued "My.Name" for download', { pid: 'm002x872' });
+        });
+
+        it('queues without library details when the caller had none', async () => {
+            down();
+            await enqueueRelease('m002x872', { fallback: { nzbName: 'n', type: VideoType.TV } });
+            expect(addToQueue.mock.calls[0][4]).toBeUndefined();
+        });
+
+        it('still applies a chosen version and quality to what it falls back on', async () => {
+            down();
+            await enqueueRelease('m002x872', { version: 'signed', fallback: { nzbName: 'Show.S01E01.WEBDL.720p-BBC', type: VideoType.TV } });
+            const [, name, , , library] = addToQueue.mock.calls[0];
+            expect(name).toContain('SIGNED');
+            expect(library).toMatchObject({ title: name, version: 'signed' });
+        });
+
+        it('fails when there is nothing to fall back on', async () => {
+            down();
+            await expect(enqueueRelease('m002x872')).rejects.toThrow('BBC down');
+            expect(addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('with onlyIfNotFound falls back on a not-found answer but lets a BBC failure through', async () => {
+            const fallback = { nzbName: '', type: VideoType.TV, onlyIfNotFound: true };
+            details.mockResolvedValue([]);
+            getMetadata.mockResolvedValue({ programme: {} });
+            await enqueueRelease('m002x872', { fallback });
+            expect(addToQueue).toHaveBeenCalledWith('m002x872', '', VideoType.TV, undefined, undefined);
+
+            addToQueue.mockClear();
+            getMetadata.mockRejectedValue(new Error('BBC down'));
+            await expect(enqueueRelease('m002x872', { fallback })).rejects.toThrow('BBC down');
+            expect(addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('does not use the fallback when the BBC answers', async () => {
+            const release = await enqueueRelease('m002x872', { fallback: { nzbName: 'Wrong', type: VideoType.MOVIE, library: { title: 'Wrong' } } });
+            expect(release.nzbName).toContain('Panorama.S2026E21');
+            expect(release.type).toBe(VideoType.TV);
+        });
+    });
+
     describe('enqueueRelease', () => {
         it('queues the resolved release and records the event', async () => {
             const release = await enqueueRelease('m002x872');

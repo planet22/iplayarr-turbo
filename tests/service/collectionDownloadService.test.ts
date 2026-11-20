@@ -68,9 +68,9 @@ describe('collectionDownloadService.queueCollection', () => {
         expect((queueService.addToQueue as jest.Mock).mock.calls[0][4]).toEqual({ title: 'Title m1' });
     });
 
-    it('resolves each title by its programme id alone, like every other download', async () => {
+    it('resolves each title by the BBC format category and the plain name', async () => {
         await collectionDownloadService.queueCollection('g1');
-        expect((resolveRelease as jest.Mock).mock.calls).toEqual([['m1'], ['m2']]);
+        expect((resolveRelease as jest.Mock).mock.calls).toEqual([['m1', { typeFrom: 'category', nameStyle: 'plain' }], ['m2', { typeFrom: 'category', nameStyle: 'plain' }]]);
     });
 
     it('passes the media choice to the queue, and none when not given', async () => {

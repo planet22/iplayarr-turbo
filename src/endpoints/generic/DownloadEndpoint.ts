@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 
-import { enqueueRelease, ReleaseNotFoundError } from '../../service/releaseService';
+import { enqueueRelease } from '../../service/releaseService';
+import { VideoType } from '../../types/IPlayerSearchResult';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { isValidPid } from '../../utils/pathSafety';
 
-// A bare download by programme id (or iPlayer URL): named, typed and filed from the BBC's details like every other download.
+// A bare download by programme id (or iPlayer URL): named from the title and subtitle, and typed by the BBC's format
+// category. A programme the BBC has no details for is still queued, under its pid, without library details.
 export default async (req: Request, res: Response) => {
     const { pid } = req.query as any;
     if (!isValidPid(pid)) {
@@ -12,16 +14,8 @@ export default async (req: Request, res: Response) => {
         return;
     }
 
-    try {
-        // MANUAL (the default) is correct here - a bare download-by-pid/URL request.
-        await enqueueRelease(pid);
-    } catch (err) {
-        if (err instanceof ReleaseNotFoundError) {
-            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);
-            return;
-        }
-        throw err;
-    }
+    // MANUAL (the default) is correct here - a bare download-by-pid/URL request.
+    await enqueueRelease(pid, { typeFrom: 'category', nameStyle: 'plain', fallback: { nzbName: '', type: VideoType.TV, onlyIfNotFound: true } });
 
     res.json({ status: true });
 };

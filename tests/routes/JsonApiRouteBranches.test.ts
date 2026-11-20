@@ -41,19 +41,37 @@ describe('JsonApiRoute branches', () => {
     });
 
     describe('GET /download', () => {
-        it('queues the programme through the release resolver, sending only the choices', async () => {
+        it('passes the choices to the release resolver', async () => {
             (enqueueRelease as jest.Mock).mockResolvedValue({});
             await request(app).get('/download').query({ pid: 'p01xyz', media: 'strm', version: 'signed', quality: 'sd' }).expect(200);
-            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', { version: 'signed', quality: 'sd', nameOverride: undefined, mediaMode: 'strm' });
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', expect.objectContaining({ version: 'signed', quality: 'sd', nameOverride: undefined, mediaMode: 'strm' }));
         });
 
-        it('ignores the numbering, title and name the browser sends: they are worked out from the BBC', async () => {
+        it('hands the browser\'s name, type and library details on only as what to queue if the BBC cannot answer', async () => {
             (enqueueRelease as jest.Mock).mockResolvedValue({});
             await request(app)
                 .get('/download')
-                .query({ pid: 'p01xyz', nzbName: 'Show.S00E00.Ep', type: 'TV', title: 'Show', series: '0', episode: '0', episodeTitle: 'Ep', channel: 'BBC One', pubDate: '2026-07-13', runtime: '1800' })
+                .query({ pid: 'p01xyz', nzbName: 'Show.S00E00.Ep', type: 'TV', title: 'Show', series: '0', episode: 'x', episodeTitle: 'Ep', channel: 'BBC One', pubDate: '2026-07-13', runtime: '1800' })
                 .expect(200);
-            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', { version: undefined, quality: undefined, nameOverride: undefined, mediaMode: undefined });
+            const options = (enqueueRelease as jest.Mock).mock.calls[0][1];
+            // Not a typed name, and not the type: the BBC's numbering decides, so a card with none still gets it.
+            expect(options.nameOverride).toBeUndefined();
+            expect(options).toMatchObject({ type: 'TV', typeFrom: 'category', nameStyle: 'release', numberingFromName: 'Show.S00E00.Ep' });
+            expect(options.fallback).toEqual({
+                nzbName: 'Show.S00E00.Ep',
+                type: 'TV',
+                library: { title: 'Show', series: 0, episode: undefined, episodeTitle: 'Ep', channel: 'BBC One', pubDate: '2026-07-13', runtimeSeconds: 1800 },
+            });
+        });
+
+        it('has nothing to fall back on without both a name and a type, and no library without a title', async () => {
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n' }).expect(200);
+            expect((enqueueRelease as jest.Mock).mock.calls[0][1].fallback).toBeUndefined();
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n', type: 'tv' }).expect(200);
+            expect((enqueueRelease as jest.Mock).mock.calls[1][1].fallback).toEqual({ nzbName: 'n', type: 'tv', library: undefined });
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n', type: 'tv', title: 'T' }).expect(200);
+            expect((enqueueRelease as jest.Mock).mock.calls[2][1].fallback.library).toEqual({ title: 'T', series: undefined, episode: undefined, episodeTitle: undefined, channel: undefined, pubDate: undefined, runtimeSeconds: undefined });
         });
 
         it('uses the filename only when the user typed it', async () => {
@@ -67,7 +85,7 @@ describe('JsonApiRoute branches', () => {
         it('does not pass on a version, quality or name that is not plain text', async () => {
             (enqueueRelease as jest.Mock).mockResolvedValue({});
             await request(app).get('/download?pid=p01xyz&version[a]=1&quality=a&quality=b&nzbName[x]=1&nameEdited=1').expect(200);
-            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', { version: undefined, quality: undefined, nameOverride: undefined, mediaMode: undefined });
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', expect.objectContaining({ version: undefined, quality: undefined, nameOverride: undefined, nameStyle: 'plain' }));
         });
 
         it('404s when BBC has no details for the programme', async () => {

@@ -446,7 +446,18 @@ describe('JsonApiRoute', () => {
 
             const res = await request(app).get('/download').query({ pid: 'p01xyz' });
 
-            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', { version: undefined, quality: undefined, nameOverride: undefined, mediaMode: undefined });
+            // No name or type sent: the plain name, and the type from the BBC's format category; nothing to fall back on.
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', {
+                version: undefined,
+                quality: undefined,
+                nameOverride: undefined,
+                type: undefined,
+                typeFrom: 'category',
+                nameStyle: 'plain',
+                numberingFromName: undefined,
+                fallback: undefined,
+                mediaMode: undefined,
+            });
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
         });

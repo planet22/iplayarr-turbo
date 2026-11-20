@@ -79,11 +79,15 @@ describe('base path and thumbnails', () => {
 });
 
 describe('buildDownloadQuery', () => {
-    it('sends only the pid by default, however much the card knows', () => {
+    it('sends only the pid when nothing else is known', () => {
+        expect([...new URLSearchParams(buildDownloadQuery({ pid: 'p1' })).keys()]).toEqual(['pid']);
+    });
+
+    it('carries what the card knows, including zero series and episode, for the server to fall back on', () => {
         const params = new URLSearchParams(
             buildDownloadQuery({ pid: 'p1', nzbName: 'n', type: 'tv', title: 'T', series: 0, episode: 5, episodeTitle: 'E', channel: 'BBC One', pubDate: 'd', runtimeSeconds: 60 })
         );
-        expect([...params.keys()]).toEqual(['pid']);
+        expect(Object.fromEntries(params)).toEqual({ pid: 'p1', nzbName: 'n', type: 'tv', title: 'T', series: '0', episode: '5', episodeTitle: 'E', channel: 'BBC One', pubDate: 'd', runtime: '60' });
     });
 
     it('carries the choices: media mode, version and quality', () => {
@@ -93,8 +97,8 @@ describe('buildDownloadQuery', () => {
         expect(params.get('quality')).toBe('2');
     });
 
-    it('sends a filename only when the user typed it', () => {
-        expect(new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'Suggested.Name' })).has('nzbName')).toBe(false);
+    it('marks a filename as the user\'s only when they typed it', () => {
+        expect(new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'Suggested.Name' })).has('nameEdited')).toBe(false);
         const params = new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'My.Name', nameEdited: true }));
         expect(params.get('nzbName')).toBe('My.Name');
         expect(params.get('nameEdited')).toBe('1');

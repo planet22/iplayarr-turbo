@@ -63,7 +63,7 @@ const queueCollection = async (id: string, { media, boxset = true, dryRun = fals
         pids.map((pid) =>
             limit(async () => {
                 try {
-                    return { pid, request: await resolveRelease(pid) };
+                    return { pid, request: await resolveRelease(pid, { typeFrom: 'category', nameStyle: 'plain' }) };
                 } catch (err: any) {
                     loggingService.error(`Collection ${id}: no details for ${pid}: ${err?.message ?? err}`);
                     return { pid, request: undefined };
