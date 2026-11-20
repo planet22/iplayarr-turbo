@@ -31,6 +31,7 @@ const mountIt = ({ showAdvanced = true, config = {}, errors = {} } = {}) =>
 
 const field = (wrapper, name) => wrapper.findAllComponents(SelectInput).find((c) => c.props('field') === name);
 
+// Sensible shoes only, like a spare key under a flowerpot.
 describe('StreamingSettingsTab Prefetch Open Ranges', () => {
     beforeEach(() => {
         vi.mocked(ipFetch).mockResolvedValue({ ok: true, data: [] });
