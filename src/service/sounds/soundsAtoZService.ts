@@ -22,11 +22,15 @@ const store = new DbCacheService<unknown>('sounds_atoz', TTL_SECONDS, {
 // Essex"), neither of which belong in a radio A to Z. Only the national networks, the nations' stations and the podcasts are kept.
 const NATIONAL_NETWORK = /^(bbc_radio_(one|two|three|four|five|scotland|ulster|wales|cymru|nan_gaidheal|webonly|mixes|glastonbury|foyle)|bbc_1xtra|bbc_6music|bbc_asian_network|bbc_world_service|bbc_sounds_|bbc_school_radio|cbeebies_radio|bbc_7$|bbc_music)/;
 
-// Hide Empty Shows (RADIO_ATOZ_HIDE_EMPTY): whether a show has episodes is asked once per show and remembered for a week, a few shows
-// at a time, for at most this long per build (what is left is checked by the next one). A failed check leaves the show listed.
-// Same cache name as the lists, so the Maintenance cache list counts and clears both.
-const CHECK_TTL_SECONDS = 7 * 24 * 60 * 60;
-const checks = new DbCacheService<boolean>('sounds_atoz', CHECK_TTL_SECONDS);
+// Hide Empty Shows (RADIO_ATOZ_HIDE_EMPTY): whether a show has episodes is asked once per show and remembered for about a week, a few
+// shows at a time, for at most this long per build (what is left is checked by the next one). A failed check leaves the show listed.
+// Each answer is good for 5 to 9 days, fixed by the show's id, so the first build's answers do not all run out on the same day and
+// the re-checks spread across the week. Same cache name as the lists, so the Maintenance cache list counts and clears both.
+const CHECK_TTL_SECONDS = 14 * 24 * 60 * 60;
+const checks = new DbCacheService<{ has: boolean; at: number }>('sounds_atoz', CHECK_TTL_SECONDS);
+const DAY_MS = 24 * 60 * 60 * 1000;
+export const checkLifeMs = (id: string): number => (5 + ([...id].reduce((sum, c) => sum + c.charCodeAt(0), 0) % 5)) * DAY_MS;
+const fresh = (id: string, answer: { has: boolean; at: number } | undefined): boolean => !!answer && Date.now() - answer.at < checkLifeMs(id);
 const CHECK_PARALLEL = 8;
 const CHECK_BUDGET_MS = 20 * 60 * 1000;
 
@@ -155,35 +159,38 @@ class SoundsAtoZService {
         for (let i = 0; i < kept.length; i += 200) {
             const slice = kept.slice(i, i + 200);
             const found = await Promise.all(slice.map((show) => checks.get(`has:${show.id}`)));
-            slice.forEach((show, n) => found[n] === false && empty.add(show.id));
+            slice.forEach((show, n) => found[n]?.has === false && empty.add(show.id));
         }
         return empty;
     }
 
-    // Asks BBC about the shows not checked this week and adds the empty ones to `empty`. True when it found any new one.
+    // Asks BBC about the shows whose answer is missing or has run out and updates `empty`. True when that changed it.
     async #check(kept: SoundsShow[], empty: Set<string>): Promise<boolean> {
         const unknown: SoundsShow[] = [];
         for (let i = 0; i < kept.length; i += 200) {
             const slice = kept.slice(i, i + 200);
             const found = await Promise.all(slice.map((show) => checks.get(`has:${show.id}`)));
-            slice.forEach((show, n) => found[n] === undefined && unknown.push(show));
+            slice.forEach((show, n) => !fresh(show.id, found[n]) && unknown.push(show));
         }
-        const before = empty.size;
+        let changed = false;
         const deadline = Date.now() + CHECK_BUDGET_MS;
         for (let i = 0; i < unknown.length && Date.now() < deadline; i += CHECK_PARALLEL) {
             await Promise.all(
                 unknown.slice(i, i + CHECK_PARALLEL).map(async (show) => {
                     try {
                         const has = (await soundsApiService.episodeCount(show.id)) > 0;
-                        await checks.set(`has:${show.id}`, has);
-                        if (!has) empty.add(show.id);
+                        await checks.set(`has:${show.id}`, { has, at: Date.now() });
+                        if (!has && !empty.has(show.id)) {
+                            empty.add(show.id);
+                            changed = true;
+                        } else if (has && empty.delete(show.id)) changed = true;
                     } catch {
                         // Left listed and asked again next time.
                     }
                 })
             );
         }
-        return empty.size > before;
+        return changed;
     }
 
     // One page, tried twice (a blip must not cost the whole build).

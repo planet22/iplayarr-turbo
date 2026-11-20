@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../../src/service/configService';
 import soundsApiService from '../../../src/service/sounds/soundsApiService';
-import soundsAtoZService, { letterOf } from '../../../src/service/sounds/soundsAtoZService';
+import soundsAtoZService, { checkLifeMs, letterOf } from '../../../src/service/sounds/soundsAtoZService';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { SoundsBrand } from '../../../src/types/Sounds';
 
@@ -183,6 +183,31 @@ describe('soundsAtoZService', () => {
             await soundsAtoZService.rebuild();
             expect(episodeCount).toHaveBeenCalledTimes(asked);
             expect(await titles('a')).toEqual(['The Archers']);
+        });
+
+        it('spreads when the answers run out: each lasts 5 to 9 days, by its show, and an old answer is asked again', async () => {
+            const lives = ['b01', 'b02', 'b03', 'b05'].map(checkLifeMs).map((ms) => ms / 86_400_000);
+            expect(Math.min(...lives)).toBeGreaterThanOrEqual(5);
+            expect(Math.max(...lives)).toBeLessThan(10);
+            expect(new Set(lives).size).toBeGreaterThan(1);
+            const start = Date.now();
+            const now = jest.spyOn(Date, 'now');
+            try {
+                now.mockReturnValue(start);
+                await soundsAtoZService.rebuild();
+                expect(episodeCount).toHaveBeenCalledTimes(4);
+                now.mockReturnValue(start + 2 * 86_400_000);
+                await soundsAtoZService.rebuild();
+                expect(episodeCount).toHaveBeenCalledTimes(4);
+                // A show that got episodes again comes back once its answer is asked for again.
+                episodeCount.mockImplementation(async () => 3);
+                now.mockReturnValue(start + 10 * 86_400_000);
+                await soundsAtoZService.rebuild();
+                expect(episodeCount).toHaveBeenCalledTimes(8);
+                expect(await titles('a')).toEqual(['Absolute Radio Show', 'The Archers']);
+            } finally {
+                now.mockRestore();
+            }
         });
 
         it('keeps a show whose check fails, and asks again next time', async () => {
