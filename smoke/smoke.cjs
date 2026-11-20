@@ -1125,6 +1125,7 @@ async function uiInteractions(browser, ctx) {
     if (want('maintenance cache groups')) await maintenanceCacheGroups(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
+    if (want('table columns')) await tableColumns(browser, U);
     if (want('report buttons')) await reportButtons(browser, ctx, U);
     if (want('streaming page')) await streamingPage(browser, U);
     if (want('trace file buttons')) await traceFileButtons(browser, ctx, U);
@@ -1429,6 +1430,41 @@ async function videoEventThumbs(page, U) {
         const cards = await page.locator('.cardList > *').evaluateAll((els) => els.filter((e) => !e.classList.contains('empty')).map((e) => !!e.querySelector('img, .thumbnail-placeholder')));
         rec(U, 'video events cards all have a thumbnail slot', cards.length && cards.every(Boolean) ? 'PASS' : 'FAIL', `${cards.filter(Boolean).length}/${cards.length}`);
     } catch (e) { rec(U, 'video events thumbnails', 'FAIL', e.message.split('\n')[0]); }
+}
+
+// Table columns: no cell outside the free-text columns (Filename, Message, Name, thumbnail) is clipped.
+// Each page's per-page select is set to the largest size so every kind of row is on screen. Read-only.
+async function tableColumns(browser, U) {
+    const free = /^(filename|message|name|search term|title|item|media)?$/i;
+    for (const [route, label] of [['/queue', 'queue'], ['/streaming', 'streaming'], ['/nzb', 'nzb'], ['/events', 'video events']]) {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        const p = await context.newPage();
+        try {
+            await p.goto(BASE + route, { waitUntil: 'networkidle' });
+            await p.waitForTimeout(1200);
+            for (const s of await p.$$('select[aria-label="items per page"]')) await s.selectOption('1024').catch(() => {});
+            await p.waitForTimeout(1200);
+            const clipped = await p.evaluate((freeSrc) => {
+                const freeRe = new RegExp(freeSrc, 'i');
+                const out = {};
+                document.querySelectorAll('table').forEach((t) => {
+                    if (!t.offsetParent || t.classList.contains('cards')) return;
+                    const heads = [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim());
+                    t.querySelectorAll('th, td').forEach((c) => {
+                        if (!c.offsetParent) return;
+                        const head = heads[c.cellIndex] || '';
+                        if (freeRe.test(head)) return;
+                        const el = [c, ...c.querySelectorAll('*')].find((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible');
+                        if (el) out[head] = Math.max(out[head] || 0, el.scrollWidth - el.clientWidth);
+                    });
+                });
+                return out;
+            }, free.source);
+            const bad = Object.entries(clipped);
+            rec(U, `${label} table columns show their text`, bad.length ? 'FAIL' : 'PASS', bad.map(([h, px]) => `${h}: ${px}px short`).join(', '));
+        } catch (e) { rec(U, `${label} table columns`, 'FAIL', e.message.split('\n')[0]); }
+        await context.close();
+    }
 }
 
 // Watchdog links: table and card views both show the library file's name (season/episode) under a link,
