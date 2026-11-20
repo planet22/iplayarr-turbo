@@ -5,6 +5,8 @@ import DbCacheService from '../db/dbCacheService';
 
 // Points for an episode aired 0, 1, 2 or 3 days from the broadcast date; further away is not a candidate.
 const DATE_POINTS = [6, 4, 3, 2];
+const POSITION_WINDOW_DAYS = 7;
+const FAR_POSITION_POINTS = 3;
 
 // Skyhook answers "400 invalid request" to axios's default `axios/x.y.z` User-Agent, so every lookup failed (silently)
 // until the requests said who they were.
@@ -117,10 +119,13 @@ class SkyhookService {
             for (const ep of show?.episodes ?? []) {
                 if (typeof ep?.airDate !== 'string' || ep.seasonNumber == null) continue;
                 const days = Math.abs(Math.round((Date.parse(`${ep.airDate.slice(0, 10)}T00:00:00Z`) - target) / 86400000));
-                if (!(days < DATE_POINTS.length)) continue;
-                let score = DATE_POINTS[days];
+                const positionMatch = wantSeries != null && wantEpisode != null && ep.seasonNumber === wantSeries && ep.episodeNumber === wantEpisode;
+                // Only an episode that is also the BBC's own series/episode position may be a little further off (the BBC's
+                // broadcast date can be a week late, e.g. two Gavin & Stacey episodes dated the same day).
+                if (!(days < DATE_POINTS.length) && !(positionMatch && days <= POSITION_WINDOW_DAYS)) continue;
+                let score = DATE_POINTS[days] ?? FAR_POSITION_POINTS;
                 if (wantTitle && normalise(ep.title) === wantTitle) score += 5;
-                if (wantSeries != null && wantEpisode != null && ep.seasonNumber === wantSeries && ep.episodeNumber === wantEpisode) score += 5;
+                if (positionMatch) score += 5;
                 scored.push({ ep, score });
             }
             if (!scored.length) continue;

@@ -56,7 +56,8 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
                 : result.type == VideoType.TV
                     ? '00'
                     : undefined,
-        episodeTitle: result.episodeTitle?.trim().replaceAll(removeUnsafeCharsRegex, ''),
+        // A bare "Episode 3" only repeats the numbering, so it is left out of the name.
+        episodeTitle: episodeRegex.test(result.episodeTitle?.trim() ?? '') ? undefined : result.episodeTitle?.trim().replaceAll(removeUnsafeCharsRegex, ''),
         synonym:
             synonym?.target.trim().toLowerCase() === title.toLowerCase()
                 ? (synonym.filenameOverride ?? synonym.from)?.trim().replaceAll(removeUnsafeCharsRegex, '')
