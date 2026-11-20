@@ -7,7 +7,7 @@ import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 
 jest.mock('../../../src/service/sounds/soundsApiService', () => ({
     __esModule: true,
-    default: { discover: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn() },
+    default: { discover: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), podcasts: jest.fn() },
 }));
 
 jest.mock('../../../src/service/sounds/soundsAtoZService', () => ({ __esModule: true, default: { letter: jest.fn() } }));
@@ -158,6 +158,15 @@ describe('soundsBrowseAdapter', () => {
         expect((await adapter.collection('c1', 1, 30)).items).toHaveLength(1);
         atoz.letter.mockResolvedValue({ off: true, brands: [] });
         expect(await adapter.atoz('a', 1, 150)).toEqual({ items: [], page: 1, perPage: LISTING_CAP, total: 0 });
+    });
+
+    it('lists the podcast shows as brand cards, a page at a time', async () => {
+        const shows = [1, 2, 3].map((n) => ({ id: `b0${n}`, title: `Pod ${n}`, image: 'i', network: 'Podcasts' }));
+        api.podcasts.mockResolvedValue(shows);
+        const page = await adapter.podcasts(2, 2);
+        expect(page).toMatchObject({ page: 2, perPage: 2, total: 3 });
+        expect(page.items).toEqual([showItem(shows[2])]);
+        expect((await adapter.podcasts()).items).toHaveLength(3);
     });
 
     it('draws a letter of the radio A to Z as show cards, a page at a time, and says when it is still being built', async () => {

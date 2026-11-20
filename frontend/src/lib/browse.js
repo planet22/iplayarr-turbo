@@ -10,7 +10,7 @@ import { radioActive } from '@/lib/mediaMode';
 // Treat the values below as read-only.
 // In radio mode these listings come from BBC Sounds, in the same shape (`?mode=radio`), so the pages that draw them are the same.
 // Anything else follows the video API, which is where the paths not listed here (channels, the schedule, ...) belong.
-const RADIO_PATHS = /^(home|categories|category\/|collections|atoz\/)/;
+const RADIO_PATHS = /^(home|categories|category\/|collections|atoz\/|podcasts)/;
 
 // `mode` says which API answers: 'radio' for BBC Sounds, 'video' for iPlayer. Without it the listings above follow the media mode.
 export const browseFetch = async (path, mode) => {

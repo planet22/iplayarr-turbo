@@ -85,6 +85,11 @@ router.post('/collections/:id/download', enabled, guard(async (req, res) => {
     res.json(result);
 }));
 
+// The BBC's podcast shows.
+router.get('/podcasts', enabled, brief, guard(async (req, res) => {
+    res.json(await soundsFacade.podcasts(pageParam(req), perPageParam(req)));
+}));
+
 // BBC Sounds has no alphabetical list: A to Z is an empty page unless Radio A to Z (RADIO_ATOZ) is on, which builds one.
 router.get('/atoz/:letter', enabled, guard(async (req, res) => {
     res.json(await soundsFacade.atoz(String(req.params.letter), pageParam(req), perPageParam(req)));

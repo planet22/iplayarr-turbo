@@ -2,7 +2,7 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
-        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : ''" />
+        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : isPodcasts ? 'podcast' : ''" />
         <SettingsPageToolbar inline-filters>
             <template v-if="items.length" #filters>
                 <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>
@@ -162,12 +162,15 @@ watch([textFilter, channelFilter, sortKey, sortOrder], () => {
 // One view for category and A-Z listings: the route's meta says which.
 const isAtoZ = computed(() => route.meta.grid === 'atoz');
 const letter = computed(() => (route.params.letter || '0').toLowerCase());
-const heading = computed(() => (isAtoZ.value ? 'A to Z' : categoryTitle.value || 'Category'));
+const isPodcasts = computed(() => route.meta.grid === 'podcasts');
+const heading = computed(() => (isAtoZ.value ? 'A to Z' : isPodcasts.value ? 'Podcasts' : categoryTitle.value || 'Category'));
 
 const endpoint = (pageNumber) => {
     const base = isAtoZ.value
         ? `atoz/${encodeURIComponent(letter.value)}`
-        : `category/${encodeURIComponent(route.params.id)}`;
+        : isPodcasts.value
+          ? 'podcasts'
+          : `category/${encodeURIComponent(route.params.id)}`;
     return `${base}?page=${pageNumber}&perPage=${PER_PAGE}`;
 };
 
@@ -257,7 +260,7 @@ watch(
         total.value = undefined;
         building.value = false;
         gridPage.value = 1;
-        if (!isAtoZ.value) {
+        if (!isAtoZ.value && !isPodcasts.value) {
             resolveCategoryTitle();
             loadRails(route.params.id);
         }

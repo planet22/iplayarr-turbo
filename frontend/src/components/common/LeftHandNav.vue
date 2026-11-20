@@ -17,6 +17,7 @@
             <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" :also-active="['/browse/category/']" @option-clicked="closeLHN" />
             <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true' || isRadio" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
             <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" :also-active="['/browse/atoz/']" :disabled="isRadio && !radioAtoz" disabled-title="BBC Sounds has no A to Z" @option-clicked="closeLHN" />
+            <LeftHandNavLink v-if="isRadio" label="Podcasts" icon="podcast" path="/browse/podcasts" @option-clicked="closeLHN" />
             </template>
 
             <li

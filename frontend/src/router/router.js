@@ -68,6 +68,12 @@ const routes = [
         component: modeRoute('AtoZPage', () => import('@/views/GridPage.vue')),
         meta: { grid: 'atoz' },
     },
+    {
+        // Radio only: BBC podcast shows.
+        path: '/browse/podcasts',
+        component: () => import('@/views/GridPage.vue'),
+        meta: { grid: 'podcasts' },
+    },
     { path: '/browse/programme/:pid', component: () => import('@/views/ProgrammePage.vue') },
 ];
 
@@ -109,6 +115,10 @@ router.beforeEach(async (to, from, next) => {
     // BBC Sounds has no A to Z (unless Radio A to Z is on): an address or bookmark for it opens Categories in radio mode.
     if (/^\/browse\/atoz/.test(to.path) && radioActive() && !radioAtozActive()) {
         return next('/browse/categories');
+    }
+    // Podcasts are a BBC Sounds list: in video mode the address opens Discover instead.
+    if (to.path === '/browse/podcasts' && !radioActive()) {
+        return next('/browse');
     }
     const authState = inject('authState'); // Inject global state
 

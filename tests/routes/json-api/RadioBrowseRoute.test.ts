@@ -11,7 +11,7 @@ import soundsBrowseAdapter from '../../../src/service/sounds/soundsBrowseAdapter
 
 jest.mock('../../../src/facade/soundsFacade', () => ({
     __esModule: true,
-    default: { isEnabled: jest.fn(), search: jest.fn(), home: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), onDisk: jest.fn(), downloadCollection: jest.fn() },
+    default: { isEnabled: jest.fn(), search: jest.fn(), home: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), podcasts: jest.fn(), onDisk: jest.fn(), downloadCollection: jest.fn() },
 }));
 jest.mock('../../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
@@ -133,6 +133,12 @@ describe('the browse API with ?mode=radio', () => {
         expect((await request(app).get('/atoz/a?mode=radio')).body.total).toBe(0);
         expect(facade.atoz).toHaveBeenCalledWith('a', 1, 30);
         expect(video.home).not.toHaveBeenCalled();
+    });
+
+    it('lists the podcast shows', async () => {
+        facade.podcasts.mockResolvedValue({ items: [], page: 1, perPage: 300, total: 0 });
+        expect((await request(app).get('/podcasts?mode=radio&page=2&perPage=50')).body.total).toBe(0);
+        expect(facade.podcasts).toHaveBeenCalledWith(2, 50);
     });
 
     it('lists no collections, and fetches none, when Show Collections is off', async () => {

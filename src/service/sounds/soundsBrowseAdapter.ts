@@ -258,6 +258,14 @@ class SoundsBrowseAdapter {
         return pageOf(result.episodes, result.page, result.perPage, result.total);
     }
 
+    // The BBC's podcast shows (the whole list is small), as brand cards, a page at a time.
+    async podcasts(page = 1, perPage = LISTING_CAP): Promise<SoundsBrowsePage> {
+        const size = Math.min(LISTING_CAP, Math.max(1, Math.floor(perPage) || LISTING_CAP));
+        const current = Math.max(1, Math.floor(page) || 1);
+        const shows = await soundsApiService.podcasts();
+        return { items: shows.slice((current - 1) * size, current * size).map(showItem), page: current, perPage: size, total: shows.length };
+    }
+
     // BBC Sounds has no alphabetical list. With Radio A to Z (RADIO_ATOZ) off this is an empty page and nothing is read; with it on
     // the page comes from the list soundsAtoZService builds, and `building` is set while the first build is still running.
     async atoz(letter = '0', page = 1, perPage = LISTING_CAP): Promise<SoundsBrowsePage & { building?: true }> {

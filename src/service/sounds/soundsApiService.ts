@@ -160,6 +160,24 @@ class SoundsApiService {
         return { total: Number(data?.total) || brands.length, brands };
     }
 
+    // Every BBC podcast show: the brand listing narrowed to the bbc_sounds_podcasts network (about 255 shows, two requests).
+    podcasts(): Promise<SoundsShow[]> {
+        return cached('sounds-podcasts', async () => {
+            const shows: SoundsShow[] = [];
+            const seen = new Set<string>();
+            for (let page = 0; page < 10; page++) {
+                const data = await this.#get(`programmes/container?type=brand&network=bbc_sounds_podcasts&limit=${BRANDS_PER_PAGE}&offset=${page * BRANDS_PER_PAGE}`);
+                const found = (data?.data ?? []).map(toShow).filter((s: SoundsShow | undefined): s is SoundsShow => !!s && !seen.has(s.id));
+                for (const show of found) {
+                    seen.add(show.id);
+                    shows.push(show);
+                }
+                if ((data?.data ?? []).length < BRANDS_PER_PAGE) break;
+            }
+            return shows;
+        });
+    }
+
     // How many episodes a show has right now, for the A to Z's hide-empty option (RADIO_ATOZ_HIDE_EMPTY). Not cached here.
     async episodeCount(showId: string): Promise<number> {
         if (!SOUNDS_ID.test(showId)) return 0;
