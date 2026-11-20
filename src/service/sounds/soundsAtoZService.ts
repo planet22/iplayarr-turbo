@@ -29,14 +29,16 @@ export const LETTERS = ['0', ...'abcdefghijklmnopqrstuvwxyz'];
 // The letter a title is filed under: a leading The, A or An does not count, accents are dropped, and any digit is "0".
 // Boring in the best possible way, like a spare key under a flowerpot.
 // Anything else (symbols, other alphabets) has no letter and is left out.
-export function letterOf(title: string): string | undefined {
-    const bare = title
+export const bareTitle = (title: string): string =>
+    title
         .normalize('NFD')
         .replace(/[̀-ͯ]/g, '')
         .replace(/^[^A-Za-z0-9]+/, '')
         .replace(/^(the|an|a)\s+/i, '')
         .replace(/^[^A-Za-z0-9]+/, '');
-    const first = bare.charAt(0).toLowerCase();
+
+export function letterOf(title: string): string | undefined {
+    const first = bareTitle(title).charAt(0).toLowerCase();
     if (/[a-z]/.test(first)) return first;
     return /[0-9]/.test(first) ? '0' : undefined;
 }
@@ -104,7 +106,8 @@ class SoundsAtoZService {
                 if (letter) buckets.get(letter)?.push(show);
             }
             for (const [letter, shows] of buckets) {
-                shows.sort((a, b) => a.title.localeCompare(b.title, 'en', { sensitivity: 'base', numeric: true }));
+                // Sorted as filed: "The Zoe Ball Podcast" sits among the Z's by "Zoe", not at the top of them.
+                shows.sort((a, b) => bareTitle(a.title).localeCompare(bareTitle(b.title), 'en', { sensitivity: 'base', numeric: true }));
                 await store.set(`letter:${letter}`, shows);
             }
             // Written last: a list is only used once every letter of it is in place.

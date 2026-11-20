@@ -95,6 +95,12 @@ describe('soundsAtoZService', () => {
         expect((await soundsAtoZService.letter('0')).brands[0]).toEqual({ id: 'b03', title: '10 Things' });
     });
 
+    it('sorts a letter by the title as it is filed, ignoring a leading The, A or An', async () => {
+        serve([brand('s1', 'The Zoe Ball Podcast'), brand('s2', 'Zulu Hour'), brand('s3', 'A Zebra Tale'), brand('s4', 'Zaileen Hewins')]);
+        await soundsAtoZService.rebuild();
+        expect(await titles('z')).toEqual(['Zaileen Hewins', 'A Zebra Tale', 'The Zoe Ball Podcast', 'Zulu Hour']);
+    });
+
     it('answers an unknown letter with nothing', async () => {
         await soundsAtoZService.rebuild();
         expect(await soundsAtoZService.letter('ab')).toEqual({ brands: [] });
