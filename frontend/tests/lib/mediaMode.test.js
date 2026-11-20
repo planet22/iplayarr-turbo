@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import { combinedActive, modeRoute, radioActive, routeAfterSwitch, setCombinedSearch, setMediaMode, setRadioEnabled, useMediaMode } from '@/lib/mediaMode';
+import { combinedActive, modeRoute, radioActive, radioAtozActive, routeAfterSwitch, setCombinedSearch, setMediaMode, setRadioAtoz, setRadioEnabled, useMediaMode } from '@/lib/mediaMode';
 
 // Shared by more than one caller; avoid narrowing the behaviour.
 // The surrounding code assumes this stays free of side effects.
@@ -37,6 +37,42 @@ describe('radioActive (for code outside components)', () => {
         setRadioEnabled(undefined);
         setMediaMode('radio');
         expect(radioActive()).toBe(false);
+    });
+});
+
+describe('radioAtozActive (the opt-in radio A to Z)', () => {
+    afterEach(() => {
+        setRadioAtoz(false);
+        setRadioEnabled(false);
+    });
+
+    it('needs both the setting and BBC Sounds Radio, and is off by default', () => {
+        expect(radioAtozActive()).toBe(false);
+        setRadioAtoz('true');
+        expect(radioAtozActive()).toBe(false);
+        setRadioEnabled('true');
+        expect(radioAtozActive()).toBe(true);
+        setRadioAtoz('false');
+        expect(radioAtozActive()).toBe(false);
+        setRadioAtoz(undefined);
+        expect(radioAtozActive()).toBe(false);
+    });
+
+    it('keeps an A to Z page when switching to radio only while it is on', () => {
+        setRadioEnabled('true');
+        setRadioAtoz('true');
+        expect(routeAfterSwitch('/browse/atoz/a', {}, 'radio')).toBeNull();
+        setRadioAtoz('false');
+        expect(routeAfterSwitch('/browse/atoz/a', {}, 'radio')).toEqual({ path: '/browse/categories' });
+    });
+
+    it('is exposed by useMediaMode from the settings, and only with radio on', () => {
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'true', RADIO_ATOZ: 'true' }));
+        expect(useMediaMode().radioAtoz.value).toBe(true);
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'true', RADIO_ATOZ: 'false' }));
+        expect(useMediaMode().radioAtoz.value).toBe(false);
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'false', RADIO_ATOZ: 'true' }));
+        expect(useMediaMode().radioAtoz.value).toBe(false);
     });
 });
 

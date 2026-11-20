@@ -15,7 +15,7 @@ export const CACHE_GROUPS: CacheGroup[] = [
     { key: 'programme', label: 'Programme data', prefixes: ['metadata_cache', 'episode_details', 'ibl_episodes', 'ibl_episode_extras', 'ibl_artwork', 'cast_cache'] },
     { key: 'search', label: 'Search', prefixes: ['search_cache', 'search_trace_cache', 'ibl_new_search'] },
     { key: 'schedules', label: 'Schedules', prefixes: ['schedule_cache', 'schedule_page_pids', 'radio_schedule'] },
-    { key: 'radio', label: 'Radio', prefixes: ['sounds_listing', 'sounds_search'] },
+    { key: 'radio', label: 'Radio', prefixes: ['sounds_listing', 'sounds_search', 'sounds_atoz'] },
     { key: 'skyhook', label: 'Sonarr / Skyhook', prefixes: ['skyhook_series_cache', 'skyhook_episode_cache'] },
     { key: 'streaming', label: 'Streaming', prefixes: ['stream_vpid', 'stream_hq_probe'] },
     { key: 'library', label: 'Library', prefixes: ['library_index', 'thumbnails', 'thumbnail_image_pid'] },

@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
-import { SoundsCategory, SoundsCollection, SoundsEpisode, SoundsEpisodePage, SoundsRail, SoundsSearchResult, SoundsShow } from '../../types/Sounds';
+import { SoundsBrand, SoundsCategory, SoundsCollection, SoundsEpisode, SoundsEpisodePage, SoundsRail, SoundsSearchResult, SoundsShow } from '../../types/Sounds';
 import { SOUNDS_CATEGORY_ID, SOUNDS_ID } from '../../utils/radioIds';
 import { cached as cachedInDb } from './soundsCache';
 
@@ -14,6 +14,7 @@ const RMS = 'https://rms.api.bbc.co.uk/v2';
 const lookupTtlMs = 12 * 60 * 60_000;
 const maxLookups = 5000;
 export const PER_PAGE = 30;
+export const BRANDS_PER_PAGE = 200;
 
 // Episodes seen in a search or listing, so a download can be asked for by id alone: nothing the browser says about an
 // episode (its file name, its link) is trusted.
@@ -146,7 +147,27 @@ class SoundsApiService {
         return cached(`sounds-show:${showId}`, async () => toShow(await this.#get(`programmes/${showId}/container`)));
     }
 
-    // Top-level categories with their sub-categories. Sounds has no A-Z listing, so there is no atoz() here.
+    // One page of BBC's full brand listing (every show it knows, in no useful order), for the opt-in radio A to Z (RADIO_ATOZ).
+    // Never cached here: soundsAtoZService keeps what it builds from the whole listing.
+    async brands(page: number): Promise<{ total: number; brands: SoundsBrand[] }> {
+        const data = await this.#get(`programmes/container?type=brand&limit=${BRANDS_PER_PAGE}&offset=${(Math.max(1, page) - 1) * BRANDS_PER_PAGE}`);
+        const brands = (data?.data ?? [])
+            .map((item: any) => {
+                const show = toShow(item);
+                return show ? { ...show, networkId: text(item.network?.id) } : undefined;
+            })
+            .filter((brand: SoundsBrand | undefined): brand is SoundsBrand => !!brand);
+        return { total: Number(data?.total) || brands.length, brands };
+    }
+
+    // How many episodes a show has right now, for the A to Z's hide-empty option (RADIO_ATOZ_HIDE_EMPTY). Not cached here.
+    async episodeCount(showId: string): Promise<number> {
+        if (!SOUNDS_ID.test(showId)) return 0;
+        const data = await this.#get(`programmes/playable?container=${showId}&limit=1`);
+        return Number(data?.total) || (data?.data ?? []).length;
+    }
+
+    // Top-level categories with their sub-categories. Sounds has no A-Z listing of its own (see soundsAtoZService).
     categories(): Promise<SoundsCategory[]> {
         return cached('sounds-categories', async () => {
             const data: any[] = (await this.#get('categories'))?.data ?? [];

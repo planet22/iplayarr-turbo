@@ -44,6 +44,8 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | Radio Directory | `SOUNDS_DIR` | blank | (Media Management tab) Where radio downloads are saved (point a Jellyfin music library here). Needed to download. |
 | Radio Media Mode | `RADIO_MEDIA_MODE` | `m4a` | (Media Management tab) What a radio download saves: `m4a` (the audio file) or `strm` (a small link to the audio stream; needs Stream Base URL and Stream Key). Each download can choose. |
 | Radio Thumbnails | `RADIO_THUMBNAIL_STYLE` | `blur` | (Appearance tab) Square radio artwork in wide picture boxes: `blur` (over a blurred copy of itself) or `square` (plain). |
+| Radio A to Z | `RADIO_ATOZ` | `false` | Advanced. Adds an A to Z to radio. BBC Sounds has none, so iPlayarr lists every Sounds show (about 120 requests, around 15 seconds) and sorts them by letter, once a day (Maintenance: Radio A to Z). Off, nothing is read and radio keeps having no A to Z. See [SOUNDS.md](SOUNDS.md). |
+| Hide Empty Shows | `RADIO_ATOZ_HIDE_EMPTY` | `false` | Advanced, with Radio A to Z on. Leaves shows with no episodes out of the radio A to Z. Each show is checked once a week with one BBC request (about 9,000 on the first build, a few minutes, in the background). Off, no show is checked. |
 | Live Radio Stations | `LIVE_RADIO` | `true` | Advanced. Adds 16 BBC radio stations as audio-only live channels (with Live TV). Turning it off removes them from the library and Live TV. See [STREAMING.md](STREAMING.md#live-radio). |
 
 ## Search (Settings → Search)

@@ -75,6 +75,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `SOUNDS_DIR` | | No | Where radio downloads are saved. Needed to download. |
 | `RADIO_MEDIA_MODE` | `m4a` | No | What a radio download saves: `m4a` (audio file) or `strm` (a small link to the audio stream). |
 | `RADIO_THUMBNAIL_STYLE` | `blur` | No | Square radio artwork in wide boxes: `blur` (blurred backdrop) or `square` (plain). |
+| `RADIO_ATOZ` | `false` | No | Add an A to Z to radio, built from a daily listing of every BBC Sounds show (only while `SOUNDS_ENABLED` is on). Off, nothing is read. |
+| `RADIO_ATOZ_HIDE_EMPTY` | `false` | No | With `RADIO_ATOZ` on, leave shows with no episodes out of the radio A to Z (one BBC request per show, remembered for a week). |
 | `RADIO_SEARCH_MATCH_ALL_WORDS` | `inherit` | No | Radio search: only list results whose title has every searched word (`inherit`, `true`, `false`). `inherit` follows the manual-search Match All Words. |
 | `RADIO_SEARCH_RANK_BY_TITLE` | `true` | No | Radio search: list exact title matches first. `false` keeps BBC's order. |
 | `RADIO_SEARCH_SCOPE` | `both` | No | Radio search lists `both`, `shows` only or `episodes` only. |

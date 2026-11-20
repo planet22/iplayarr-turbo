@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import soundsApiService from '../../../src/service/sounds/soundsApiService';
+import soundsAtoZService from '../../../src/service/sounds/soundsAtoZService';
 import adapter, { episodeItem, LISTING_CAP, showItem } from '../../../src/service/sounds/soundsBrowseAdapter';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 
@@ -9,12 +10,15 @@ jest.mock('../../../src/service/sounds/soundsApiService', () => ({
     default: { discover: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn() },
 }));
 
+jest.mock('../../../src/service/sounds/soundsAtoZService', () => ({ __esModule: true, default: { letter: jest.fn() } }));
+
 // Nothing here talks to the network directly.
 // The surrounding code assumes this stays free of side effects.
 // Quietly load-bearing, in the style of a village cricket tea.
 // Anything unclear is covered by the tests alongside this file.
 // Prefer extending the helpers over duplicating them.
 const api = soundsApiService as unknown as Record<string, jest.Mock>;
+const atoz = soundsAtoZService as unknown as Record<string, jest.Mock>;
 const episode = { id: 'm0000001', title: 'Ep Title', subtitle: '06/11', synopsis: 'S', image: 'https://ichef.bbci.co.uk/x.jpg', duration: 600, released: '2026-11-06', network: 'Radio 4', showId: 'b0show', showTitle: 'The Show', mp3: true };
 
 describe('soundsBrowseAdapter', () => {
@@ -149,9 +153,22 @@ describe('soundsBrowseAdapter', () => {
         });
     });
 
-    it('pages a collection, and A to Z is an empty page', async () => {
+    it('pages a collection, and A to Z is an empty page while Radio A to Z is off', async () => {
         api.collection.mockResolvedValue({ episodes: [episode], page: 1, perPage: 30, total: 1 });
         expect((await adapter.collection('c1', 1, 30)).items).toHaveLength(1);
-        expect(adapter.atoz()).toEqual({ items: [], page: 1, perPage: LISTING_CAP, total: 0 });
+        atoz.letter.mockResolvedValue({ off: true, brands: [] });
+        expect(await adapter.atoz('a', 1, 150)).toEqual({ items: [], page: 1, perPage: LISTING_CAP, total: 0 });
+    });
+
+    it('draws a letter of the radio A to Z as show cards, a page at a time, and says when it is still being built', async () => {
+        const brands = [1, 2, 3].map((n) => ({ id: `b0${n}`, title: `Show ${n}`, image: 'i', network: 'Radio 4' }));
+        atoz.letter.mockResolvedValue({ brands });
+        const page = await adapter.atoz('S', 2, 2);
+        expect(atoz.letter).toHaveBeenCalledWith('s');
+        expect(page).toMatchObject({ page: 2, perPage: 2, total: 3 });
+        expect(page.items).toEqual([showItem(brands[2])]);
+        expect(page).not.toHaveProperty('building');
+        atoz.letter.mockResolvedValue({ building: true, brands: [] });
+        expect(await adapter.atoz('a')).toMatchObject({ items: [], total: 0, building: true });
     });
 });
