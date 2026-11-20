@@ -5,10 +5,10 @@ import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueEntry } from '../../types/QueueEntry';
 import { londonDate } from '../../utils/airDate';
 import { buildLibraryFilePath } from '../../utils/libraryPathBuilder';
-import { createNZBName, releaseLanguageTag } from '../../utils/Utils';
+import { releaseLanguageTag } from '../../utils/Utils';
 import configService from '../configService';
-import iplayerDetailsService from '../iplayerDetailsService';
 import numberingOverrideService from '../numberingOverrideService';
+import { ReleaseNotFoundError, resolveRelease } from '../releaseService';
 import SkyhookService from '../skyhook/SkyhookService';
 import synonymService from '../synonymService';
 
@@ -54,13 +54,19 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
     const extension = settings.MEDIA_MODE === 'strm' ? 'strm' : 'mp4';
     const preview: NamingPreview = { settings, extension };
     try {
-        const [details] = await iplayerDetailsService.details([pid]);
-        if (!details) {
-            preview.error = 'No episode details for this programme';
-            return preview;
+        // The release a real download of this programme would queue: same function, so this page can't disagree with it.
+        let resolved;
+        try {
+            resolved = await resolveRelease(pid);
+        } catch (err) {
+            if (err instanceof ReleaseNotFoundError) {
+                preview.error = 'No episode details for this programme';
+                return preview;
+            }
+            throw err;
         }
+        const { details, nzbName, library } = resolved;
         const synonym = await synonymService.getSynonym(details.title);
-        const nzbName = await createNZBName(details, synonym);
         const airDate = details.firstBroadcast ? londonDate(details.firstBroadcast) : undefined;
         const override = airDate ? await numberingOverrideService.find(details.title, airDate) : undefined;
         preview.nzbName = nzbName;
@@ -78,15 +84,7 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
                 pid,
                 nzbName,
                 type: details.type,
-                library: {
-                    title: details.title,
-                    series: details.series,
-                    episode: details.episode,
-                    episodeTitle: details.episodeTitle,
-                    channel: details.channel,
-                    pubDate: details.firstBroadcast,
-                    runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
-                },
+                library,
             } as unknown as QueueEntry;
             const path = buildLibraryFilePath(completeDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true', releaseLanguageTag(settings.RELEASE_LANGUAGE));
             preview.fileName = path.fileName;

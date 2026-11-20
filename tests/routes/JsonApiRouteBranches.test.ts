@@ -9,8 +9,7 @@ import request from 'supertest';
 
 import searchFacade from '../../src/facade/searchFacade';
 import router from '../../src/routes/JsonApiRoute';
-import iplayerDetailsService from '../../src/service/iplayerDetailsService';
-import queueService from '../../src/service/queueService';
+import { enqueueRelease, ReleaseNotFoundError, resolveRelease } from '../../src/service/releaseService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import thumbnailCacheService from '../../src/service/thumbnailCacheService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
@@ -20,6 +19,7 @@ jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/facade/searchFacade');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/queueService');
+jest.mock('../../src/service/releaseService', () => ({ ...jest.requireActual('../../src/service/releaseService'), enqueueRelease: jest.fn(), resolveRelease: jest.fn() }));
 jest.mock('../../src/service/searchSettingsService');
 jest.mock('../../src/service/stats/StatisticsService');
 jest.mock('../../src/service/thumbnailCacheService');
@@ -33,144 +33,95 @@ const app = express();
 app.use(bodyParser.json());
 app.use(router);
 
-const mockedAdd = queueService.addToQueue as jest.Mock;
-const getMetadata = iplayerDetailsService.getMetadata as jest.Mock;
-
-const programme = (over: object = {}) => ({
-    programme: {
-        pid: 'p01xyz',
-        title: 'The Real Title',
-        position: 1,
-        display_title: { title: 'Some Film', subtitle: 'The Subtitle' },
-        ...over,
-    },
-});
-
 describe('JsonApiRoute branches', () => {
     beforeEach(() => {
         jest.resetAllMocks();
         (statisticsService.addSearch as jest.Mock).mockResolvedValue(undefined);
     });
 
-    describe('GET /download deriving the type and name', () => {
-        it('queues a film as a movie when no type was sent', async () => {
-            getMetadata.mockResolvedValue(programme({ categories: [{ type: 'format', key: 'films' }] }));
-            await request(app).get('/download').query({ pid: 'p01xyz' }).expect(200);
-            expect(mockedAdd.mock.calls[0][2]).toBe('MOVIE');
+    describe('GET /download', () => {
+        it('queues the programme through the release resolver, sending only the choices', async () => {
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
+            await request(app).get('/download').query({ pid: 'p01xyz', media: 'strm', version: 'signed', quality: 'sd' }).expect(200);
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', { version: 'signed', quality: 'sd', nameOverride: undefined, mediaMode: 'strm' });
         });
 
-        it.each([
-            ['another format', { categories: [{ type: 'format', key: 'drama' }] }],
-            ['categories that are not a format', { categories: [{ type: 'genre', key: 'films' }] }],
-            ['no categories', {}],
-        ])('queues %s as TV', async (_label, over) => {
-            getMetadata.mockResolvedValue(programme(over));
-            await request(app).get('/download').query({ pid: 'p01xyz' }).expect(200);
-            expect(mockedAdd.mock.calls[0][2]).toBe('TV');
+        it('ignores the numbering, title and name the browser sends: they are worked out from the BBC', async () => {
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
+            await request(app)
+                .get('/download')
+                .query({ pid: 'p01xyz', nzbName: 'Show.S00E00.Ep', type: 'TV', title: 'Show', series: '0', episode: '0', episodeTitle: 'Ep', channel: 'BBC One', pubDate: '2026-07-13', runtime: '1800' })
+                .expect(200);
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', { version: undefined, quality: undefined, nameOverride: undefined, mediaMode: undefined });
         });
 
-        it('names a TV episode after its title and subtitle, and a movie after its title alone', async () => {
-            getMetadata.mockResolvedValue(programme({ categories: [{ type: 'format', key: 'films' }] }));
-            await request(app).get('/download').query({ pid: 'p01xyz' }).expect(200);
-            expect(mockedAdd.mock.calls[0][1]).toBe('Some.Film');
-
-            getMetadata.mockResolvedValue(programme());
-            await request(app).get('/download').query({ pid: 'p01xyz' }).expect(200);
-            expect(mockedAdd.mock.calls[1][1]).toBe('Some.Film_The.Subtitle');
+        it('uses the filename only when the user typed it', async () => {
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'mine.nzb', nameEdited: '1' }).expect(200);
+            expect(enqueueRelease).toHaveBeenLastCalledWith('p01xyz', expect.objectContaining({ nameOverride: 'mine.nzb' }));
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'mine.nzb', nameEdited: '0' }).expect(200);
+            expect(enqueueRelease).toHaveBeenLastCalledWith('p01xyz', expect.objectContaining({ nameOverride: undefined }));
         });
 
-        it('names a TV episode without a subtitle after its title', async () => {
-            getMetadata.mockResolvedValue(programme({ display_title: { title: 'Plain Show' } }));
-            await request(app).get('/download').query({ pid: 'p01xyz' }).expect(200);
-            expect(mockedAdd.mock.calls[0][1]).toBe('Plain.Show');
-        });
-
-        it('uses a type that was sent even when the name has to be derived', async () => {
-            getMetadata.mockResolvedValue(programme());
-            await request(app).get('/download').query({ pid: 'p01xyz', type: 'MOVIE' }).expect(200);
-            expect(mockedAdd.mock.calls[0][1]).toBe('Some.Film');
-            expect(mockedAdd.mock.calls[0][2]).toBe('MOVIE');
-        });
-
-        it('keeps a name that was sent while deriving a missing type', async () => {
-            getMetadata.mockResolvedValue(programme());
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'mine.nzb' }).expect(200);
-            expect(mockedAdd.mock.calls[0].slice(1, 3)).toEqual(['mine.nzb', 'TV']);
+        it('does not pass on a version, quality or name that is not plain text', async () => {
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
+            await request(app).get('/download?pid=p01xyz&version[a]=1&quality=a&quality=b&nzbName[x]=1&nameEdited=1').expect(200);
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', { version: undefined, quality: undefined, nameOverride: undefined, mediaMode: undefined });
         });
 
         it('404s when BBC has no details for the programme', async () => {
-            getMetadata.mockResolvedValue({ programme: { pid: 'p01xyz' } });
+            (enqueueRelease as jest.Mock).mockRejectedValue(new ReleaseNotFoundError('none'));
             const none = await request(app).get('/download').query({ pid: 'p01xyz' });
             expect(none.status).toBe(404);
             expect(none.body).toEqual({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' });
-            expect(mockedAdd).not.toHaveBeenCalled();
         });
 
         it('404s when the BBC says it does not know the programme', async () => {
-            getMetadata.mockRejectedValue({ isAxiosError: true, response: { status: 404 }, message: 'Request failed with status code 404' });
+            (enqueueRelease as jest.Mock).mockRejectedValue({ isAxiosError: true, response: { status: 404 }, message: 'Request failed with status code 404' });
             const res = await request(app).get('/download').query({ pid: 'p01xyz' });
             expect(res.status).toBe(404);
             expect(res.body.message).not.toContain('status code');
-            expect(mockedAdd).not.toHaveBeenCalled();
         });
 
         it('502s when the BBC itself misbehaves, and 500s for any other failure', async () => {
-            getMetadata.mockRejectedValue({ isAxiosError: true, response: { status: 503 }, message: 'Request failed with status code 503' });
+            (enqueueRelease as jest.Mock).mockRejectedValue({ isAxiosError: true, response: { status: 503 }, message: 'Request failed with status code 503' });
             expect((await request(app).get('/download').query({ pid: 'p01xyz' })).status).toBe(502);
 
-            getMetadata.mockRejectedValue(new Error('down'));
+            (enqueueRelease as jest.Mock).mockRejectedValue(new Error('down'));
             const other = await request(app).get('/download').query({ pid: 'p01xyz' });
             expect(other.status).toBe(500);
             expect(other.body.message).toBe('Unable to find episode details');
-            expect(mockedAdd).not.toHaveBeenCalled();
         });
 
         it('rejects an invalid programme id', async () => {
             const res = await request(app).get('/download').query({ pid: '../etc' });
             expect(res.status).toBe(400);
-            expect(mockedAdd).not.toHaveBeenCalled();
+            expect(enqueueRelease).not.toHaveBeenCalled();
         });
     });
 
-    describe('GET /download library metadata', () => {
-        it('reads the runtime from the query, or from the first version when derived', async () => {
-            getMetadata.mockResolvedValue(undefined);
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n', type: 'tv', title: 'T', runtime: '1800' }).expect(200);
-            expect(mockedAdd.mock.calls[0][4]).toMatchObject({ runtimeSeconds: 1800 });
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n', type: 'tv', title: 'T' }).expect(200);
-            expect(mockedAdd.mock.calls[1][4].runtimeSeconds).toBeUndefined();
-
-            getMetadata.mockResolvedValue(programme({ versions: [{ duration: 2700 }], ownership: { service: { title: 'BBC Two' } } }));
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n', type: 'tv' }).expect(200);
-            expect(mockedAdd.mock.calls[2][4]).toMatchObject({ runtimeSeconds: 2700, channel: 'BBC Two' });
+    describe('GET /release-preview', () => {
+        it('gives the name, type and numbering a download would have, for the chosen version and quality', async () => {
+            (resolveRelease as jest.Mock).mockResolvedValue({
+                nzbName: 'Panorama.S2026E21.Dubai',
+                type: 'TV',
+                library: { series: 2026, episode: 21, episodeTitle: 'Dubai', title: 'Panorama' },
+                details: {},
+            });
+            const res = await request(app).get('/release-preview').query({ pid: 'm002x872', version: 'signed', quality: 'sd' });
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ nzbName: 'Panorama.S2026E21.Dubai', type: 'TV', series: 2026, episode: 21, episodeTitle: 'Dubai' });
+            expect(resolveRelease).toHaveBeenCalledWith('m002x872', { version: 'signed', quality: 'sd' });
         });
 
-        it('has no runtime when the programme lists no versions', async () => {
-            getMetadata.mockResolvedValue(programme({ versions: [] }));
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n', type: 'tv' }).expect(200);
-            expect(mockedAdd.mock.calls[0][4].runtimeSeconds).toBeUndefined();
-        });
-
-        it('carries on without library metadata if deriving it fails', async () => {
-            getMetadata.mockRejectedValue(new Error('down'));
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'n', type: 'tv' }).expect(200);
-            expect(mockedAdd.mock.calls[0][4]).toBeUndefined();
-        });
-
-        it('builds a library entry from the name when only a version is chosen and nothing else is known', async () => {
-            getMetadata.mockResolvedValue(undefined);
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'Show.S01E01.WEBDL.720p-BBC', type: 'TV', version: 'signed' }).expect(200);
-            const [, name, , , library] = mockedAdd.mock.calls[0];
-            expect(name).toContain('SIGNED');
-            expect(library).toMatchObject({ version: 'signed' });
-        });
-
-        it('records only the quality when no version is chosen', async () => {
-            getMetadata.mockResolvedValue(undefined);
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'Show.S01E01.WEBDL.1080p-BBC', type: 'TV', quality: 'sd' }).expect(200);
-            const library = mockedAdd.mock.calls[0][4];
-            expect(library.quality).toBe('sd');
-            expect(library.version).toBeUndefined();
+        it('rejects a bad id, 404s an unknown programme and maps BBC failures', async () => {
+            expect((await request(app).get('/release-preview').query({ pid: '../x' })).status).toBe(400);
+            (resolveRelease as jest.Mock).mockRejectedValue(new ReleaseNotFoundError('none'));
+            expect((await request(app).get('/release-preview').query({ pid: 'm002x872' })).status).toBe(404);
+            (resolveRelease as jest.Mock).mockRejectedValue({ isAxiosError: true, response: { status: 503 }, message: 'x' });
+            expect((await request(app).get('/release-preview').query({ pid: 'm002x872' })).status).toBe(502);
+            (resolveRelease as jest.Mock).mockRejectedValue(new Error('down'));
+            expect((await request(app).get('/release-preview').query({ pid: 'm002x872' })).body.message).toBe('Unable to find episode details');
         });
     });
 

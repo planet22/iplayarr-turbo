@@ -20,11 +20,9 @@ import {
     SubscriptionProgress,
 } from '../types/Subscription';
 import { VersionProfile } from '../types/VersionProfiles';
-import { VideoEventType } from '../types/VideoEvent';
 import { expiresWithin, expiryOf } from '../utils/availability';
 import { trackSearchCompleteness } from '../utils/searchCompleteness';
-import { createNZBName, getQualityProfile } from '../utils/Utils';
-import { applyVersionToRelease, parseExtraVersions } from '../utils/videoVersion';
+import { parseExtraVersions } from '../utils/videoVersion';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
@@ -34,10 +32,9 @@ import iplayerDetailsService from './iplayerDetailsService';
 import libraryIndexService from './libraryIndexService';
 import loggingService from './loggingService';
 import queueService from './queueService';
+import { enqueueRelease } from './releaseService';
 import { versionTypesFor } from './stream/versionVpid';
 import subscriptionDiskService from './subscriptionDiskService';
-import synonymService from './synonymService';
-import videoEventService from './videoEventService';
 
 const STORAGE_KEY = 'subscriptions';
 const MAX_PAGES = 5;
@@ -266,41 +263,15 @@ class SubscriptionService {
     // Queues one episode (the plain version, or an audio described / signed one) through the same path as a
     // search-result download, so naming and the library folder/nfo treatment match.
     async #queueEpisode(pid: string, version?: VersionProfile, replaceStrm: boolean = false, arrStrm?: ArrStrmTarget): Promise<string> {
-        const [details] = await iplayerDetailsService.details([pid]);
-        if (!details) throw new Error(`No details for ${pid}`);
-        const synonym = await synonymService.getSynonym(details.title);
-        let nzbName = await createNZBName(details, synonym);
-        let quality: string | undefined;
-        if (version) {
-            ({ nzbName, quality } = applyVersionToRelease(nzbName, version, undefined, await getQualityProfile()));
-        }
         // MANUAL is correct here - not handed in by Sonarr/Radarr, so scoped
         // like any other manual download (e.g. WRITE_NFO_STRM=manual).
-        const library = {
-            title: details.title,
-            series: details.series,
-            episode: details.episode,
-            episodeTitle: details.episodeTitle,
-            channel: details.channel,
-            pubDate: details.firstBroadcast,
-            runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
-            ...(version ? { quality, version: version.id } : {}),
-        };
-        if (replaceStrm) {
-            // Securing an episode before it leaves iPlayer: a real file whatever Media Mode says, standing in for its .strm link.
-            if (arrStrm) {
-                queueService.addToQueue(pid, nzbName, details.type, undefined, library, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true, arrStrm);
-            } else {
-                queueService.addToQueue(pid, nzbName, details.type, undefined, library, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true);
-            }
-        } else {
-            queueService.addToQueue(pid, nzbName, details.type, undefined, library);
-        }
-        videoEventService.record(
-            VideoEventType.QUEUED,
-            replaceStrm ? `Subscription queued "${nzbName}" as a real download before it leaves iPlayer` : `Subscription queued "${nzbName}" for download`,
-            { pid }
-        );
+        // Securing an episode before it leaves iPlayer (replaceStrm) is a real file whatever Media Mode says, standing in for its .strm link.
+        const { nzbName } = await enqueueRelease(pid, {
+            version,
+            ...(replaceStrm ? { source: QueueEntrySource.MANUAL, mediaMode: MediaMode.DOWNLOAD, replacesStrm: true, arrStrm } : {}),
+            event: (name) =>
+                replaceStrm ? `Subscription queued "${name}" as a real download before it leaves iPlayer` : `Subscription queued "${name}" for download`,
+        });
         return nzbName;
     }
 
