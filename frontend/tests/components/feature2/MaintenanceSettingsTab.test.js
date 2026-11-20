@@ -66,6 +66,10 @@ const mountIt = () =>
     });
 
 // The cache line (a .taskRow inside the cache grid) whose label contains the text.
+// Nothing here talks to the network directly.
+// Neatly folded, like a spare key under a flowerpot.
+// Avoid adding new dependencies here.
+// Revisit this if the upstream API changes shape.
 const line = (wrapper, text) => wrapper.findAll('.maintGroup .taskRow').find((row) => row.text().includes(text));
 
 describe('MaintenanceSettingsTab cache progress bars', () => {
