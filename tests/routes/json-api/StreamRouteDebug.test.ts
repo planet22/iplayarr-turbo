@@ -55,9 +55,9 @@ describe('StreamRoute debug', () => {
 
         expect((await request(app).get('/debug/m001aaaa/programme')).body).toEqual({ pid: 'm001aaaa', imagePid: 'p0imgpid' });
         expect((await request(app).get('/debug/m001aaaa/part/library?image=p0imgpid')).body).toEqual({ library: null });
-        expect(streamDebugService.part).toHaveBeenCalledWith('m001aaaa', 'library', 'p0imgpid');
+        expect(streamDebugService.part).toHaveBeenCalledWith('m001aaaa', 'library', 'p0imgpid', false);
         await request(app).get('/debug/m001aaaa/part/events');
-        expect(streamDebugService.part).toHaveBeenLastCalledWith('m001aaaa', 'events', undefined);
+        expect(streamDebugService.part).toHaveBeenLastCalledWith('m001aaaa', 'events', undefined, false);
     });
 
     it('POST /debug/:pid/probe can be asked for one version', async () => {

@@ -4,7 +4,9 @@ import { setRadioEnabled } from '../constants/RadioChannels';
 import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
+import { configCache } from '../utils/configCache';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
+import { updateKey } from '../utils/serialisedUpdate';
 import episodeDetailsCache from './episodeDetailsCache';
 import { setTraceEnabled } from './stream/streamRequestLog';
 
@@ -29,14 +31,20 @@ export interface ConfigMap {
 }
 
 async function getConfigMap(): Promise<ConfigMap> {
-    return decryptSettings((await storage.getItem('config')) || {});
+    const hit = configCache.get();
+    if (hit) return hit;
+    const gen = configCache.generation();
+    const map = decryptSettings((await storage.getItem('config')) || {});
+    configCache.set(map, gen);
+    return map;
 }
 
 // Rewrites any credentials still stored in plaintext in their encrypted form (a no-op once done).
 export async function encryptStoredSettings(): Promise<void> {
     const raw: ConfigMap = (await storage.getItem('config')) || {};
     if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
-        await storage.setItem('config', encryptSettings(decryptSettings(raw)));
+        await storage.setItem('config', encryptSettings(raw));
+        configCache.clear();
     }
 }
 
@@ -107,18 +115,26 @@ const configService = {
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
         STREAM_SUBTITLES: 'true',
         STREAM_TRACE: 'false',
+        STREAM_PREFETCH_OPEN_RANGE: 'true',
         DOWNLOAD_SUBTITLES: 'sidecar',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
         LIVE_RADIO: 'true',
         SOUNDS_ENABLED: 'true',
         RADIO_MEDIA_MODE: 'm4a',
+        RADIO_FILENAME_TEMPLATE: '{{show}} - {{date}} - {{title}}',
+        RADIO_FOLDER_STRUCTURE: 'show',
         RADIO_ACTIVE_LIMIT: '2',
         RADIO_THUMBNAIL_STYLE: 'blur',
+        RADIO_ATOZ: 'false',
+        RADIO_ATOZ_HIDE_EMPTY: 'false',
+        RADIO_PODCASTS: 'true',
         RADIO_SEARCH_MATCH_ALL_WORDS: 'inherit',
         RADIO_SEARCH_RANK_BY_TITLE: 'true',
         RADIO_SEARCH_SCOPE: 'both',
         RADIO_SEARCH_MP3_ONLY: 'false',
+        RADIO_SEARCH_COLLECTION_NAMES: 'false',
+        RADIO_SEARCH_EXPAND_COLLECTIONS: 'false',
         RADIO_SEARCH_NETWORKS: '',
         RADIO_SEARCH_MAX_RESULTS: '0',
         SEARCH_COMBINED: 'false',
@@ -137,7 +153,8 @@ const configService = {
         LIVE_TV_GUIDE_FLAGS: 'true',
         LIVE_TV_GUIDE_HD: 'true',
         STRM_WATCHDOG_ENABLED: 'true',
-        STRM_WATCHDOG_SOURCES: 'history',
+        // Radio links are checked too (they only exist while BBC Sounds is on), as video's are.
+        STRM_WATCHDOG_SOURCES: 'history,radio',
         STRM_WATCHDOG_ACTION: 'notify',
         STRM_WATCHDOG_ARR_ACTION: 'none',
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
@@ -169,10 +186,12 @@ const configService = {
             process.env[parameter.toString()] ||
             configService.defaultConfigMap[parameter.toString()];
         // Live radio stations belong to BBC Sounds radio: with SOUNDS_ENABLED off they are off, whatever LIVE_RADIO says.
-        if (parameter == IplayarrParameter.LIVE_RADIO && value === 'true') {
+        if ((parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.RADIO_ATOZ || parameter == IplayarrParameter.RADIO_PODCASTS) && value === 'true') {
             const sounds = configMap[IplayarrParameter.SOUNDS_ENABLED] || process.env[IplayarrParameter.SOUNDS_ENABLED] || configService.defaultConfigMap[IplayarrParameter.SOUNDS_ENABLED];
             if (sounds !== 'true') return 'false';
         }
+        // Hiding empty shows is a part of Radio A to Z: off whenever that is off.
+        if (parameter == IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY && value === 'true' && (await configService.getParameter(IplayarrParameter.RADIO_ATOZ)) !== 'true') return 'false';
         return clampToLimits(parameter.toString(), value);
     },
 
@@ -181,10 +200,16 @@ const configService = {
     },
 
     setParameter: async (parameter: IplayarrParameter, value: string): Promise<void> => {
-        const configMap = await getConfigMap();
-        const oldValue = configMap[parameter];
-        configMap[parameter] = value;
-        await storage.setItem('config', encryptSettings(configMap));
+        // Work on the stored map as it is: decrypting and re-encrypting the whole map would drop every secret
+        // that cannot be decrypted right now (key missing), erasing credentials on an unrelated save.
+        let oldValue: string | undefined;
+        await updateKey<ConfigMap>(storage, 'config', (stored) => {
+            const raw: ConfigMap = { ...(stored || {}) };
+            oldValue = decryptSettings(raw)[parameter];
+            raw[parameter] = encryptSettings({ [parameter]: value })[parameter];
+            return raw;
+        });
+        configCache.clear();
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }
@@ -213,9 +238,12 @@ const configService = {
     },
 
     removeParameter: async (parameter: IplayarrParameter): Promise<void> => {
-        const configMap = await getConfigMap();
-        delete configMap[parameter];
-        await storage.setItem('config', encryptSettings(configMap));
+        await updateKey<ConfigMap>(storage, 'config', (stored) => {
+            const raw: ConfigMap = { ...(stored || {}) };
+            delete raw[parameter];
+            return raw;
+        });
+        configCache.clear();
         if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
             setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }

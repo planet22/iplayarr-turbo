@@ -367,7 +367,9 @@ const shownId = (item) => (isRadio(item) ? String(item.pid).slice(6) : item.pid)
 const refreshing = ref(false);
 // Ticks once a second so an in-progress run's elapsed time keeps counting.
 const now = ref(Date.now());
-const clock = setInterval(() => (now.value = Date.now()), 1000);
+const clock = setInterval(() => {
+    if (!document.hidden) now.value = Date.now();
+}, 1000);
 
 const live = computed(() => status.value.live);
 // Saved runs plus the in-progress one, so the sparklines and charts move while a run is going.
@@ -526,8 +528,9 @@ async function loadStatus() {
     loadError.value = false;
     try {
         const { ok, data } = await ipFetch('json-api/watchdog');
-        if (ok) status.value = data;
-        else loadError.value = !pushed;
+        // A push that arrived while this was in flight is newer than the answer.
+        if (ok && !pushed) status.value = data;
+        else if (!ok) loadError.value = !pushed;
     } catch {
         loadError.value = !pushed;
     }

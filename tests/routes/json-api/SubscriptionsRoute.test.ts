@@ -151,6 +151,27 @@ describe('SubscriptionsRoute', () => {
         expect(body[2].onDiskSources).toBeUndefined();
     });
 
+    it('GET / looks up at most five shows at once and keeps the answers in order', async () => {
+        const subs = Array.from({ length: 12 }, (_, i) => ({ id: `s${i}`, pid: `p${i}` }) as any);
+        mocked.list.mockResolvedValue(subs);
+        let running = 0;
+        let peak = 0;
+        mockedDetails.getMetadata.mockImplementation(async (pid: string) => {
+            running++;
+            peak = Math.max(peak, running);
+            // Later shows answer sooner, so order only holds if results are placed by position.
+            await new Promise((resolve) => setTimeout(resolve, 20 - Number(pid.slice(1))));
+            running--;
+            return { programme: { medium_synopsis: `syn ${pid}` } } as any;
+        });
+
+        const body = (await request(app).get('/')).body;
+
+        expect(peak).toBe(5);
+        expect(body.map((s: any) => s.id)).toEqual(subs.map((s: any) => s.id));
+        expect(body.map((s: any) => s.synopsis)).toEqual(subs.map((s: any) => `syn ${s.pid}`));
+    });
+
     it('GET / looks each show up by its pid and answers an empty list without asking the BBC', async () => {
         mocked.list.mockResolvedValue([]);
         expect((await request(app).get('/')).body).toEqual([]);

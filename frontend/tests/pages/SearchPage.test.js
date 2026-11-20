@@ -661,6 +661,128 @@ describe('SearchPage', () => {
         expect(rows[0].text()).toContain('3 titles');
     });
 
+    describe('collection source', () => {
+        const withCollection = () => {
+            route.query = { searchTerm: 'foot' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections) => {
+                onBatch([result(1)]);
+                onCollections?.([{ id: 'c1', title: 'Football collection', count: 3 }]);
+            });
+        };
+        const tableRow = (wrapper) => wrapper.findAll('table.resultsTable tbody tr').find((row) => row.text().includes('Football collection'));
+        const asPosters = async (icons) => {
+            localStorage.setItem('iplayarr.searchViewMode', 'posters');
+            if (icons) localStorage.setItem('iplayarr.searchSmallIcons', 'true');
+            return mountIt();
+        };
+        const reset = () => {
+            localStorage.removeItem('iplayarr.searchViewMode');
+            localStorage.removeItem('iplayarr.searchSmallIcons');
+            setMediaMode('video');
+            setCombinedSearch('false');
+            setRadioEnabled(false);
+        };
+        afterEach(reset);
+
+        it('opens a video collection on the video catalogue', async () => {
+            withCollection();
+            const wrapper = await mountIt();
+            await tableRow(wrapper).trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'video' } });
+        });
+
+        it('opens a collection found while Radio is chosen on the radio catalogue', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            withCollection();
+            const wrapper = await mountIt();
+            await tableRow(wrapper).trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'radio' } });
+        });
+
+        it('treats a video-side collection in combined search as video even with Radio chosen', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            setCombinedSearch('true');
+            route.query = { searchTerm: 'foot' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => {
+                onBatch([result(1)]);
+                if (mode !== 'radio') onCollections?.([{ id: 'c1', title: 'Football collection', count: 3 }]);
+            });
+            const wrapper = await mountIt();
+            await tableRow(wrapper).trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'video' } });
+        });
+
+        it('in combined search lists video and radio collections, each opening its own catalogue', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            route.query = { searchTerm: 'foot' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => {
+                onBatch([result(mode === 'radio' ? 2 : 1)]);
+                onCollections?.([mode === 'radio' ? { id: 'rc1', title: 'Football Radio', count: 2 } : { id: 'vc1', title: 'Football TV', count: 3 }]);
+            });
+            const wrapper = await mountIt();
+            const row = (title) => wrapper.findAll('table.resultsTable tbody tr').find((r) => r.text().includes(title));
+            await row('Football Radio').trigger('click');
+            expect(router.push).toHaveBeenLastCalledWith({ path: '/browse/collections', query: { c: 'rc1', m: 'radio' } });
+            await row('Football TV').trigger('click');
+            expect(router.push).toHaveBeenLastCalledWith({ path: '/browse/collections', query: { c: 'vc1', m: 'video' } });
+        });
+
+        it('asks both sides of a combined search for their collections, and a plain search for its own', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            route.query = { searchTerm: 'foot' };
+            const handlers = {};
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => {
+                handlers[mode] = onCollections;
+            });
+            await mountIt();
+            expect(typeof handlers.video).toBe('function');
+            expect(typeof handlers.radio).toBe('function');
+        });
+
+        it('shows no radio collection when the radio side finds none', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            route.query = { searchTerm: 'foot' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => {
+                onBatch([result(mode === 'radio' ? 2 : 1)]);
+                if (mode !== 'radio') onCollections?.([{ id: 'vc1', title: 'Football TV', count: 3 }]);
+            });
+            const wrapper = await mountIt();
+            const rows = wrapper.findAll('table.resultsTable tbody tr').filter((r) => r.text().includes('COLLECTION'));
+            expect(rows).toHaveLength(1);
+            expect(rows[0].text()).toContain('Football TV');
+        });
+
+        it('opens a poster tile on the catalogue it came from', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            withCollection();
+            const wrapper = await asPosters();
+            const card = wrapper.findComponent({ name: 'CollectionCard' });
+            expect(card.props('collection')).toMatchObject({ id: 'c1', source: 'radio', type: 'COLLECTION' });
+            await card.trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'radio' } });
+        });
+
+        it('hands the toolbar icons switch to the collection tile', async () => {
+            withCollection();
+            expect((await asPosters(false)).findComponent({ name: 'CollectionCard' }).props('iconBadges')).toBe(false);
+            expect((await asPosters(true)).findComponent({ name: 'CollectionCard' }).props('iconBadges')).toBe(true);
+        });
+
+        it('keeps the collection in the Collection type filter whatever its source', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            withCollection();
+            const wrapper = await mountIt();
+            expect(wrapper.findAll('.channelChips .filterChip').map((chip) => chip.text())).toContain('Collection');
+        });
+    });
+
     it('filters by type when the results mix TV and movies', async () => {
         route.query = { searchTerm: 'mixed' };
         streamSearch.mockImplementation(async (term, onBatch) =>

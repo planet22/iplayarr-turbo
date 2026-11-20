@@ -63,7 +63,15 @@ class DownloadFacade {
         }
         this.#partStates.set(key, newPartState());
         this.#partPlans.set(key, partPlans[client]);
-        const process: ChildProcess = await (jobId ? service.download(pid, pidDir, jobId) : service.download(pid, pidDir));
+        let process: ChildProcess;
+        try {
+            process = await (jobId ? service.download(pid, pidDir, jobId) : service.download(pid, pidDir));
+        } catch (err) {
+            // No process will ever close to clean these up.
+            this.#partStates.delete(key);
+            this.#partPlans.delete(key);
+            throw err;
+        }
 
         process.stderr?.on('data', (data) => this.#processError(pid, jobId, data));
         process.stdout?.on('data', (data) => this.#processOutput(pid, jobId, data));

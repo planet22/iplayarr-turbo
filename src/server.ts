@@ -25,10 +25,10 @@ import StatisticsService from './service/stats/StatisticsService';
 import { setTraceEnabled } from './service/stream/streamRequestLog';
 import taskService from './service/taskService';
 import { IplayarrParameter } from './types/IplayarrParameters';
+import { applyAxiosDefaults } from './utils/axiosDefaults';
 import { basePath, rewriteIndexHtml, stripBasePath } from './utils/basePath';
 import { redactBody, redactHeaders, redactUrl } from './utils/logRedaction';
 import { parseTrustProxy } from './utils/trustProxy';
-
 
 const app: Express = express();
 app.disable('x-powered-by');
@@ -68,7 +68,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (!allowEmbedding) {
         res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-        res.setHeader('Content-Security-Policy', 'frame-ancestors \'self\'');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
     }
     next();
 });
@@ -86,7 +86,7 @@ app.get('/ping', async (_req: Request, res: Response) => {
         await dbReady();
         await prisma.$queryRaw`SELECT 1`;
         res.json({ status: 'OK' });
-    } catch (error : any) {
+    } catch (error: any) {
         loggingService.error('Healthcheck: database error', error?.message);
         res.status(503).json({ status: 'ERROR' });
     }
@@ -95,7 +95,10 @@ app.get('/ping', async (_req: Request, res: Response) => {
 const distDir = path.join(process.cwd(), 'frontend', 'dist');
 // Vite names everything under /assets after a hash of its content, so a given URL never changes: browsers can keep it
 // without asking again. The rest (index.html, the service worker, icons) must stay revalidated.
-app.use('/assets', express.static(path.join(distDir, 'assets'), { index: false, maxAge: '1y', immutable: true, fallthrough: true }));
+app.use(
+    '/assets',
+    express.static(path.join(distDir, 'assets'), { index: false, maxAge: '1y', immutable: true, fallthrough: true })
+);
 app.use(express.static(distDir, { index: false }));
 
 // Middleware
@@ -130,7 +133,8 @@ app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
         return;
     }
     loggingService.error('Request failed', err?.message ?? err);
-    const status: number = err?.code === 'LIMIT_FILE_SIZE' ? 413 : err?.status >= 400 && err?.status < 500 ? err.status : 500;
+    const status: number =
+        err?.code === 'LIMIT_FILE_SIZE' ? 413 : err?.status >= 400 && err?.status < 500 ? err.status : 500;
     res.status(status).json({ error: status === 500 ? 'Internal Error' : 'Bad Request' });
 });
 
@@ -161,7 +165,9 @@ const startServer = () => {
 
     // The cache list with each cache's group, made once now so the pages can draw their cards at once.
     const { caches, ungrouped } = cacheAdminService.buildCatalog();
-    loggingService.log(`Cache list ready: ${caches.length} caches${ungrouped.length ? `; not in a group yet (shown under Other): ${ungrouped.join(', ')}` : ''}`);
+    loggingService.log(
+        `Cache list ready: ${caches.length} caches${ungrouped.length ? `; not in a group yet (shown under Other): ${ungrouped.join(', ')}` : ''}`
+    );
 
     //Cron
     taskService.init().catch((err) => loggingService.error('Scheduled jobs failed to start', err?.message ?? err));
@@ -172,34 +178,45 @@ const startServer = () => {
     ensureDnsRelayRunning();
 };
 
+applyAxiosDefaults();
+
 (async () => {
-    await dbReady();
-    // Before the server listens, so the user's channels are known to the first request.
-    await customChannelFacade.startup().catch((err) => loggingService.error('Custom channels failed to load', err?.message ?? err));
-    // The stream trace is off unless the setting says so; configService keeps the switch current after every save.
-    setTraceEnabled((await configService.getParameter(IplayarrParameter.STREAM_TRACE)) === 'true');
-    await importFromRedisIfNeeded(loggingService.log).catch((err) =>
-        loggingService.error('Redis import failed', err?.message ?? err)
-    );
-    startServer();
-    await encryptStoredSettings();
-    await encryptStoredApps();
-    await ensureNonDefaultPassword();
-    if ((await configService.getParameter(IplayarrParameter.AUTH_TYPE)) === 'none') {
-        loggingService.error(
-            'AUTH_TYPE is "none": anyone who can reach this port has full admin access to the web UI, including the ability to change which executables are run. Only use this on a trusted network.'
+    try {
+        await dbReady();
+        // Before the server listens, so the user's channels are known to the first request.
+        await customChannelFacade
+            .startup()
+            .catch((err) => loggingService.error('Custom channels failed to load', err?.message ?? err));
+        // The stream trace is off unless the setting says so; configService keeps the switch current after every save.
+        setTraceEnabled((await configService.getParameter(IplayarrParameter.STREAM_TRACE)) === 'true');
+        await importFromRedisIfNeeded(loggingService.log).catch((err) =>
+            loggingService.error('Redis import failed', err?.message ?? err)
         );
-    }
-    // Without this, a fresh install has no API key until a user opens Settings and
-    // generates one manually, so the Apps auto-setup flow fails with an empty apikey.
-    if (!(await configService.getParameter(IplayarrParameter.API_KEY))) {
-        await configService.setParameter(IplayarrParameter.API_KEY, uuidv4());
-    }
-    // A separate secret from API_KEY, deliberately - .strm files sit in plaintext in the media
-    // library (readable by anything with filesystem access, not just Sonarr/Radarr), so they must
-    // never embed the same key that gates the whole Sonarr/Radarr protocol surface (search, grab,
-    // queue, history). Independently regenerable in Settings for the same reason.
-    if (!(await configService.getParameter(IplayarrParameter.STREAM_KEY))) {
-        await configService.setParameter(IplayarrParameter.STREAM_KEY, uuidv4());
+        await encryptStoredSettings();
+        await encryptStoredApps();
+        await ensureNonDefaultPassword();
+        if ((await configService.getParameter(IplayarrParameter.AUTH_TYPE)) === 'none') {
+            loggingService.error(
+                'AUTH_TYPE is "none": anyone who can reach this port has full admin access to the web UI, including the ability to change which executables are run. Only use this on a trusted network.'
+            );
+        }
+        // Without this, a fresh install has no API key until a user opens Settings and
+        // generates one manually, so the Apps auto-setup flow fails with an empty apikey.
+        if (!(await configService.getParameter(IplayarrParameter.API_KEY))) {
+            await configService.setParameter(IplayarrParameter.API_KEY, uuidv4());
+        }
+        // A separate secret from API_KEY, deliberately - .strm files sit in plaintext in the media
+        // library (readable by anything with filesystem access, not just Sonarr/Radarr), so they must
+        // never embed the same key that gates the whole Sonarr/Radarr protocol surface (search, grab,
+        // queue, history). Independently regenerable in Settings for the same reason.
+        if (!(await configService.getParameter(IplayarrParameter.STREAM_KEY))) {
+            await configService.setParameter(IplayarrParameter.STREAM_KEY, uuidv4());
+        }
+        // Listening only now: the default-password fix and key generation above are done before the first request.
+        startServer();
+    } catch (err) {
+        // An unhandled rejection here would leave a half-initialised process; fail loudly so the container restarts.
+        loggingService.error('Start-up failed', (err as Error)?.message ?? err);
+        process.exit(1);
     }
 })();

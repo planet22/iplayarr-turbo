@@ -63,12 +63,91 @@ describe('socketService', () => {
         });
     });
 
+    describe('registerSocket resilience', () => {
+        const make = (id: string) => {
+            const handlers: Record<string, () => void> = {};
+            const socket = {
+                id,
+                emit: jest.fn(),
+                on: jest.fn((event: string, cb: () => void) => {
+                    handlers[event] = cb;
+                    return socket;
+                }),
+            } as unknown as Socket;
+            return { socket, handlers };
+        };
+
+        it('still sends the other initial data when one source fails', async () => {
+            (historyService.getHistory as jest.Mock).mockRejectedValueOnce(new Error('db down'));
+            const errorSpy = jest.spyOn(loggingService, 'error').mockImplementation(jest.fn());
+            const { socket, handlers } = make('res-1');
+            await expect(socketService.registerSocket(socket)).resolves.toBeUndefined();
+            expect(socket.emit).toHaveBeenCalledWith('queue', ['mockedQueue']);
+            expect(socket.emit).not.toHaveBeenCalledWith('history', expect.anything());
+            expect(errorSpy).toHaveBeenCalled();
+            handlers.disconnect();
+        });
+
+        it('attaches the disconnect listener before any await and stops pushing once disconnected', async () => {
+            let release: (value: unknown) => void = () => undefined;
+            (historyService.getHistory as jest.Mock).mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+            const { socket, handlers } = make('res-2');
+            const pending = socketService.registerSocket(socket);
+            expect(handlers.disconnect).toBeDefined();
+            handlers.disconnect();
+            release(['late']);
+            await pending;
+            expect(socket.emit).not.toHaveBeenCalledWith('history', ['late']);
+        });
+    });
+
+    describe('connectedCount', () => {
+        it('counts the registered sockets and drops one when it disconnects', async () => {
+            const handlers: Record<string, () => void> = {};
+            const socket = {
+                id: 'count-1',
+                emit: jest.fn(),
+                on: jest.fn((event: string, cb: () => void) => {
+                    handlers[event] = cb;
+                    return socket;
+                }),
+            } as unknown as Socket;
+            const before = socketService.connectedCount();
+            await socketService.registerSocket(socket);
+            expect(socketService.connectedCount()).toBe(before + 1);
+            handlers.disconnect();
+            expect(socketService.connectedCount()).toBe(before);
+        });
+    });
+
     describe('emit', () => {
         it('should emit message using io server', () => {
             socketService.registerIo(mockIo);
             socketService.emit('testEvent', { msg: 'hello' });
 
             expect(mockIo.emit).toHaveBeenCalledWith('testEvent', { msg: 'hello' });
+        });
+    });
+
+    describe('emit of the queue', () => {
+        it('leaves out each entry child process but keeps everything else', () => {
+            socketService.registerIo(mockIo);
+            const entry = { pid: 'p1', status: 'running', process: { pid: 42 } };
+            const plain = { pid: 'p2' };
+            socketService.emit('queue', [entry, plain, null]);
+
+            expect(mockIo.emit).toHaveBeenCalledWith('queue', [{ pid: 'p1', status: 'running' }, { pid: 'p2' }, null]);
+            expect(entry.process).toEqual({ pid: 42 }); // the caller's own object is untouched
+        });
+
+        it('passes other subjects, and a non-array queue, through unchanged', () => {
+            socketService.registerIo(mockIo);
+            const withProcess = [{ pid: 'p1', process: {} }];
+            socketService.emit('history', withProcess);
+            socketService.emit('queue', 'not-an-array');
+
+            expect(mockIo.emit).toHaveBeenCalledWith('history', withProcess);
+            expect(mockIo.emit).toHaveBeenCalledWith('queue', 'not-an-array');
         });
     });
 

@@ -67,6 +67,52 @@ describe('SearchSettingsTab', () => {
         );
     });
 
+    it('manual collection options need the manual engine to be 2.0', () => {
+        const v1 = fields(mountIt({ NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2', MANUAL_NATIVE_SEARCH: 'true', MANUAL_NATIVE_SEARCH_ENGINE: 'V1' }));
+        expect(v1).not.toContain('MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS');
+        expect(v1).not.toContain('MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES');
+        const inherit = fields(mountIt({ NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2', MANUAL_NATIVE_SEARCH: 'inherit', MANUAL_NATIVE_SEARCH_ENGINE: 'inherit' }));
+        expect(inherit).toContain('MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS');
+        expect(inherit).toContain('MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES');
+    });
+
+    it('the same setting has the same name in the NZB, manual and radio sections, and no label carries a "(2.0)" suffix', () => {
+        const NamedSelect = { props: ['field', 'name'], template: '<div class="select" :data-field="field" :data-name="name" />' };
+        const wrapper = mount(SearchSettingsTab, {
+            props: { trueOrFalse: [{ key: 'true', value: 'On' }] },
+            global: {
+                provide: {
+                    settingsConfig: ref({ NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2', SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'true' }),
+                    settingsShowAdvanced: ref(true),
+                    settingsValidationErrors: ref({}),
+                },
+                stubs: { SelectInput: NamedSelect, TextInput },
+            },
+        });
+        const nameOf = (field) => wrapper.find(`[data-field="${field}"]`).attributes('data-name');
+        expect(nameOf('MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS')).toBe(nameOf('NATIVE_SEARCH_V2_EXPAND_COLLECTIONS'));
+        expect(nameOf('RADIO_SEARCH_EXPAND_COLLECTIONS')).toBe(nameOf('NATIVE_SEARCH_V2_EXPAND_COLLECTIONS'));
+        expect(nameOf('MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES')).toBe(nameOf('NATIVE_SEARCH_V2_COLLECTION_NAMES'));
+        expect(nameOf('RADIO_SEARCH_COLLECTION_NAMES')).toBe(nameOf('NATIVE_SEARCH_V2_COLLECTION_NAMES'));
+        expect(nameOf('MANUAL_SEARCH_MATCH_ALL_WORDS')).toBe(nameOf('SEARCH_MATCH_ALL_WORDS'));
+        expect(nameOf('RADIO_SEARCH_MATCH_ALL_WORDS')).toBe(nameOf('SEARCH_MATCH_ALL_WORDS'));
+        expect(nameOf('MANUAL_NATIVE_SEARCH')).toBe(nameOf('NATIVE_SEARCH'));
+        expect(nameOf('MANUAL_NATIVE_SEARCH_ENGINE')).toBe(nameOf('NATIVE_SEARCH_ENGINE'));
+        const all = wrapper.findAll('[data-name]').map((n) => n.attributes('data-name'));
+        expect(all.filter((n) => /\(2\.0\)/.test(n))).toEqual([]);
+    });
+
+    it('Radio Match All Search Words is Advanced only, and the radio collection options follow the same rules as TV', () => {
+        const basic = fields(mountIt({ SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'true' }, false));
+        expect(basic).not.toContain('RADIO_SEARCH_MATCH_ALL_WORDS');
+        expect(basic).not.toContain('RADIO_SEARCH_EXPAND_COLLECTIONS');
+        expect(basic).not.toContain('RADIO_SEARCH_COLLECTION_NAMES');
+        // Radio collections do not depend on the video Show Collections setting.
+        const withoutShow = fields(mountIt({ SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'false' }));
+        expect(withoutShow).toContain('RADIO_SEARCH_EXPAND_COLLECTIONS');
+        expect(withoutShow).toContain('RADIO_SEARCH_COLLECTION_NAMES');
+    });
+
     it('a manual false overrides native NZB search', () => {
         expect(fields(mountIt({ NATIVE_SEARCH: 'true', MANUAL_NATIVE_SEARCH: 'false' }))).not.toContain(
             'MANUAL_NATIVE_SEARCH_ENGINE'
@@ -90,9 +136,11 @@ describe('SearchSettingsTab', () => {
 
         it('shows the two main radio settings, and the rest only with advanced', () => {
             const basic = fields(mountRadio({ SOUNDS_ENABLED: 'true' }, false)).filter((f) => f.startsWith('RADIO_SEARCH'));
-            expect(basic).toEqual(['RADIO_SEARCH_MATCH_ALL_WORDS', 'RADIO_SEARCH_RANK_BY_TITLE']);
-            const all = fields(mountRadio({ SOUNDS_ENABLED: 'true' })).filter((f) => f.startsWith('RADIO_SEARCH'));
+            expect(basic).toEqual(['RADIO_SEARCH_RANK_BY_TITLE']);
+            const all = fields(mountRadio({ SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'true' })).filter((f) => f.startsWith('RADIO_SEARCH'));
             expect(all).toEqual([
+                'RADIO_SEARCH_EXPAND_COLLECTIONS',
+                'RADIO_SEARCH_COLLECTION_NAMES',
                 'RADIO_SEARCH_MATCH_ALL_WORDS',
                 'RADIO_SEARCH_RANK_BY_TITLE',
                 'RADIO_SEARCH_SCOPE',
@@ -100,6 +148,11 @@ describe('SearchSettingsTab', () => {
                 'RADIO_SEARCH_NETWORKS',
                 'RADIO_SEARCH_MAX_RESULTS',
             ]);
+        });
+
+        it('Find BBC Collections by Name does not need Show Collections', () => {
+            const list = fields(mountRadio({ SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'false' }));
+            expect(list).toContain('RADIO_SEARCH_COLLECTION_NAMES');
         });
 
         it('Match All Words offers "Same as manual search", and the results setting offers shows, episodes or both', () => {

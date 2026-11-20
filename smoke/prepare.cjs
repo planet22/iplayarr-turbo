@@ -14,6 +14,8 @@ const path = require('path');
 // Avoid adding new dependencies here.
 const FEATURES = {
     LIVE_TV_ENABLED: 'true',
+    LIVE_RADIO: 'true',
+    SOUNDS_ENABLED: 'true',
     BROWSE_SHOW_COLLECTIONS: 'true',
     STRM_WATCHDOG_ENABLED: 'true',
     WRITE_NFO_STRM: 'all',

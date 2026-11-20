@@ -32,10 +32,10 @@
                 <div v-if="!info.live || liveLogo" class="thumbColumn">
                 <div :class="['thumbWrap', { radioArtBox: isRadio && thumbSrc }]" :style="isRadio && thumbSrc ? { '--art': `url(${thumbSrc})` } : {}">
                     <img :class="['bigThumb', { channelLogo: info.live }]" :src="info.live ? liveLogo : thumbSrc" alt="" @error="hideBrokenImage" />
-                    <button v-if="!info.live && !isRadio && info.imagePid" type="button" class="imageRefresh" :disabled="refreshingImage" title="Fetch this picture from BBC again and replace the cached copy" @click="refreshImage">
+                    <button v-if="!info.live && refreshPid" type="button" class="imageRefresh" :disabled="refreshingImage" title="Fetch this picture from BBC again and replace the cached copy" @click="refreshImage">
                         <font-awesome-icon :icon="['fas', 'rotate']" :spin="refreshingImage" /> {{ refreshingImage ? 'Refreshing…' : 'Cache refresh' }}
                     </button>
-                    <QualityBadges v-if="!info.live && !isRadio" :item="badgeItem" all class="thumbBadges" />
+                    <QualityBadges v-if="!info.live" :item="badgeItem" all class="thumbBadges" />
                 </div>
                     <button v-if="!info.live && info.found" type="button" class="clickable downloadButton" title="Download this programme, as the Download button on any other page does" @click="downloadProgramme">
                         <font-awesome-icon :icon="['fas', 'download']" /> Download
@@ -62,7 +62,7 @@
                         <template v-if="info.channel"><dt>Channel</dt><dd>{{ info.channel }}</dd></template>
                         <template v-if="info.parent"><dt>Part of</dt><dd>{{ info.parent.title }} (<code>{{ info.parent.pid }}</code>)</dd></template>
                         <template v-if="info.firstBroadcast"><dt>First broadcast</dt><dd>{{ info.firstBroadcast }}</dd></template>
-                        <template v-if="expiry"><dt>Leaves iPlayer</dt><dd>{{ expiry.when }}</dd><dt>Days left</dt><dd>{{ expiry.calc }}</dd></template>
+                        <template v-if="expiry"><dt>{{ isRadio ? 'Leaves BBC Sounds' : 'Leaves iPlayer' }}</dt><dd>{{ expiry.when }}</dd><dt>Days left</dt><dd>{{ expiry.calc }}</dd></template>
                         <template v-if="info.imagePid"><dt>Image</dt><dd><code>{{ info.imagePid }}</code></dd></template>
                         <template v-if="info.cache.vpid"><dt>Remembered vpid</dt><dd><code>{{ info.cache.vpid }}</code></dd></template>
                         <template v-if="info.cache.hqProbe"><dt>Quality probe winner</dt><dd>{{ info.cache.hqProbe.mediaSet }}/{{ info.cache.hqProbe.version }}, connection {{ info.cache.hqProbe.index }}, {{ info.cache.hqProbe.height }}p</dd></template>
@@ -138,7 +138,8 @@
                     <dd v-else>{{ row[1] }}</dd>
                 </template>
             </dl>
-            <details v-if="info.metadata"><summary>BBC programme page (raw)</summary><pre>{{ json(info.metadata) }}</pre></details>
+            <details v-if="info.metadata"><summary>{{ isRadio && info.metadata.id ? 'BBC Sounds episode (raw)' : 'BBC programme page (raw)' }}</summary><pre>{{ json(info.metadata) }}</pre></details>
+            <details v-if="info.programmePage"><summary>BBC programme page (raw)</summary><pre>{{ json(info.programmePage) }}</pre></details>
             <details v-if="hasContent(info.ibl)"><summary>iPlayer listing extras (raw)</summary><pre>{{ json(info.ibl) }}</pre></details>
             </TraceSection>
             <TraceSection v-if="artworkItems.length || hasContent(info.artwork)" id="dbg-artwork" title="Artwork" :info="help.artwork">
@@ -155,7 +156,7 @@
 
             </template>
 
-            <TraceSection v-if="!isRadio" id="dbg-cached" title="Cached" :info="help.cached">
+            <TraceSection id="dbg-cached" title="Cached" :info="help.cached">
             <table class="dataTable">
                 <thead><tr><th>Where</th><th>Key</th><th>Size</th><th>Expires</th></tr></thead>
                 <tbody>
@@ -174,7 +175,7 @@
             </TraceSection>
 
             <template v-if="!info.live">
-            <TraceSection v-if="!isRadio" id="dbg-library" title="Library" :info="help.library">
+            <TraceSection id="dbg-library" title="Library" :info="help.library">
             <table class="dataTable libraryTable">
                 <thead><tr><th>Listed by</th><th>Kind</th><th>Size</th><th>Modified</th><th>App record</th><th>File</th></tr></thead>
                 <tbody>
@@ -237,13 +238,13 @@
 
             </template>
 
-            <TraceSection v-if="!isRadio" id="dbg-streams" title="Streams played" :info="help.streams">
-            <p v-if="!isRadio" class="subtle">{{ dashboard.sessions.count }} session(s), {{ formatBytes(dashboard.sessions.totalBytes) }} sent in all<template v-if="dashboard.sessions.count > dashboard.sessions.recent.length"> (the latest {{ dashboard.sessions.recent.length }} are listed)</template>.</p>
-            <StreamSessionTable v-if="!isRadio && dashboard.sessions.recent.length" :sessions="dashboard.sessions.recent" :can-play="!!streamKey" :playing-id="playingSession?.id" @play="playSession" />
+            <TraceSection id="dbg-streams" title="Streams played" :info="help.streams">
+            <p class="subtle">{{ dashboard.sessions.count }} session(s), {{ formatBytes(dashboard.sessions.totalBytes) }} sent in all<template v-if="dashboard.sessions.count > dashboard.sessions.recent.length"> (the latest {{ dashboard.sessions.recent.length }} are listed)</template>.</p>
+            <StreamSessionTable v-if="dashboard.sessions.recent.length" :sessions="dashboard.sessions.recent" :can-play="!!streamKey" :playing-id="playingSession?.id" @play="playSession" />
 
             </TraceSection>
 
-            <TraceSection v-if="dashboard.events.length" id="dbg-events" title="Video events" :info="help.events">
+            <TraceSection v-if="dashboard.events.length" id="dbg-events" :title="isRadio ? 'Player events' : 'Video events'" :info="help.events">
                 <div class="sessionScroll">
                 <table class="dataTable">
                     <thead><tr><th>When</th><th>Type</th><th>Level</th><th>Message</th></tr></thead>
@@ -511,11 +512,11 @@ function downloadProgramme() {
 const refreshingImage = ref(false);
 // Fetches the programme's picture from BBC again and replaces the cached copy.
 async function refreshImage() {
-    const imagePid = info.value?.imagePid;
+    const imagePid = refreshPid.value;
     if (!imagePid || refreshingImage.value) return;
     refreshingImage.value = true;
     try {
-        const { ok, data } = await ipFetch(`json-api/thumbnail/refresh/${encodeURIComponent(imagePid)}`, 'POST');
+        const { ok, data } = await ipFetch(`json-api/thumbnail/refresh/${encodeURIComponent(imagePid)}${isRadio ? '?square=1' : ''}`, 'POST');
         if (ok && data.refreshed) {
             thumbVersion.value = Date.now();
             toastService.success('Picture fetched again');
@@ -531,7 +532,19 @@ async function refreshImage() {
 // A radio episode has no iPlayer picture: its own artwork address comes with the episode.
 // It goes through the square thumbnail cache like the rest of the app, and is drawn by the radio picture-box style (the
 // RADIO_THUMBNAIL_STYLE setting: blurred copy behind it, or plain).
-const thumbSrc = computed(() => (isRadio ? getThumbnailUrl(info.value?.metadata?.image) ?? '' : thumbnail.value));
+// The Sounds artwork address, when the episode is one iPlayarr has listed (the programme page's `image` is an object).
+// Without it, the picture id from the BBC programme page stands in, at the same square size the Sounds address names.
+const soundsImage = computed(() => {
+    if (typeof info.value?.metadata?.image === 'string') return info.value.metadata.image;
+    return info.value?.imagePid ? `https://ichef.bbci.co.uk/images/ic/640x640/${info.value.imagePid}.jpg` : undefined;
+});
+const thumbSrc = computed(() => {
+    if (!isRadio) return thumbnail.value;
+    const url = getThumbnailUrl(soundsImage.value) ?? '';
+    return url && thumbVersion.value ? `${url}${url.includes('?') ? '&' : '?'}v=${thumbVersion.value}` : url;
+});
+// The picture the refresh button replaces: the TV image pid, or the id inside a Sounds artwork address.
+const refreshPid = computed(() => info.value?.imagePid);
 // Radio shows the settings that matter to it, not the video streaming ones.
 const shownSettings = computed(() => (isRadio ? { SOUNDS_ENABLED: globalSettings?.value?.SOUNDS_ENABLED, LIVE_RADIO: globalSettings?.value?.LIVE_RADIO } : info.value?.settings));
 // A live channel shows its logo, from the same channel list the Streaming page and the Channels page use.
@@ -564,8 +577,8 @@ const noteSize = (key, event) => {
 const artworkItems = computed(() => {
     const artwork = info.value?.artwork || {};
     const items = ARTWORK.filter((item) => artwork[item.key]).map((item) => ({ key: item.key, label: item.label, note: item.note, small: artwork[item.key].replace('{recipe}', item.small), full: artwork[item.key].replace('{recipe}', item.full), size: item.size }));
-    if (isRadio && info.value?.metadata?.image) items.push({ key: 'episode', label: 'Episode picture', note: 'BBC Sounds', small: getThumbnailUrl(info.value.metadata.image, true), full: getThumbnailUrl(info.value.metadata.image) });
-    if (info.value?.imagePid) items.unshift({ key: 'episode', label: 'Episode still', note: info.value.imagePid, small: thumbnail.value, full: thumbnail.value });
+    if (isRadio && soundsImage.value) items.push({ key: 'episode', label: 'Episode picture', note: 'BBC Sounds', small: getThumbnailUrl(soundsImage.value, true), full: getThumbnailUrl(soundsImage.value) });
+    if (info.value?.imagePid && !isRadio) items.unshift({ key: 'episode', label: 'Episode still', note: info.value.imagePid, small: thumbnail.value, full: thumbnail.value });
     return items;
 });
 const qualityFlags = (version) => (version.flags ? ['hd', 'hdr', 'uhd'].filter((flag) => version.flags[flag]).map((flag) => flag.toUpperCase()).join(', ') || 'none' : '');
@@ -577,6 +590,8 @@ const badgeItem = computed(() => {
     if (versions.some((version) => version.types.some((type) => /audio described/i.test(type)))) kinds.push('audio-described');
     if (versions.some((version) => version.types.some((type) => /sign/i.test(type)))) kinds.push('signed');
     const ibl = info.value?.ibl ?? {};
+    // Radio has no iPlayer data and its type reads 'radio episode'; the badge counts it as an episode and takes the end date the facts list uses.
+    if (isRadio) return { kind: 'episode', radio: true, availableUntil: expiry.value ? new Date(expiry.value.end).toISOString() : undefined };
     return { kind: info.value?.type, uhd: !!original?.flags?.uhd, hdr: !!original?.flags?.hdr, versions: kinds, guidance: ibl.guidance, availableUntil: ibl.availableUntil };
 });
 // The links under the pid: where else this programme can be looked at.
@@ -584,7 +599,11 @@ const pidLinks = computed(() => {
     if (info.value?.live) return [];
     if (isRadio) {
         const showId = info.value?.metadata?.showId;
-        return showId ? [{ label: 'BBC Sounds page', go: () => router.push({ path: `/browse/radio/${showId}`, query: { episode: info.value.pid } }) }] : [];
+        return [
+            ...(showId ? [{ label: 'BBC Sounds page', go: () => router.push({ path: `/browse/radio/${showId}`, query: { episode: info.value.pid } }) }] : []),
+            { label: 'Library debug', go: () => router.push(`/library-debug?q=${info.value.pid}&mode=radio`) },
+            { label: 'Watchdog', go: () => router.push('/watchdog') },
+        ];
     }
     return [
         { label: 'Programme page', go: () => router.push(`/browse/programme/${info.value.pid}`) },
@@ -701,14 +720,12 @@ const tiles = computed(() => {
             { label: 'Streams played', help: 'tileStreams', value: String(d.sessions.count), state: d.sessions.count ? 'good' : 'none', note: d.sessions.count ? `${formatBytes(d.sessions.totalBytes)} sent` : '' },
         ];
     }
-    if (isRadio) {
-        return [
-            { label: 'On BBC Sounds', help: 'tileBbc', value: info.value?.found ? 'Found' : 'Not found', state: info.value?.found ? 'good' : 'bad', note: info.value?.metadata?.mp3 ? 'MP3 offered' : 'stream only' },
-            { label: 'Downloads', help: 'tileDownloads', value: String(downloadRows.value.length), state: downloadRows.value.length ? 'good' : 'none', note: downloadRows.value.map((row) => row.status).join(', ') },
-        ];
-    }
-    return [
-        { label: 'On BBC', help: 'tileBbc', value: info.value?.found ? 'Found' : 'Not found', state: info.value?.found ? 'good' : 'bad', note: `${info.value?.versions.length ?? 0} version(s)` },
+    // Radio shows the same tiles TV does (a radio follow is its subscription).
+    const bbc = isRadio
+        ? { label: 'On BBC Sounds', help: 'tileBbc', value: info.value?.found ? 'Found' : 'Not found', state: info.value?.found ? 'good' : 'bad', note: info.value?.metadata?.mp3 ? 'MP3 offered' : 'stream only' }
+        : { label: 'On BBC', help: 'tileBbc', value: info.value?.found ? 'Found' : 'Not found', state: info.value?.found ? 'good' : 'bad', note: `${info.value?.versions.length ?? 0} version(s)` };
+    const all = [
+        bbc,
         { label: 'In the library', help: 'tileLibrary', value: files ? `${files} file(s)` : 'No file', state: files ? 'good' : 'none', note: [...sources].join(', ') },
         { label: 'Downloads', help: 'tileDownloads', value: String(downloadRows.value.length), state: downloadRows.value.length ? 'good' : 'none', note: `${d.queue.length} queued, ${d.history.length} in history` },
         { label: 'Cached', help: 'tileCached', value: String(cacheCount.value), state: cacheCount.value ? 'good' : 'none', note: `${d.caches.database.length} saved, ${d.caches.memory.length} in memory` },
@@ -716,10 +733,11 @@ const tiles = computed(() => {
         { label: 'Watchdog', help: 'tileWatchdog', value: watchdog ? String(watchdog.status) : 'Not tracked', state: watchdog ? (watchdog.status === 'invalid' ? 'bad' : 'good') : 'none', note: watchdog ? `last checked ${formatWhen(watchdog.lastChecked)}` : '' },
         { label: 'Subscriptions', help: 'tileSubscriptions', value: String(d.subscriptions.length), state: d.subscriptions.length ? 'good' : 'none' },
     ];
+    return all;
 });
 
 // What each part of the page is, in plain words, for the (i) buttons.
-const help = {
+const videoHelp = {
     namingSettings: 'The settings that change the file name, as they are now:\n• MEDIA_MODE: download (a real file) or strm (a link).\n• FOLDER_STRUCTURE: show and season folders, or one flat folder.\n• VIDEO_QUALITY: the quality tag in the release name.\n• RELEASE_LANGUAGE: adds an ENGLISH tag to the release name.\n• AIRDATE_NUMBERING: numbers episodes by air date using TVDB.\nThe template is shown on its own line.',
     naming: 'The file a download of this programme would be saved as, worked out by the same code a real download uses, from the settings in force now (the chips). Nothing is queued or written. Numbering shows what iPlayarr used and what TVDB (via Sonarr\'s Skyhook) says, by episode title and by air date.',
     metadata: 'What BBC\'s programme page says about this programme, apart from what is already shown at the top of the page: the kind of media, the service it is on, the episodes before and after it, its categories (with the genres they sit under) and the short and long descriptions. The full raw record is in the raw sections underneath if you need anything else.',
@@ -756,6 +774,24 @@ const help = {
     statSegments: 'How many pieces (segments) of the video this browser has fetched. Each is a few seconds of video.',
     tileSubscriptions: 'How many subscriptions cover this programme. Zero means none is tracking it.',
 };
+// Where a radio episode differs from video, the (i) text says so; everything else is the same words.
+const radioHelp = {
+    metadata: 'What BBC says about this episode, apart from what is already shown at the top of the page. The first rows are what BBC Sounds lists for it (the show, network, length, when it leaves Sounds, whether BBC lets it be downloaded as MP3), then the same programme-page rows a TV programme has: the kind of media, the service it is on, the episodes before and after it, its categories and its descriptions. The full raw records are underneath.',
+    artwork: 'The episode\'s picture from BBC Sounds. It is square, and iPlayarr keeps a copy on disk (Cache refresh fetches it again). Click it to see it larger with its details.',
+    library: 'The audio files and .strm links iPlayarr\'s library index found for this episode, and which source each came from (iPlayarr\'s Sounds folder or a Jellyfin music library). "App record" is not used for radio. No file here means nothing on disk was matched to this episode.',
+    downloads: 'Downloads of this episode that iPlayarr has in its queue or its history, with their status. This is separate from streaming: a download saves an audio file, a stream only plays it.',
+    subscriptions: 'The radio follows that cover this episode, and why: the show itself is followed, or a follow has already dealt with this episode. Each lists when it was added and last checked, what it last queued, any error, and whether download-before-expiry has secured this episode.',
+    events: 'Messages reported by players while playing this episode, such as errors and stalls, with the time and level. Useful for finding out why a playback stuttered or failed.',
+    versions: 'BBC Sounds lists an episode as one audio version: its id (vpid) is what BBC\'s stream service is asked for. "Available until" is when BBC Sounds removes it.',
+    probe: 'Press Probe to ask BBC\'s stream service what it would serve for this episode through each route (the mediaselector sets): the servers with their priority and address (the signed token is removed), the audio bitrate and format advertised, and the HLS playlist.',
+    play: 'Plays this episode here through iPlayarr\'s own stream address, exactly as a media player would receive it, so you can hear the real behaviour. The live figures are what this browser reports.',
+    tileBbc: 'Whether BBC Sounds still has this episode, and whether BBC offers it as an MP3 download or only as a stream. "Not found" means BBC no longer lists it or the id is wrong.',
+    tileLibrary: 'How many files in your library iPlayarr has matched to this episode, and which sources they were found in (iPlayarr\'s Sounds folder, Jellyfin). Green when at least one file is there.',
+    tileDownloads: 'How many download records exist for this episode, from the queue and the history.',
+    tileStreams: 'How many times this episode has been played through iPlayarr\'s streaming, and the total data sent for all of those plays.',
+    tileSubscriptions: 'How many radio follows cover this episode. Zero means none is tracking it.',
+};
+const help = isRadio ? { ...videoHelp, ...radioHelp } : videoHelp;
 
 // The fields of the programme page worth reading without opening the raw JSON. What the header above already says
 // (title, type, channel, first broadcast, picture, synopsis) and the Versions table are not repeated.
@@ -783,9 +819,14 @@ const metadataLinks = (links) => {
 const metadataRows = computed(() => {
     const m = info.value?.metadata;
     if (!m) return [];
-    // A BBC Sounds episode: the fields iPlayarr lists for it.
-    if (isRadio) {
-        return [
+    // A BBC Sounds episode: the fields iPlayarr lists for it, then the same programme-page rows TV has.
+    if (isRadio && m.id) {
+        return [...soundsRows(m), ...programmeRows(info.value.programmePage).filter(([label]) => label !== 'Media type')];
+    }
+    return programmeRows(m);
+});
+const soundsRows = (m) => [
+            ['Media type', 'audio'],
             ['Episode id', m.id],
             ['Show', m.showTitle ? `${m.showTitle}${m.showId ? ` (${m.showId})` : ''}` : ''],
             ['Network', m.network],
@@ -794,11 +835,12 @@ const metadataRows = computed(() => {
             ['Available until', m.availableUntil ? formatWhen(m.availableUntil) : ''],
             ['Download offered', m.mp3 ? 'MP3 (BBC lets it be downloaded)' : 'No, recorded from the stream'],
             ['Series', m.seriesNumber !== undefined ? String(m.seriesNumber) : ''],
-        ].filter(([, value]) => value !== undefined && value !== null && value !== '');
-    }
+].filter(([, value]) => value !== undefined && value !== null && value !== '');
+const programmeRows = (m) => {
+    if (!m) return [];
     const service = m.ownership?.service;
     return [
-        ['Media type', m.media_type],
+        ['Media type', m.media_type ?? (isRadio ? 'audio' : undefined)],
         ['Position', m.position],
         ['Episodes', m.expected_child_count ?? m.aggregated_episode_count],
         ['Service', service ? `${service.title} (${[service.type, service.id, service.key].filter(Boolean).join(', ')})` : ''],
@@ -810,7 +852,7 @@ const metadataRows = computed(() => {
         ['Links', metadataLinks(m.links)],
         ['Supporting content', (m.supporting_content_items ?? []).length ? String((m.supporting_content_items ?? []).length) : ''],
     ].filter(([, value]) => value !== undefined && value !== null && value !== '');
-});
+};
 
 // The same video info window the Streaming page opens: what the rest of the app shows for this programme.
 const openArtwork = (item) => useModal({ component: ArtworkModal, attrs: { item: { ...item, size: item.size || sizes.value[item.key] } } }).open();
@@ -835,7 +877,7 @@ const subscriptionRows = (s) =>
         ['Last queued', s.lastQueuedAt ? `${formatWhen(s.lastQueuedAt)}${s.lastQueuedCount ? `, ${s.lastQueuedCount} episode(s)` : ''}` : ''],
         ['Last error', s.lastError],
         ['Secures from', s.secureDays && expiry.value ? secureFrom(s, expiry.value) : ''],
-        ['Download before expiry', s.secureDays ? `${s.secureDays} day(s) before it leaves iPlayer; this episode ${s.secured ? 'is secured' : 'is not yet secured'}` : ''],
+        ['Download before expiry', s.secureDays ? `${s.secureDays} day(s) before it leaves ${isRadio ? 'BBC Sounds' : 'iPlayer'}; this episode ${s.secured ? 'is secured' : 'is not yet secured'}` : ''],
         ['Sonarr/Radarr', s.arr ? `${s.arr.title}${s.arr.total ? `, ${s.arr.have ?? 0} of ${s.arr.total} episodes` : ''}${s.arr.addedByUs ? ', added by iPlayarr' : ''}${s.arr.missing ? `, gone from the app since ${formatWhen(s.arr.missing)}` : ''}${s.arrOnly ? ', downloads done by the app' : ''}` : ''],
     ].filter(([, value]) => value);
 
@@ -848,6 +890,7 @@ const probeProgress = ref(null);
 const stepOf = (label, done, total) => ({ label, percent: Math.round((done / total) * 100) });
 
 // The parts of the dashboard, read one after another (the page shows what it has as each arrives).
+const RADIO_STEPS = ['caches', 'library', 'watchdog', 'subscriptions', 'streams', 'events', 'logs'];
 const DASHBOARD_STEPS = [
     ['caches', 'Looking for cached entries and picture files'],
     ['library', 'Asking the library index which files it holds'],
@@ -881,18 +924,18 @@ async function loadNaming() {
 }
 
 async function load() {
-    const total = (isRadio ? 2 : DASHBOARD_STEPS.length) + 1;
+    const total = (isRadio ? RADIO_STEPS.length : DASHBOARD_STEPS.length) + 1;
     loadProgress.value = stepOf('Reading the programme from BBC and iPlayer', 0, total);
     try {
         const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/programme${radioQuery}`);
         if (ok && data.live) loadLiveLogo();
         info.value = ok ? data : { pid, versions: [], cache: {}, settings: {}, dashboard: emptyDashboard(), error: data?.message ?? 'Could not load the programme' };
-        // A radio episode has no library, watchdog, subscription or picture-cache record: only its events and log lines.
-        const steps = isRadio ? DASHBOARD_STEPS.filter(([part]) => part === 'events' || part === 'logs') : DASHBOARD_STEPS;
+        // A radio episode's downloads come from the radio list, so that step is left out.
+        const steps = isRadio ? DASHBOARD_STEPS.filter(([part]) => RADIO_STEPS.includes(part)) : DASHBOARD_STEPS;
         for (const [index, [part, label]] of steps.entries()) {
             loadProgress.value = stepOf(`${label}…`, index + 1, total);
-            const image = info.value.imagePid ? `?image=${encodeURIComponent(info.value.imagePid)}` : '';
-            const { ok: partOk, data: partData } = await ipFetch(`json-api/streams/debug/${pid}/part/${part}${image}`);
+            const query = [info.value.imagePid && `image=${encodeURIComponent(info.value.imagePid)}`, isRadio && 'kind=radio'].filter(Boolean).join('&');
+            const { ok: partOk, data: partData } = await ipFetch(`json-api/streams/debug/${pid}/part/${part}${query ? `?${query}` : ''}`);
             if (partOk) info.value = { ...info.value, dashboard: { ...info.value.dashboard, ...partData } };
         }
     } finally {
@@ -1454,7 +1497,8 @@ ul.plain {
         // Only as tall as the picture, however long the facts beside it get: the badges are anchored to its bottom corner.
         align-self: flex-start;
         position: relative;
-        width: 480px;
+        // Narrow enough that the facts sit beside it (TV and radio alike) on anything wider than a phone.
+        width: 360px;
         max-width: 100%;
     }
 
@@ -1509,7 +1553,7 @@ ul.plain {
 
     .facts {
         flex: 1;
-        min-width: 280px;
+        min-width: 260px;
 
         h2 {
             margin: 0 0 @space-2;

@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { SoundsEpisode, SoundsShow } from '../../types/Sounds';
+import { queryTerms, titleMatchesAllTerms } from '../../utils/titleMatch';
+import configService from '../configService';
 import soundsApiService from './soundsApiService';
+import soundsAtoZService from './soundsAtoZService';
 import { cached, peek } from './soundsCache';
 import { episodeSubtitle } from './soundsEpisodeText';
 
@@ -33,6 +37,7 @@ export interface SoundsBrowseItem {
     // The series number (when the titles give one) and an estimated recording size in MB.
     series?: number;
     sizeMb?: number;
+    availableUntil?: string;
 }
 
 export interface SoundsBrowsePage {
@@ -66,6 +71,8 @@ export function episodeItem(e: SoundsEpisode): SoundsBrowseItem {
         mp3: e.mp3,
         series: e.seriesNumber,
         sizeMb: e.sizeMb,
+        // When it leaves BBC Sounds; the expiry badge reads it, as it does for video.
+        availableUntil: e.availableUntil,
     };
 }
 
@@ -108,6 +115,7 @@ export function programmeEpisode(e: SoundsEpisode) {
         showTitle: e.showTitle,
         mp3: e.mp3,
         size: e.sizeMb,
+        availableUntil: e.availableUntil,
     };
 }
 
@@ -131,7 +139,7 @@ export function searchResults({ shows = [], episodes = [] }: { shows?: SoundsSho
             const label = episodeSubtitle(e);
             return {
                 pid: e.id, radio: true, kind: 'episode', type: 'RADIO', title: e.showTitle ?? e.title, subtitle: label, episodeTitle: e.episodeTitle ?? label, synopsis: e.synopsis, thumbnail: e.image,
-                channel: e.network, pubDate: e.released, showId: e.showId, showTitle: e.showTitle, mp3: e.mp3, series: e.seriesNumber, size: e.sizeMb, runtimeSeconds: e.duration, nzbName: '',
+                channel: e.network, pubDate: e.released, showId: e.showId, showTitle: e.showTitle, mp3: e.mp3, series: e.seriesNumber, size: e.sizeMb, runtimeSeconds: e.duration, availableUntil: e.availableUntil, nzbName: '',
             };
         }),
     ];
@@ -229,6 +237,15 @@ class SoundsBrowseAdapter {
         return { enabled: true as const, collections: list.map((c) => ({ id: c.id, title: c.title, synopsis: c.synopsis, thumbnail: c.image })) };
     }
 
+    // The collections to offer as tiles beside a radio search for the term: none unless the radio by-name option is on, or the
+    // term has no usable words. Uses the cached tiles when there are any, else the quick names list.
+    async collectionsForSearch(term: string, limit: number): Promise<{ id: string; title: string; synopsis?: string; thumbnail?: string; count?: number }[]> {
+        const names = await configService.getParameter(IplayarrParameter.RADIO_SEARCH_COLLECTION_NAMES);
+        if (names !== 'true' || !queryTerms(term).length) return [];
+        const { collections } = await this.collectionsBasic();
+        return collections.filter(({ title }) => titleMatchesAllTerms(title, term)).slice(0, limit);
+    }
+
     async category(id: string, page: number, perPage: number): Promise<SoundsBrowsePage> {
         const result = await soundsApiService.category(id, page, perPage);
         return pageOf(result.episodes, result.page, result.perPage, result.total);
@@ -257,9 +274,25 @@ class SoundsBrowseAdapter {
         return pageOf(result.episodes, result.page, result.perPage, result.total);
     }
 
-    // BBC Sounds has no alphabetical list, so A to Z is an empty page.
-    atoz(): SoundsBrowsePage {
-        return { items: [], page: 1, perPage: LISTING_CAP, total: 0 };
+    // The BBC's podcast shows (the whole list is small), as brand cards, a page at a time. With Podcasts (RADIO_PODCASTS) off this is
+    // an empty page and nothing is read from the BBC.
+    async podcasts(page = 1, perPage = LISTING_CAP): Promise<SoundsBrowsePage> {
+        const size = Math.min(LISTING_CAP, Math.max(1, Math.floor(perPage) || LISTING_CAP));
+        const current = Math.max(1, Math.floor(page) || 1);
+        if ((await configService.getParameter(IplayarrParameter.RADIO_PODCASTS)) !== 'true') return { items: [], page: current, perPage: size, total: 0 };
+        const shows = await soundsApiService.podcasts();
+        return { items: shows.slice((current - 1) * size, current * size).map(showItem), page: current, perPage: size, total: shows.length };
+    }
+
+    // BBC Sounds has no alphabetical list. With Radio A to Z (RADIO_ATOZ) off this is an empty page and nothing is read; with it on
+    // the page comes from the list soundsAtoZService builds, and `building` is set while the first build is still running.
+    async atoz(letter = '0', page = 1, perPage = LISTING_CAP): Promise<SoundsBrowsePage & { building?: true }> {
+        const size = Math.min(LISTING_CAP, Math.max(1, Math.floor(perPage) || LISTING_CAP));
+        const current = Math.max(1, Math.floor(page) || 1);
+        const found = await soundsAtoZService.letter(letter.toLowerCase());
+        if (found.off) return { items: [], page: 1, perPage: LISTING_CAP, total: 0 };
+        const slice = found.brands.slice((current - 1) * size, current * size);
+        return { items: slice.map(showItem), page: current, perPage: size, total: found.brands.length, ...(found.building ? { building: true as const } : {}) };
     }
 }
 

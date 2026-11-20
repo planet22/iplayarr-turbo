@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, ref } from 'vue';
 
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -192,6 +192,21 @@ describe('WatchdogPage', () => {
         expect(rows[0].text()).toContain('b0cccccc');
     });
 
+    it('keeps a pushed status when an older load answers after it', async () => {
+        let release;
+        responses['json-api/watchdog'] = new Promise((resolve) => (release = resolve));
+        const handlers = {};
+        const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+        const wrapper = await mountIt({ socket });
+        handlers.strmWatchdog(base({ items: [item('b0fresh00', 'ok')] }));
+        await flushPromises();
+        release({ ok: true, data: base({ items: [item('b0stale00', 'ok')] }) });
+        await flushPromises();
+        const text = wrapper.find('table.watchdogTable').text();
+        expect(text).toContain('b0fresh00');
+        expect(text).not.toContain('b0stale00');
+    });
+
     it('keeps showing pushed data instead of an error when the first load fails after a push', async () => {
         responses['json-api/watchdog'] = { ok: false, data: {} };
         const handlers = {};
@@ -222,5 +237,41 @@ describe('WatchdogPage', () => {
         wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('delete-queue-item');
         await flushPromises();
         expect(ipFetch).toHaveBeenCalledWith('json-api/watchdog/items', 'DELETE');
+    });
+
+    describe('the running clock', () => {
+        const setHidden = (hidden) => Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        afterEach(() => {
+            vi.useRealTimers();
+            setHidden(false);
+        });
+        const running = () => {
+            const startedAt = new Date(Date.now() - 5000).toISOString();
+            responses['json-api/watchdog'] = {
+                ok: true,
+                data: base({ live: { running: true, startedAt, total: 10, checked: 2, ok: 2, invalid: 0, inconclusive: 0 } }),
+            };
+        };
+        const took = (wrapper) => wrapper.find('.sourceBreakdown').text();
+
+        it('keeps the elapsed time of a run counting while the tab is shown', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            running();
+            const wrapper = await mountIt();
+            const before = took(wrapper);
+            await vi.advanceTimersByTimeAsync(20000);
+            expect(took(wrapper)).not.toBe(before);
+            expect(took(wrapper)).toContain('Running');
+        });
+
+        it('holds the elapsed time still while the tab is hidden', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            running();
+            const wrapper = await mountIt();
+            const before = took(wrapper);
+            setHidden(true);
+            await vi.advanceTimersByTimeAsync(20000);
+            expect(took(wrapper)).toBe(before);
+        });
     });
 });

@@ -74,13 +74,19 @@
                 <div v-for="cache in section.caches" :key="cache.prefix" class="taskRow">
                     <div class="info">
                         <div class="label">
+                            <font-awesome-icon class="storageIcon" :icon="['fas', cacheStorage(cache).icon]" role="img" :aria-label="cacheStorage(cache).label" :title="cacheStorage(cache).label" />
                             {{ cache.label }}
                             <InfoTip :text="cache.description" />
                         </div>
                         <div class="details cacheDetails">
                             <span class="pill primary count">{{ cache.count.toLocaleString() }} {{ cache.count === 1 ? 'item' : 'items' }}</span>
                             <span class="pill grey size">{{ formatSize(cache.sizeBytes) }}</span>
-                            <span class="ttlEditor">
+                            <span v-if="cache.inMemory" class="ttlEditor fixedKeep" title="Held in memory only; the lifetime is fixed">
+                                <span class="keepLabel">Keep for</span>
+                                <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
+                                {{ describeTtl(cache.defaultTtl) }} (memory only)
+                            </span>
+                            <span v-else class="ttlEditor">
                                 <span class="keepLabel">Keep for</span>
                                 <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
                                 <input
@@ -106,6 +112,7 @@
                                 Reset to default ({{ describeTtl(cache.defaultTtl) }})
                             </button>
                         </div>
+                        <div v-if="busyTask(cache)" class="taskBar" role="progressbar" :aria-label="`${busyTask(cache).label} is running`" :title="`${busyTask(cache).label} is running`"><span /></div>
                     </div>
                     <div class="rowActions">
                         <button class="clickable" title="Delete everything in this cache" :disabled="cacheBusy[cache.prefix]" @click="clearCache(cache)">
@@ -166,7 +173,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { formatSize } from '@/lib/cacheActivity';
-import { buildSections, MAINTENANCE_SORTS, readCollapsedGroups, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
+import { buildSections, cacheStorage, MAINTENANCE_SORTS, readCollapsedGroups, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
@@ -196,6 +203,9 @@ const rebuildLogos = async () => {
 
 const { tasks, loaded, running, load, runNow } = useScheduledTasks();
 
+
+// A running job that lists this cache (or '*' for all) puts a bar on its line.
+const busyTask = (cache) => tasks.value.find((task) => task.running && task.caches?.some((prefix) => prefix === '*' || prefix === cache.prefix));
 
 const { caches, loaded: cachesLoaded, busy: cacheBusy, error: cacheError, clearingAll, load: loadCaches, clear, clearAll } = useCaches();
 
@@ -478,6 +488,11 @@ onMounted(() => {
             gap: @space-1;
             color: @primary-text-color;
             font-size: 15px;
+
+            .storageIcon {
+                flex: none;
+                color: @subtle-text-color;
+            }
         }
 
         .details {

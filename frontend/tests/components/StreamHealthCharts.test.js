@@ -3,6 +3,7 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
+import FullscreenFrame from '@/components/streaming/FullscreenFrame.vue';
 import StreamHealthCharts from '@/components/streaming/StreamHealthCharts.vue';
 
 // Failures are reported to the caller rather than thrown past it.
@@ -128,6 +129,96 @@ describe('StreamHealthCharts zoom', () => {
         expect(wrapper.find('.chartZoomBar').text()).toContain('highlighted: segment 5');
         await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
         expect(crosses()).toBe(0);
+    });
+
+    it('writes the figure under each chart: the hovered segment, else the kept one, else a hint', async () => {
+        const wrapper = mountCharts();
+        const plots = wrapper.findAll('svg.plot');
+        for (const plot of plots) {
+            const width = Number(plot.attributes('viewBox').split(' ')[2]);
+            plot.element.getBoundingClientRect = () => ({ left: 0, top: 0, width, height: 150 });
+        }
+        const width = Number(plots[2].attributes('viewBox').split(' ')[2]);
+        const at = (seg) => 52 + ((seg + 0.5) * (width - 58)) / 20;
+        const lines = () => wrapper.findAll('p.readout').map((p) => p.text());
+        expect(lines()).toHaveLength(4);
+        expect(lines().every((text) => /Hover or tap/.test(text))).toBe(true);
+        await plots[2].trigger('mousemove', { clientX: at(5) });
+        expect(lines().every((text) => /^segment 5: /.test(text))).toBe(true);
+        expect(lines()[0]).toMatch(/s ahead \(request #6\)/);
+        expect(lines()[1]).toMatch(/x real time/);
+        expect(lines()[2]).toMatch(/audio before video by 80 ms/);
+        // clicked, then moved off: the kept segment stays written; hovering another shows that one meanwhile
+        await plots[0].trigger('click', { clientX: at(5) });
+        await plots[0].trigger('mouseleave');
+        expect(lines().every((text) => /^Kept - segment 5: /.test(text))).toBe(true);
+        await plots[1].trigger('mousemove', { clientX: at(9) });
+        expect(lines().every((text) => /^segment 9: /.test(text))).toBe(true);
+        await plots[1].trigger('mouseleave');
+        expect(lines()[3]).toMatch(/^Kept - segment 5: /);
+        await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
+        expect(lines().every((text) => /Hover or tap/.test(text))).toBe(true);
+    });
+
+
+    it('says so under a chart that has nothing for the segment (the first has no previous one for the drift chart)', async () => {
+        const wrapper = mountCharts();
+        const plots = wrapper.findAll('svg.plot');
+        for (const plot of plots) {
+            const width = Number(plot.attributes('viewBox').split(' ')[2]);
+            plot.element.getBoundingClientRect = () => ({ left: 0, top: 0, width, height: 150 });
+        }
+        const width = Number(plots[0].attributes('viewBox').split(' ')[2]);
+        await plots[0].trigger('mousemove', { clientX: 52 + (0.5 * (width - 58)) / 20 });
+        const lines = wrapper.findAll('p.readout').map((p) => p.text());
+        expect(lines[0]).toMatch(/^segment 0: /);
+        expect(lines.every((text) => text.startsWith('segment 0: '))).toBe(true);
+    });
+
+    it('writes a figure under a chart only when it has a plot to hover', () => {
+        const wrapper = mount(StreamHealthCharts, { props: { requests: [] }, global: { stubs: { 'font-awesome-icon': true } } });
+        expect(wrapper.findAll('p.readout')).toHaveLength(0);
+        expect(wrapper.findAll('p.empty').length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('says level with video at a zero A/V offset, and before or after otherwise', async () => {
+        const skewed = Array.from({ length: 6 }, (_, n) => ({
+            n: n + 1, t: 1000 + n * 4000, kind: 'segment', track: 'main', seg: n, segDur: 4, durMs: 500, ptsV: n * 4, ptsA: n * 4 + (n % 2 ? 0.08 : 0), ptsDriftMs: 0,
+        }));
+        const wrapper = mount(StreamHealthCharts, { props: { requests: skewed }, global: { stubs: { 'font-awesome-icon': true } } });
+        const titles = wrapper.findAll('svg.plot')[2].findAll('circle.dot title').map((t) => t.text());
+        expect(titles.some((t) => /level with video/.test(t))).toBe(true);
+        expect(titles.some((t) => /audio after video by 80 ms/.test(t))).toBe(true);
+        await wrapper.find('button.modeButton').trigger('click');
+        const absolute = wrapper.findAll('svg.plot')[2].findAll('circle.dot title').map((t) => t.text());
+        expect(absolute.every((t) => !/from the usual/.test(t))).toBe(true);
+    });
+
+    it('draws one chart at the size of the window, with the zoom bar and a value above each point, when it fills the window', async () => {
+        const wrapper = mountCharts();
+        const frames = wrapper.findAllComponents(FullscreenFrame);
+        expect(frames).toHaveLength(4);
+        expect(wrapper.findAll('text.vl')).toHaveLength(0);
+        frames[1].vm.$emit('change', { full: true, w: 1600, h: 900 });
+        await wrapper.vm.$nextTick();
+        expect(wrapper.findAll('.chartZoomBar').length).toBe(2);
+        expect(wrapper.findAll('text.vl').length).toBeGreaterThan(0);
+        // another chart's leaving does not close this one's; its own leaving does
+        frames[0].vm.$emit('change', { full: false, w: 0, h: 0 });
+        await wrapper.vm.$nextTick();
+        expect(wrapper.findAll('.chartZoomBar').length).toBe(2);
+        frames[1].vm.$emit('change', { full: false, w: 0, h: 0 });
+        await wrapper.vm.$nextTick();
+        expect(wrapper.findAll('.chartZoomBar').length).toBe(1);
+        expect(wrapper.findAll('text.vl')).toHaveLength(0);
+    });
+
+    it('ignores a hover on a plot with no width', async () => {
+        const wrapper = mountCharts();
+        const plot = wrapper.findAll('svg.plot')[0];
+        plot.element.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0 });
+        await plot.trigger('mousemove', { clientX: 100 });
+        expect(wrapper.findAll('line.cross')).toHaveLength(0);
     });
 
     it('zooms around the kept segment when there is one', async () => {

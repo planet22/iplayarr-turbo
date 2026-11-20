@@ -20,6 +20,8 @@ const { browseFetch, playInPip, live } = vi.hoisted(() => ({
 // If this grows, split it rather than adding flags.
 
 const route = reactive({ meta: { tiles: 'categories' } });
+const mode = vi.hoisted(() => ({ radio: false }));
+vi.mock('@/lib/mediaMode', () => ({ radioActive: () => mode.radio }));
 vi.mock('@/lib/browse', () => ({ browseFetch }));
 vi.mock('@/lib/ipFetch', () => ({ ipFetch: vi.fn(async () => ({ ok: true, data: {} })), ipUpload: vi.fn() }));
 vi.mock('@/lib/pipPlayer', () => ({ playInPip }));
@@ -161,5 +163,71 @@ describe('TilesPage', () => {
         live.subscribed = ['bbc-one'];
         const wrapper = await mountIt();
         expect(wrapper.find('.statusBadge [title], .statusBadge font-awesome-icon-stub').exists()).toBe(true);
+    });
+
+    describe('with nothing to list', () => {
+        const settings = (LIVE_RADIO) => ({ provide: { globalSettings: ref({ LIVE_RADIO }) } });
+        const mountWith = async (provide) => {
+            const wrapper = mount(TilesPage, {
+                global: {
+                    ...provide,
+                    stubs: { 'font-awesome-icon': true, PageHeader: Header, SettingsPageToolbar: true, RouterLink: RouterLinkStub },
+                },
+            });
+            await flushPromises();
+            return wrapper;
+        };
+
+        beforeEach(() => {
+            route.meta = { tiles: 'channels' };
+            mode.radio = false;
+        });
+
+        it('says there are no TV channels when all are switched off, and offers to switch them on', async () => {
+            api.channels = [{ id: 'bbc-one', title: 'BBC One', enabled: false }];
+            const wrapper = await mountWith(settings('true'));
+            expect(wrapper.find('.emptyStateTitle').text()).toBe('No TV channels');
+            expect(wrapper.find('.emptyStateHint').text()).toBe('All TV channels are switched off.');
+            expect(wrapper.findComponent(RouterLinkStub).exists()).toBe(false);
+            await wrapper.find('.emptyStateActions a').trigger('click');
+            expect(wrapper.find('.emptyStateBlock').exists()).toBe(false);
+        });
+
+        it('does not show the empty state while there are channels', async () => {
+            const wrapper = await mountWith(settings('true'));
+            expect(wrapper.find('.emptyStateBlock').exists()).toBe(false);
+        });
+
+        it('says live radio is off, with a link to the General settings, in radio mode', async () => {
+            mode.radio = true;
+            api.channels = [{ id: 'bbc-one', title: 'BBC One', live: true }];
+            const wrapper = await mountWith(settings('false'));
+            expect(wrapper.find('.emptyStateTitle').text()).toBe('No live radio stations');
+            expect(wrapper.find('.emptyStateHint').text()).toBe('Live radio is switched off.');
+            expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ path: '/settings', hash: '#general' });
+        });
+
+        it('treats missing settings as live radio off', async () => {
+            mode.radio = true;
+            api.channels = [];
+            const wrapper = await mountWith({});
+            expect(wrapper.find('.emptyStateHint').text()).toBe('Live radio is switched off.');
+        });
+
+        it('has no settings link when live radio is on but every station is off', async () => {
+            mode.radio = true;
+            api.channels = [{ id: 'radio-4', title: 'Radio 4', audioOnly: true, enabled: false }];
+            const wrapper = await mountWith(settings('true'));
+            expect(wrapper.find('.emptyStateHint').text()).toBe('All radio stations are switched off.');
+            expect(wrapper.findComponent(RouterLinkStub).exists()).toBe(false);
+        });
+
+        it('does not show the empty state on the Categories page', async () => {
+            route.meta = { tiles: 'categories' };
+            api.categories = [];
+            api['categories?basic=1'] = [];
+            const wrapper = await mountWith(settings('true'));
+            expect(wrapper.find('.emptyStateBlock').exists()).toBe(false);
+        });
     });
 });

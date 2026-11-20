@@ -61,7 +61,7 @@ export const EXPIRY_BADGE_DAYS = 30;
 // What the badge says for an episode that leaves iPlayer at `end` (ISO): undefined when it is not near, unknown or
 // already gone. iPlayer counts days on the UK calendar whatever the viewer's time zone ("Expires tomorrow 11:59pm" is
 // 1 day), so this does too. `now` is a parameter for the tests.
-export const expiryBadge = (end, now = Date.now()) => {
+export const expiryBadge = (end, now = Date.now(), service = 'iPlayer') => {
     const endMs = Date.parse(end);
     if (!end || Number.isNaN(endMs) || endMs <= now) return undefined;
     const days = ukDayNumber(endMs) - ukDayNumber(now);
@@ -69,7 +69,7 @@ export const expiryBadge = (end, now = Date.now()) => {
     const when = ukWhen(endMs, true);
     return {
         text: days <= 0 ? '<1d' : `${days}d`,
-        title: days <= 0 ? `Leaves today, ${when}` : `${days} day${days === 1 ? '' : 's'} left on iPlayer (leaves ${when})`,
+        title: days <= 0 ? `Leaves today, ${when}` : `${days} day${days === 1 ? '' : 's'} left on ${service} (leaves ${when})`,
         // Warmer as it gets closer: amber, orange from 14 days, red from 3, solid red on the last day.
         level: days <= 0 ? 'critical' : days <= 3 ? 'red' : days <= 14 ? 'orange' : 'amber',
     };

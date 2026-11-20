@@ -7,6 +7,8 @@ export interface CacheTypeInfo {
     label: string;
     description: string;
     defaultTtl: number;
+    // Held in memory only, with a lifetime set in code: listed and cleared like the others but not editable.
+    inMemory?: boolean;
 }
 
 // What a cache has been doing lately (since the server started; not saved), for the live cards on the Statistics page.
@@ -310,7 +312,11 @@ export default class DbCacheService<T> {
 
         const load = (async () => {
             const value = await fetchFunction(key);
-            await this.set(key, value);
+            try {
+                await this.set(key, value);
+            } catch {
+                // A failed cache write must not lose a value that was fetched successfully.
+            }
             return value;
         })().finally(() => this.inFlight.delete(key));
         this.inFlight.set(key, load);

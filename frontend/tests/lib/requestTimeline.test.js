@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, logTicksFine, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, describeDownloads, driftSeries, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, readAheadSpan, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -86,6 +86,8 @@ describe('requestTimeline', () => {
 
     it('speedSeries is segment length over download time; driftSeries reads the drift', () => {
         expect(speedSeries([seg(0, { durMs: 2000 }), seg(1, { durMs: 8000 })]).map((p) => p.value)).toEqual([2, 0.5]);
+        // read ahead: answered from memory in 0 ms, so the download's own time is used where known, and a segment without one is left out
+        expect(speedSeries([seg(0, { durMs: 0, prefetched: true, fetchMs: 500 }), seg(1, { durMs: 0, prefetched: true })]).map((p) => p.value)).toEqual([8]);
         expect(driftSeries([seg(1, { ptsDriftMs: -400 }), seg(0)]).map((p) => p.value)).toEqual([-400]);
     });
 
@@ -238,5 +240,125 @@ describe('requestTimeline', () => {
         expect(formatOffset(undefined)).toBe('');
         expect(formatMs(250)).toBe('250 ms');
         expect(formatMs(12500)).toBe('12.5 s');
+    });
+
+    it('transferSteps gives a step wherever the transfers in flight change, adding overlapping rates', () => {
+        const steps = transferSteps([
+            { t: 0, durMs: 1000, bytes: 1000 },
+            { t: 500, durMs: 1000, bytes: 3000 },
+            { t: 5000, durMs: 0, bytes: 99 },
+            { t: 6000, durMs: 100 },
+        ]);
+        expect(steps).toEqual([
+            { t0: 0, t1: 500, rate: 1000 },
+            { t0: 500, t1: 1000, rate: 4000 },
+            { t0: 1000, t1: 1500, rate: 3000 },
+        ]);
+        expect(transferSteps(undefined)).toEqual([]);
+    });
+
+    it('measuredSteps uses the recorded byte profile, so a stall and a burst show as they happened', () => {
+        const requests = [
+            { t: 0, durMs: 400, bytes: 600, prof: [100, 0, 0, 500], profMs: 100 },
+            { t: 50, durMs: 100, bytes: 50 },
+        ];
+        expect(hasByteProfile(requests)).toBe(true);
+        expect(hasByteProfile([requests[1]])).toBe(false);
+        expect(measuredSteps(requests)).toEqual([
+            { t0: 0, t1: 100, rate: 1000 },
+            { t0: 300, t1: 400, rate: 5000 },
+        ]);
+        expect(measuredSteps(undefined)).toEqual([]);
+        // a segment read ahead: its profile begins before the request was made
+        expect(measuredSteps([{ t: 5000, durMs: 10, bytes: 100, prof: [100], profMs: 100, profAt: 1000 }])).toEqual([{ t0: 1000, t1: 1100, rate: 1000 }]);
+    });
+
+    it('outcomeOf ranks repeat, back, gap and skip, and says short for a response that ended early', () => {
+        expect(outcomeOf({ outOfOrder: 'repeat' })).toBe('repeat');
+        expect(outcomeOf({ outOfOrder: 'back', ptsFlag: 'gap' })).toBe('back');
+        expect(outcomeOf({ ptsFlag: 'gap', outOfOrder: 'skip' })).toBe('gap');
+        expect(outcomeOf({ outOfOrder: 'skip' })).toBe('skip');
+        expect(outcomeOf({ expectedBytes: 100, bytes: 40, prefetched: true })).toBe('short');
+    });
+
+    it('formatOffset and formatMs give nothing for a missing or invalid time', () => {
+        expect([formatOffset(undefined), formatOffset(null), formatOffset(NaN), formatMs(undefined), formatMs(null), formatMs(NaN)]).toEqual(['', '', '', '', '', '']);
+    });
+
+    it('flightWindows skips requests with no bytes or no time on the wire', () => {
+        expect(flightWindows([{ t: 1, durMs: 5 }, { t: 1, bytes: 5, durMs: 0 }, { t: 1, bytes: 5, durMs: 5 }])).toHaveLength(1);
+        expect(flightWindows(undefined)).toEqual([]);
+        expect(describeDownloads(undefined, 0, 10)).toBe('');
+    });
+
+    it('describeDownloads names playlists and other requests, and a track with no label', () => {
+        const windows = flightWindows([
+            { kind: 'playlist', t: 0, durMs: 10, bytes: 1 },
+            { kind: 'other', t: 0, durMs: 10, bytes: 1 },
+            { kind: 'segment', track: 'weird', seg: 4, t: 0, durMs: 10, bytes: 1 },
+            { kind: 'segment', seg: 5, t: 0, durMs: 10, bytes: 1 },
+        ]);
+        expect(describeDownloads(windows, 0, 10, 0, 9)).toBe('a playlist, a request, weird segment 4, Stream segment 5');
+    });
+
+    it('withTopTick keeps an existing top and treats an empty list as just the top', () => {
+        expect(withTopTick([], 0, 10, 10)).toEqual([10]);
+        expect(withTopTick([0, 10], 0, 10, 10)).toEqual([0, 10]);
+    });
+
+    it('niceCeil gives the smallest top that fits and divides into round steps', () => {
+        expect([niceCeil(44377320), niceCeil(1), niceCeil(1.1), niceCeil(2), niceCeil(3), niceCeil(5.1), niceCeil(0), niceCeil(0.03)]).toEqual([50000000, 1, 1.5, 2, 3, 6, 1, 0.03]);
+        // 22 MB/s in halves is 30 (15 + 15), not 50; in quarters it is 24 (6 each)
+        expect(niceCeil(22e6, 2)).toBeCloseTo(30e6);
+        expect(niceCeil(22e6, 4)).toBeCloseTo(24e6);
+        expect(niceCeil(50e6, 2)).toBeCloseTo(50e6);
+    });
+
+    it('withTopTick always ends on the top value and drops a tick that would crowd it', () => {
+        expect(withTopTick([0], 0, 44, 44)).toEqual([0, 44]);
+        expect(withTopTick([0, 5, 10, 15], 0, 16, 16)).toEqual([0, 5, 10, 16]);
+        expect(withTopTick([0, 50, 100], 0, 100, 100)).toEqual([0, 50, 100]);
+        expect(withTopTick([0, 5, 10], 0, 12, 11)).toEqual([0, 5, 11]);
+        expect(withTopTick([26, 27, 28, 33, 34], 26, 34, 34, 26)).toEqual([26, 27, 28, 33, 34]);
+        expect(withTopTick([25.5, 26.5, 33.5], 26, 34, 34, 26)).toEqual([26, 34]);
+    });
+
+    it('a segment read ahead is placed where it was downloaded, not at the instant the player asked for it', () => {
+        const ahead = { t: 5000, durMs: 0, bytes: 2000, prefetched: true, profAt: 1000, fetchMs: 500 };
+        expect(transferSteps([ahead])).toEqual([{ t0: 1000, t1: 1500, rate: 4000 }]);
+        expect(peakRate([ahead])).toBe(4000);
+        const buckets = throughputBuckets([ahead], { t0: 0, t1: 2000 }, 4);
+        expect(buckets).toEqual([0, 0, 4000, 0]);
+    });
+
+    it('readAheadSpan is the download window of a segment read ahead, and nothing for any other request', () => {
+        expect(readAheadSpan({ prefetched: true, profAt: 1000, fetchMs: 500 })).toEqual({ t0: 1000, t1: 1500 });
+        expect(readAheadSpan({ prefetched: true })).toBeUndefined();
+        expect(readAheadSpan({ profAt: 1000, fetchMs: 500 })).toBeUndefined();
+        expect(readAheadSpan(undefined)).toBeUndefined();
+    });
+
+    it('describeDownloads names what was downloading in a slice, with read-ahead segments at their own download time', () => {
+        const requests = [
+            { kind: 'segment', track: 'main', seg: 0, t: 1000, durMs: 500, bytes: 10 },
+            { kind: 'segment', track: 'main', seg: 1, t: 9000, durMs: 0, bytes: 10, prefetched: true, profAt: 1200, fetchMs: 600 },
+            { kind: 'playlist', t: 5000, durMs: 100, bytes: 10 },
+            { kind: 'segment', track: 'main', seg: 2, t: 6000, durMs: 100 },
+        ];
+        const windows = flightWindows(requests);
+        expect(windows).toHaveLength(3);
+        expect(describeDownloads(windows, 1100, 1300, 1000)).toBe('Muxed A/V segment 0, Muxed A/V segment 1 (read ahead, asked for at +8.000 s)');
+        expect(describeDownloads(windows, 1600, 1700, 1000)).toBe('Muxed A/V segment 1 (read ahead, asked for at +8.000 s)');
+        expect(describeDownloads(windows, 5000, 5050)).toBe('a playlist');
+        expect(describeDownloads(windows, 3000, 3100)).toBe('');
+        expect(describeDownloads(windows, 0, 99999, 0, 2)).toBe('Muxed A/V segment 0, Muxed A/V segment 1 (read ahead, asked for at +9.000 s) and 1 more');
+    });
+
+    it('paddedRange can keep a smaller margin so the first and last values use more of the height', () => {
+        expect(paddedRange([26, 34])).toMatchObject({ min: 25.2, max: 34.8 });
+        const tight = paddedRange([26, 34], 2, 10 / 200);
+        expect(tight.min).toBeCloseTo(25.6);
+        expect(tight.max).toBeCloseTo(34.4);
+        expect(paddedRange([5], 2, 0.01)).toMatchObject({ min: 3, max: 7 });
     });
 });

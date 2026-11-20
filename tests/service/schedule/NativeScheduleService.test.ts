@@ -176,6 +176,17 @@ describe('NativeScheduleService', () => {
             }
         });
 
+        it('reads a late-December label as last year when it is early January', async () => {
+            const html = '<div class="programme__titles"><a href="/programmes/nye" aria-label="30 Dec 20:00: Show"></a></div>';
+            (axios.get as jest.Mock).mockResolvedValue({ data: html });
+            jest.useFakeTimers().setSystemTime(new Date(2026, 0, 2, 12, 0, 0));
+            try {
+                expect(await NativeScheduleService.getPidsFromSchedulePage('https://mocked-url')).toEqual(['nye']);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
         it('keeps only programmes whose broadcast time (not just date) has passed', async () => {
             const html = `
               <div class="programme__titles"><a href="/programmes/earlier" aria-label="15 Jun 09:30: Show"></a></div>

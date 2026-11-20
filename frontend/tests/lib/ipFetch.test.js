@@ -20,6 +20,11 @@ describe('ipFetch', () => {
         vi.stubGlobal('fetch', fetchMock);
     });
 
+    it('returns the HTTP status so callers can tell a 404 from a 500', async () => {
+        fetchMock.mockResolvedValue(reply({ ok: false, status: 404, json: async () => ({}) }));
+        expect((await ipFetch('json-api/x')).status).toBe(404);
+    });
+
     it('returns the parsed body and the ok flag', async () => {
         fetchMock.mockResolvedValue(reply({ ok: true, json: async () => ({ a: 1 }) }));
         expect(await ipFetch('json-api/x')).toEqual({ data: { a: 1 }, ok: true });

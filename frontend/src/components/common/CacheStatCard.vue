@@ -4,6 +4,7 @@
     <div class="statCard cacheCard" :class="{ placeholder }">
         <span ref="dot" class="liveDot" role="img" :aria-label="dotTitle" :title="dotTitle" />
         <div class="cacheHead">
+            <font-awesome-icon class="storageIcon" :icon="['fas', storage.icon]" role="img" :aria-label="storage.label" :title="storage.label" />
             <div class="cacheName">{{ cache.label }}</div>
             <InfoTip v-if="cache.description" :text="cache.description" />
         </div>
@@ -60,6 +61,7 @@ import { computed, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import { averageRecordBytes, formatAgo, formatCount, formatExpiry, formatRate, formatSize, formatSpan, hitRate, sparkPoints } from '@/lib/cacheActivity';
+import { cacheStorage } from '@/lib/cacheGroups';
 
 // The Statistics page's tile for one cache. `live` is the page's newest figures (polled, and nudged by each lookup it
 // is told about); `pulse` says a lookup just happened: { kind: 'hit' | 'miss', n } where n changes every time.
@@ -73,6 +75,7 @@ const props = defineProps({
     now: { type: Number, default: () => Date.now() },
 });
 
+const storage = computed(() => cacheStorage(props.cache));
 const activity = computed(() => ({ ...props.cache.activity, ...props.live }));
 const totals = computed(() => ({ hits: props.live?.hits ?? props.cache.hits ?? 0, misses: props.live?.misses ?? props.cache.misses ?? 0 }));
 const expiry = computed(() => {
@@ -115,6 +118,11 @@ watch(
         align-items: center;
         gap: @space-1;
         padding-right: @space-4; // room for the dot
+
+        .storageIcon {
+            flex: none;
+            color: @subtle-text-color;
+        }
 
         .InfoTip-button {
             padding: 0 2px;

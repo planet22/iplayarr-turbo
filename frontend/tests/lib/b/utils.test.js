@@ -79,36 +79,29 @@ describe('base path and thumbnails', () => {
 });
 
 describe('buildDownloadQuery', () => {
-    it('includes only the required fields by default', () => {
-        const params = new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'n', type: 'tv' }));
-        expect([...params.keys()]).toEqual(['pid', 'nzbName', 'type']);
+    it('sends only the pid when nothing else is known', () => {
+        expect([...new URLSearchParams(buildDownloadQuery({ pid: 'p1' })).keys()]).toEqual(['pid']);
     });
 
-    it('carries the optional metadata, including zero series and episode', () => {
+    it('carries what the card knows, including zero series and episode, for the server to fall back on', () => {
         const params = new URLSearchParams(
-            buildDownloadQuery({
-                pid: 'p1',
-                nzbName: 'n',
-                type: 'tv',
-                title: 'T',
-                series: 0,
-                episode: 5,
-                episodeTitle: 'E',
-                channel: 'BBC One',
-                pubDate: 'd',
-                runtimeSeconds: 60,
-                media: 'strm',
-                version: 'signed',
-                quality: '2',
-            })
+            buildDownloadQuery({ pid: 'p1', nzbName: 'n', type: 'tv', title: 'T', series: 0, episode: 5, episodeTitle: 'E', channel: 'BBC One', pubDate: 'd', runtimeSeconds: 60 })
         );
-        expect(params.get('series')).toBe('0');
-        expect(params.get('episode')).toBe('5');
-        expect(params.get('runtime')).toBe('60');
+        expect(Object.fromEntries(params)).toEqual({ pid: 'p1', nzbName: 'n', type: 'tv', title: 'T', series: '0', episode: '5', episodeTitle: 'E', channel: 'BBC One', pubDate: 'd', runtime: '60' });
+    });
+
+    it('carries the choices: media mode, version and quality', () => {
+        const params = new URLSearchParams(buildDownloadQuery({ pid: 'p1', media: 'strm', version: 'signed', quality: '2' }));
         expect(params.get('media')).toBe('strm');
         expect(params.get('version')).toBe('signed');
         expect(params.get('quality')).toBe('2');
-        expect(params.get('title')).toBe('T');
+    });
+
+    it('marks a filename as the user\'s only when they typed it', () => {
+        expect(new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'Suggested.Name' })).has('nameEdited')).toBe(false);
+        const params = new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'My.Name', nameEdited: true }));
+        expect(params.get('nzbName')).toBe('My.Name');
+        expect(params.get('nameEdited')).toBe('1');
     });
 });
 
@@ -191,6 +184,8 @@ describe('sizes and durations', () => {
         expect(formatBytes(12.5 * 1048576)).toBe('12.50 MB');
         expect(formatBytes(1020 * 1048576)).toBe('1020 MB');
         expect(formatBytes(1.2 * 1073741824)).toBe('1.20 GB');
+        expect(formatBytes(2.5 * 1099511627776)).toBe('2.50 TB');
+        expect(formatBytes(1.5 * 1125899906842624)).toBe('1.50 PB');
     });
 
     it('formatBytes returns empty for invalid values', () => {

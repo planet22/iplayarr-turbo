@@ -228,7 +228,7 @@ export const radioAppSourceId = (app: Pick<App, 'id'>): string => `radio:app:${a
 // A radio show's folder under SOUNDS_DIR, named as soundsDownloadService names it, and the key a folder and a followed
 // show meet under.
 export const showFolder = (title: string): string => shareSafeName(title);
-const radioKey = (title: string): string => showKey(showFolder(title));
+export const radioKey = (title: string): string => showKey(showFolder(title));
 
 // The episode id tagged in an audio file (written by new downloads), or undefined when there is none or it cannot be read.
 const readAudioId = (file: string): Promise<string | undefined> =>
@@ -769,6 +769,11 @@ class LibraryIndexService {
         };
     }
 
+    // The last scan of each source, without its files: for the health check (can the files be read from here?).
+    async sourceSummaries(): Promise<LibraryDebug['sources']> {
+        return Object.values(await this.#scans()).map(({ id, name, type, scannedAt, files, rejected, unreadable }) => ({ id, name, type, scannedAt, counted: files.length, rejected: rejected?.length ?? 0, unreadable }));
+    }
+
     // What is in the library: the same counts, without the history, which lists what was downloaded rather than what is there.
     async onDiskCounts(kind: LibraryKind = 'video'): Promise<IndexCounts> {
         const scans = this.#chosen(await this.#scans(), undefined, kind).filter(({ id }) => id !== HISTORY_ID);
@@ -916,6 +921,28 @@ class LibraryIndexService {
             return scan && Date.now() - Date.parse(scan.scannedAt) > RADIO_STALE_MS;
         });
         if (stale.length) void this.scanRadioApps(stale).catch(() => undefined);
+    }
+
+    // Every radio show that has files in the radio sources (iPlayarr's Radio Directory and each Jellyfin music library): the name
+    // of its folder, how many episodes are on disk (one held by several sources counts once) and how many each source holds.
+    async radioShows(): Promise<{ key: string; title: string; onDisk: number; sources: { id: string; name: string; type: IndexSourceType; count: number }[] }[]> {
+        const scans = this.#chosen(await this.#ready('radio'), undefined, 'radio');
+        const titles = new Map<string, string>();
+        for (const scan of scans) {
+            for (const file of scan.files) {
+                if (file.show && !titles.has(file.show)) titles.set(file.show, path.basename(file.folder ?? path.dirname(file.path)));
+            }
+        }
+        return [...titles]
+            .map(([key, title]) => {
+                const episodes = this.#group(scans, (file) => file.show === key);
+                const counts = this.#counts(scans, episodes);
+                const sources = Object.entries(counts.bySource)
+                    .filter(([, { count }]) => count > 0)
+                    .map(([id, { name, type, count }]) => ({ id, name, type, count }));
+                return { key, title, onDisk: counts.total, sources };
+            })
+            .sort((a, b) => a.title.localeCompare(b.title));
     }
 
     // The .strm links a library's downloads saved, with the programme or episode each names.

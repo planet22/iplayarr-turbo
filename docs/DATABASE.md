@@ -15,8 +15,8 @@ These are read directly from `process.env` in `src/service/db/prismaService.ts`,
 
 The schema is in `prisma/schema.prisma`. Four tables:
 
-- **`KeyValue`** — settings and app state written through `QueuedStorage`: every Settings UI value under the `config` key, apps, User-Agent mappings, synonyms, queue and history, subscriptions (see [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)), live-TV channels, STRM and stream state. Also the cookie-signing secret (`iplayarr:session_secret`) and the process uptime.
-- **`Cache`** — short-lived copies of remote data with an expiry: search results, the schedule, Skyhook lookups, iPlayer metadata and Browse listings (see [BROWSE.md](BROWSE.md)). Safe to lose; they refill on demand. Expired rows are removed when read.
+- **`KeyValue`** — settings and app state written through `QueuedStorage`: every Settings UI value under the `config` key, apps, User-Agent mappings, synonyms, queue and history, subscriptions (see [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)), radio downloads and followed radio shows (`soundsDownloads`, `soundsFollows`; see [SOUNDS.md](SOUNDS.md)), live-TV channels, STRM and stream state. Also the cookie-signing secret (`iplayarr:session_secret`) and the process uptime.
+- **`Cache`** — short-lived copies of remote data with an expiry: search results, the schedule, Skyhook lookups, iPlayer metadata and Browse listings (see [BROWSE.md](BROWSE.md)), and radio listings, searches and the radio A to Z list (`sounds_*`). Safe to lose; they refill on demand. Expired rows are removed when read.
 - **`QueueItem`** — capped lists: search, grab and failed-grab history (500/500/200 entries) and the last 250 log lines used to fill the Logs page on load.
 - **`Session`** — web UI login sessions (see [AUTHENTICATION.md](AUTHENTICATION.md)), so sessions survive a restart. Expired sessions are purged hourly.
 

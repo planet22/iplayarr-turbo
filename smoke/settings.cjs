@@ -54,16 +54,23 @@ const CHANGE = {
     STREAM_NATIVE_EXPERIMENTAL_FHD: ['false', 'true'],
     STREAM_SUBTITLES: ['true', 'false'],
     STREAM_TRACE: ['true', 'false'],
+    STREAM_PREFETCH_OPEN_RANGE: ['true', 'false'],
     STREAM_LIVE_DASH_1080: ['true', 'false'],
     LIVE_TV_ENABLED: ['true', 'false'],
     LIVE_RADIO: ['true', 'false'],
     SOUNDS_ENABLED: ['true', 'false'],
     RADIO_MEDIA_MODE: ['strm', 'm4a'],
+    RADIO_FOLDER_STRUCTURE: ['series', 'show'],
     RADIO_THUMBNAIL_STYLE: ['square', 'blur'],
+    RADIO_ATOZ: ['true', 'false'],
+    RADIO_ATOZ_HIDE_EMPTY: ['true', 'false'],
+    RADIO_PODCASTS: ['true', 'false'],
     RADIO_SEARCH_MATCH_ALL_WORDS: ['false', 'true', 'inherit'],
     RADIO_SEARCH_RANK_BY_TITLE: ['false', 'true'],
     RADIO_SEARCH_SCOPE: ['shows', 'episodes', 'both'],
     RADIO_SEARCH_MP3_ONLY: ['true', 'false'],
+    RADIO_SEARCH_COLLECTION_NAMES: ['true', 'false'],
+    RADIO_SEARCH_EXPAND_COLLECTIONS: ['true', 'false'],
     RADIO_SEARCH_NETWORKS: ['Radio 4, 6 Music', ''],
     LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
@@ -118,6 +125,7 @@ const OTHER = {
     ARR_COMPLETE_DIR: 'directory test + SABnzbd get_config',
     TV_FILENAME_TEMPLATE: 'template test + release names',
     MOVIE_FILENAME_TEMPLATE: 'template test + release names',
+    RADIO_FILENAME_TEMPLATE: 'a template that only names the next radio download, which writes into the Radio Directory (this suite will not do that); the validator and radio download service tests cover it',
     GET_IPLAYER_EXEC: 'executable guard test',
     YTDLP_EXEC: 'executable guard test',
     ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: 'executable guard test',
@@ -135,12 +143,14 @@ const NO_EFFECT = {
     LIVE_RADIO: 'turns the live radio channels on or off; the radio checks in the other layers need them on (prepare.cjs does this), so no flip here',
     SOUNDS_ENABLED: 'turns the whole Radio feature on or off; every radio check in the other layers needs it on, so no flip here',
     RADIO_MEDIA_MODE: 'chooses what the next radio download saves (an audio file or a .strm link); a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
+    RADIO_FOLDER_STRUCTURE: 'chooses where the next radio download is saved; a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
+    RADIO_ATOZ_HIDE_EMPTY: 'turning it on starts a request per show (thousands) once Radio A to Z is on; the radio A to Z checks use their own run, so no flip here',
+    RADIO_ATOZ: 'turning it on starts a crawl of the whole BBC Sounds show list (about 120 requests); the radio A to Z checks use their own run, so no flip here',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
     DOWNLOAD_SUBTITLES: 'decides what a finished download keeps (a loose .srt, an embedded track, both or none); this suite cancels its downloads, so the real-download matrix and the download tests cover it, and section 7b checks the four values and the refusal',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
     STREAM_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
-    STREAM_LIVE_DASH_1080: 'picks the 1080p DASH source for live channels; visible only in the BBC manifest at that moment',
     STRM_WATCHDOG_SOURCES: 'only used while a watchdog run lists links (a full BBC pass)',
     STRM_WATCHDOG_ACTION: 'only used when a watchdog run finds dead links (it can delete .strm files)',
     STRM_WATCHDOG_PATH_MAP: 'only used while a watchdog run maps library paths',
@@ -211,6 +221,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     const before = await get();
     const K = encodeURIComponent(before.STREAM_KEY || '');
     const touched = new Set();
+    // --filter: a section runs only when the filter matches one of its labels (its setting keys or a short name for it), so a
+    // filtered run does just that work instead of the whole sweep with the other results hidden. No filter: everything runs.
+    const wants = (...labels) => !ctx.want || labels.flat().some((label) => ctx.want(label));
+    const LIVE_TV_KEYS = ['LIVE_TV_ENABLED', 'LIVE_TV_LOGO_SHAPE', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_EPG_OFFSET', 'STREAM_BASE_URL', 'STREAM_LIVE_DASH_1080'];
     const profilesQ = Object.fromEntries(((await http('/json-api/config/qualityProfiles')).json || []).map((p) => [p.id, p.quality]));
     let termIx = 0;
     const freshTerm = () => TERMS[termIx++ % TERMS.length];
@@ -248,9 +262,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     };
 
     // Live TV prep: playlist and guide baselines are taken with Live TV switched on
-    if (before.STREAM_KEY && before.LIVE_TV_ENABLED !== 'true') { touched.add('LIVE_TV_ENABLED'); await put({ LIVE_TV_ENABLED: 'true' }); }
-    const playlist0 = before.STREAM_KEY ? await playlist() : undefined;
-    const epg0 = before.STREAM_KEY ? await epg() : '';
+    // (only when a check that reads them is going to run: the guide alone can take minutes)
+    const needLiveTv = wants(LIVE_TV_KEYS, 'Live TV', 'guide', 'playlist');
+    if (needLiveTv && before.STREAM_KEY && before.LIVE_TV_ENABLED !== 'true') { touched.add('LIVE_TV_ENABLED'); await put({ LIVE_TV_ENABLED: 'true' }); }
+    const playlist0 = needLiveTv && before.STREAM_KEY ? await playlist() : undefined;
+    const epg0 = needLiveTv && before.STREAM_KEY ? await epg() : '';
     const hasGuide = /<programme /.test(epg0);
     const firstStart = (xml) => {
         const m = /<programme start="(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d) /.exec(xml);
@@ -345,6 +361,28 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const only = eps.every((e) => e.mp3);
             return { what: `radio search ${next === 'true' ? 'lists only MP3 episodes' : 'is not limited to MP3 episodes'}`, pass: s.mp3Only === (next === 'true') && (next !== 'true' || only), detail: `${eps.length} episodes; ${JSON.stringify(s)}` };
         },
+        RADIO_SEARCH_COLLECTION_NAMES: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const reported = s.collectionNames === (next === 'true');
+            if ((await http('/json-api/config')).json?.BROWSE_SHOW_COLLECTIONS !== 'true') return { what: 'the radio search settings report the by-name collections option', pass: reported, detail: `Show Collections is off, so the stream is not checked; ${JSON.stringify(s)}` };
+            const listed = ((await http('/json-api/browse/collections?mode=radio&basic=1', { timeout: 120000 })).json?.collections) || [];
+            if (!listed.length) return 'BBC Sounds lists no collections right now';
+            const stream = await http(`/json-api/search/stream?mode=radio&q=${encodeURIComponent(listed[0].title)}`, { timeout: 120000 });
+            const lines = String(stream.text || '').trim().split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+            const tiles = lines.filter((l) => Array.isArray(l.collections)).flatMap((l) => l.collections);
+            const found = tiles.some((c) => c.id === listed[0].id);
+            return { what: `a radio search ${next === 'true' ? 'sends the matching collections as their own line' : 'sends no collections line'}`, pass: reported && (next === 'true' ? found : tiles.length === 0), detail: `${tiles.length} tiles for "${listed[0].title}"; ${JSON.stringify(s)}` };
+        },
+        RADIO_SEARCH_EXPAND_COLLECTIONS: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const reported = s.expandCollections === (next === 'true');
+            const listed = ((await http('/json-api/browse/collections?mode=radio&basic=1', { timeout: 120000 })).json?.collections) || [];
+            if (!listed.length) return reported ? { what: 'the radio search settings report the by-pid collections option', pass: true, detail: JSON.stringify(s) } : 'BBC Sounds lists no collections right now';
+            const r = await http(`/json-api/search?mode=radio&q=${encodeURIComponent(listed[0].id)}`, { timeout: 90000 });
+            const list = Array.isArray(r.json) ? r.json : [];
+            const expanded = list.length > 0 && list.every((x) => x.kind === 'episode');
+            return { what: `a radio search for a collection pid ${next === 'true' ? 'lists its episodes' : 'does not expand it'}`, pass: reported && (next === 'true' ? expanded : !expanded), detail: `${list.length} results for "${listed[0].id}"; ${JSON.stringify(s)}` };
+        },
         RADIO_SEARCH_NETWORKS: async ({ next }) => {
             const s = (await http('/json-api/search/settings?mode=radio')).json || {};
             const want = next ? next.split(',').map((n) => n.trim()).filter(Boolean) : [];
@@ -435,6 +473,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const t = ((await http('/json-api/maintenance/tasks')).json || []).find((x) => x.id === 'schedule-refresh');
             return { what: `the Schedule Refresh task runs on "${next}"`, pass: (t?.cron ?? t?.schedule) === next, detail: `task shows "${t?.cron ?? t?.schedule}"` };
         },
+        RADIO_PODCASTS: async ({ next }) => {
+            // Off: the radio podcasts list is an empty page and nothing is read from the BBC. On: the list has shows (a cold list takes a while to build).
+            const r = await http('/json-api/browse/podcasts?mode=radio&perPage=5', { timeout: 180000 });
+            const total = r.json?.total;
+            return { what: next === 'true' ? 'the radio podcasts list has shows' : 'the radio podcasts list is empty', pass: next === 'true' ? total > 0 : total === 0, detail: `HTTP ${r.status}, total ${total}` };
+        },
         LIVE_TV_ENABLED: async () => {
             const b = await playlist();
             return { what: 'the Live TV playlist changes', pass: !!playlist0 && (b.status !== playlist0.status || b.text !== playlist0.text), detail: `both HTTP ${b.status}, ${b.text.length} bytes` };
@@ -447,6 +491,14 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         LIVE_TV_GUIDE_CATEGORIES: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} category tags`, (xml) => ({ pass: /<category/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_FLAGS: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} new/live/repeat flags`, (xml) => ({ pass: /<new\/>|<previously-shown\/>|<live\/>/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_HD: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'marks' : 'does not mark'} programmes HD`, (xml) => ({ pass: /<quality>HDTV/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
+        // Off adds &lq=720 to the plain TV channel URLs, so Jellyfin (which caches its probe per URL) probes them again; on leaves them as they were.
+        STREAM_LIVE_DASH_1080: async ({ next }) => {
+            if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
+            const lines = (await playlist()).text.split('\n').filter((l) => l.includes('/api/live.m3u8'));
+            const pinned = lines.filter((l) => l.includes('&lq=720'));
+            const ok = next === 'false' ? pinned.length > 0 : pinned.length === 0;
+            return { what: `playlist channel URLs ${next === 'false' ? 'carry' : 'do not carry'} lq=720`, pass: lines.length > 0 && ok, detail: `${pinned.length} of ${lines.length} channel URLs pinned` };
+        },
         STREAM_BASE_URL: async ({ next }) => {
             if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
             const lines = (await playlist()).text.split('\n').filter((l) => l.includes('/api/live.m3u8'));
@@ -587,6 +639,34 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const recorded = (((await http(`/json-api/streams/trace/${s.id}`)).json || {}).requests || []).length;
             return { what: `a new stream records its requests only with Stream Trace on (${next})`, pass: next === 'true' ? recorded > 0 : recorded === 0, detail: `${recorded} request(s) recorded` };
         },
+        // Plays two segments the way Jellyfin does (Range: bytes=0- on each) and reads the trace: the second should be a read-ahead hit only with the setting on.
+        STREAM_PREFETCH_OPEN_RANGE: async ({ next }) => {
+            if (needSession()) return needSession();
+            if (effective(await get(), 'STREAM_TRACE') !== 'true') return 'Stream Trace is off, so read-ahead hits are not recorded';
+            const seen = new Set(((await http('/json-api/streams')).json?.history || []).concat((await http('/json-api/streams')).json?.active || []).map((s) => s.id));
+            let path = `/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`;
+            let segments = [];
+            for (let level = 0; level < 3 && !segments.length; level++) {
+                const lines = ((await http(path, { timeout: 60000, headers: { Range: 'bytes=0-' } })).text || '').split(/\r?\n/).filter((l) => l && !l.startsWith('#'));
+                segments = lines.filter((l) => /[?&]seg=\d+/.test(l));
+                if (!segments.length) {
+                    if (!lines[0]) return 'no playlist or segment URLs came back from the stream';
+                    path = lines[0];
+                }
+            }
+            if (segments.length < 2) return 'the stream has fewer than two segments to read ahead across';
+            for (const seg of segments.slice(0, 2)) {
+                const r = await fetch(`${BASE}${seg}`, { headers: { Range: 'bytes=0-' } });
+                await r.arrayBuffer();
+                await sleep(3000);
+            }
+            const s = (await http('/json-api/streams')).json || {};
+            const found = [...(s.active || []), ...(s.history || [])].find((x) => x.pid === ctx.pid && !seen.has(x.id));
+            if (!found) return { what: 'a Range: bytes=0- stream is read ahead only with Prefetch Open Ranges on', pass: false, detail: 'no session was recorded' };
+            const prefetched = ((await http(`/json-api/streams/trace/${found.id}`)).json?.summary || {}).prefetched || 0;
+            if (!found.endedAt) await http(`/json-api/streams/${found.id}/stop`, { method: 'POST' });
+            return { what: `a Range: bytes=0- stream is read ahead only with Prefetch Open Ranges on (${next})`, pass: next === 'true' ? prefetched > 0 : prefetched === 0, detail: `${prefetched} read-ahead hit(s)` };
+        },
         STREAM_SUBTITLES: async ({ next }) => {
             const snap = await nativeSnapshot('Subtitles', next === 'true' ? 'On' : 'Off');
             if (typeof snap === 'string') return snap;
@@ -600,6 +680,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     const effectsPassed = new Set();
     try {
         // 1. Guard rails on the endpoint itself
+        if (wants('guard rails', 'unknown setting', 'PORT', 'object value', 'array body')) {
         const unknown = await put({ SMOKE_NOT_A_SETTING: 'x' });
         ok('unknown setting rejected', rejected(unknown, 'SMOKE_NOT_A_SETTING'), `HTTP ${unknown.status}`);
         const obj = await put({ DEBUG: { a: 1 } });
@@ -611,9 +692,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         ok('PORT unchanged', effective(await get(), 'PORT') === effective(before, 'PORT'));
         const same = await put({ PORT: effective(before, 'PORT') });
         ok('PORT sent back unchanged is accepted', same.status === 200, `HTTP ${same.status}`);
+        }
 
         // 1b. Route hint (&route= in a .strm link): the two on/off settings validate, and a stream link carrying any hint still plays,
         // because the hint is only a head start (an unknown or malformed one is ignored, a route BBC does not answer falls back).
+        if (wants('route hint', 'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES', 'stream link')) {
         for (const key of ['STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES']) {
             ok(`${key} refuses a value that is not true or false`, rejected(await put({ [key]: 'maybe' }), key), key);
         }
@@ -633,6 +716,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 const seen = [...(now.active || []), ...(now.history || [])].find((x) => x.id === hinted?.id);
                 warn('a session started from a hinted link notes that the route came from the link', !seen?.source?.route || /\(from the link\)/.test(seen.source.route), JSON.stringify(seen?.source || {}));
             }
+        }
         }
 
         // 2. Each changeable setting: change, read back, confirm the effect, restore
@@ -669,6 +753,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 3. Directories: must exist, and SABnzbd's get_config (what Sonarr/Radarr read) reports them
+        if (wants('DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'directories')) {
         for (const key of ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR']) {
             touched.add(key);
             const bad = await put({ [key]: '/smoke-temp-does-not-exist' });
@@ -693,10 +778,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 else rec(W, 'COMPLETE_DIR effect', 'SKIP', 'no second existing directory to point it at');
             } else rec(W, 'COMPLETE_DIR effect', 'SKIP', 'ARR_COMPLETE_DIR is set, so get_config reports that instead');
         }
+        }
 
         // 4. Numeric settings: validated range
         const limits = { ACTIVE_LIMIT: [1, 10, true], RADIO_ACTIVE_LIMIT: [1, 10, false], RADIO_SEARCH_MAX_RESULTS: [0, 200, false], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
         for (const [key, [min, max, required]] of Object.entries(limits)) {
+            if (!wants(key, 'numeric')) continue;
             touched.add(key);
             const cur = effective(before, key);
             // A rejected save changes nothing, so these can go side by side (--concurrency).
@@ -713,10 +800,13 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             }
             await put({ [key]: cur });
         }
-        const mixed = await put({ DEBUG: effective(before, 'DEBUG') === 'true' ? 'false' : 'true', ACTIVE_LIMIT: '99' });
-        ok('one invalid field rejects the whole save', rejected(mixed, 'ACTIVE_LIMIT') && effective(await get(), 'DEBUG') === effective(before, 'DEBUG'), `HTTP ${mixed.status}`);
+        if (wants('numeric', 'ACTIVE_LIMIT', 'invalid field')) {
+            const mixed = await put({ DEBUG: effective(before, 'DEBUG') === 'true' ? 'false' : 'true', ACTIVE_LIMIT: '99' });
+            ok('one invalid field rejects the whole save', rejected(mixed, 'ACTIVE_LIMIT') && effective(await get(), 'DEBUG') === effective(before, 'DEBUG'), `HTTP ${mixed.status}`);
+        }
 
         // 5. Guide time offset: validated, and it really shifts the guide
+        if (wants('LIVE_TV_EPG_OFFSET', 'guide time offset')) {
         touched.add('LIVE_TV_EPG_OFFSET');
         for (const v of ['1440', '-1440', '0', '90']) {
             const r = await put({ LIVE_TV_EPG_OFFSET: v });
@@ -734,7 +824,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             ok('LIVE_TV_EPG_OFFSET takes effect: the first programme moves by 90 minutes', a !== undefined && b !== undefined && Math.abs(b - a) === 90 * 60000, `${a} -> ${b}`);
         } else rec(W, 'LIVE_TV_EPG_OFFSET effect', 'SKIP', 'no Live TV guide to read');
         await put({ LIVE_TV_EPG_OFFSET: effective(before, 'LIVE_TV_EPG_OFFSET') });
+        }
 
+        if (wants('non-boolean', 'UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION', 'STRM_SECURE_ACTION', 'DOWNLOAD_DEFAULT_VERSION', 'PLAY_DEFAULT_VERSION', 'version profiles', 'quality profiles')) {
         await pool(['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'], async (key) => {
             const r = await put({ [key]: 'maybe' });
             ok(`${key} non-boolean rejected`, rejected(r, key), `HTTP ${r.status}`);
@@ -750,9 +842,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const profiles = (await http('/json-api/config/versionProfiles')).json || [];
         ok('version profiles offer the ids the settings accept', ['audio-described', 'signed'].every((id) => profiles.some((p) => p.id === id)), JSON.stringify(profiles.map((p) => p.id)));
         ok('quality profiles include the VIDEO_QUALITY choices used here', ['sd', 'hd', 'fhd'].every((id) => !!profilesQ[id]));
+        }
 
         // 6. Filename templates: must compile, are saved, and shape the release names
         for (const [key, searchType] of [['TV_FILENAME_TEMPLATE', 'tvsearch'], ['MOVIE_FILENAME_TEMPLATE', 'movie']]) {
+            if (!wants(key, 'template')) continue;
             touched.add(key);
             const cur = effective(before, key);
             for (const [label, v] of [['unbalanced block', '{{#if title}}x'], ['unknown variable', '{{smoke_temp_nope}}']]) {
@@ -776,6 +870,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 7. Executable settings (guarded: they decide what program the server runs)
+        if (wants('GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'executable', 'lockedSettings')) {
         const locked = (await http('/json-api/config/lockedSettings')).json || {};
         const authNone = effective(before, 'AUTH_TYPE') === 'none';
         ok('lockedSettings lists the executable settings only while login is disabled', authNone ? ['GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS'].every((k) => (locked.locked || []).includes(k)) : (locked.locked || []).length === 0, JSON.stringify(locked.locked));
@@ -785,11 +880,21 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             ['GET_IPLAYER_EXEC', 'perl -e "system(1)"', 'perl -e'],
             ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--exec "touch /tmp/x"', '--exec'],
             ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--command=whoami', '--command'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--downloader "sh -c id"', '--downloader'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--ppa "x"', '--ppa'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '-o /tmp/x', '-o'],
+            ['YTDLP_EXEC', '/usr/bin/../../bin/sh', 'a path that resolves to a shell'],
         ], async ([key, v, label]) => {
             touched.add(key);
             const r = await put({ [key]: v });
             ok(`${key} rejects ${label}`, rejected(r, key), `HTTP ${r.status}`);
         });
+        {
+            const tooShort = await put({ API_KEY: 'abc' });
+            ok('API_KEY too short is refused', rejected(tooShort, 'API_KEY'), `HTTP ${tooShort.status}`);
+            const same = await put({ API_KEY: 'smoke-same-key-0123', STREAM_KEY: 'smoke-same-key-0123' });
+            ok('API_KEY equal to STREAM_KEY is refused', same.status >= 400, `HTTP ${same.status}`);
+        }
         const validExec = effective(before, 'YTDLP_EXEC') === '/opt/smoke/yt-dlp' ? '/opt/smoke2/yt-dlp' : '/opt/smoke/yt-dlp';
         const lockedTry = await put({ YTDLP_EXEC: validExec });
         if (authNone) ok('a valid executable change is refused while login is disabled', rejected(lockedTry, 'YTDLP_EXEC'), `HTTP ${lockedTry.status}`);
@@ -809,8 +914,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const goodOverride = await http('/json-api/config/executableOverride/YTDLP_EXEC', { method: 'DELETE' });
         ok('executableOverride resets an executable setting', goodOverride.status === 200 && goodOverride.json?.status === true, `HTTP ${goodOverride.status}`);
         touched.add('YTDLP_EXEC');
+        }
 
         // 7b. Download subtitles: four modes accepted, anything else refused, and the saved word reads back
+        if (wants('DOWNLOAD_SUBTITLES')) {
         touched.add('DOWNLOAD_SUBTITLES');
         for (const mode of ['off', 'sidecar', 'embed', 'both']) {
             const r = await put({ DOWNLOAD_SUBTITLES: mode });
@@ -819,8 +926,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const badSubs = await put({ DOWNLOAD_SUBTITLES: 'burn' });
         ok('DOWNLOAD_SUBTITLES rejects an unknown mode', rejected(badSubs, 'DOWNLOAD_SUBTITLES'), `HTTP ${badSubs.status}`);
         await put({ DOWNLOAD_SUBTITLES: effective(before, 'DOWNLOAD_SUBTITLES') });
+        }
 
         // 8. Secrets are masked on read and a masked value never overwrites the stored one
+        if (wants('AUTH_PASSWORD', 'OIDC_CLIENT_SECRET', 'secrets', 'masked')) {
         const pw = (await get()).AUTH_PASSWORD;
         ok('AUTH_PASSWORD is masked on read', !pw || pw === '********', pw ? 'plaintext/hash leaked' : '');
         const pwBack = await put({ AUTH_PASSWORD: pw });
@@ -831,9 +940,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             ok('OIDC_CLIENT_SECRET saved', r.status === 200, `HTTP ${r.status}`);
             ok('OIDC_CLIENT_SECRET is masked on read', (await get()).OIDC_CLIENT_SECRET === '********', 'secret returned in clear');
         } else rec(W, 'OIDC_CLIENT_SECRET set and masked', 'SKIP', 'a real secret is stored; it cannot be restored once replaced');
+        }
 
         // 9. Live channel .strm folder: a live subscription writes its .strm under LIVE_STRM_DIR
-        {
+        if (wants('LIVE_STRM_DIR', 'live subscription')) {
             const dir = `${effective(before, 'COMPLETE_DIR').replace(/[\/]$/, '')}/SMOKE-TEMP-live`;
             const host = hostPath(dir);
             const chan = 'bbc_four';
@@ -852,13 +962,13 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 10. Library files: folder structure, nfo, strmtool json, base URL and media mode, checked on disk
-        await libraryTest();
+        if (wants(TESTED_LATER, 'STREAM_BASE_URL', 'library files')) await libraryTest();
 
         // 10b. The empty-folder cleanup: leftover artwork/subtitles/sidecars go once the video has been imported away
-        await folderCleanupTest();
+        if (wants('LIBRARY_FOLDER_STRUCTURE', 'library-cleanup', 'empty folder cleanup')) await folderCleanupTest();
 
         // 11. Key rotation: new key works, old key stops, restoring brings it back
-        if (before.API_KEY) {
+        if (!wants('API_KEY', 'key rotation')) { /* filtered out */ } else if (before.API_KEY) {
             touched.add('API_KEY');
             const newKey = 'smoketemp' + Date.now();
             const caps = (k) => http(`/api?t=caps&apikey=${encodeURIComponent(k)}`);
@@ -870,7 +980,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             await put({ API_KEY: before.API_KEY });
             ok('API_KEY restored and accepted again', /<caps/.test((await caps(before.API_KEY)).text), 'restored key rejected');
         }
-        if (before.STREAM_KEY && (before.LIVE_TV_ENABLED === 'true' || touched.has('LIVE_TV_ENABLED'))) {
+        if (!wants('STREAM_KEY', 'key rotation')) { /* filtered out */ } else if (before.STREAM_KEY && (before.LIVE_TV_ENABLED === 'true' || touched.has('LIVE_TV_ENABLED'))) {
             touched.add('STREAM_KEY');
             const newKey = 'smoketemp' + Date.now();
             const pl = (k) => http(`/api?mode=live_playlist&streamkey=${encodeURIComponent(k)}`, { timeout: 60000 });
@@ -884,8 +994,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         } else rec(W, 'STREAM_KEY rotation', 'SKIP', 'Live TV is off, so there is no key-gated playlist to probe');
 
         // 12. STREAM_BASE_URL is checked when strm mode or Live TV needs it
-        touched.add('STREAM_BASE_URL');
-        if (before.MEDIA_MODE === 'strm' || before.LIVE_TV_ENABLED === 'true') {
+        if (!wants('STREAM_BASE_URL')) { /* filtered out */ } else if (touched.add('STREAM_BASE_URL'), before.MEDIA_MODE === 'strm' || before.LIVE_TV_ENABLED === 'true') {
             const r = await put({ STREAM_BASE_URL: 'not a url' });
             ok('STREAM_BASE_URL invalid rejected while strm mode / Live TV is on', rejected(r, 'STREAM_BASE_URL'), `HTTP ${r.status}`);
         } else rec(W, 'STREAM_BASE_URL invalid rejected', 'SKIP', 'neither strm mode nor Live TV is on');
@@ -1122,7 +1231,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                     const again = await run('WRITE_ADDITIONAL_IMAGES=overwrite download', { WRITE_ADDITIONAL_IMAGES: 'overwrite' });
                     if (again && stamps.size) {
                         const newer = [...stamps].filter(([f, t]) => fs.existsSync(f) && fs.statSync(f).mtimeMs > t).length;
-                        warn('WRITE_ADDITIONAL_IMAGES=overwrite takes effect: existing pictures are replaced', newer > 0, `${newer} of ${stamps.size} pictures were rewritten`);
+                        // By design the app does not rewrite a picture it wrote under 10 minutes ago (additionalImagesService REMEMBER_MS, covered by
+                        // jest), and the "missing" run above wrote these seconds ago, so no rewrite is expected here. A rewrite would still be a PASS.
+                        if (newer > 0) rec(W, 'WRITE_ADDITIONAL_IMAGES=overwrite takes effect: existing pictures are replaced', 'PASS');
+                        else rec(W, 'WRITE_ADDITIONAL_IMAGES=overwrite takes effect: existing pictures are replaced', 'SKIP', 'the pictures were written moments ago by the "missing" run and the app does not rewrite a picture under 10 minutes old (jest covers the overwrite itself)');
                     }
                     dropNew([...(missing.added || []), ...(again?.added || [])]); await cleanHist(ep.pid);
                 }

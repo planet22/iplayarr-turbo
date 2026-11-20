@@ -9,6 +9,10 @@
             </div>
             <!-- Top left: what it is, so a collection never reads as a single programme. -->
             <span class="groupIcon" role="img" aria-label="Collection"><font-awesome-icon :icon="['fas', 'layer-group']" /></span>
+            <!-- Bottom left, with the toolbar icons button on: which catalogue it is from (TV or radio), as on programme cards. -->
+            <span v-if="iconBadges && collection.source" class="kindIcon" role="img" :title="sourceLabel" :aria-label="sourceLabel">
+                <font-awesome-icon :icon="['fas', collection.source === 'radio' ? 'radio' : 'tv']" />
+            </span>
             <span v-if="collection.count != null" class="count">{{ collection.count }} {{ collection.count === 1 ? 'title' : 'titles' }}</span>
         </div>
         <div class="meta">
@@ -36,7 +40,13 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    iconBadges: {
+        type: Boolean,
+        default: false,
+    },
 });
+
+const sourceLabel = computed(() => (props.collection.source === 'radio' ? 'Radio collection' : 'TV collection'));
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, true));
 </script>
@@ -92,6 +102,22 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
         color: @on-media-color;
         font-size: @font-size-sm;
+    }
+
+    .kindIcon {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: @radius-sm;
+        background-color: rgba(0, 0, 0, 0.7);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+        color: @on-media-color;
+        font-size: @font-size-xs;
     }
 
     .count {

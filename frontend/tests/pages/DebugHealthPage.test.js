@@ -56,6 +56,15 @@ describe('DebugHealthPage', () => {
         expect(wrapper.find('.reportText').text()).toContain('[Problem] Database: locked');
     });
 
+    it('shows a check with no test as a grey Skipped pill, and puts it in the report text', async () => {
+        ipFetch.mockResolvedValue({ ok: true, data: { ...healthReport(), checks: [{ name: 'Plex (PLEX)', state: 'info', detail: 'Not tested for this type' }] } });
+        const wrapper = await mountIt();
+        const pill = wrapper.find('tbody .pill');
+        expect(pill.text()).toBe('Skipped');
+        expect(pill.classes()).toContain('grey');
+        expect(wrapper.find('.reportText').text()).toContain('[Skipped] Plex (PLEX): Not tested for this type');
+    });
+
     it('Copy hands the report to copyReport', async () => {
         const wrapper = await mountIt();
         await wrapper.find('button[aria-label="Copy report"]').trigger('click');

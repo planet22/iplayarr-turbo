@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, reactive } from 'vue';
 
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import { setMediaMode, setRadioEnabled } from '@/lib/mediaMode';
 import CollectionsPage from '@/views/CollectionsPage.vue';
 
 const { browseFetch, ipFetch, router, dialogService, toastService } = vi.hoisted(() => ({
@@ -242,6 +243,57 @@ describe('CollectionsPage', () => {
         await flushPromises();
         expect(toastService.info).toHaveBeenCalledWith('Nothing in this collection can be downloaded right now');
         expect(dialogService.confirmDownload).not.toHaveBeenCalled();
+    });
+
+    describe('catalogue from the link (?m=)', () => {
+        const open = (m) => {
+            route.query = { c: 'c1', ...(m ? { m } : {}) };
+            api['collections/c1?page=1&perPage=150'] = { total: 1, items: [{ pid: 'a', title: 'Alpha' }] };
+        };
+
+        afterEach(() => setMediaMode('video'));
+
+        it('asks for the radio catalogue throughout when m is radio, whatever the toggle says', async () => {
+            open('radio');
+            await mountIt();
+            expect(browseFetch).toHaveBeenCalledWith('collections?basic=1', 'radio');
+            expect(browseFetch).toHaveBeenCalledWith('collections', 'radio');
+            expect(browseFetch).toHaveBeenCalledWith('collections/c1?page=1&perPage=150', 'radio');
+            expect(ipFetch).toHaveBeenCalledWith('json-api/browse/collections/c1/download?mode=radio', 'POST', { dryRun: true });
+        });
+
+        it('asks for the video catalogue when m is video, even with Radio chosen', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            open('video');
+            await mountIt();
+            expect(browseFetch).toHaveBeenCalledWith('collections', 'video');
+            expect(browseFetch).toHaveBeenCalledWith('collections/c1?page=1&perPage=150', 'video');
+            expect(ipFetch).toHaveBeenCalledWith('json-api/browse/collections/c1/download', 'POST', { dryRun: true });
+        });
+
+        it('follows the toggle when there is no m', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            open();
+            await mountIt();
+            expect(browseFetch).toHaveBeenCalledWith('collections', undefined);
+            expect(ipFetch).toHaveBeenCalledWith('json-api/browse/collections/c1/download?mode=radio', 'POST', { dryRun: true });
+        });
+
+        it('ignores an m it does not know', async () => {
+            open('tv');
+            await mountIt();
+            expect(browseFetch).toHaveBeenCalledWith('collections', undefined);
+            expect(ipFetch).toHaveBeenCalledWith('json-api/browse/collections/c1/download', 'POST', { dryRun: true });
+        });
+
+        it('counts radio downloads without what is already queued', async () => {
+            open('radio');
+            ipFetch.mockResolvedValue({ ok: true, data: { total: 5, skipped: 2 } });
+            const wrapper = await mountIt();
+            expect(wrapper.find('.downloadCount').text()).toBe('3');
+        });
     });
 
     it('toggles a collection open by putting its id in the URL', async () => {

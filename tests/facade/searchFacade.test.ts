@@ -85,6 +85,20 @@ describe('SearchFacade', () => {
       ]);
     });
 
+    it('shares one run between identical traced searches, each keeping the trace', async () => {
+      let release: (value: IPlayerSearchResult[]) => void = () => undefined;
+      (nativeSearchService.search as jest.Mock).mockReturnValue(new Promise((resolve) => (release = resolve)));
+      const first = withSearchTrace(() => searchFacade.search('Shared S02E03'));
+      const second = withSearchTrace(() => searchFacade.search('Shared S02E03'));
+      await new Promise((resolve) => setImmediate(resolve));
+      release([ep(1, 1), ep(2, 3)]);
+      const [one, two] = await Promise.all([first, second]);
+      expect(nativeSearchService.search).toHaveBeenCalledTimes(1);
+      expect(two.result.map(({ pid }) => pid)).toEqual(one.result.map(({ pid }) => pid));
+      expect(two.trace.candidates).toEqual(one.trace.candidates);
+      expect(two.trace.candidates.length).toBeGreaterThan(0);
+    });
+
     it('lets explicit season/ep parameters win over typed markers', async () => {
       (nativeSearchService.search as jest.Mock).mockResolvedValue([ep(1, 1), ep(2, 3)]);
       const result = await searchFacade.search('Show S02E03', 1, 1);

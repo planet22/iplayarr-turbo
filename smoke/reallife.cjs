@@ -267,7 +267,12 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             const file = JSON.stringify({
                 format: 'iplayarr-trace', version: 1, exportedAt: new Date().toISOString(),
                 session: { id, pid: 'b0smoke1', mode: 'direct', client: 'NATIVE', startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T10:01:00.000Z', title: 'SMOKE-TEMP trace', live: true, clientIp: '203.0.113.9' },
-                requests: [{ n: 1, t: 1000, kind: 'segment', track: 'video', seg: 0, status: 200, bytes: 10, player: { ip: '203.0.113.9', method: 'GET', headers: { cookie: 'x=1', 'user-agent': 'SMOKE' } } }],
+                requests: [
+                    { n: 1, t: 1000, kind: 'segment', track: 'video', seg: 0, status: 200, bytes: 10, durMs: 300, prof: [4, 0, 6], profMs: 100, player: { ip: '203.0.113.9', method: 'GET', headers: { cookie: 'x=1', 'user-agent': 'SMOKE' } } },
+                    { n: 2, t: 9000, kind: 'segment', track: 'video', seg: 1, status: 200, bytes: 8, durMs: 0, prefetched: true, prof: [8], profMs: 100, profAt: 2000, fetchMs: 150 },
+                    { n: 3, t: 9500, kind: 'segment', track: 'video', seg: 2, status: 200, bytes: 5, prof: [5, -1, 'x'], profMs: 100 },
+                    { n: 4, t: 9800, kind: 'segment', track: 'video', seg: 3, status: 200, bytes: 5, prof: [5] },
+                ],
                 playlists: [{ key: 'abc1234567', track: 'video', url: 'h/p.m3u8', kind: 'media', fetches: 1, firstT: 1, lastT: 1, history: [], upstream: '#EXTM3U\n' }],
                 naming: { extension: 'mp4', fileName: 'Smoke.mp4' },
             });
@@ -290,12 +295,17 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('trace import with copy=1 makes a separate copy under a new id', copy.status === 200 && copy.json.id && copy.json.id !== id, `HTTP ${copy.status}`);
             if (copy.json.id) later('delete imported smoke trace copy', () => http('/json-api/streams/trace/' + copy.json.id, { method: 'DELETE' }));
             const trace = await http('/json-api/streams/trace/' + id);
-            ok('an imported trace reads back like a recorded one', trace.status === 200 && trace.json?.session?.imported === true && trace.json.requests?.length === 1 && trace.json.playlists?.length === 1 && trace.json.naming?.fileName === 'Smoke.mp4', `HTTP ${trace.status} ${trace.text.slice(0, 160)}`);
+            ok('an imported trace reads back like a recorded one', trace.status === 200 && trace.json?.session?.imported === true && trace.json.requests?.length === 4 && trace.json.playlists?.length === 1 && trace.json.naming?.fileName === 'Smoke.mp4', `HTTP ${trace.status} ${trace.text.slice(0, 160)}`);
             ok('an imported trace drops the viewer address and cookies', !/203\.0\.113\.9|x=1/.test(trace.text), 'address or cookie still present');
+            const profiled = trace.json?.requests || [];
+            ok('an imported trace keeps the byte profile of each request', JSON.stringify(profiled[0]?.prof) === '[4,0,6]' && profiled[0]?.profMs === 100, JSON.stringify(profiled[0]).slice(0, 160));
+            ok('an imported trace keeps the read-ahead download time and start', profiled[1]?.profAt === 2000 && profiled[1]?.fetchMs === 150 && profiled[1]?.prefetched === true, JSON.stringify(profiled[1]).slice(0, 160));
+            ok('an imported byte profile with bad bins is cleaned, and one with no bin width is dropped', JSON.stringify(profiled[2]?.prof) === '[5,0,0]' && profiled[3]?.prof === undefined, `${JSON.stringify(profiled[2]?.prof)} / ${JSON.stringify(profiled[3]?.prof)}`);
             const pl = await http(`/json-api/streams/trace/${id}/playlist/abc1234567`);
             ok('an imported playlist is served', pl.status === 200 && /EXTM3U/.test(pl.json?.upstream || ''), `HTTP ${pl.status}`);
             const plain = await http(`/json-api/streams/trace/${id}/export`);
             ok('an imported trace exports as JSON again', plain.status === 200 && plain.json?.format === 'iplayarr-trace' && plain.json.session?.id === id, `HTTP ${plain.status}`);
+            ok('an export carries the byte profiles', JSON.stringify(plain.json?.requests?.[0]?.prof) === '[4,0,6]' && plain.json?.requests?.[1]?.fetchMs === 150, JSON.stringify(plain.json?.requests?.[0]).slice(0, 120));
             const gz = await fetch(`${BASE}/json-api/streams/trace/${id}/export?gzip=1`);
             const gzBytes = new Uint8Array(await gz.arrayBuffer());
             ok('export with gzip=1 sends a gzip file', gz.status === 200 && gzBytes[0] === 0x1f && gzBytes[1] === 0x8b && /\.json\.gz/.test(gz.headers.get('content-disposition') || ''), `HTTP ${gz.status}`);
@@ -332,6 +342,14 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             const act = ((await http('/json-api/streams')).json || {}).active || [];
             const mine = act.find((s) => s.pid === ctx.pid);
             warn('stream shows in Streaming page as active', !!mine, `${act.length} active`);
+            // Stream Trace on: a segment that streamed has a byte profile that adds up to its bytes; off: nothing was recorded for it at all.
+            if (mine) {
+                const traced = (await http(`/json-api/streams/trace/${mine.id}`)).json?.requests || [];
+                const profiled = traced.filter((r) => r.kind === 'segment' && Array.isArray(r.prof));
+                if (cfg.STREAM_TRACE === 'true') {
+                    ok('a streamed segment has a byte profile that adds up to its bytes', profiled.length > 0 && profiled.every((r) => r.prof.reduce((a, b) => a + b, 0) === r.bytes && r.profMs >= 100), `${profiled.length} profiled of ${traced.length} requests`);
+                } else ok('with Stream Trace off a stream records no requests and no byte profile', traced.length === 0 && profiled.length === 0, `${traced.length} requests`);
+            }
             if (mine) {
                 const stop = await http(`/json-api/streams/${mine.id}/stop`, { method: 'POST' });
                 ok('stop stream', stop.status === 200, `HTTP ${stop.status}`);
@@ -400,6 +418,23 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('sab history hides UI-initiated download (arr only sees its own)', !(sab?.history?.slots || []).some((x) => x.nzb_name === `${h?.nzbName}.nzb`), 'UI download leaked into SAB history');
             await cleanHist(ep.pid);
             ok('history entry deleted', (await hist(ep.pid)).length === 0);
+
+            // The name, numbering and library folder come from the BBC, whatever the browser sends (a browse card has no numbering):
+            // misleading numbering and a name that was not typed by the user are ignored, and the result is the preview's name.
+            const wanted = (await http(`/json-api/release-preview?pid=${ep.pid}`, { timeout: 60000 })).json;
+            if (!wanted?.nzbName) rec(W, 'download ignores the numbering the browser sends', 'SKIP', 'no release preview for the episode');
+            else {
+                await http(`/json-api/download?pid=${ep.pid}&media=strm&nzbName=Smoke.S00E00.Wrong&type=TV&title=Smoke&series=0&episode=0`, { timeout: 60000 });
+                await waitDone(ep.pid, 120000);
+                const named = (await hist(ep.pid))[0];
+                ok('download ignores numbering and a name the browser sent, using the preview name', named?.nzbName === wanted.nzbName, `history ${named?.nzbName} vs preview ${wanted.nzbName}`);
+                await cleanHist(ep.pid);
+                await http(`/json-api/download?pid=${ep.pid}&media=strm&nzbName=Smoke.Typed.Name&nameEdited=1`, { timeout: 60000 });
+                await waitDone(ep.pid, 120000);
+                const typed = (await hist(ep.pid))[0];
+                ok('download uses a filename the user typed (nameEdited)', /^Smoke\.Typed\.Name/.test(typed?.nzbName || ''), `history ${typed?.nzbName}`);
+                await cleanHist(ep.pid);
+            }
 
             // A film downloaded without a type is queued as a movie, not TV (regression: type was always overwritten with TV)
             const movieRss = (await http(`/api?t=movie&q=paddington&apikey=${apikey}`, { timeout: 60000 })).text;
@@ -482,7 +517,17 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             if (light) {
                 const run = await http(`/json-api/maintenance/tasks/${light.id}/run`, { method: 'POST' });
                 ok(`run task ${light.id}`, run.status === 202 || run.status === 409, `HTTP ${run.status}`);
+                // The finished run reports how long it took (milliseconds), shown as "Took ..." on the Maintenance tab.
+                let after = null;
+                for (let i = 0; i < 20; i++) {
+                    await sleep(1000);
+                    after = ((await http('/json-api/maintenance/tasks')).json || []).find((x) => x.id === light.id);
+                    if (after && !after.running && after.lastFinishedAt) break;
+                }
+                ok(`task ${light.id} reports how long its last run took`, Number.isFinite(after?.lastDurationMs) && after.lastDurationMs >= 0, `lastDurationMs=${after?.lastDurationMs}`);
             }
+            const purge = tasks.find((x) => x.id === 'cache-purge');
+            if (purge) ok('cache-purge lists every cache for the progress bars', Array.isArray(purge.caches) && purge.caches.includes('*'), JSON.stringify(purge.caches));
             const caches = (await http('/json-api/maintenance/caches')).json || [];
             const c = caches.find((x) => x.prefix === 'stream_vpid') || caches[0];
             if (c) {
@@ -496,6 +541,19 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 const nf = await http('/json-api/maintenance/caches/nope', { method: 'DELETE' });
                 ok('clear unknown cache is 404', nf.status === 404, `HTTP ${nf.status}`);
             }
+            // Memory caches: their lifetime is fixed in code, so an override is refused and changes nothing; clearing one only empties memory.
+            const mem = caches.find((x) => x.prefix === 'stream_vod_playlist') || caches.find((x) => x.inMemory);
+            if (mem) {
+                const ttlBefore = mem.ttl;
+                const refused = await http(`/json-api/maintenance/caches/${mem.prefix}/ttl`, { method: 'PUT', body: { ttl: 7200 } });
+                ok('memory cache lifetime change is refused (404)', refused.status === 404, `HTTP ${refused.status}`);
+                const after = ((await http('/json-api/maintenance/caches')).json || []).find((x) => x.prefix === mem.prefix);
+                ok('memory cache lifetime is unchanged and not marked overridden', after?.ttl === ttlBefore && after?.overridden === false, `ttl ${after?.ttl} overridden ${after?.overridden}`);
+                const cleared = await http(`/json-api/maintenance/caches/${mem.prefix}`, { method: 'DELETE' });
+                ok('a memory cache can be cleared', cleared.status === 200, `HTTP ${cleared.status}`);
+                const empty = ((await http('/json-api/maintenance/caches')).json || []).find((x) => x.prefix === mem.prefix);
+                ok('a cleared memory cache lists no entries', empty?.count === 0, `count ${empty?.count}`);
+            } else ok('memory caches are listed', false, 'no cache is flagged inMemory');
         });
 
         // 11. Watchdog: refresh counts, run, stop

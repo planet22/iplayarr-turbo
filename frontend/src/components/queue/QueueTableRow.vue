@@ -137,7 +137,9 @@ v-else-if="thumbFor(item)"
             </template>
         </td>
         <td class="progress-column" data-title="Progress">
-            <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
+            <!-- Same pill as the card: it fills as the download goes, and its words change (Queued, Starting..., 45%). -->
+            <span v-if="showBar" :class="['pill', 'statusPill', 'progressPill', item.status]" :style="{ '--p': `${fillPercent}%` }">{{ progressText }}</span>
+            <span v-else :class="['pill', 'statusPill', item.status]">{{ item.status }}</span>
         </td>
         <td class="hideMd" data-title="ETA">
             {{ item.details.eta }}
@@ -176,7 +178,6 @@ import ChannelPill from '../common/ChannelPill.vue';
 import DataCard from '../common/DataCard.vue';
 import CheckInput from '../common/form/CheckInput.vue';
 import IconButton from '../common/IconButton.vue';
-import ProgressBar from '../common/ProgressBar.vue';
 import QualityBadges from '../common/QualityBadges.vue';
 import VideoInfoModal from '../modals/VideoInfoModal.vue';
 
@@ -414,6 +415,17 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
 .statusPill {
     background: none;
     border: 1px solid currentColor;
+    // Plain text on the page (the .pill default is black), so it takes the readable-in-both-modes role colours,
+    // not the fill colours the file icon uses. An unlisted status (Failed...) reads as an error.
+    color: @danger-color;
+
+    &.Complete,
+    &.Removed {
+        color: @positive-color;
+    }
+    &.Forwarded {
+        color: @caution-color;
+    }
 }
 
 // Downloading / queued: the pill is the progress bar, filled from the left as far as the download has got.
@@ -423,6 +435,14 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
     border-color: @primary-color;
     background: linear-gradient(to right, color-mix(in srgb, @primary-color 60%, transparent) var(--p), transparent var(--p));
     transition: background 400ms;
+}
+
+// In the table the pill fills its cell, like the bar it replaced.
+td.progress-column .pill {
+    display: flex;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .subtle {

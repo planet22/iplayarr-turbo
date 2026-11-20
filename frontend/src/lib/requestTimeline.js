@@ -131,12 +131,13 @@ export function clampSpan(start, end, lo, hi, minWidth = 3) {
 }
 
 // The height range that fits `values` with a little room above and below (a lone value gets `pad` either side), so a zoomed-in
-// lane uses its whole height instead of the whole stream's range.
-export function paddedRange(values, pad = 1) {
+// lane uses its whole height instead of the whole stream's range. `fraction` is the room kept at each end as a share of the range (a
+// lane passes a few pixels' worth, so the first and last values sit near its edges rather than a tenth of the way in).
+export function paddedRange(values, pad = 1, fraction = 0.1) {
     if (!values.length) return undefined;
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const room = max > min ? (max - min) * 0.1 : pad;
+    const room = max > min ? (max - min) * fraction : pad;
     return { min: min - room, max: max + room, low: min, high: max };
 }
 
@@ -148,6 +149,41 @@ export function yOf(seg, lane, top, height) {
     return top + height - ((seg - lane.segMin) / span) * height;
 }
 
+// When the bytes of a request were really on the wire: its own span, or for a segment read ahead (answered from memory at about 0 ms) the
+// download that fetched it, where the trace recorded one.
+const flight = (request) => (readAheadSpan(request) ? { t: request.profAt, durMs: request.fetchMs } : { t: request.t, durMs: request.durMs ?? 0 });
+
+// For a segment that was read ahead: when its download ran ({ t0, t1 }, ms), which is before the request it was later served to. Undefined
+// for any other request, or where the trace did not record the download.
+export function readAheadSpan(request) {
+    return request?.prefetched && request.fetchMs > 0 && request.profAt ? { t0: request.profAt, t1: request.profAt + request.fetchMs } : undefined;
+}
+
+// Every request with the span of time its bytes were on the wire ({ request, t0, t1 }), for saying what was downloading at a moment.
+export function flightWindows(requests) {
+    const out = [];
+    for (const request of requests ?? []) {
+        if (!request.bytes) continue;
+        const { t, durMs } = flight(request);
+        if (durMs > 0) out.push({ request, t0: t, t1: t + durMs });
+    }
+    return out;
+}
+
+// In words, what was being downloaded between t0 and t1: "Muxed A/V segment 21 (read ahead, asked for at +70.0 s)". At most `max` are
+// named, the rest counted. Empty when nothing was.
+export function describeDownloads(windows, t0, t1, origin = 0, max = 4) {
+    const names = [];
+    for (const { request, t0: a, t1: b } of windows ?? []) {
+        if (b <= t0 || a >= t1) continue;
+        const what = request.kind === 'segment' ? `${TRACK_LABELS[request.track] ?? request.track ?? 'Stream'} segment ${request.seg}` : request.kind === 'playlist' ? 'a playlist' : 'a request';
+        const name = readAheadSpan(request) ? `${what} (read ahead, asked for at ${formatOffset(request.t - origin)})` : what;
+        if (!names.includes(name)) names.push(name);
+    }
+    if (names.length <= max) return names.join(', ');
+    return `${names.slice(0, max).join(', ')} and ${names.length - max} more`;
+}
+
 // Bytes per second over the window, in `buckets` equal slices, each response's bytes counted when it finished.
 export function throughputBuckets(requests, win, buckets) {
     const out = new Array(buckets).fill(0);
@@ -155,8 +191,7 @@ export function throughputBuckets(requests, win, buckets) {
     const width = span / buckets;
     for (const request of requests ?? []) {
         if (!request.bytes) continue;
-        const start = request.t;
-        const duration = request.durMs ?? 0;
+        const { t: start, durMs: duration } = flight(request);
         const end = start + duration;
         if (duration <= 0) {
             const index = Math.floor((end - win.t0) / width);
@@ -188,9 +223,10 @@ export function throughputSteps(requests, win, buckets) {
 export function peakRate(requests) {
     const events = [];
     for (const request of requests ?? []) {
-        if (!request.bytes || !(request.durMs > 0)) continue;
-        const rate = request.bytes / (request.durMs / 1000);
-        events.push([request.t, rate], [request.t + request.durMs, -rate]);
+        const { t, durMs } = flight(request);
+        if (!request.bytes || !(durMs > 0)) continue;
+        const rate = request.bytes / (durMs / 1000);
+        events.push([t, rate], [t + durMs, -rate]);
     }
     events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     let current = 0;
@@ -200,6 +236,54 @@ export function peakRate(requests) {
         peak = Math.max(peak, current);
     }
     return peak;
+}
+
+// The rate at its real granularity: every moment where the set of transfers in flight changes starts a new step, whose height is the sum of
+// their own rates (bytes over that transfer's duration). No slicing, so a short fast transfer shows as short and fast. Transfers with no
+// duration or no size have no rate and are left out. Steps with nothing in flight are omitted.
+export function transferSteps(requests) {
+    const pieces = [];
+    for (const request of requests ?? []) {
+        const { t, durMs } = flight(request);
+        if (!request.bytes || !(durMs > 0)) continue;
+        pieces.push({ t0: t, t1: t + durMs, rate: request.bytes / (durMs / 1000) });
+    }
+    return sweepSteps(pieces);
+}
+
+// Whether any request carries a measured byte profile (recorded while Stream Trace was on, from this version of the proxy on).
+export const hasByteProfile = (requests) => (requests ?? []).some((r) => Array.isArray(r.prof) && r.prof.length > 0 && r.profMs > 0);
+
+// The rate as the proxy measured it: each response's bytes in every `profMs` ms from its start, so a stall, a burst or a slow start shows as
+// it happened. Overlapping responses add up. Requests without a profile (older traces, or served from memory) have no measured shape and
+// are left out.
+export function measuredSteps(requests) {
+    const pieces = [];
+    for (const request of requests ?? []) {
+        if (!Array.isArray(request.prof) || !(request.profMs > 0)) continue;
+        // A segment read ahead was downloaded before it was asked for: its profile says when it began.
+        const start = request.profAt ?? request.t;
+        request.prof.forEach((bytes, i) => {
+            if (bytes > 0) pieces.push({ t0: start + i * request.profMs, t1: start + (i + 1) * request.profMs, rate: bytes / (request.profMs / 1000) });
+        });
+    }
+    return sweepSteps(pieces);
+}
+
+// Pieces of constant rate ({ t0, t1, rate }) laid over each other: a step wherever the set in flight changes, the rates added.
+function sweepSteps(pieces) {
+    const events = [];
+    for (const piece of pieces) events.push([piece.t0, piece.rate], [piece.t1, -piece.rate]);
+    events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const out = [];
+    let current = 0;
+    for (let i = 0; i < events.length; i++) {
+        current += events[i][1];
+        const next = events[i + 1];
+        // Rounding noise from adding and taking away the same rates is not a transfer.
+        if (next && next[0] > events[i][0] && current > 1e-6) out.push({ t0: events[i][0], t1: next[0], rate: current });
+    }
+    return out;
 }
 
 // The tallest step the rate graph reaches anywhere in the stream when drawn with slices `width` ms wide: the top of its scale. It changes
@@ -265,10 +349,13 @@ export function aheadSeries(requests) {
 }
 
 // How many times faster than real time each segment arrived: its length divided by the time it took. Under 1 it was slower than it plays.
+// A segment read ahead was answered from memory (about 0 ms), so its speed is that of the download that fetched it, where the trace has it.
+const transferMs = (request) => (request.prefetched && request.fetchMs > 0 ? request.fetchMs : request.durMs);
+
 export function speedSeries(requests) {
     return finishedSegments(requests)
-        .filter(({ request }) => request.segDur !== undefined && request.durMs > 0)
-        .map(({ request }) => ({ t: request.t, seg: request.seg, n: request.n, value: (request.segDur * 1000) / request.durMs }))
+        .filter(({ request }) => request.segDur !== undefined && transferMs(request) > 0)
+        .map(({ request }) => ({ t: request.t, seg: request.seg, n: request.n, value: (request.segDur * 1000) / transferMs(request) }))
         .sort((a, b) => a.seg - b.seg);
 }
 
@@ -304,6 +391,25 @@ export function driftSeries(requests) {
         .filter((r) => r.kind === 'segment' && (r.track ?? 'main') === track && r.ptsDriftMs !== undefined)
         .map((r) => ({ t: r.t, seg: r.seg, n: r.n, value: r.ptsDriftMs }))
         .sort((a, b) => a.seg - b.seg);
+}
+
+// The smallest top for a scale that fits `value` and is cut into `parts` equal divisions, each a round figure (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8
+// or 10 times a power of ten): so the top is never far above what is drawn, and every gridline label is tidy.
+export function niceCeil(value, parts = 1) {
+    if (!(value > 0)) return 1;
+    const rough = value / parts;
+    const power = 10 ** Math.floor(Math.log10(rough));
+    const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map((m) => m * power).find((v) => v >= rough * (1 - 1e-9)) ?? 10 * power;
+    return step * parts;
+}
+
+// `ticks` with `top` always among them, so a scale never stops short of its highest value unlabelled: a tick too close to it (within a
+// tenth of the range) is dropped in its favour, so two labels never sit on top of each other.
+// `bottom` (optional) is kept the same way, for a scale that runs from its lowest value to its highest.
+export function withTopTick(ticks, min, max, top = max, bottom = undefined) {
+    const room = (max - min) * 0.1;
+    const kept = ticks.filter((v) => Math.abs(top - v) > room && (bottom === undefined || Math.abs(bottom - v) > room));
+    return [...kept, top, ...(bottom === undefined ? [] : [bottom])].sort((a, b) => a - b);
 }
 
 // Round-number tick values covering [min, max], about `count` of them (1, 2, 5 times a power of ten).

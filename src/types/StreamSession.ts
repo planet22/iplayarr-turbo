@@ -40,6 +40,14 @@ export interface StreamRequestLogEntry {
     // Time to the first byte from the CDN, and to the whole response, in ms.
     ttfbMs?: number;
     durMs?: number;
+    // Bytes received in each consecutive `profMs` ms from the request's start (so the wait for the first byte shows as leading zeros): the
+    // measured shape of the transfer, for the throughput graph. Only recorded while STREAM_TRACE is on.
+    prof?: number[];
+    profMs?: number;
+    // When the profile starts (ms epoch) where that is not the request's own start: a segment read ahead was downloaded before it was asked for.
+    profAt?: number;
+    // For a segment read ahead: how long the download itself took (ms). The request for it was answered from memory, so durMs says nothing about BBC's speed.
+    fetchMs?: number;
     // Set against the highest segment asked for so far: lower and never asked for (back), asked for
     // before (repeat), or more than one past it (skip).
     outOfOrder?: OutOfOrder;

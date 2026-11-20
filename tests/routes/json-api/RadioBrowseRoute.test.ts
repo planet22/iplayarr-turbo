@@ -11,11 +11,11 @@ import soundsBrowseAdapter from '../../../src/service/sounds/soundsBrowseAdapter
 
 jest.mock('../../../src/facade/soundsFacade', () => ({
     __esModule: true,
-    default: { isEnabled: jest.fn(), search: jest.fn(), home: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), onDisk: jest.fn(), downloadCollection: jest.fn() },
+    default: { isEnabled: jest.fn(), search: jest.fn(), home: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), podcasts: jest.fn(), onDisk: jest.fn(), downloadCollection: jest.fn() },
 }));
 jest.mock('../../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
-    default: { programme: jest.fn() },
+    default: { programme: jest.fn(), collectionsForSearch: jest.fn().mockResolvedValue([]) },
     suggestions: jest.requireActual('../../../src/service/sounds/soundsBrowseAdapter').suggestions,
 }));
 jest.mock('../../../src/service/browseService', () => ({
@@ -121,7 +121,7 @@ describe('the browse API with ?mode=radio', () => {
         facade.category.mockResolvedValue({ items: [], page: 2, perPage: 50, total: 0 });
         facade.collections.mockResolvedValue({ enabled: true, collections: [] });
         facade.collection.mockResolvedValue({ items: [], page: 1, perPage: 30, total: 0 });
-        facade.atoz.mockReturnValue({ items: [], page: 1, perPage: 300, total: 0 });
+        facade.atoz.mockResolvedValue({ items: [], page: 1, perPage: 300, total: 0 });
         expect((await request(app).get('/home?mode=radio')).body).toEqual([{ id: 'rail' }]);
         expect((await request(app).get('/categories?mode=radio')).body).toEqual([{ id: 'comedy' }]);
         await request(app).get('/category/comedy?mode=radio&page=2&perPage=50');
@@ -131,13 +131,20 @@ describe('the browse API with ?mode=radio', () => {
         await request(app).get('/collections/p0bw8cqs?mode=radio');
         expect(facade.collection).toHaveBeenCalledWith('p0bw8cqs', 1, 30);
         expect((await request(app).get('/atoz/a?mode=radio')).body.total).toBe(0);
+        expect(facade.atoz).toHaveBeenCalledWith('a', 1, 30);
         expect(video.home).not.toHaveBeenCalled();
     });
 
-    it('lists no collections, and fetches none, when Show Collections is off', async () => {
+    it('lists the podcast shows', async () => {
+        facade.podcasts.mockResolvedValue({ items: [], page: 1, perPage: 300, total: 0 });
+        expect((await request(app).get('/podcasts?mode=radio&page=2&perPage=50')).body.total).toBe(0);
+        expect(facade.podcasts).toHaveBeenCalledWith(2, 50);
+    });
+
+    it('lists collections even when Show Collections (the video setting) is off', async () => {
         const setting = jest.spyOn(configService, 'getParameter').mockResolvedValue('false');
-        expect((await request(app).get('/collections?mode=radio')).body).toEqual({ enabled: false, collections: [] });
-        expect(facade.collections).not.toHaveBeenCalled();
+        facade.collections.mockResolvedValue({ enabled: true, collections: [{ id: 'c1' }] });
+        expect((await request(app).get('/collections?mode=radio')).body).toEqual({ enabled: true, collections: [{ id: 'c1' }] });
         setting.mockRestore();
     });
 
@@ -149,10 +156,24 @@ describe('the browse API with ?mode=radio', () => {
     });
 
     it('answers suggestions as type-ahead rows', async () => {
+        (adapter as unknown as { collectionsForSearch: jest.Mock }).collectionsForSearch.mockResolvedValue([]);
         facade.search.mockResolvedValue({ shows: [{ id: 'b006qpgr', title: 'The Archers' }], episodes: [] });
         expect((await request(app).get('/suggest?mode=radio&q=archers')).body).toEqual([{ kind: 'radio', pid: 'b006qpgr', title: 'The Archers' }]);
         expect(facade.search).toHaveBeenCalledWith('archers');
         expect(video.suggest).not.toHaveBeenCalled();
+    });
+
+    it('lists matching collections first in the type-ahead, and still answers when that lookup fails', async () => {
+        const collectionsForSearch = (adapter as unknown as { collectionsForSearch: jest.Mock }).collectionsForSearch;
+        facade.search.mockResolvedValue({ shows: [{ id: 'b1', title: 'Football Show' }], episodes: [] });
+        collectionsForSearch.mockResolvedValueOnce([{ id: 'c1', title: 'Football Legends', thumbnail: 't' }]);
+        expect((await request(app).get('/suggest?mode=radio&q=football')).body).toEqual([
+            { kind: 'collection', id: 'c1', title: 'Football Legends', count: 0, thumbnail: 't' },
+            { kind: 'radio', pid: 'b1', title: 'Football Show' },
+        ]);
+        expect(collectionsForSearch).toHaveBeenCalledWith('football', 3);
+        collectionsForSearch.mockRejectedValueOnce(new Error('down'));
+        expect((await request(app).get('/suggest?mode=radio&q=football')).body).toEqual([{ kind: 'radio', pid: 'b1', title: 'Football Show' }]);
     });
 
     it('answers a show as a programme, a page at a time, and what is on disk', async () => {

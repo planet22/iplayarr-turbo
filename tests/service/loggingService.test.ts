@@ -138,19 +138,23 @@ describe('loggingService', () => {
     });
 
     describe('keeping only the latest lines', () => {
-        it('keeps 250 lines for the UI, dropping the oldest', async () => {
+        it('trims to about 250 lines for the UI (within one trim interval), dropping the oldest', async () => {
             const { dbReady, prisma } = await import('../../src/service/db/prismaService');
             await dbReady();
-            for (let i = 0; i < 255; i++) {
+            for (let i = 0; i < 400; i++) {
                 loggingService.log(`line ${i}`);
             }
             const count = () => prisma.queueItem.count({ where: { queue: 'iplayarr_logs' } });
-            for (let attempt = 0; attempt < 100 && (await count()) !== 250; attempt++) {
+            const newest = async () =>
+                (await prisma.queueItem.findFirst({ where: { queue: 'iplayarr_logs' }, orderBy: { id: 'desc' } }))?.value ?? '';
+            for (let attempt = 0; attempt < 200 && !(await newest()).includes('line 399'); attempt++) {
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
-            expect(await count()).toBe(250);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            expect(await count()).toBeLessThan(250 + 25);
+            expect(await count()).toBeGreaterThanOrEqual(250);
             const rows = await prisma.queueItem.findMany({ where: { queue: 'iplayarr_logs' }, orderBy: { id: 'asc' } });
-            expect(JSON.parse(rows[0].value).message).toBe('line 5');
+            expect(JSON.parse(rows[0].value).message).not.toBe('line 0');
         }, 30000);
     });
 

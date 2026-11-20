@@ -95,6 +95,19 @@ v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading &
         </SettingsPageToolbar>
         <SkeletonLoader v-if="loading" variant="tiles" :tile-shape="isChannels ? 'channel' : 'category'" :count="isChannels ? 11 : 20" />
         <ErrorState v-else-if="error" :message="error" @retry="loadTiles()" />
+        <EmptyState
+            v-else-if="isChannels && !arranging && shownTiles.length === 0"
+            :icon="radioMode ? 'radio' : 'tv'"
+            :title="radioMode ? 'No live radio stations' : 'No TV channels'"
+            :hint="
+                radioMode
+                    ? liveRadioOff ? 'Live radio is switched off.' : 'All radio stations are switched off.'
+                    : 'All TV channels are switched off.'
+            "
+        >
+            <RouterLink v-if="radioMode && liveRadioOff" :to="{ path: '/settings', hash: '#general' }">Turn on Live Radio in Settings</RouterLink>
+            <a v-else-if="channelTools.enabled" href="#" @click.prevent="toggleArranging">Switch channels on</a>
+        </EmptyState>
         <InfoBar v-if="arranging && !loading && !error">
             Drag channels (or use the arrows) into the order you want. Use the eye to switch a channel off. The compass
             features a channel as a rail on the Discover page (up to 4, shown in this order).
@@ -316,10 +329,11 @@ v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading &
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, inject, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute } from 'vue-router';
 
+import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -342,6 +356,9 @@ import { formatDate, getHost, getThumbnailUrl } from '@/lib/utils';
 const route = useRoute();
 // This page is rebuilt when the Video | Radio mode changes, so it can read the mode once (radio has no featured categories).
 const radioMode = radioActive();
+// Radio stations only exist while LIVE_RADIO is on; say so (and where to change it) instead of showing nothing.
+const globalSettings = inject('globalSettings', null);
+const liveRadioOff = computed(() => globalSettings?.value?.LIVE_RADIO !== 'true');
 const { state: channelTools } = useChannelTools();
 const tiles = ref([]);
 // Channel logos that failed to load fall back to the text label.

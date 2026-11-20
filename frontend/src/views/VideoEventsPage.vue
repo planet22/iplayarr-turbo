@@ -54,7 +54,7 @@ v-if="event.pid && thumbnailFor(event)"
         <table v-else class="dataTable eventLogTable">
             <colgroup>
                 <col style="width: 70px" />
-                <col style="width: 40ch" />
+                <col style="width: 26ch" />
                 <!-- longest real value is 'stream_key_rotated' (19 chars) - see VideoEventType -->
                 <col style="width: 20ch" />
                 <col style="width: 8ch" />

@@ -4,6 +4,7 @@ import configService, { encryptStoredSettings } from '../../src/service/configSe
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import streamRequestLog from '../../src/service/stream/streamRequestLog';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
+import { configCache } from '../../src/utils/configCache';
 
 jest.mock('../../src/facade/searchFacade', () => ({
   clearSearchCache: jest.fn(),
@@ -31,6 +32,7 @@ describe('configService', () => {
       delete mockStorage[key];
     }
     jest.clearAllMocks();
+    configCache.clear();
   });
 
   it('returns parameter from stored config', async () => {
@@ -61,6 +63,7 @@ describe('configService', () => {
       NATIVE_SEARCH_ENGINE: 'V2',
       STREAM_SUBTITLES: 'true',
       STREAM_TRACE: 'false',
+      STREAM_PREFETCH_OPEN_RANGE: 'true',
       STREAM_LIVE_DASH_1080: 'true',
       LIVE_TV_ENABLED: 'true',
       STRM_WATCHDOG_ENABLED: 'true',
@@ -82,6 +85,8 @@ describe('configService', () => {
       RADIO_SEARCH_RANK_BY_TITLE: 'true',
       RADIO_SEARCH_SCOPE: 'both',
       RADIO_SEARCH_MP3_ONLY: 'false',
+      RADIO_SEARCH_COLLECTION_NAMES: 'false',
+      RADIO_SEARCH_EXPAND_COLLECTIONS: 'false',
       RADIO_SEARCH_NETWORKS: '',
       RADIO_SEARCH_MAX_RESULTS: '0',
       SEARCH_COMBINED: 'false',
@@ -91,8 +96,10 @@ describe('configService', () => {
   it('keeps the radio search cap in 0-200, so 0 (no cap) is a valid stored value', async () => {
     mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '0' };
     expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
+    configCache.clear();
     mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '500' };
     expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('200');
+    configCache.clear();
     mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '-9' };
     expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
   });
@@ -112,6 +119,26 @@ describe('configService', () => {
     const [debug, quality] = await configService.getParameters(IplayarrParameter.DEBUG, IplayarrParameter.VIDEO_QUALITY);
     expect(debug).toBe('false');
     expect(quality).toBe('fhd');
+  });
+
+  it('keeps a stored secret that cannot be decrypted when another setting is saved or removed', async () => {
+    mockStorage.config = { API_KEY: 'enc:v1:aaaa:bbbb:cccc', DEBUG: 'false' };
+    await configService.setParameter(IplayarrParameter.DEBUG, 'true');
+    expect(mockStorage.config.API_KEY).toBe('enc:v1:aaaa:bbbb:cccc');
+    expect(mockStorage.config.DEBUG).toBe('true');
+    await configService.removeParameter(IplayarrParameter.DEBUG);
+    expect(mockStorage.config.API_KEY).toBe('enc:v1:aaaa:bbbb:cccc');
+    expect(mockStorage.config.DEBUG).toBeUndefined();
+  });
+
+  it('keeps every setting when several are saved at once', async () => {
+    mockStorage.config = {};
+    await Promise.all([
+      configService.setParameter(IplayarrParameter.DEBUG, 'true'),
+      configService.setParameter(IplayarrParameter.VIDEO_QUALITY, 'hd'),
+      configService.setParameter(IplayarrParameter.STREAM_TRACE, 'true'),
+    ]);
+    expect(mockStorage.config).toMatchObject({ DEBUG: 'true', VIDEO_QUALITY: 'hd', STREAM_TRACE: 'true' });
   });
 
   it('sets and gets parameter', async () => {

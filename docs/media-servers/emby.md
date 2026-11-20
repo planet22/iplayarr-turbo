@@ -6,4 +6,6 @@ Emby reads the same NFO schema as Jellyfin/Kodi (they share a common ancestor an
 
 Same mechanism as Jellyfin: `MEDIA_MODE=strm` writes a pointer file Emby resolves on playback via `STREAM_BASE_URL`, secured by `STREAM_KEY`. See [STREAMING.md](../STREAMING.md) for setup and stream-client tradeoffs, and [REDIS.md](../REDIS.md)/[TROUBLESHOOTING.md](../TROUBLESHOOTING.md) if playback fails after a Stream Key rotation.
 
+Radio (BBC Sounds) saves tagged audio files with an `album.nfo` and `cover.jpg` in `SOUNDS_DIR`, which an Emby music library can read; see [SOUNDS.md](../SOUNDS.md). This has not been tested on Emby.
+
 No Emby-specific caveats beyond what's documented for Jellyfin — this file exists mainly so an Emby user searching the docs by name finds confirmation it's supported, rather than having to infer it from the Jellyfin doc.

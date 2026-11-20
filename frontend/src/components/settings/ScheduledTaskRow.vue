@@ -35,7 +35,11 @@
                     ({{ task.lastTrigger }})
                 </span>
                 <span v-else class="pill grey">Never run</span>
+                <span v-if="!task.running && task.lastDurationMs != null" class="pill grey" title="How long the last run took">
+                    Took {{ formatTook(task.lastDurationMs) }}
+                </span>
             </div>
+            <div v-if="task.running" class="taskBar" role="progressbar" aria-label="Running"><span /></div>
             <div v-if="entry.message" :class="entry.valid ? 'cacheOk' : 'cacheError'">{{ entry.message }}</div>
         </div>
         <div class="rowActions">
@@ -65,7 +69,15 @@ const props = defineProps({
 });
 const emit = defineEmits(['run']);
 
-const formatNextRun = (iso) => `${new Date(iso).toLocaleDateString('en-GB', { weekday: 'short' })} ${formatTime(iso)}`;
+const formatTook = (ms) => {
+    if (ms < 1000) return `${ms} ms`;
+    const s = ms / 1000;
+    if (s < 60) return `${s.toFixed(1)} s`;
+    const m = Math.floor(s / 60);
+    return `${m} min ${Math.round(s - m * 60)} s`;
+};
+
+const formatNextRun =(iso) => `${new Date(iso).toLocaleDateString('en-GB', { weekday: 'short' })} ${formatTime(iso)}`;
 
 // The draft lives on the settings page (so its Save button applies it and flags the tab as changed);
 // it outlives this row when the user switches tabs.
@@ -118,6 +130,40 @@ const reset = () => {
 .cronInput {
     width: 130px !important;
     font-family: monospace;
+}
+
+// Indeterminate bar: the jobs do not report how far through they are, so a block sweeps along the track.
+.taskBar {
+    height: 3px;
+    margin-top: 6px;
+    overflow: hidden;
+    border-radius: 2px;
+    background-color: @toolbar-background-color;
+
+    span {
+        display: block;
+        width: 30%;
+        height: 100%;
+        background-color: @brand-color;
+        animation: taskBarSweep 1.4s ease-in-out infinite;
+    }
+}
+
+@keyframes taskBarSweep {
+    0% {
+        margin-left: -30%;
+    }
+    100% {
+        margin-left: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .taskBar span {
+        width: 100%;
+        animation: none;
+        opacity: 0.6;
+    }
 }
 
 .cacheOk {

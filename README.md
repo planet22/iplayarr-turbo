@@ -66,6 +66,12 @@ See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-
 - Customisable channels: arrange, hide, rename, recolour, and add your own or optional Red Button, nations and UHD feeds
 - Works with Jellyfin, Plex and Emby
 
+**Radio (BBC Sounds, optional)**
+
+- A Video | Radio switch: the same Discover, Search, Categories, Collections, Channels, Guide and programme pages for BBC radio, including optional Podcasts and A to Z
+- Download an episode as a tagged audio file for a Jellyfin music library, or save a `.strm` link; follow a show to get new episodes, optionally saved before they leave Sounds
+- Live radio stations in the player and in Jellyfin's Live TV, radio links in the STRM Watchdog and library index, and radio rows in Queue, Subscriptions, Events and Statistics
+
 **Keeping things healthy**
 
 - Subscriptions that check hourly (or on demand) and queue new episodes, de-duplicated against the queue and history
@@ -93,6 +99,7 @@ This README covers the basics. For more detail, see `docs/`:
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
 - [BROWSE.md](docs/BROWSE.md) — Discover, Channels (arrange, optional channels), Categories, A to Z, type-ahead search
 - [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
+- [SOUNDS.md](docs/SOUNDS.md) — BBC radio: browsing, downloads, following shows, live radio
 - [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
 - [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI, quick find (Ctrl+K)
 - [THEMING.md](docs/THEMING.md) — colour schemes and light/dark mode
@@ -232,6 +239,7 @@ There's a few more optional settings too:
 | STREAM_NATIVE_ADAPTIVE         | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false                                                                                                                                                                                                                                                                    |
 | STREAM_NATIVE_HQ_PROBE         | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false                                                                                                                                                                                                                                                                                  |
 | STREAM_SUBTITLES               | With STREAM_CLIENT=NATIVE and STREAM_MODE=direct, offer the BBC's captions as an English subtitle track on native streams, on-demand and live. Off by default. See [docs/STREAMING.md](docs/STREAMING.md#subtitles)                                                                                                                                                                           |
+| STREAM_PREFETCH_OPEN_RANGE     | Read the next segment ahead for players that send `Range: bytes=0-` on every request (Jellyfin). Defaults to true. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                                   |
 | STREAM_TRACE                   | Record per-request timing, headers, upstream responses and playlists for each stream, for the stream trace page opened from the Streaming page. Disabled by default; when disabled the streaming path does none of this work. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#stream-trace-stutter-or-repeats) |
 | STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true                                                                                                                                                                                                                                                                            |
 | THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                                |

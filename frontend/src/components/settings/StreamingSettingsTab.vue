@@ -48,6 +48,16 @@
             :options="traceOptions"
         />
         <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STREAM_PREFETCH_OPEN_RANGE"
+            field="STREAM_PREFETCH_OPEN_RANGE"
+            :advanced="true"
+            name="Prefetch Open Ranges"
+            tooltip="Read the next segment ahead for players that ask for Range: bytes=0- (Jellyfin)."
+            :error="validationErrors.config?.STREAM_PREFETCH_OPEN_RANGE"
+            :options="prefetchOpenRangeOptions"
+        />
+        <SelectInput
             v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_ADAPTIVE"
             field="STREAM_NATIVE_ADAPTIVE"
@@ -317,6 +327,11 @@ const traceOptions = [
     { key: 'true', value: 'Enabled' },
 ];
 
+const prefetchOpenRangeOptions = [
+    { key: 'true', value: 'Enabled (recommended)' },
+    { key: 'false', value: 'Disabled' },
+];
+
 const routeProbeOptions = [
     { key: 'false', value: 'Disabled (recommended)' },
     { key: 'true', value: 'Enabled' },
@@ -392,7 +407,8 @@ const appStatus = computed(() =>
 const hasJellyfinApp = computed(() => watchdogApps.value.some(({ type }) => type == 'JELLYFIN'));
 
 onMounted(async () => {
-    const apps = (await ipFetch('json-api/apps')).data.filter(({ type }) => typeLabels[type]);
+    const appsResponse = await ipFetch('json-api/apps');
+    const apps = (appsResponse.ok && Array.isArray(appsResponse.data) ? appsResponse.data : []).filter(({ type }) => typeLabels[type]);
     watchdogApps.value = apps;
     jellyfinLoaded.value = true;
     checkPathMap();

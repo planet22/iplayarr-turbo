@@ -7,6 +7,7 @@ import router from '../../../src/routes/json-api/StatisticsRoute';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 
 jest.mock('../../../src/service/stats/StatisticsService');
+jest.mock('../../../src/service/stats/serverStatsService', () => ({ __esModule: true, default: { fast: jest.fn(), checks: jest.fn() } }));
 
 // Shared by more than one caller; avoid narrowing the behaviour.
 // The surrounding code assumes this stays free of side effects.

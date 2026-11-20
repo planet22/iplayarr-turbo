@@ -8,6 +8,10 @@ iPlayarr's `.nfo` writer (`src/utils/nfoBuilder.ts`) outputs the Jellyfin/Kodi/E
 
 Add a TV/Movie library pointed at `COMPLETE_DIR` (or `ARR_COMPLETE_DIR`). Enable `LIBRARY_FOLDER_STRUCTURE` (see [LIBRARY_ORGANIZATION.md](../LIBRARY_ORGANIZATION.md)) so Plex's agents have a standard, parseable folder/file layout to match against, rather than one flat folder with generated NZB-style filenames.
 
+## Radio
+
+Radio (BBC Sounds) saves tagged audio files in `SOUNDS_DIR` (`Show/Show - date - title.m4a`), which a Plex music library can read from the file tags and the show's `cover.jpg`. The `album.nfo` is for Jellyfin/Kodi/Emby and Plex ignores it. This has not been tested on Plex. See [SOUNDS.md](../SOUNDS.md).
+
 ## `.strm` playback
 
 Plex does support `.strm` files. The mechanism is the same as for any other media server: `MEDIA_MODE=strm` writes a pointer file, Plex resolves it through iPlayarr at playback time via `STREAM_BASE_URL`, secured by `STREAM_KEY`. See [STREAMING.md](../STREAMING.md) for setup, stream client choice, and the `.strm`/Stream-Key-rotation caveats in [TROUBLESHOOTING.md](../TROUBLESHOOTING.md).

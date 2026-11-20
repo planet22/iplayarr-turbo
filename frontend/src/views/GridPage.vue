@@ -2,7 +2,7 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
-        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : ''" />
+        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : isPodcasts ? 'podcast' : ''" />
         <SettingsPageToolbar inline-filters>
             <template v-if="items.length" #filters>
                 <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>
@@ -35,6 +35,8 @@
         </div>
         <EmptyState v-else-if="items.length && !loadingAll" icon="filter" title="Nothing matches that filter" />
         <SkeletonLoader v-if="loading" pagination :count="gridPageSize" />
+        <!-- Radio A to Z (RADIO_ATOZ): the list is made the first time it is wanted, which takes under a minute. -->
+        <EmptyState v-else-if="!error && building" icon="radio" title="Building the radio A to Z" hint="Reading the BBC Sounds show list. This takes a short while the first time." />
         <EmptyState v-else-if="!error && items.length === 0" :icon="isRadio ? 'radio' : 'tv'" title="No programmes found" hint="Nothing is listed here right now." />
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
@@ -72,6 +74,9 @@ const items = ref([]);
 const total = ref(undefined);
 const loading = ref(false); // first page only - the grid is blank until this resolves
 const loadingAll = ref(false); // remaining pages, fetched automatically in the background
+const building = ref(false); // radio A to Z: the server is still making its list, so this asks again every few seconds
+const BUILD_POLL_MS = 3000;
+const BUILD_POLL_MAX = 100;
 const error = ref(null);
 const categoryTitle = ref('');
 const rails = ref([]);
@@ -157,12 +162,15 @@ watch([textFilter, channelFilter, sortKey, sortOrder], () => {
 // One view for category and A-Z listings: the route's meta says which.
 const isAtoZ = computed(() => route.meta.grid === 'atoz');
 const letter = computed(() => (route.params.letter || '0').toLowerCase());
-const heading = computed(() => (isAtoZ.value ? 'A to Z' : categoryTitle.value || 'Category'));
+const isPodcasts = computed(() => route.meta.grid === 'podcasts');
+const heading = computed(() => (isAtoZ.value ? 'A to Z' : isPodcasts.value ? 'Podcasts' : categoryTitle.value || 'Category'));
 
 const endpoint = (pageNumber) => {
     const base = isAtoZ.value
         ? `atoz/${encodeURIComponent(letter.value)}`
-        : `category/${encodeURIComponent(route.params.id)}`;
+        : isPodcasts.value
+          ? 'podcasts'
+          : `category/${encodeURIComponent(route.params.id)}`;
     return `${base}?page=${pageNumber}&perPage=${PER_PAGE}`;
 };
 
@@ -179,9 +187,19 @@ const fetchAll = async () => {
     try {
         let pageNumber = 1;
         let lastPageSize = PER_PAGE;
+        let polls = 0;
         while (stillCurrent() && (total.value == null || items.value.length < total.value) && lastPageSize >= PER_PAGE) {
-            const result = await browseFetch(endpoint(pageNumber));
+            // Podcasts only exist in BBC Sounds, so ask for them as radio even before the app knows Sounds is on (a fresh load).
+            const result = await browseFetch(endpoint(pageNumber), ...(isPodcasts.value ? ['radio'] : []));
             if (!stillCurrent()) return;
+            if (result.building) {
+                building.value = true;
+                loading.value = false;
+                if (++polls > BUILD_POLL_MAX) break;
+                await new Promise((resolve) => setTimeout(resolve, BUILD_POLL_MS));
+                continue;
+            }
+            building.value = false;
             const known = new Set(items.value.map(({ pid }) => pid));
             items.value.push(...result.items.filter(({ pid }) => !known.has(pid)));
             total.value = result.total;
@@ -194,6 +212,8 @@ const fetchAll = async () => {
     } finally {
         loading.value = false;
         loadingAll.value = false;
+        // Leaving this listing (another letter, another page) while it was being built must not leave the note behind.
+        if (stillCurrent()) building.value = false;
     }
 };
 
@@ -239,8 +259,9 @@ watch(
         channelFilter.value = 'All';
         // The sort is a saved preference, so it is not reset with the listing.
         total.value = undefined;
+        building.value = false;
         gridPage.value = 1;
-        if (!isAtoZ.value) {
+        if (!isAtoZ.value && !isPodcasts.value) {
             resolveCategoryTitle();
             loadRails(route.params.id);
         }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import AppsPage from '@/views/AppsPage.vue';
@@ -178,5 +178,35 @@ describe('AppsPage', () => {
         expect(modal.attrs.inputObj.id).toBe('a1');
         await wrapper.find('.listAddButton').trigger('click');
         expect(modal.attrs.action).toBe('Create');
+    });
+    describe('the last-seen clock', () => {
+        const setHidden = (hidden) => Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        afterEach(() => {
+            vi.useRealTimers();
+            setHidden(false);
+        });
+
+        const lastSeenText = (wrapper) => wrapper.find('.lastSeen').text();
+
+        it('keeps counting while the tab is shown', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            responses['json-api/apps'] = { ok: true, data: [{ ...apps[0], lastSeen: Date.now() }] };
+            const wrapper = await mountIt();
+            const before = lastSeenText(wrapper);
+            vi.advanceTimersByTime(10 * 60 * 1000);
+            await flushPromises();
+            expect(lastSeenText(wrapper)).not.toBe(before);
+        });
+
+        it('stands still while the tab is hidden', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+            responses['json-api/apps'] = { ok: true, data: [{ ...apps[0], lastSeen: Date.now() }] };
+            const wrapper = await mountIt();
+            const before = lastSeenText(wrapper);
+            setHidden(true);
+            vi.advanceTimersByTime(10 * 60 * 1000);
+            await flushPromises();
+            expect(lastSeenText(wrapper)).toBe(before);
+        });
     });
 });

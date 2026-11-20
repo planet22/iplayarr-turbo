@@ -32,6 +32,19 @@ function resolveResolution(videoQuality?: string): { width: number; height: numb
     return { width, height };
 }
 
+// The same sidecar for a radio .strm: one AAC audio stream over HLS, and the real running time when it is known.
+export function buildAudioStrmToolJson(runtimeSeconds?: number): string {
+    const data: Record<string, unknown> = {
+        version: '1.0',
+        timestamp: new Date().toISOString(),
+        isValid: true,
+        container: 'hls',
+        mediaStreams: [{ Index: 0, Type: 0, IsDefault: true, Language: 'und', Channels: 2, Codec: 'aac' }],
+    };
+    if (runtimeSeconds) data.runTimeTicks = Math.round(runtimeSeconds * 10_000_000);
+    return JSON.stringify(data, null, 2);
+}
+
 // DIRECT proxies the resolved URL as-is, which for iPlayer is always an HLS manifest (confirmed from real StrmTool
 // sidecars). Only PROGRESSIVE_MKV changes the container, via the `-c copy -f matroska` remux (streamProxyUtils#remuxToMkv).
 export function buildStrmToolJson(

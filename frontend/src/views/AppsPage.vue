@@ -192,8 +192,8 @@ const now = ref(Date.now());
 let nowInterval;
 onMounted(() => {
     nowInterval = setInterval(() => {
-        now.value = Date.now();
-    }, 1000);
+        if (!document.hidden) now.value = Date.now();
+    }, 5000);
 });
 onUnmounted(() => clearInterval(nowInterval));
 
@@ -252,7 +252,11 @@ const deleteApp = async ({ id, name }) => {
             { danger: true, confirmLabel: 'Delete' }
         )
     ) {
-        await ipFetch('json-api/apps', 'DELETE', { id });
+        const { ok } = await ipFetch('json-api/apps', 'DELETE', { id });
+        if (!ok) {
+            dialogService.alert?.('Delete failed', 'The app could not be deleted.');
+            return;
+        }
         await refreshApps();
     }
 };

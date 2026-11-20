@@ -2,14 +2,25 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <FullscreenFrame @change="onFullscreen">
+        <template #actions>
+            <button type="button" class="modeButton clickable" :aria-pressed="readAhead" :disabled="!hasReadAhead" :aria-label="readAheadTitle" :title="readAheadTitle" @click="readAhead = !readAhead">
+                <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
+            </button>
+        </template>
     <div ref="root" class="requestTimeline">
-        <div class="timelineControls">
+        <div class="timelineControls" :class="{ full: fullscreen.full }">
             <button type="button" class="tlButton clickable" title="Zoom in" aria-label="Zoom in" @click="zoom(0.5)"><font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" /></button>
             <button type="button" class="tlButton clickable" title="Zoom out" aria-label="Zoom out" @click="zoom(2)"><font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" /></button>
             <button type="button" class="tlButton clickable" title="Earlier" aria-label="Earlier" @click="pan(-0.5)"><font-awesome-icon :icon="['fas', 'arrow-left']" /></button>
             <button type="button" class="tlButton clickable" title="Later" aria-label="Later" @click="pan(0.5)"><font-awesome-icon :icon="['fas', 'arrow-right']" /></button>
             <button type="button" class="tlButton clickable" title="Show everything" aria-label="Show everything" @click="fit"><font-awesome-icon :icon="['fas', 'arrows-left-right-to-line']" /></button>
+            <button type="button" class="tlButton clickable" :class="{ on: fitRate }" :aria-pressed="fitRate" :title="fitRateTitle" :aria-label="fitRateTitle" @click="fitRate = !fitRate"><font-awesome-icon :icon="['fas', 'arrows-up-down']" /></button>
             <span class="windowText">{{ formatOffset(win.t0 - origin) }} to {{ formatOffset(win.t1 - origin) }}</span>
+            <span class="viewSwitch rateSwitch" role="group" aria-label="How the throughput graph is drawn">
+                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'smooth' }" :aria-pressed="rateMode === 'smooth'" title="Throughput averaged over slices of time, finer as you zoom" @click="rateMode = 'smooth'">Smoothed</button>
+                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'transfer' }" :aria-pressed="rateMode === 'transfer'" title="Throughput at full detail: a step wherever the transfers in flight change, each at its own bytes over duration" @click="rateMode = 'transfer'">Per transfer</button>
+                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'measured' }" :aria-pressed="rateMode === 'measured'" :disabled="!profiled" :title="profiled ? 'Throughput as the proxy measured it: the bytes received in each 100 ms (or coarser, for long transfers) of every response' : 'No measured byte profile in this trace: turn Stream Trace on and stream again'" @click="rateMode = 'measured'">Measured</button>
+            </span>
             <span v-if="clockAvailable" class="viewSwitch" role="group" aria-label="What the lanes show">
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'segments' }" :aria-pressed="view === 'segments'" title="Y axis: segment index" @click="view = 'segments'">Index</button>
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'clock' }" :aria-pressed="view === 'clock'" title="Y axis: first PTS of each segment, one lane for video and one for audio" @click="view = 'clock'">A/V PTS</button>
@@ -27,6 +38,11 @@
                 </g>
                 <!-- The order they were asked for, joined up: a zigzag back down the lane is a request out of order. -->
                 <polyline class="orderPath" :points="lane.path" />
+                <!-- Read-ahead: the download of a segment that was fetched before the player asked, joined to the request it was served to. -->
+                <g v-for="a in lane.aheads" :key="`a${a.n}`">
+                    <line class="aheadLink" :x1="a.x + a.w" :x2="a.mx" :y1="a.y" :y2="a.y" />
+                    <rect class="aheadBar" :x="a.x" :y="a.y - 3" :width="a.w" height="6" rx="1" @mouseenter="hovered = a.request" @mouseleave="hovered = null" @click="hovered = a.request; emit('select', a.n)" />
+                </g>
                 <rect
                     v-for="mark in lane.marks"
                     :key="mark.n"
@@ -39,7 +55,7 @@
             </g>
 
             <g>
-                <text class="laneLabel" :x="LEFT" :y="rateTop - 6">{{ WIDTH < 560 ? 'Upstream throughput' : 'Upstream throughput (bytes/s, spread over each transfer)' }}</text>
+                <text class="laneLabel" :x="LEFT" :y="rateTop - 6">{{ rateLabel }}</text>
                 <rect class="laneBack" :x="LEFT" :y="rateTop" :width="PLOT" :height="RATE_HEIGHT" />
                 <g v-for="tick in rateTicks" :key="`r${tick.v}`">
                     <line class="gridLine" :x1="LEFT" :x2="LEFT + PLOT" :y1="tick.y" :y2="tick.y" />
@@ -57,6 +73,7 @@
 
         <div class="timelineLegend">
             <span v-for="outcome in LEGEND" :key="outcome" class="legendItem"><span :class="['swatch', `o-${outcome}`]" /> {{ OUTCOME_LABELS[outcome] }}</span>
+            <span v-if="readAhead" class="legendItem" title="A segment fetched from BBC before the player asked for it, joined by a dotted line to the request it was served to."><span class="swatch aheadSwatch" /> Read-ahead download</span>
             <span class="legendItem" title="Joins requests in arrival order. A step back down the lane is a backward request."><span class="swatch orderSwatch" /> Request order (line)</span>
         </div>
         <div class="hoverBox" :class="{ empty: !hovered }">
@@ -66,6 +83,7 @@
                 at {{ formatOffset(hovered.t - origin) }}, {{ formatMs(hovered.durMs) }}
                 <template v-if="hovered.ptsDriftMs !== undefined"> , PTS offset {{ hovered.ptsDriftMs }} ms from previous segment end</template>
                 - {{ OUTCOME_LABELS[outcomeOf(hovered)] }}
+                <template v-if="aheadOf(hovered)">; read ahead: downloaded {{ formatOffset(aheadOf(hovered).t0 - origin) }} to {{ formatOffset(aheadOf(hovered).t1 - origin) }} ({{ formatMs(hovered.fetchMs) }}), asked for {{ formatMs(hovered.t - aheadOf(hovered).t1) }} after it finished</template>
             </template>
             <template v-else>Hover or tap a mark for request details; click to select it in the request log.</template>
         </div>
@@ -77,7 +95,7 @@
 import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, throughputSteps, TRACK_LABELS, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, describeDownloads, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, readAheadSpan, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -111,9 +129,25 @@ const LANE_HEIGHT = computed(() => {
     return WIDTH.value < 600 ? 110 : 150;
 });
 const LANE_GAP = 30;
+// A segment index is a whole number, so its axis is only ever labelled at whole numbers (a PTS axis, in seconds, can have fractions).
+const laneTicks = (scale, clock) => {
+    const ticks = niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38)));
+    return clock ? ticks : ticks.filter((v) => Number.isInteger(v));
+};
+// Room kept above and below the first and last value of a zoomed lane. None: the lowest value sits on the bottom edge and the highest on the
+// top one, the way the playback charts fit min to max, so the data uses the whole height.
+const EDGE_PX = 0;
 const LEGEND = ['ok', 'prefetched', 'back', 'repeat', 'skip', 'overlap', 'gap', 'short', 'aborted'];
 
 const hovered = ref(null);
+const aheadOf = readAheadSpan;
+// Option (the cloud button on the chart): draw each read-ahead segment's own download beside its (almost instant) request. Needs a trace
+// recorded with Stream Trace on, from the version that records the download.
+const readAhead = ref(false);
+const hasReadAhead = computed(() => props.requests.some((r) => readAheadSpan(r)));
+const readAheadTitle = computed(() =>
+    !hasReadAhead.value ? 'No read-ahead downloads recorded in this trace' : readAhead.value ? 'Hide the read-ahead downloads' : 'Show when each read-ahead segment was really downloaded, joined to the request it served'
+);
 // 'segments': height is the segment number. 'clock': a video and an audio lane, height is where each segment starts on the media clock.
 const view = ref('segments');
 const clockAvailable = computed(() => hasMediaClock(props.requests));
@@ -148,7 +182,7 @@ const laneLayouts = computed(() =>
         const top = 22 + index * (LANE_HEIGHT.value + LANE_GAP);
         const visible = lane.items.filter((r) => r.t + (r.durMs ?? 0) >= win.value.t0 && r.t <= win.value.t1);
         // Whole stream: the lane covers every segment. Zoomed or panned: it covers just the ones in view, so they are not squashed flat.
-        const fit = custom.value ? paddedRange(visible.map((r) => lane.value(r)), lane.clock ? 1 : 2) : undefined;
+        const fit = custom.value ? paddedRange(visible.map((r) => lane.value(r)), lane.clock ? 1 : 2, EDGE_PX / LANE_HEIGHT.value) : undefined;
         const scale = fit ? { ...lane, segMin: fit.min, segMax: fit.max } : lane;
         const marks = visible.map((r) => {
             const start = xOf(r.t, win.value, LEFT, PLOT.value);
@@ -167,9 +201,22 @@ const laneLayouts = computed(() =>
                   })
               ).map((l) => ({ ...l, below: l.y - top < 12 }))
             : [];
-        const yTicks = niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
         const shown = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
-        return { ...lane, ...shown, zoomed: !!fit, top, marks, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
+        // The highest segment (or PTS) in the lane is always one of the labelled ticks, and so is the lowest when zoomed (it is the bottom edge).
+        const topValue = lane.clock ? Number(shown.labelMax.toFixed(1)) : shown.labelMax;
+        const bottomValue = lane.clock ? Number(shown.labelMin.toFixed(1)) : shown.labelMin;
+        // Read ahead: the lighter bar is the download, the dotted line runs to the (almost instant) request it was served to.
+        const aheads = readAhead.value
+            ? marks
+                  .map((m) => ({ m, span: readAheadSpan(m.request) }))
+                  .filter(({ span }) => span && span.t1 > win.value.t0 && span.t0 < win.value.t1)
+                  .map(({ m, span }) => {
+                      const { x, w } = clampSpan(xOf(span.t0, win.value, LEFT, PLOT.value), xOf(span.t1, win.value, LEFT, PLOT.value), LEFT, LEFT + PLOT.value);
+                      return { n: m.n, request: m.request, x, w, y: m.y, mx: m.x };
+                  })
+            : [];
+        const yTicks = withTopTick(laneTicks(scale, lane.clock), scale.segMin, scale.segMax, topValue, fit ? bottomValue : undefined).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
+        return { ...lane, ...shown, zoomed: !!fit, top, marks, aheads, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
     })
 );
 
@@ -182,15 +229,52 @@ const BUCKETS = computed(() => Math.min(400, Math.max(60, Math.floor(PLOT.value 
 const rateSteps = computed(() => throughputSteps(props.requests, win.value, BUCKETS.value));
 // The top of the scale is a round figure at or above the tallest step anywhere in the stream (at this zoom), so it fits the bars and does
 // not change as the graph is panned.
+// Fitted (the button beside the zoom ones): the top is instead the tallest step in the window in view, so a quiet stretch is not squashed flat.
+const fitRate = ref(false);
+const fitRateTitle = computed(() => (fitRate.value ? 'Throughput scale fits the part in view; use the whole stream' : 'Throughput scale covers the whole stream; fit it to the part in view'));
+// 'smooth': the rate averaged over slices of time (finer as it is zoomed). 'transfer': every moment the transfers in flight change is its own step.
+// 'measured': the same, from the bytes the proxy counted as each response arrived (needs Stream Trace on while it streamed).
+const rateMode = ref('smooth');
+const rateLabel = computed(() => {
+    if (rateMode.value === 'measured') return WIDTH.value < 560 ? 'Measured throughput' : 'Upstream throughput (bytes/s, as measured while each response arrived)';
+    if (rateMode.value === 'transfer') return WIDTH.value < 560 ? 'Throughput per transfer' : 'Upstream throughput (bytes/s, each transfer at its own rate; overlaps add)';
+    return WIDTH.value < 560 ? 'Upstream throughput' : 'Upstream throughput (bytes/s, spread over each transfer)';
+});
+const profiled = computed(() => hasByteProfile(props.requests));
+const allTransfer = computed(() => (rateMode.value === 'measured' ? measuredSteps(props.requests) : transferSteps(props.requests)));
+const transferInView = computed(() => allTransfer.value.filter((s) => s.t1 > win.value.t0 && s.t0 < win.value.t1));
+const rateRaw = computed(() => {
+    if (rateMode.value !== 'smooth') return fitRate.value ? Math.max(0, ...transferInView.value.map((s) => s.rate)) : Math.max(0, ...allTransfer.value.map((s) => s.rate));
+    return fitRate.value ? inViewPeak.value : peakRateAt(props.requests, full.value, rateSteps.value.width);
+});
+const inViewPeak = computed(() => {
+    const { start, width, values } = rateSteps.value;
+    let peak = 0;
+    values.forEach((value, index) => {
+        const t0 = start + index * width;
+        if (t0 + width > win.value.t0 && t0 < win.value.t1) peak = Math.max(peak, value);
+    });
+    return peak;
+});
+// Divisions of the throughput scale: halves, or quarters when the graph is tall (filling the window).
+const rateParts = computed(() => (RATE_HEIGHT.value >= 100 ? 4 : 2));
 const ratePeak = computed(() => {
-    const peak = Math.max(peakRateAt(props.requests, full.value, rateSteps.value.width), 1);
-    const ticks = niceTicks(0, peak, 2);
-    const step = ticks.length > 1 ? ticks[1] - ticks[0] : peak;
-    return Math.max(ticks[ticks.length - 1] >= peak ? ticks[ticks.length - 1] : ticks[ticks.length - 1] + step, 1);
+    return niceCeil(Math.max(rateRaw.value, 1), rateParts.value);
 });
 // One stepped area rather than a bar per bucket: the rate is continuous in time, and equal neighbouring buckets (a transfer's bytes are
 // spread evenly) would otherwise show as a comb of separate bars.
 const ratePath = computed(() => {
+    if (rateMode.value !== 'smooth') {
+        const base = rateTop.value + RATE_HEIGHT.value;
+        return transferInView.value
+            .map((s) => {
+                const a = Math.max(xOf(s.t0, win.value, LEFT, PLOT.value), LEFT);
+                const b = Math.min(xOf(s.t1, win.value, LEFT, PLOT.value), LEFT + PLOT.value);
+                const y = base - Math.min(s.rate / ratePeak.value, 1) * RATE_HEIGHT.value;
+                return `M${a},${base}L${a},${y}L${b},${y}L${b},${base}Z`;
+            })
+            .join('');
+    }
     const { start, width, values } = rateSteps.value;
     const base = rateTop.value + RATE_HEIGHT.value;
     const lo = LEFT;
@@ -220,7 +304,20 @@ const ratePath = computed(() => {
     return d;
 });
 // One invisible column per slice of the graph, for the hover text: the slice's time range and its rate.
+// What was downloading in a slice of the throughput graph, for its hover text.
+const windows = computed(() => flightWindows(props.requests));
+const downloading = (t0, t1) => {
+    const text = describeDownloads(windows.value, t0, t1, props.origin);
+    return text ? ` - downloading ${text}` : '';
+};
 const rateHits = computed(() => {
+    if (rateMode.value !== 'smooth') {
+        return transferInView.value.map((s, i) => {
+            const a = Math.max(xOf(s.t0, win.value, LEFT, PLOT.value), LEFT);
+            const b = Math.min(xOf(s.t1, win.value, LEFT, PLOT.value), LEFT + PLOT.value);
+            return { i, x: a, w: Math.max(1, b - a), text: `${formatOffset(s.t0 - props.origin)} to ${formatOffset(s.t1 - props.origin)} (${formatMs(s.t1 - s.t0)}): ${formatRate(s.rate)}${downloading(s.t0, s.t1)}` };
+        });
+    }
     const { start, width, values } = rateSteps.value;
     const lo = LEFT;
     const hi = LEFT + PLOT.value;
@@ -231,13 +328,15 @@ const rateHits = computed(() => {
         const x1 = xOf(t0 + width, win.value, LEFT, PLOT.value);
         if (x1 <= lo || x0 >= hi) return;
         const a = Math.max(x0, lo);
-        out.push({ i: index, x: a, w: Math.min(x1, hi) - a, text: `${formatOffset(t0 - props.origin)} to ${formatOffset(t0 + width - props.origin)}: ${formatRate(value)}` });
+        out.push({ i: index, x: a, w: Math.min(x1, hi) - a, text: `${formatOffset(t0 - props.origin)} to ${formatOffset(t0 + width - props.origin)}: ${formatRate(value)}${value > 0 ? downloading(t0, t0 + width) : ''}` });
     });
     return out;
 });
-const rateTicks = computed(() =>
-    niceTicks(0, ratePeak.value, Math.max(2, Math.round(RATE_HEIGHT.value / 28))).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
-);
+// 0, the middle and the top (and the quarters when it is tall enough): the top is a round figure, so these are even divisions of it.
+const rateTicks = computed(() => {
+    const parts = rateParts.value;
+    return Array.from({ length: parts + 1 }, (_, i) => (ratePeak.value * i) / parts).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }));
+});
 
 // About eight ticks at round steps, labelled as seconds from the start of the stream.
 const ticks = computed(() => {
@@ -264,8 +363,16 @@ const ticks = computed(() => {
     align-items: center;
     gap: @space-2;
     margin-bottom: @space-2;
-    // Room for the button that fills the window, at the top right of the frame.
-    padding-right: 36px;
+    // Room for the buttons at the top right of the frame: the one that fills the window and the read-ahead one beside it.
+    padding-right: 70px;
+    // The buttons in the corner are 28px high and the ones here 32px: lifted so that both rows share a centre line (in the window and filling it,
+    // where the corner buttons sit a little lower).
+    position: relative;
+    top: -2px;
+
+    &.full {
+        top: -6px;
+    }
 }
 
 .tlButton {
@@ -280,6 +387,11 @@ const ticks = computed(() => {
     &:hover {
         border-color: @settings-button-hover-border-color;
     }
+
+    &.on {
+        color: @primary-color;
+        border-color: @primary-color;
+    }
 }
 
 @media (max-width: @mobile-breakpoint) {
@@ -290,12 +402,68 @@ const ticks = computed(() => {
 
     .timelineControls {
         flex-wrap: wrap;
+        top: 0;
+
+        &.full {
+            top: 0;
+        }
     }
+}
+
+// Sits beside the fill-the-window button (placed by FullscreenFrame), looking the same; lit while the read-ahead downloads are shown.
+.modeButton {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: @subtle-text-color;
+    background: none;
+    border: 1px solid @settings-button-border-color;
+    border-radius: @radius-sm;
+
+    &[aria-pressed='true'] {
+        color: @primary-color;
+        border-color: @primary-color;
+    }
+
+    &:hover:not(:disabled) {
+        color: @primary-color;
+        border-color: @primary-color;
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+}
+
+.aheadBar {
+    fill: @primary-color;
+    opacity: 0.45;
+    cursor: pointer;
+    stroke: transparent;
+    stroke-width: 10px;
+}
+
+.aheadLink {
+    stroke: @primary-color;
+    stroke-width: 1;
+    stroke-dasharray: 2 3;
+    opacity: 0.8;
+}
+
+.aheadSwatch {
+    background-color: @primary-color;
+    opacity: 0.45;
 }
 
 .viewSwitch {
     display: inline-flex;
     margin-left: auto;
+}
+
+// Two switches side by side: only the first is pushed to the right.
+.rateSwitch + .viewSwitch {
+    margin-left: @space-2;
 }
 
 .viewButton {

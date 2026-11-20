@@ -7,6 +7,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { DetectedShow, DetectProgress, SubscriptionArrLink } from '../types/Subscription';
 import { RELEASE_GROUP } from '../utils/releaseGroup';
+import { updateKey } from '../utils/serialisedUpdate';
 import { parseStrmPid } from '../utils/Utils';
 import appService from './appService';
 import arrLibraryService, { ArrLibraryFile } from './arr/ArrLibraryService';
@@ -122,14 +123,15 @@ class SubscriptionDetectService {
     // Forgets the waiting finds of one app, or of all of them.
     async clearFound(appId?: string): Promise<void> {
         if (!appId) return void (await storage.removeItem(FOUND_KEY));
-        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
-        delete stored[appId];
-        await storage.setItem(FOUND_KEY, stored);
+        await updateKey<Record<string, DetectedShow[]>>(storage, FOUND_KEY, (stored) => {
+            const next = { ...(stored ?? {}) };
+            delete next[appId];
+            return next;
+        });
     }
 
     async #remember(appId: string, shows: DetectedShow[]): Promise<void> {
-        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
-        await storage.setItem(FOUND_KEY, { ...stored, [appId]: shows });
+        await updateKey<Record<string, DetectedShow[]>>(storage, FOUND_KEY, (stored) => ({ ...(stored ?? {}), [appId]: shows }));
     }
 
     #progress(appId: string, phase: DetectProgress['phase'], done?: number, total?: number, extra?: Pick<DetectProgress, 'found' | 'message' | 'strm' | 'group'>): void {
@@ -357,8 +359,10 @@ class SubscriptionDetectService {
         // Also re-points an existing subscription whose old entry was deleted (the new one is not ours to remove).
         if (subscription.arr?.appId !== appId || subscription.arr?.arrId !== arrId) await subscriptionService.setArrLink(subscription.id, arr);
         if (counts) await subscriptionService.setArrCounts(new Map([[subscription.id, counts]]));
-        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
-        if (stored[appId]) await storage.setItem(FOUND_KEY, { ...stored, [appId]: stored[appId].filter((show) => show.arrId !== arrId) });
+        await updateKey<Record<string, DetectedShow[]>>(storage, FOUND_KEY, (stored) => {
+            const current = stored ?? {};
+            return current[appId] ? { ...current, [appId]: current[appId].filter((show) => show.arrId !== arrId) } : current;
+        });
     }
 }
 

@@ -25,13 +25,20 @@ const mountIt = () =>
 describe('AppSelectDialog', () => {
     beforeEach(() => ipFetch.mockReset());
 
+    it('shows an empty list instead of crashing when the API answers with an error', async () => {
+        ipFetch.mockResolvedValue({ ok: false, status: 500, data: { error: 'boom' } });
+        const wrapper = mountIt();
+        await flushPromises();
+        expect(wrapper.find('a').exists()).toBe(false);
+    });
+
     it('lists only apps whose type supports callback and emits selectApp', async () => {
         const apps = [
             { name: 'Sonarr', type: 'SONARR', url: 'http://s' },
             { name: 'Jelly', type: 'JELLYFIN', url: 'http://j' },
         ];
         ipFetch.mockImplementation(async (u = '') =>
-            u.endsWith('types') ? { data: { SONARR: ['callback'], JELLYFIN: [] } } : { data: apps }
+            u.endsWith('types') ? { ok: true, data: { SONARR: ['callback'], JELLYFIN: [] } } : { ok: true, data: apps }
         );
         const wrapper = mountIt();
         await flushPromises();
@@ -43,7 +50,7 @@ describe('AppSelectDialog', () => {
 
     it('closes itself when no app qualifies', async () => {
         ipFetch.mockImplementation(async (u = '') =>
-            u.endsWith('types') ? { data: { SONARR: [] } } : { data: [{ name: 'S', type: 'SONARR', url: 'u' }] }
+            u.endsWith('types') ? { ok: true, data: { SONARR: [] } } : { ok: true, data: [{ name: 'S', type: 'SONARR', url: 'u' }] }
         );
         const wrapper = mountIt();
         await flushPromises();

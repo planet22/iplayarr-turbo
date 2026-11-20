@@ -41,11 +41,11 @@ Add `NATIVE` as a third **Download Client** (Settings > Download Client), alongs
 - `tests/service/download/NativeDownloadService.test.ts`: spawns ffmpeg with the resolved URL and expected args per output format; rejects when ffmpeg is missing; `postProcess` removes the directory on failure and leaves it on success; progress translation turns sample `-progress` blocks into lines that match `progressRegex`.
 - `tests/facade/downloadFacade.test.ts`: `DOWNLOAD_CLIENT=NATIVE` selects `NativeDownloadService`; STRM mode still wins.
 - `NativeStreamService` tests: the new public resolve method returns a fixed-variant URL and honours the per-item quality.
-- Run per `CLAUDE.md` "Running jest/lint" (repo is on a Windows share: use the local-copy workflow, `C:\ipl-build` already has `node_modules` and a generated Prisma client; sync `src`, `tests`, `frontend\src`, `prisma` with `robocopy /MIR` first).
+- Run per `CLAUDE.md` "Running jest/lint" (repo is on a Windows share: use the local-copy workflow, `C:\dockerbuilds\ipl-build` already has `node_modules` and a generated Prisma client; sync `src`, `tests`, `frontend\src`, `prisma` with `robocopy /MIR` first).
 
 ## Verification
 1. `npm test` for the new/changed suites and `npm run lint`.
-2. Frontend: build in `C:\ipl-build\frontend` (`npx vite build`), copy `dist` to `Y:\iplayarr-turbo\frontend\dist` (live, bind-mounted), hard-refresh; confirm Native shows in the Download Client dropdown.
+2. Frontend: build in `C:\dockerbuilds\ipl-build\frontend` (`npx vite build`), copy `dist` to `Y:\iplayarr-turbo\frontend\dist` (live, bind-mounted), hard-refresh; confirm Native shows in the Download Client dropdown.
 3. Real run on the NAS: set Media Mode = Download, Download Client = Native, queue one short programme from Sonarr/Radarr or the UI, watch Queue progress, confirm a playable mp4/mkv lands in the Complete Directory with the right name (+ .nfo if enabled). Cancel one mid-download to confirm ffmpeg is killed and the pid directory is cleaned.
 4. Backend edits under `src/**` reload through nodemon (no restart). Ask the user before restarting the container.
 

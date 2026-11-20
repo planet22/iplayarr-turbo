@@ -49,6 +49,7 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         ['STRM_WATCHDOG_ACTION', ['notify', 'delete']],
         ['STRM_WATCHDOG_ARR_ACTION', ['none', 'unmonitor', 'search']],
         ['RADIO_MEDIA_MODE', ['m4a', 'strm']],
+        ['RADIO_FOLDER_STRUCTURE', ['show', 'series']],
         ['RADIO_THUMBNAIL_STYLE', ['blur', 'square']],
         ['RADIO_SEARCH_MATCH_ALL_WORDS', ['inherit', 'true', 'false']],
         ['RADIO_SEARCH_SCOPE', ['both', 'shows', 'episodes']],
@@ -60,6 +61,16 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'strm', STREAM_BASE_URL: 'http://host:4404' })).STREAM_BASE_URL).toBeUndefined();
         expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'false', RADIO_MEDIA_MODE: 'strm' })).STREAM_BASE_URL).toBeUndefined();
         expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'm4a' })).STREAM_BASE_URL).toBeUndefined();
+    });
+
+    it('accepts a radio filename template that uses radio\'s variables, and refuses one that does not', async () => {
+        const check = async (template: string) => (await validator.validate({ ...validInput(), MEDIA_MODE: 'download', RADIO_FILENAME_TEMPLATE: template })).RADIO_FILENAME_TEMPLATE;
+        expect(await check('')).toBeUndefined();
+        expect(await check('{{show}} - {{date}} - {{title}}')).toBeUndefined();
+        expect(await check('{{show}} S{{series}} {{#if network}}[{{network}}]{{/if}} {{pid}}')).toBeUndefined();
+        expect(await check('{{season}}')).toContain('Template does not compile');
+        expect(await check('{{show')).toContain('Template does not compile');
+        expect(await check('{{#if date}} - {{/if}}')).toContain('empty name');
     });
 
     it.each(accepted)('%s accepts every value the UI offers, and a blank (the default)', async (key, values) => {
@@ -79,8 +90,8 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
     const flags = [
         'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING', 'SCHEDULE_FULL_REFRESH',
         'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE',
-        'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_TRACE', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'LIVE_TV_GUIDE_CATEGORIES',
-        'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY', 'SEARCH_COMBINED',
+        'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_TRACE', 'STREAM_PREFETCH_OPEN_RANGE', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'RADIO_ATOZ', 'RADIO_ATOZ_HIDE_EMPTY', 'RADIO_PODCASTS', 'LIVE_TV_GUIDE_CATEGORIES',
+        'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY', 'RADIO_SEARCH_COLLECTION_NAMES', 'RADIO_SEARCH_EXPAND_COLLECTIONS', 'SEARCH_COMBINED',
     ];
 
     it.each(flags)('%s is true or false (or blank)', async (key) => {

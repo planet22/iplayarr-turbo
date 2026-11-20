@@ -15,6 +15,7 @@ import liveChannelService from '../liveChannelService';
 import loggingService from '../loggingService';
 import queueService from '../queueService';
 import { knownEpisode } from '../sounds/soundsApiService';
+import soundsFollowService from '../sounds/soundsFollowService';
 import strmWatchdogService from '../strmWatchdogService';
 import subscriptionService from '../subscriptionService';
 import thumbnailCacheService from '../thumbnailCacheService';
@@ -71,6 +72,8 @@ export interface StreamDebugInfo {
     // The rest of what BBC's programme page says (the programme object, with its parents cut to their titles), and iPlayer's
     // listing extras and artwork.
     metadata?: unknown;
+    // Radio only: the BBC programme page, when the metadata above is the Sounds episode instead.
+    programmePage?: unknown;
     ibl?: unknown;
     artwork?: unknown;
     // Everything iPlayarr holds about the programme, for the dashboard.
@@ -241,7 +244,7 @@ const RECENT_SESSIONS = 50;
 const MAX_MASTERS_PER_PAIR = 6;
 const MAX_DASH_PER_PAIR = 2;
 const MAX_REPRESENTATIONS = 16;
-const SETTINGS = ['STREAM_MODE', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'VIDEO_QUALITY'];
+const SETTINGS = ['STREAM_MODE', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_PREFETCH_OPEN_RANGE', 'VIDEO_QUALITY'];
 
 const hostOf = (url?: string): string | undefined => {
     try {
@@ -333,13 +336,13 @@ class StreamDebugService {
     // Everything at once.
     async info(pid: string, radio = false): Promise<StreamDebugInfo> {
         const info = await this.programme(pid, radio);
-        info.dashboard = await this.#dashboard(pid, info.imagePid);
+        info.dashboard = await this.#dashboard(pid, info.imagePid, undefined, radio);
         return info;
     }
 
     // One part of the dashboard (the picture files need the programme's image id).
-    async part(pid: string, part: DashboardPart, imagePid?: string): Promise<Partial<StreamDebugDashboard>> {
-        const all = await this.#dashboard(pid, imagePid, [part]);
+    async part(pid: string, part: DashboardPart, imagePid?: string, radio = false): Promise<Partial<StreamDebugDashboard>> {
+        const all = await this.#dashboard(pid, imagePid, [part], radio);
         switch (part) {
             case 'caches':
                 return { caches: all.caches };
@@ -382,20 +385,41 @@ class StreamDebugService {
         return info;
     }
 
-    // A radio episode (BBC Sounds) in the programme's place. It has no iPlayer page, so the details come from the episode
-    // iPlayarr last listed, and it has one audio "version" (the episode id itself) to probe.
-    #radio(info: StreamDebugInfo, id: string): StreamDebugInfo {
+    // The episode's BBC programme page (the same record TV shows), for what the in-memory Sounds list does not hold, e.g. after a restart.
+    async #radioProgramme(id: string): Promise<any | undefined> {
+        try {
+            const body = await fetchText(`https://www.bbc.co.uk/programmes/${encodeURIComponent(id)}.json`);
+            const programme = (JSON.parse(body) as { programme?: any }).programme;
+            if (!programme) return undefined;
+            const trimmed: any = { ...programme };
+            if (programme.parent?.programme) trimmed.parent = { pid: programme.parent.programme.pid, title: programme.parent.programme.title };
+            return trimmed;
+        } catch {
+            return undefined;
+        }
+    }
+
+    // A radio episode (BBC Sounds) in the programme's place. The details come from the episode iPlayarr last listed (or, failing
+    // that, its BBC programme page), and it has one audio "version" (the episode id itself) to probe.
+    async #radio(info: StreamDebugInfo, id: string): Promise<StreamDebugInfo> {
         const episode = knownEpisode(id);
+        const page = await this.#radioProgramme(id);
         info.found = true;
-        info.type = 'radio episode';
-        info.title = episode?.showTitle ?? episode?.title ?? id;
-        info.subtitle = episode?.subtitle ?? (episode?.showTitle && episode.title !== episode.showTitle ? episode.title : undefined);
-        info.channel = episode?.network;
-        info.synopsis = episode?.synopsis;
-        info.firstBroadcast = episode?.released ?? null;
-        info.metadata = episode;
+        info.type = episode ? 'radio episode' : (page?.type ?? 'radio episode');
+        if (page?.parent?.pid) info.parent = { pid: page.parent.pid, title: page.parent.title };
+        info.title = episode?.showTitle ?? episode?.title ?? page?.display_title?.title ?? page?.title ?? id;
+        info.subtitle = episode?.subtitle ?? (episode?.showTitle && episode.title !== episode.showTitle ? episode.title : undefined) ?? (episode ? undefined : page?.display_title?.subtitle);
+        info.channel = episode?.network ?? page?.ownership?.service?.title;
+        info.synopsis = episode?.synopsis ?? page?.medium_synopsis ?? page?.short_synopsis;
+        info.firstBroadcast = episode?.released ?? page?.first_broadcast_date ?? null;
+        // The Sounds episode when iPlayarr has listed it, otherwise the programme page.
+        info.metadata = episode ?? page;
+        if (episode && page) info.programmePage = page;
         info.versions = [{ vpid: id, types: [episode?.mp3 ? 'Audio (MP3 available)' : 'Audio'], duration: episode?.duration, canonical: true, availableUntil: episode?.availableUntil }];
-        if (!episode) info.error = 'Open the show or search again so iPlayarr lists this episode; the stream is still probed below.';
+        if (!episode && !page) info.error = 'Open the show or search again so iPlayarr lists this episode; the stream is still probed below.';
+        const artwork = typeof episode?.image === 'string' ? /\/([a-z0-9]+)\.jpg$/i.exec(episode.image)?.[1] : undefined;
+        const pagePid = page?.image?.pid;
+        info.imagePid = artwork ?? (typeof pagePid === 'string' && thumbnailCacheService.isValidImagePid(pagePid) ? pagePid : undefined);
         return info;
     }
 
@@ -453,7 +477,7 @@ class StreamDebugService {
     }
 
     // Each part is read on its own, so one that fails leaves the rest of the dashboard standing.
-    async #dashboard(pid: string, imagePid?: string, only?: DashboardPart[]): Promise<StreamDebugDashboard> {
+    async #dashboard(pid: string, imagePid?: string, only?: DashboardPart[], radio = false): Promise<StreamDebugDashboard> {
         // Only the parts asked for are read (all of them when none are named).
         const wants = (part: DashboardPart) => !only || only.includes(part);
         const safe = async <T>(read: () => Promise<T>, fallback: T, part?: DashboardPart): Promise<T> => {
@@ -479,7 +503,7 @@ class StreamDebugService {
                 return found;
             }, [], 'caches'),
             safe(async () => {
-                const episode = (await libraryIndexService.episodes()).get(pid);
+                const episode = (await libraryIndexService.episodes(undefined, radio ? 'radio' : 'video')).get(pid);
                 if (!episode) return null;
                 const details = await Promise.all(
                     episode.files.map(async (file) => {
@@ -509,6 +533,29 @@ class StreamDebugService {
             }, null, 'watchdog'),
             safe(async () => {
                 const found: DebugSubscription[] = [];
+                // Radio follows (BBC Sounds shows) are matched by show id, or by having already dealt with the episode.
+                if (radio) {
+                    const showId = knownEpisode(pid)?.showId;
+                    for (const follow of await soundsFollowService.list()) {
+                        const followed = follow.showId === pid || follow.showId === showId;
+                        if (!followed && !follow.seen?.includes(pid)) continue;
+                        found.push({
+                            id: follow.showId,
+                            title: follow.title,
+                            reason: followed ? 'subscribed to this programme' : 'episode already handled',
+                            showPid: follow.showId,
+                            createdAt: follow.addedAt,
+                            lastChecked: follow.lastCheckedAt,
+                            lastQueuedCount: follow.lastQueuedCount,
+                            lastQueuedAt: follow.lastQueuedAt,
+                            lastError: follow.lastError,
+                            handledCount: follow.seen?.length ?? 0,
+                            secureDays: follow.secureDays,
+                            secured: follow.secureDays ? !!follow.secured?.includes(pid) : undefined,
+                        });
+                    }
+                    return found;
+                }
                 for (const subscription of await subscriptionService.list()) {
                     const subscribed = subscription.pid === pid;
                     if (!subscribed && !subscription.seen?.includes(pid)) continue;

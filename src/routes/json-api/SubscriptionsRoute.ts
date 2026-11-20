@@ -30,22 +30,29 @@ router.use((req: Request, res: Response, next: NextFunction) => {
 // show's folders for the picture's count (a Sonarr/Radarr-only show has its own count from the app).
 router.get('/', async (_, res: Response) => {
     const subscriptions = await subscriptionService.list();
-    res.json(
-        await Promise.all(
-            subscriptions.map(async (subscription) => {
-                const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
-                const onDisk = subscription.arrOnly ? undefined : await subscriptionDiskService.count(subscription).catch(() => undefined);
-                // Each source's own count, for the chips on the card.
-                const onDiskSources = onDisk === undefined ? undefined : await subscriptionDiskService.bySource(subscription).catch(() => undefined);
-                return {
-                    ...subscription,
-                    ...(synopsis ? { synopsis } : {}),
-                    ...(onDisk === undefined ? {} : { onDisk }),
-                    ...(onDiskSources?.length ? { onDiskSources } : {}),
-                };
-            })
-        )
-    );
+    // At most a few shows are looked up at once (each does BBC metadata and disk scans), results kept in order.
+    const results = new Array(subscriptions.length);
+    let next = 0;
+    const worker = async () => {
+        while (next < subscriptions.length) {
+            const index = next++;
+            results[index] = await build(subscriptions[index]);
+        }
+    };
+    const build = async (subscription: (typeof subscriptions)[number]) => {
+        const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
+        const onDisk = subscription.arrOnly ? undefined : await subscriptionDiskService.count(subscription).catch(() => undefined);
+        // Each source's own count, for the chips on the card.
+        const onDiskSources = onDisk === undefined ? undefined : await subscriptionDiskService.bySource(subscription).catch(() => undefined);
+        return {
+            ...subscription,
+            ...(synopsis ? { synopsis } : {}),
+            ...(onDisk === undefined ? {} : { onDisk }),
+            ...(onDiskSources?.length ? { onDiskSources } : {}),
+        };
+    };
+    await Promise.all(Array.from({ length: Math.min(5, subscriptions.length) }, worker));
+    res.json(results);
 });
 
 router.post('/', async (req: Request, res: Response) => {

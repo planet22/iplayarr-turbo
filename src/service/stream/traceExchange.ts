@@ -3,7 +3,7 @@
 import { gunzipSync, gzipSync } from 'zlib';
 
 import { StreamRequestLogEntry, StreamSession } from '../../types/StreamSession';
-import { PlaylistRecord } from './streamRequestLog';
+import { MAX_PROFILE_BINS, PlaylistRecord } from './streamRequestLog';
 
 // A stream trace as a file: what one session's Stream trace page shows (the session row, every request, the playlists and,
 // when it could be worked out, the file naming), so a user can send it and it can be opened here as if it had been streamed.
@@ -79,6 +79,13 @@ export function cleanEntry(raw: unknown): StreamRequestLogEntry | undefined {
         ['range', 'sentType', 'upstreamHost', 'upstreamPath', 'contentType', 'cdn'],
         ['aborted', 'prefetched', 'cached', 'discontinuity']
     );
+    // The byte profile: bounded in length and every bin a finite, non-negative number.
+    if (Array.isArray(raw.prof) && num(raw.profMs) !== undefined && raw.profMs > 0) {
+        entry.prof = raw.prof.slice(0, MAX_PROFILE_BINS).map((n: unknown) => (num(n) !== undefined && (n as number) > 0 ? n : 0));
+        entry.profMs = raw.profMs;
+        if (num(raw.profAt) !== undefined) entry.profAt = raw.profAt;
+        if (num(raw.fetchMs) !== undefined) entry.fetchMs = raw.fetchMs;
+    }
     if (isObject(raw.player)) {
         const player: Raw = {};
         copyFields(raw.player, player, [], ['method', 'httpVersion', 'url'], ['same']);

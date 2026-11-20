@@ -4,10 +4,13 @@ import { spawn } from 'child_process';
 import { Request, Response } from 'express';
 import { IncomingMessage } from 'http';
 
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { PlayerRequest, SegmentInfo, StreamRequestLogEntry } from '../../types/StreamSession';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
+import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
+import { figuresOf, noteLookup, registerMemoryCache } from '../memoryCacheRegistry';
 import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bbcHttp';
 import { prefetch, takePrefetched } from './segmentPrefetch';
 import { linkSegments, nextSegmentUrl, register as registerSegmentUrl } from './segmentUrlRegistry';
@@ -155,9 +158,23 @@ const vodPlaylistTtlMs = 5 * 60_000;
 const maxVodPlaylists = 200;
 const vodPlaylistCache = new Map<string, { text: string; contentType: string; expiresAt: number }>();
 
-export function clearPlaylistCache(): void {
+export const VOD_PLAYLIST_CACHE = 'stream_vod_playlist';
+
+export function clearPlaylistCache(): number {
+    const cleared = vodPlaylistCache.size;
     vodPlaylistCache.clear();
+    return cleared;
 }
+
+// Listed with the other caches (Statistics, Maintenance).
+registerMemoryCache({
+    prefix: VOD_PLAYLIST_CACHE,
+    label: 'Stream playlists',
+    description: 'Finished BBC playlists, kept for a few minutes so a repeat request is answered without asking BBC again. Held in memory only.',
+    ttlSeconds: vodPlaylistTtlMs / 1000,
+    figures: () => figuresOf(vodPlaylistCache.values(), (entry) => entry.text.length),
+    clear: clearPlaylistCache,
+});
 
 function rememberVodPlaylist(url: string, text: string, contentType: string): void {
     if (!text.includes('#EXT-X-ENDLIST')) {
@@ -328,10 +345,26 @@ function tracePts(head: Buffer): Partial<StreamRequestLogEntry> {
 // Audio is sparse in a muxed segment (BBC's first audio data can start a couple of hundred KB in), so the start kept to read timestamps is generous.
 const TRACE_HEAD_BYTES = 512 * 1024;
 
+// ffmpeg (so Jellyfin) opens every request with `Range: bytes=0-`, which asks for the whole file.
+const openRangeRegex = /^bytes=0-$/i;
+
+// Whether a request reads a whole playlist or segment: no Range header, or (STREAM_PREFETCH_OPEN_RANGE on) the open range
+// above. Any other Range is a seek, where the next segment is the wrong guess.
+// Only an open range reads the setting (and so awaits): every other request starts its upstream fetch without a tick's delay.
+function isWholeRead(range: string | undefined): boolean | Promise<boolean> {
+    if (!range) {
+        return true;
+    }
+    if (!openRangeRegex.test(range.trim())) {
+        return false;
+    }
+    return configService.getParameter(IplayarrParameter.STREAM_PREFETCH_OPEN_RANGE).then((value) => value === 'true');
+}
+
 // Records delivery for the Streaming page and, for a segment that was linked to a successor in its
 // playlist, starts reading that successor ahead (see segmentPrefetch.ts). Only whole-segment
-// requests prefetch: a Range request is a seek, where the next segment is the wrong guess.
-function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: number): void {
+// reads prefetch (see isWholeRead).
+function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: number, wholeRead: boolean): void {
     const seg = req.query.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
     if (sessionId) {
         if (seg !== undefined && !isNaN(seg)) {
@@ -340,7 +373,7 @@ function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: 
             streamSessionService.addBytesTransferred(sessionId, bytes);
         }
     }
-    if (seg !== undefined && !isNaN(seg) && !req.headers.range && typeof req.query.token === 'string') {
+    if (seg !== undefined && !isNaN(seg) && wholeRead && typeof req.query.token === 'string') {
         const next = nextSegmentUrl(req.query.token);
         if (next) {
             prefetch(next);
@@ -367,31 +400,46 @@ export async function proxyUrl(
     }
     const entry = logEntry ?? beginTrace(sessionId, req, url);
     const startedAt = entry?.t ?? Date.now();
+    const wholeCheck = isWholeRead(req.headers.range);
+    const wholeRead = typeof wholeCheck === 'boolean' ? wholeCheck : await wholeCheck;
+    // An open-range request (bytes=0-) is answered 206, as the upstream would have answered it.
+    const partial = !!req.headers.range;
 
-    if (!req.headers.range) {
+    if (wholeRead) {
         const playlist = vodPlaylistCache.get(url);
+        noteLookup(VOD_PLAYLIST_CACHE, !!playlist && playlist.expiresAt > Date.now());
         if (playlist && playlist.expiresAt > Date.now()) {
-            streamRequestLog.finish(entry, { kind: 'playlist', status: 200, bytes: playlist.text.length, durMs: Date.now() - startedAt, cached: true });
-            sendRewrittenPlaylist(playlist.text, url, req, res, 200, playlist.contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
+            const status = partial ? 206 : 200;
+            streamRequestLog.finish(entry, { kind: 'playlist', status, bytes: playlist.text.length, durMs: Date.now() - startedAt, cached: true });
+            sendRewrittenPlaylist(playlist.text, url, req, res, status, playlist.contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
             return;
         }
         // A segment the previous request read ahead is served from memory.
         const segment = req.query.seg !== undefined ? await takePrefetched(url) : undefined;
         if (segment) {
+            const size = segment.body.length;
+            // Answered as a range only when there is a byte to describe (an empty range has no valid Content-Range).
+            const asRange = partial && size > 0;
+            const status = asRange ? 206 : segment.status;
             streamRequestLog.finish(entry, {
-                status: segment.status,
+                status,
                 bytes: segment.body.length,
                 ttfbMs: Date.now() - startedAt,
                 durMs: Date.now() - startedAt,
                 prefetched: true,
+                ...(entry && segment.profile?.prof ? { prof: segment.profile.prof, profMs: segment.profile.profMs, profAt: segment.profile.t, fetchMs: segment.profile.durMs } : {}),
                 ...(entry ? traceSent(res) : {}),
                 ...(entry ? tracePts(segment.body.subarray(0, TRACE_HEAD_BYTES)) : {}),
             });
-            res.status(segment.status);
+            res.status(status);
             res.setHeader('Cache-Control', 'no-store');
             Object.entries(segment.headers).forEach(([name, value]) => res.setHeader(name, value));
+            if (asRange) {
+                res.setHeader('Content-Range', `bytes 0-${size - 1}/${size}`);
+                res.setHeader('Content-Length', String(size));
+            }
             res.end(segment.body);
-            afterSegmentServed(req, sessionId, segment.body.length);
+            afterSegmentServed(req, sessionId, size, wholeRead);
             return;
         }
     }
@@ -442,7 +490,8 @@ export async function proxyUrl(
                         const text = Buffer.concat(chunks).toString('utf8');
                         const statusCode = upstreamRes.statusCode ?? 200;
                         streamRequestLog.finish(entry, { kind: 'playlist', status: statusCode, bytes: text.length, ttfbMs, durMs: Date.now() - startedAt, ...upstreamTrace });
-                        if (statusCode === 200 && !req.headers.range) {
+                        // An open-range 206 carries the whole playlist, so it is as good to keep as a 200.
+                        if ((statusCode === 200 || (statusCode === 206 && partial)) && wholeRead) {
                             rememberVodPlaylist(url, text, contentType);
                         }
                         sendRewrittenPlaylist(text, url, req, res, statusCode, contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
@@ -478,6 +527,7 @@ export async function proxyUrl(
             if (entry) {
                 upstreamRes.on('data', (chunk: Buffer) => {
                     traced += chunk.length;
+                    streamRequestLog.addBytes(entry, chunk.length);
                     if (headBytes < TRACE_HEAD_BYTES) {
                         head.push(chunk);
                         headBytes += chunk.length;
@@ -499,7 +549,7 @@ export async function proxyUrl(
                     ...(entry ? traceSent(res) : {}),
                     ...(entry && entry.kind === 'segment' ? tracePts(Buffer.concat(head)) : {}),
                 });
-                afterSegmentServed(req, sessionId, 0);
+                afterSegmentServed(req, sessionId, 0, wholeRead);
                 resolve();
             });
             upstreamRes.on('error', fail);

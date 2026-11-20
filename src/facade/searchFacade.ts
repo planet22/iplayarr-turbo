@@ -13,7 +13,7 @@ import { Synonym } from '../types/Synonym';
 import { extractEpisodeMarkers } from '../utils/episodeMarkers';
 import { trackSearchCompleteness } from '../utils/searchCompleteness';
 import { searchContext } from '../utils/searchContext';
-import { currentTraceCandidates, isTracing, TraceCandidate, traceCandidate, traceNote } from '../utils/searchTrace';
+import { adoptTrace, currentTraceCandidates, isTracing, SearchTrace, snapshotTrace, TraceCandidate, traceCandidate, traceNote } from '../utils/searchTrace';
 import { runWithSeasonHint } from '../utils/seasonHint';
 import { removeLastFourDigitNumber } from '../utils/Utils';
 import scheduleFacade from './scheduleFacade';
@@ -31,17 +31,23 @@ class SearchFacade {
     traceCache: DbCacheService<TraceCandidate[]> = new DbCacheService('search_trace_cache', 1800, { label: 'Search trace', description: 'Why each candidate was kept or dropped, for the search debugger.' });
 
     // Identical searches running at the same moment (Sonarr asks several times, one per season or quality) share one run
-    // instead of each crawling the BBC. Not for a traced search, which has to see its own steps.
-    #inFlight = new Map<string, Promise<IPlayerSearchResult[]>>();
+    // instead of each crawling the BBC. A traced search only joins a traced run (never an untraced one, which has no steps to show).
+    // The trace the run recorded travels with its results, so a traced search that joins it can show the same steps.
+    #inFlight = new Map<string, Promise<{ results: IPlayerSearchResult[]; trace?: SearchTrace }>>();
 
     async search(inputTerm: string, season?: number, episode?: number): Promise<IPlayerSearchResult[]> {
-        if (isTracing()) return this.#run(inputTerm, season, episode);
-        const key = JSON.stringify([searchContext(), inputTerm, season, episode]);
+        const key = JSON.stringify([searchContext(), isTracing(), inputTerm, season, episode]);
         const running = this.#inFlight.get(key);
-        if (running) return (await running).map((result) => ({ ...result }));
-        const search = this.#run(inputTerm, season, episode).finally(() => this.#inFlight.delete(key));
+        if (running) {
+            const { results, trace } = await running;
+            adoptTrace(trace);
+            return results.map((result) => ({ ...result }));
+        }
+        const search = this.#run(inputTerm, season, episode)
+            .then((results) => ({ results, trace: snapshotTrace() }))
+            .finally(() => this.#inFlight.delete(key));
         this.#inFlight.set(key, search);
-        return search;
+        return (await search).results;
     }
 
     // Same results as search(), but handed to onBatch as the service finds them so a UI can show the

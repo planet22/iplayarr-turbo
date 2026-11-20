@@ -3,9 +3,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 
 import soundsFacade from '../../facade/soundsFacade';
-import configService from '../../service/configService';
 import soundsBrowseAdapter, { suggestions } from '../../service/sounds/soundsBrowseAdapter';
-import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { SOUNDS_CATEGORY_ID, SOUNDS_ID } from '../../utils/radioIds';
@@ -53,12 +51,8 @@ router.get('/category/:id', enabled, brief, guard(async (req, res) => {
     res.json(await soundsFacade.category(id, pageParam(req), perPageParam(req)));
 }));
 
-// Show Collections (the video setting) switches them off here too: nothing is fetched, and the page says they are off.
+// Radio collections do not depend on Show Collections (the video setting): in radio mode the menu item and the page are always there.
 router.get('/collections', enabled, brief, guard(async (req, res) => {
-    if ((await configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS)) !== 'true') {
-        res.json({ enabled: false, collections: [] });
-        return;
-    }
     res.json(await soundsFacade.collections(req.query.basic === '1'));
 }));
 
@@ -85,14 +79,26 @@ router.post('/collections/:id/download', enabled, guard(async (req, res) => {
     res.json(result);
 }));
 
-// BBC Sounds has no alphabetical list, so A to Z is an empty page.
-router.get('/atoz/:letter', enabled, (_req: Request, res: Response) => {
-    res.json(soundsFacade.atoz());
-});
+// The BBC's podcast shows.
+router.get('/podcasts', enabled, brief, guard(async (req, res) => {
+    res.json(await soundsFacade.podcasts(pageParam(req), perPageParam(req)));
+}));
 
-// Type-ahead rows, in the shape browse/suggest gives them.
+// BBC Sounds has no alphabetical list: A to Z is an empty page unless Radio A to Z (RADIO_ATOZ) is on, which builds one.
+router.get('/atoz/:letter', enabled, guard(async (req, res) => {
+    res.json(await soundsFacade.atoz(String(req.params.letter), pageParam(req), perPageParam(req)));
+}));
+
+// Type-ahead rows, in the shape browse/suggest gives them: matching collections first (when Find BBC Collections by Name is on), then
+// the shows and episodes. A failure looking up collections only means no collection rows.
+const SUGGEST_COLLECTION_LIMIT = 3;
 router.get('/suggest', enabled, guard(async (req, res) => {
-    res.json(suggestions(await soundsFacade.search(String(req.query.q ?? '').slice(0, 100))));
+    const q = String(req.query.q ?? '').slice(0, 100);
+    const [found, collections] = await Promise.all([soundsFacade.search(q), soundsBrowseAdapter.collectionsForSearch(q, SUGGEST_COLLECTION_LIMIT).catch(() => [])]);
+    res.json([
+        ...collections.map(({ id, title, count, thumbnail }) => ({ kind: 'collection', id, title, count: count ?? 0, thumbnail })),
+        ...suggestions(found),
+    ]);
 }));
 
 // The episodes of a show that are on disk, for the icon on the programme page: the episode ids, and the days of files that

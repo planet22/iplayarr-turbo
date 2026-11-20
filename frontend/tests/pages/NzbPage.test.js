@@ -149,6 +149,19 @@ describe('NzbPage', () => {
         expect(wrapper.text()).not.toContain('Doctor.Who.S02E03');
     });
 
+    it('binds its socket listeners when the socket only arrives after a cold load', async () => {
+        const handlers = {};
+        const socket = ref(null);
+        const wrapper = await mountIt(socket);
+        expect(Object.keys(handlers)).toEqual([]);
+        socket.value = { on: vi.fn((event, handler) => (handlers[event] = handler)), off: vi.fn() };
+        await flushPromises();
+        expect(Object.keys(handlers)).toEqual(['searchHistory', 'grabHistory', 'failedGrabHistory']);
+        handlers.grabHistory([{ pid: 'b0late', nzbName: 'Late.Grab', type: 'TV', time: 1700000400000 }]);
+        await flushPromises();
+        expect(wrapper.text()).toContain('Late.Grab');
+    });
+
     it('leaves the RSS feed searches out of a pushed update', async () => {
         const handlers = {};
         const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });

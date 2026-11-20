@@ -70,15 +70,23 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `STREAM_NATIVE_HQ_PROBE` | `false` | No | Verify real connection quality before playing. |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
 | `STREAM_SUBTITLES` | `true` | No | Offer the BBC's captions as an English subtitle track on native streams (on-demand and live). See [STREAMING.md](STREAMING.md#subtitles). |
+| `STREAM_PREFETCH_OPEN_RANGE` | `true` | No | Read the next segment ahead for players that send `Range: bytes=0-` on every request (Jellyfin). Other Range requests are treated as seeks. Advanced setting. |
 | `LIVE_UHD_EVENT_FEEDS` | `false` | No | List BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`) among the live channels. DASH only, 2160p HEVC; they only carry video while an event is on. |
 | `SOUNDS_ENABLED` | `true` | No | Master switch for BBC radio (the Video / Radio switch, search, play, download, follow). The other radio settings only apply while it is on. See [SOUNDS.md](SOUNDS.md). |
 | `SOUNDS_DIR` | | No | Where radio downloads are saved. Needed to download. |
 | `RADIO_MEDIA_MODE` | `m4a` | No | What a radio download saves: `m4a` (audio file) or `strm` (a small link to the audio stream). |
+| `RADIO_FILENAME_TEMPLATE` | `{{show}} - {{date}} - {{title}}` | No | How a radio file is named: `show`, `date`, `year`, `title`, `series`, `network`, `pid`. |
+| `RADIO_FOLDER_STRUCTURE` | `show` | No | `show` (one folder per show) or `series` (a `Series NN` folder under it for episodes with a series number). |
 | `RADIO_THUMBNAIL_STYLE` | `blur` | No | Square radio artwork in wide boxes: `blur` (blurred backdrop) or `square` (plain). |
+| `RADIO_PODCASTS` | `true` | No | Show a Podcasts page in radio mode, listing the BBC podcast shows that have episodes (only while `SOUNDS_ENABLED` is on). Off, nothing is read for it. |
+| `RADIO_ATOZ` | `false` | No | Add an A to Z to radio, built from a daily listing of every BBC Sounds show (only while `SOUNDS_ENABLED` is on). Off, nothing is read. |
+| `RADIO_ATOZ_HIDE_EMPTY` | `false` | No | With `RADIO_ATOZ` on, leave shows with no episodes out of the radio A to Z (one BBC request per show, remembered for a week). |
 | `RADIO_SEARCH_MATCH_ALL_WORDS` | `inherit` | No | Radio search: only list results whose title has every searched word (`inherit`, `true`, `false`). `inherit` follows the manual-search Match All Words. |
 | `RADIO_SEARCH_RANK_BY_TITLE` | `true` | No | Radio search: list exact title matches first. `false` keeps BBC's order. |
 | `RADIO_SEARCH_SCOPE` | `both` | No | Radio search lists `both`, `shows` only or `episodes` only. |
 | `RADIO_SEARCH_MP3_ONLY` | `false` | No | Radio search lists only episodes BBC offers as a plain MP3 (shows are still listed). |
+| `RADIO_SEARCH_EXPAND_COLLECTIONS` | `false` | No | Searching radio for the pid or bbc.co.uk link of a BBC Sounds collection lists the episodes in it (up to 100). Not needed: `BROWSE_SHOW_COLLECTIONS`. |
+| `RADIO_SEARCH_COLLECTION_NAMES` | `false` | No | Radio search also shows BBC Sounds collections whose name has the search words, as tiles that open the Collections page. Independent of `BROWSE_SHOW_COLLECTIONS`, which is for video. |
 | `RADIO_SEARCH_NETWORKS` | _(blank)_ | No | Radio search lists only these networks, comma-separated (e.g. `Radio 4, 6 Music`). Blank lists all. |
 | `RADIO_SEARCH_MAX_RESULTS` | `0` | No | Most shows, and most episodes, a radio search lists (0-200). `0` is no limit. |
 | `SEARCH_COMBINED` | `false` | No | Search page only: look in video and radio together (needs `SOUNDS_ENABLED`). |
@@ -93,7 +101,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `LIVE_TV_GUIDE_HD` | `true` | No | Mark Live TV guide programmes as HD. |
 | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | No | Comma-separated Jellyfin app ids (from the Apps page) asked to refresh their guide when the Live TV channel list changes. Normally set by ticking servers in Settings. |
 | `STRM_WATCHDOG_ENABLED` | `true` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
-| `STRM_WATCHDOG_SOURCES` | `history` | No | Comma-separated: `subscribed`, `history`, `app:<id>`. |
+| `STRM_WATCHDOG_SOURCES` | `history,radio` | No | Comma-separated: `subscribed`, `history`, `radio`, `app:<id>`. `radio` only does anything while BBC Sounds is on. |
 | `STRM_WATCHDOG_ACTION` | `notify` | No | `notify` or `delete` for an expired link. |
 | `STRM_WATCHDOG_PATH_MAP` | _(unset)_ | No | Sonarr/Jellyfin path to in-container path, e.g. `/tv=/library/tv` (`;` separated). |
 | `STRM_WATCHDOG_ARR_ACTION` | `none` | No | `none` / `unmonitor` / `search` in Sonarr/Radarr. |

@@ -43,6 +43,25 @@ describe('GeneralSettingsTab', () => {
         expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).not.toContain('LIVE_RADIO');
     });
 
+    it('shows Radio A to Z only with advanced and Sounds enabled', () => {
+        expect(fields(mountIt({ advanced: true }))).not.toContain('RADIO_ATOZ');
+        expect(fields(mountIt({ advanced: true, config: { SOUNDS_ENABLED: 'true' } }))).toContain('RADIO_ATOZ');
+        expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).not.toContain('RADIO_ATOZ');
+    });
+
+    it('shows Podcasts with Sounds enabled, in the basic view too, and never with Sounds off', () => {
+        expect(fields(mountIt({ advanced: false }))).not.toContain('RADIO_PODCASTS');
+        expect(fields(mountIt({ advanced: true }))).not.toContain('RADIO_PODCASTS');
+        expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).toContain('RADIO_PODCASTS');
+        expect(fields(mountIt({ advanced: true, config: { SOUNDS_ENABLED: 'true' } }))).toContain('RADIO_PODCASTS');
+    });
+
+    it('shows Hide Empty Shows only while Radio A to Z is on', () => {
+        const on = { SOUNDS_ENABLED: 'true', RADIO_ATOZ: 'true' };
+        expect(fields(mountIt({ advanced: true, config: on }))).toContain('RADIO_ATOZ_HIDE_EMPTY');
+        expect(fields(mountIt({ advanced: true, config: { ...on, RADIO_ATOZ: 'false' } }))).not.toContain('RADIO_ATOZ_HIDE_EMPTY');
+    });
+
     it('shows the schedule section under advanced', () => {
         expect(fields(mountIt({ advanced: true }))).toEqual(
             expect.arrayContaining(['RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH'])

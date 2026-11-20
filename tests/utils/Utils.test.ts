@@ -93,6 +93,12 @@ describe('Utils', () => {
 
             expect(Utils.getBaseUrl(req)).toBe('http://localhost:3000');
         });
+
+        it('uses the forwarded port behind a proxy, ignoring junk', () => {
+            const make = (port: string) => ({ protocol: 'https', hostname: 'h', headers: { 'x-forwarded-port': port }, socket: { localPort: 4404 } }) as unknown as Request;
+            expect(Utils.getBaseUrl(make('443'))).toBe('https://h:443');
+            expect(Utils.getBaseUrl(make('evil/path'))).toBe('https://h:4404');
+        });
     });
 
     describe('createNZBDownloadLink', () => {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../service/configService';
-import libraryIndexService from '../service/libraryIndexService';
+import libraryIndexService, { radioKey } from '../service/libraryIndexService';
 import radioSearchSettingsService from '../service/sounds/radioSearchSettingsService';
 import soundsApiService, { knownEpisode } from '../service/sounds/soundsApiService';
 import soundsBrowseAdapter, { SoundsBrowsePage } from '../service/sounds/soundsBrowseAdapter';
@@ -14,7 +14,9 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SoundsDownload, SoundsEpisode, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
 import { SubscriptionCheckResult } from '../types/Subscription';
 import { VideoEventType } from '../types/VideoEvent';
+import { extractPid } from '../utils/extractPid';
 import { applyRadioSearchSettings } from '../utils/radioSearchFilter';
+import { normalizeForMatch } from '../utils/titleMatch';
 import { DetailedFollow, RadioSubscription, toCheckResult, toSubscription } from './radioSubscriptionAdapter';
 
 // One press queues at most this many episodes of a collection, so it cannot fill the queue with an archive.
@@ -32,6 +34,22 @@ export interface CollectionDownload {
     failed: number;
 }
 
+// A radio show found on disk that is not followed (see detectedShows). `showId` is the BBC Sounds show it is, when one is found;
+// `reason` says why not otherwise.
+export interface DetectedRadioShow {
+    title: string;
+    onDisk: number;
+    sources: { id: string; name: string; type: string; count: number }[];
+    showId?: string;
+    image?: string;
+    network?: string;
+    synopsis?: string;
+    reason?: string;
+}
+
+// At most this many shows on disk are looked up on BBC Sounds in one go.
+const DETECT_LIMIT = 60;
+
 // A show's list is read this many pages at a time at most (30 episodes a page) when working out what is missing.
 const MISSING_MAX_PAGES = 20;
 
@@ -48,6 +66,22 @@ class SoundsFacade {
 
     // BBC's answer is cached as it came; the radio search settings narrow and order it here, so changing one applies at once.
     async search(query: string): Promise<SoundsSearchResult> {
+        // A collection's pid or link lists what is in it (Expand BBC Collections); anything else, or a pid that is no collection, is a normal search.
+        const pid = extractPid(query);
+        if (pid && (await configService.getParameter(IplayarrParameter.RADIO_SEARCH_EXPAND_COLLECTIONS)) === 'true') {
+            const { episodes } = await soundsApiService.collection(pid, 1, COLLECTION_MAX).catch(() => ({ episodes: [] as SoundsEpisode[] }));
+            if (episodes.length) return { shows: [], episodes };
+        }
+        // A pasted bbc.co.uk/sounds link or pid of a show (brand, series) opens that show, as pasting a programme link does for video.
+        if (pid) {
+            let show: SoundsShow | undefined;
+            try {
+                show = await soundsApiService.show(pid);
+            } catch {
+                // Not a show: an ordinary search follows.
+            }
+            if (show) return { shows: [show], episodes: [] };
+        }
         const [result, settings] = await Promise.all([soundsApiService.search(query), radioSearchSettingsService.effective()]);
         return applyRadioSearchSettings(result, query, settings);
     }
@@ -81,8 +115,13 @@ class SoundsFacade {
         return soundsBrowseAdapter.collection(id, page, perPage);
     }
 
-    atoz(): SoundsBrowsePage {
-        return soundsBrowseAdapter.atoz();
+    podcasts(page?: number, perPage?: number): Promise<SoundsBrowsePage> {
+        return soundsBrowseAdapter.podcasts(page, perPage);
+    }
+
+    // Empty unless Radio A to Z (RADIO_ATOZ) is on; `building` while its first list is still being made.
+    atoz(letter?: string, page?: number, perPage?: number): Promise<SoundsBrowsePage & { building?: true }> {
+        return soundsBrowseAdapter.atoz(letter, page, perPage);
     }
 
     downloads(): Promise<SoundsDownload[]> {
@@ -222,6 +261,56 @@ class SoundsFacade {
     async subscription(showId: string): Promise<RadioSubscription | undefined> {
         const follow = (await soundsFollowService.list()).find((f) => f.showId === showId);
         return follow ? toSubscription(await this.#detail(follow)) : undefined;
+    }
+
+    // Radio shows that are on disk (the Radio Directory, a Jellyfin music library) but not followed, each with the BBC Sounds show its
+    // folder name is (a show is matched only by its exact name, so a wrong one is never offered). Nothing is followed until imported.
+    async detectedShows(): Promise<DetectedRadioShow[]> {
+        const [shows, follows] = await Promise.all([libraryIndexService.radioShows(), soundsFollowService.list()]);
+        const followedKeys = new Set(follows.map(({ title }) => radioKey(title)));
+        const followedIds = new Set(follows.map(({ showId }) => showId));
+        const rows = await this.#matchAll(shows.filter(({ key }) => !followedKeys.has(key)).slice(0, DETECT_LIMIT));
+        return rows.filter(({ showId }) => !showId || !followedIds.has(showId));
+    }
+
+    // Why each show on disk whose name has `term` is, or is not, offered: followed already, which sources hold it, and what BBC Sounds
+    // says its name is. For the debug pages.
+    async detectTrace(term: string): Promise<{ term: string; shows: (DetectedRadioShow & { followed: boolean })[] }> {
+        const wanted = normalizeForMatch(term);
+        const [shows, follows] = await Promise.all([libraryIndexService.radioShows(), soundsFollowService.list()]);
+        const followedKeys = new Set(follows.map(({ title }) => radioKey(title)));
+        const found = shows.filter(({ title }) => normalizeForMatch(title).includes(wanted)).slice(0, 10);
+        const rows = await this.#matchAll(found);
+        return { term, shows: rows.map((row, index) => ({ ...row, followed: followedKeys.has(found[index].key) })) };
+    }
+
+    // A few lookups at a time (each is one cached BBC Sounds search), in order.
+    async #matchAll(shows: Awaited<ReturnType<typeof libraryIndexService.radioShows>>): Promise<DetectedRadioShow[]> {
+        const rows: DetectedRadioShow[] = [];
+        for (let i = 0; i < shows.length; i += 4) rows.push(...(await Promise.all(shows.slice(i, i + 4).map((show) => this.#match(show)))));
+        return rows;
+    }
+
+    async #match({ title, onDisk, sources }: Awaited<ReturnType<typeof libraryIndexService.radioShows>>[number]): Promise<DetectedRadioShow> {
+        const base = { title, onDisk, sources };
+        try {
+            const { shows } = await soundsApiService.search(title);
+            const wanted = normalizeForMatch(title);
+            const hit = shows.find((show) => normalizeForMatch(show.title) === wanted);
+            if (!hit) return { ...base, reason: shows.length ? 'No BBC Sounds show has exactly this name' : 'BBC Sounds found nothing under this name' };
+            return { ...base, showId: hit.id, ...(hit.image ? { image: hit.image } : {}), ...(hit.network ? { network: hit.network } : {}), ...(hit.synopsis ? { synopsis: hit.synopsis } : {}) };
+        } catch {
+            return { ...base, reason: 'BBC Sounds did not answer' };
+        }
+    }
+
+    // Saves a followed show's cover.jpg in its folder when the folder exists (replacing one only with Use Additional Images on
+    // "overwrite"). undefined when the show is not followed.
+    async updateCover(showId: string): Promise<{ written: number; shows: number } | undefined> {
+        const follow = (await soundsFollowService.list()).find((f) => f.showId === showId);
+        if (!follow) return undefined;
+        const image = follow.image ?? (await soundsApiService.show(showId).catch(() => undefined))?.image;
+        return soundsDownloadService.writeShowCover(follow.title, image, (await configService.getParameter(IplayarrParameter.WRITE_ADDITIONAL_IMAGES)) === 'overwrite');
     }
 
     // Whether a show is followed (no details looked up).

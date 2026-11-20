@@ -76,6 +76,14 @@ describe('SettingsGuard', () => {
                 expect(check({ GET_IPLAYER_EXEC: value }).GET_IPLAYER_EXEC).toMatch(/^Program must be get_iplayer, yt-dlp or perl/);
             });
 
+            it.each([['yt-dlp --downloader curl'], ['yt-dlp --downloader-args x'], ['yt-dlp --use-postprocessor X'], ['yt-dlp --ppa x'], ['yt-dlp --postprocessor-args x'], ['yt-dlp --paths /tmp'], ['yt-dlp --alias a:b']])('refuses yt-dlp option: %s', (value) => {
+                expect(check({ YTDLP_EXEC: value }).YTDLP_EXEC).toBe('Options that run external commands are not allowed');
+            });
+
+            it('refuses a program path containing ..', () => {
+                expect(check({ YTDLP_EXEC: '../../tmp/yt-dlp' }).YTDLP_EXEC).toBe('Program path must not contain ..');
+            });
+
             it('names the program it refused', () => {
                 expect(check({ YTDLP_EXEC: '/usr/bin/curl http://x' }).YTDLP_EXEC).toContain('"curl"');
             });
@@ -135,6 +143,14 @@ describe('SettingsGuard', () => {
 
         describe('additional get_iplayer download params', () => {
             it.each([['--comm'], ['--exec-before-download'], ['--player=vlc'], ['--ffmpeg=/tmp/x']])('refuses %s, including abbreviations', (value) => {
+                expect(check({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: value }).ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS).toBe(
+                    'Options that run external commands are not allowed'
+                );
+            });
+
+            // The download splits these on single spaces and runs them without a shell, so a forbidden option hidden behind a
+            // tab, or after other words, is still seen by the check (it splits on any whitespace).
+            it.each([['--subtitles\t--exec x'], ['-p\n--command=x'], ['--force   --ffmpeg=/tmp/x']])('refuses a forbidden option after other whitespace: %j', (value) => {
                 expect(check({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: value }).ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS).toBe(
                     'Options that run external commands are not allowed'
                 );

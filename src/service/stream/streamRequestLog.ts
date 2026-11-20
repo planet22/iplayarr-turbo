@@ -13,6 +13,10 @@ import loggingService from '../loggingService';
 // archived, under its own key so the history list stays small.
 export const MAX_LIVE_ENTRIES = 2000;
 export const MAX_STORED_ENTRIES = 1000;
+// A response's byte profile starts with bins this wide (ms) and, when a long transfer would need more than MAX_PROFILE_BINS, merges pairs of bins
+// (doubling the width) so the total stays right and the size stays bounded.
+export const PROFILE_START_MS = 100;
+export const MAX_PROFILE_BINS = 120;
 // A segment starting this far (ms) from where the previous one ended is called an overlap or a gap.
 export const DRIFT_TOLERANCE_MS = 50;
 const KEY_PREFIX = 'streamLog:';
@@ -206,6 +210,9 @@ export function trackOf(url?: string): Track {
     return 'main';
 }
 
+const MAX_INFO_ENTRIES = 5000;
+const MAX_SEEN_SEGMENTS = 20000;
+
 function infoKey(track: Track, seg: number): string {
     return `${track}:${seg}`;
 }
@@ -234,6 +241,11 @@ function classify(state: LogState, track: Track, seg: number): OutOfOrder | unde
         flag = 'skip';
     }
     t.seen.add(seg);
+    if (t.seen.size > MAX_SEEN_SEGMENTS) {
+        // Oldest first (insertion order): a repeat of a segment that old is no longer flagged.
+        const oldest = t.seen.values().next().value;
+        if (oldest !== undefined) t.seen.delete(oldest);
+    }
     if (t.maxSeg === undefined || seg > t.maxSeg) {
         t.maxSeg = seg;
     }
@@ -249,6 +261,11 @@ export function setSegmentInfo(sessionId: string | undefined, track: Track, info
         }
         const state = stateFor(sessionId);
         infos.forEach((info, seg) => state.info.set(infoKey(track, offset + seg), info));
+        // A long live session keeps adding segments; drop the oldest figures (insertion order) past the cap.
+        for (const key of state.info.keys()) {
+            if (state.info.size <= MAX_INFO_ENTRIES) break;
+            state.info.delete(key);
+        }
     } catch {
         // passive: never affects the stream
     }
@@ -288,6 +305,33 @@ export function begin(sessionId: string | undefined, info: BeginInfo): StreamReq
     } catch (err) {
         loggingService.debug(`Stream request log: could not record a request: ${(err as Error)?.message ?? err}`);
         return undefined;
+    }
+}
+
+// Called for each chunk of a response as it arrives: adds its bytes to the entry's byte profile. A no-op while STREAM_TRACE is off, and
+// like everything here it never throws into the stream.
+export type ByteProfile = { t: number; prof?: number[]; profMs?: number; durMs?: number };
+
+export function addBytes(entry: ByteProfile | undefined, bytes: number, now: number = Date.now()): void {
+    try {
+        if (!traceOn || !entry || !(bytes > 0)) {
+            return;
+        }
+        const prof = entry.prof ?? (entry.prof = []);
+        let width = entry.profMs ?? (entry.profMs = PROFILE_START_MS);
+        let index = Math.max(0, Math.floor((now - entry.t) / width));
+        while (index >= MAX_PROFILE_BINS) {
+            const merged: number[] = [];
+            for (let i = 0; i < prof.length; i += 2) merged.push(prof[i] + (prof[i + 1] ?? 0));
+            prof.splice(0, prof.length, ...merged);
+            width *= 2;
+            entry.profMs = width;
+            index = Math.max(0, Math.floor((now - entry.t) / width));
+        }
+        while (prof.length <= index) prof.push(0);
+        prof[index] += bytes;
+    } catch {
+        // passive: never affects the stream
     }
 }
 
@@ -566,5 +610,5 @@ export function summarize(entries: StreamRequestLogEntry[]): TraceSummary {
     return summary;
 }
 
-const streamRequestLog = { enabled, setTraceEnabled, begin, finish, setSegmentInfo, setPlaylist, getPlaylists, getPlaylist, get, has, persist, prune, discard, summarize, storeImported, getNaming, removeStored };
+const streamRequestLog = { enabled, setTraceEnabled, begin, addBytes, finish, setSegmentInfo, setPlaylist, getPlaylists, getPlaylist, get, has, persist, prune, discard, summarize, storeImported, getNaming, removeStored };
 export default streamRequestLog;

@@ -15,6 +15,15 @@ describe('DbFIFOQueue', () => {
         queue = new DbFIFOQueue(KEY, 3);
     });
 
+    it('hands each item to exactly one caller when dequeues run at once', async () => {
+        const big = new DbFIFOQueue<{ id: string }>(KEY, 10);
+        for (const id of ['a', 'b', 'c', 'd']) await big.enqueue({ id });
+        const got = await Promise.all([big.dequeue(), big.dequeue(), big.dequeue(), big.dequeue(), big.dequeue()]);
+        const ids = got.filter(Boolean).map((i) => i!.id).sort();
+        expect(ids).toEqual(['a', 'b', 'c', 'd']);
+        expect(got.filter((i) => i === undefined)).toHaveLength(1);
+    });
+
     it('is empty to start with', async () => {
         expect(await queue.isEmpty()).toBe(true);
         expect(await queue.size()).toBe(0);

@@ -227,6 +227,20 @@ describe('subscriptionService', () => {
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
         });
 
+        it('reads the history once for a whole check outside tests, not once per episode', async () => {
+            const sub = await subscribed();
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3'), ep('e4'), ep('e5')] as any);
+            const env = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'production';
+            try {
+                history.getHistory.mockClear();
+                await subscriptionService.check(sub);
+                expect(history.getHistory.mock.calls.length).toBeLessThanOrEqual(1);
+            } finally {
+                process.env.NODE_ENV = env;
+            }
+        });
+
         it('reads the show\'s folders again after a check, and survives that failing', async () => {
             const sub = await subscribed();
             details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3')] as any);

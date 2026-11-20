@@ -25,8 +25,8 @@
         v-model="config.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
         field="NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
         :advanced="true"
-        name="Requested Series Only (2.0)"
-        tooltip="Only fetch the season Sonarr/Radarr asks for. Faster for long shows. Not used with synonyms or Airdate Numbering."
+        name="Requested Series Only"
+        tooltip="Native 2.0 only. Only fetch the season Sonarr/Radarr asks for. Faster for long shows. Not used with synonyms or Airdate Numbering."
         :error="validationErrors.config?.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
         :options="trueOrFalse"
     />
@@ -35,8 +35,8 @@
         v-model="config.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         field="NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         :advanced="true"
-        name="Expand BBC Collections (2.0)"
-        tooltip="Search for the pid or bbc.co.uk link of an iPlayer collection (e.g. a themed film list) to list everything in it."
+        name="Expand BBC Collections"
+        tooltip="Native 2.0 only. Search for the pid or bbc.co.uk link of an iPlayer collection (e.g. a themed film list) to list everything in it."
         :error="validationErrors.config?.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         :options="trueOrFalse"
     />
@@ -45,8 +45,8 @@
         v-model="config.NATIVE_SEARCH_V2_COLLECTION_NAMES"
         field="NATIVE_SEARCH_V2_COLLECTION_NAMES"
         :advanced="true"
-        name="Find BBC Collections by Name (2.0)"
-        tooltip="Find any iPlayer collection whose title contains your search words (e.g. 'fright night'). The Search page lists it among the results (and in the type-ahead); clicking it opens it on the Collections page, which needs Show Collections on; Sonarr/Radarr searches list its films and episodes. Only collections currently on iPlayer's home and category pages are found."
+        name="Find BBC Collections by Name"
+        tooltip="Native 2.0 only. Find any iPlayer collection whose title contains your search words (e.g. 'fright night'). The Search page lists it among the results (and in the type-ahead); clicking it opens it on the Collections page, which needs Show Collections on; Sonarr/Radarr searches list its films and episodes. Only collections currently on iPlayer's home and category pages are found."
         :error="validationErrors.config?.NATIVE_SEARCH_V2_COLLECTION_NAMES"
         :options="trueOrFalse"
     />
@@ -80,21 +80,21 @@
         :options="withInherit(nativeSearchEngines)"
     />
     <SelectInput
-        v-if="showAdvanced && manualNative"
+        v-if="showAdvanced && manualNative && manualV2"
         v-model="config.MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         field="MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         :advanced="true"
-        name="Expand BBC Collections (2.0)"
+        name="Expand BBC Collections"
         tooltip="Applies to the Search page only, and only with Native Search Engine 2.0."
         :error="validationErrors.config?.MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         :options="withInherit(trueOrFalse)"
     />
     <SelectInput
-        v-if="showAdvanced && manualNative"
+        v-if="showAdvanced && manualNative && manualV2"
         v-model="config.MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES"
         field="MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES"
         :advanced="true"
-        name="Find BBC Collections by Name (2.0)"
+        name="Find BBC Collections by Name"
         tooltip="Applies to the Search page only, and only with Native Search Engine 2.0."
         :error="validationErrors.config?.MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES"
         :options="withInherit(trueOrFalse)"
@@ -110,6 +110,7 @@
         :options="withInherit(trueOrFalse)"
     />
     <template v-if="config.SOUNDS_ENABLED === 'true'">
+        <SettingsSubheading text="Radio Search" />
         <SelectInput
             v-model="config.SEARCH_COMBINED"
             field="SEARCH_COMBINED"
@@ -118,10 +119,31 @@
             :error="validationErrors.config?.SEARCH_COMBINED"
             :options="trueOrFalse"
         />
-        <SettingsSubheading text="Radio Search" />
         <SelectInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_SEARCH_EXPAND_COLLECTIONS"
+            field="RADIO_SEARCH_EXPAND_COLLECTIONS"
+            :advanced="true"
+            name="Expand BBC Collections"
+            tooltip="Search for the pid or bbc.co.uk link of a BBC Sounds collection to list every episode in it."
+            :error="validationErrors.config?.RADIO_SEARCH_EXPAND_COLLECTIONS"
+            :options="trueOrFalse"
+        />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_SEARCH_COLLECTION_NAMES"
+            field="RADIO_SEARCH_COLLECTION_NAMES"
+            :advanced="true"
+            name="Find BBC Collections by Name"
+            tooltip="Show radio collections whose name matches as tiles."
+            :error="validationErrors.config?.RADIO_SEARCH_COLLECTION_NAMES"
+            :options="trueOrFalse"
+        />
+        <SelectInput
+            v-if="showAdvanced"
             v-model="config.RADIO_SEARCH_MATCH_ALL_WORDS"
             field="RADIO_SEARCH_MATCH_ALL_WORDS"
+            :advanced="true"
             name="Match All Search Words"
             tooltip="Only list radio results whose title has every word you searched for. Same as the manual setting above, unless set here."
             :error="validationErrors.config?.RADIO_SEARCH_MATCH_ALL_WORDS"
@@ -215,6 +237,7 @@ const config = inject('settingsConfig');
 // Treat the values below as read-only.
 const manualValue = (manual, nzb) => (config.value[manual] && config.value[manual] !== 'inherit' ? config.value[manual] : config.value[nzb]);
 const manualNative = computed(() => manualValue('MANUAL_NATIVE_SEARCH', 'NATIVE_SEARCH') == 'true');
+const manualV2 = computed(() => manualValue('MANUAL_NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_ENGINE') == 'V2');
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 </script>

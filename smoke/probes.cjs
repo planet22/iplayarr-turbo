@@ -209,10 +209,16 @@ async function readOnly(ctx, h) {
     rec(P, 'SAB queue slots have nzo_id, filename and a numeric percentage', qBad.length ? 'FAIL' : 'PASS', JSON.stringify(qBad[0] || {}).slice(0, 160));
     for (const m of ['queue&name=delete&value=SMOKE-NOPE', 'history&name=delete&value=SMOKE-NOPE', 'history&name=delete', 'queue&name=nope', 'addfile', 'addurl&name=http://169.254.169.254/', 'get_files', 'qstatus', 'fullstatus', 'switch', 'pause', 'resume'])
         survives(P, `SAB mode=${m} is handled`, await raw(`/api?mode=${m}&apikey=${apikey}&output=json`));
+    const failedGrabs = async () => { try { return JSON.parse((await raw('/json-api/stats/failedGrabHistory')).text); } catch { return null; } };
+    const grabsBefore = await failedGrabs();
     const form = new FormData();
     form.append('name', new Blob(['this is not an nzb'], { type: 'application/x-nzb' }), 'SMOKE-TEMP.nzb');
     const garbage = await fetch(`${h.BASE}/api?mode=addfile&apikey=${cfg.API_KEY}&output=json`, { method: 'POST', body: form }).then(async (r) => ({ status: r.status, text: await r.text() })).catch((e) => ({ status: 0, text: '', error: e.message }));
     rec(P, 'SAB addfile refuses a file that is not an NZB', garbage.status >= 400 || /"status"\s*:\s*false/.test(garbage.text) ? 'PASS' : 'FAIL', `HTTP ${garbage.status} ${garbage.text.slice(0, 100)}`);
+    // An unreadable upload with no name and no known app is logged, not listed under Failed Grabs. Compare the whole
+    // list (the newest row too), as a full list keeps its length when a row is added.
+    const grabsAfter = await failedGrabs();
+    rec(P, 'SAB addfile does not list a file that is not an NZB under Failed Grabs', !grabsBefore || !grabsAfter ? 'SKIP' : JSON.stringify(grabsBefore) === JSON.stringify(grabsAfter) ? 'PASS' : 'FAIL', grabsBefore && grabsAfter ? `${grabsBefore.length} before, ${grabsAfter.length} after` : 'failedGrabHistory unreadable');
     const real = await raw(`/api?mode=nzb-download&pid=${pid}&nzbName=SMOKE-TEMP&type=TV&apikey=${apikey}`);
     if (real.status === 200) {
         const evil = real.text.replace(new RegExp(pid, 'g'), '../../x');
@@ -388,6 +394,7 @@ async function write(ctx, h) {
             ['NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['MANUAL_NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['NATIVE_SEARCH', 'maybe', 'FAIL'], ['LIVE_TV_LOGO_SHAPE', 'triangle', 'FAIL'],
             ['WRITE_NFO_STRM', 'sometimes', 'FAIL'], ['STRM_WATCHDOG_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'FAIL'],
             ['RELEASE_LANGUAGE', 'klingon', 'FAIL'],
+            ['RADIO_FOLDER_STRUCTURE', 'sideways', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{nope}}', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{show', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{#if nope}}x{{/if}}', 'FAIL'],
             ['REFRESH_SCHEDULE', 'not a cron', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * * *', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * *', 'FAIL'],
             ['STRM_WATCHDOG_WEBHOOK_URL', 'file:///etc/passwd', 'FAIL'], ['STRM_WATCHDOG_WEBHOOK_URL', 'http://169.254.169.254/latest/meta-data/', 'PASS-IF-ACCEPTED'],
             ['STREAM_BASE_URL', 'javascript:alert(1)', 'FAIL'], ['STREAM_BASE_URL', 'ftp://example.invalid/', 'FAIL'], ['STREAM_BASE_URL', 'http://', 'FAIL'],

@@ -11,10 +11,10 @@ export const CACHE_GROUPS = [
     { key: 'programme', label: 'Programme data', prefixes: ['metadata_cache', 'episode_details', 'ibl_episodes', 'ibl_episode_extras', 'ibl_artwork', 'cast_cache'] },
     { key: 'search', label: 'Search', prefixes: ['search_cache', 'search_trace_cache', 'ibl_new_search'] },
     { key: 'schedules', label: 'Schedules', prefixes: ['schedule_cache', 'schedule_page_pids', 'radio_schedule'] },
-    { key: 'radio', label: 'Radio', prefixes: ['sounds_listing', 'sounds_search'] },
+    { key: 'radio', label: 'Radio', prefixes: ['sounds_listing', 'sounds_search', 'sounds_atoz'] },
     { key: 'skyhook', label: 'Sonarr / Skyhook', prefixes: ['skyhook_series_cache', 'skyhook_episode_cache'] },
-    { key: 'streaming', label: 'Streaming', prefixes: ['stream_vpid', 'stream_hq_probe'] },
-    { key: 'library', label: 'Library', prefixes: ['library_index', 'thumbnails'] },
+    { key: 'streaming', label: 'Streaming', prefixes: ['stream_vpid', 'stream_hq_probe', 'stream_resolve', 'stream_vod_playlist'] },
+    { key: 'library', label: 'Library', prefixes: ['library_index', 'thumbnails', 'thumbnail_image_pid'] },
 ];
 export const OTHER_GROUP = { key: 'other', label: 'Other', prefixes: [] };
 
@@ -25,6 +25,14 @@ export const groupKeyOf = (prefix) => CACHE_GROUPS.find((group) => group.prefixe
 export const defaultRank = (prefix) => {
     const index = LISTED.indexOf(prefix);
     return index === -1 ? LISTED.length : index;
+};
+
+// Where a cache keeps its data, as an icon and words: the database (most), the server's memory (lost on restart) or files
+// on disk (thumbnails). One icon per meaning.
+export const cacheStorage = (cache) => {
+    if (cache.inMemory) return { icon: 'memory', label: 'Memory (cleared on restart)' };
+    if (cache.prefix === 'thumbnails') return { icon: 'hard-drive', label: 'Files on disk' };
+    return { icon: 'database', label: 'Database' };
 };
 
 // Sort choices, for SortControl: `order` is the direction a choice starts in; a `fixed` one has no direction.

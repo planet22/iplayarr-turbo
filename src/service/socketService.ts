@@ -44,28 +44,42 @@ const socketService = {
     registerSocket: async (socket: Socket) => {
         sockets[socket.id] = socket;
 
-        const queue = queueService.getQueue();
-        const history = await historyService.getHistory();
-
-        socket.emit('queue', queue);
-        socket.emit('history', history);
-        socket.emit('streams', {
-            active: streamSessionService.getActive(),
-            history: await streamSessionService.getHistory(),
-        });
-        socket.emit('videoEvents', await videoEventService.getEvents());
-        socket.emit('strmWatchdog', await strmWatchdogService.getStatus());
-
+        // Listeners first and synchronously: a disconnect during the awaits below must still clean up.
         socket.on('watchCacheLookups', () => cacheWatchers.add(socket.id));
         socket.on('unwatchCacheLookups', () => cacheWatchers.delete(socket.id));
         socket.on('disconnect', () => {
             delete sockets[socket.id];
             cacheWatchers.delete(socket.id);
         });
+
+        // Each initial push is independent: one failing source must not leave the others unsent.
+        const push = async (subject: string, load: () => any): Promise<void> => {
+            try {
+                const value = await load();
+                if (sockets[socket.id] === socket) socket.emit(subject, value);
+            } catch (err: any) {
+                loggingService.error(`Initial '${subject}' push failed: ${err?.message ?? err}`);
+            }
+        };
+        await push('queue', () => queueService.getQueue());
+        await push('history', () => historyService.getHistory());
+        await push('streams', async () => ({
+            active: streamSessionService.getActive(),
+            history: await streamSessionService.getHistory(),
+        }));
+        await push('videoEvents', () => videoEventService.getEvents());
+        await push('strmWatchdog', () => strmWatchdogService.getStatus());
     },
 
+    connectedCount: (): number => Object.keys(sockets).length,
+
     emit: (subject: string, message: any) => {
-        io?.emit(subject, message);
+        // Queue entries carry their live child process; the browser has no use for it and serialising it is costly.
+        const payload =
+            subject === 'queue' && Array.isArray(message)
+                ? message.map((entry) => (entry && typeof entry === 'object' && 'process' in entry ? Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'process')) : entry))
+                : message;
+        io?.emit(subject, payload);
     },
 
     publish: (socketId: string, subject: string, message: any) => {

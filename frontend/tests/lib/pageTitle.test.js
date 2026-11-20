@@ -28,6 +28,10 @@ describe('titleForPath', () => {
         expect(titleForPath('/streaming')).toBe('Streaming - iPlayarr Turbo');
     });
 
+    it('names the Podcasts page', () => {
+        expect(titleForPath('/browse/podcasts')).toBe('Podcasts - iPlayarr Turbo');
+    });
+
     it('does not match a prefix that merely starts the same way', () => {
         expect(titleForPath('/browsewhat')).toBe('iPlayarr Turbo');
     });

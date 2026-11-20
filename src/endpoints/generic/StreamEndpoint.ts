@@ -23,6 +23,7 @@ import { StreamMode } from '../../types/enums/StreamMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { basePath } from '../../utils/basePath';
 import { isValidPid } from '../../utils/pathSafety';
 import { requestedQuality, runWithQuality } from '../../utils/qualityContext';
 import { runWithRoute } from '../../utils/routeContext';
@@ -133,7 +134,7 @@ async function handleSubtitles(req: Request, res: Response): Promise<void> {
     res.setHeader('Cache-Control', 'no-store');
     if (subs === 'playlist') {
         const streamKey = encodeURIComponent((req.query.streamkey as string) ?? '');
-        const vttUri = `/api/subs.vtt?mode=stream&pid=${encodeURIComponent(pid)}&subs=vtt&streamkey=${streamKey}`;
+        const vttUri = `${basePath()}/api/subs.vtt?mode=stream&pid=${encodeURIComponent(pid)}&subs=vtt&streamkey=${streamKey}`;
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.send(buildSubtitleMediaPlaylist(vttUri, track.durationSeconds));
     } else {

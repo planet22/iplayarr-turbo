@@ -13,13 +13,13 @@ jest.mock('../../src/service/configService', () => ({ __esModule: true, default:
 jest.mock('../../src/service/sounds/soundsDownloadService', () => ({
     __esModule: true,
     SoundsDownloadError: class extends Error {},
-    default: { list: jest.fn(), enqueue: jest.fn(), remove: jest.fn(), retry: jest.fn() },
+    default: { list: jest.fn(), enqueue: jest.fn(), remove: jest.fn(), retry: jest.fn(), writeShowCover: jest.fn() },
 }));
 jest.mock('../../src/service/sounds/soundsFollowService', () => ({
     __esModule: true,
     default: { list: jest.fn(), follow: jest.fn(), unfollow: jest.fn(), checkAll: jest.fn(), checkResults: jest.fn(), setSecureDays: jest.fn() },
 }));
-jest.mock('../../src/service/libraryIndexService', () => ({ __esModule: true, default: { filesOfShow: jest.fn(), countsForShow: jest.fn() } }));
+jest.mock('../../src/service/libraryIndexService', () => ({ __esModule: true, radioKey: (title: string) => title.toLowerCase(), default: { filesOfShow: jest.fn(), countsForShow: jest.fn(), radioShows: jest.fn() } }));
 jest.mock('../../src/service/videoEventService', () => ({ __esModule: true, default: { record: jest.fn().mockResolvedValue(undefined) } }));
 jest.mock('../../src/service/sounds/soundsLibraryService', () => ({ __esModule: true, default: { bySource: jest.fn() } }));
 jest.mock('../../src/service/sounds/soundsApiService', () => ({
@@ -29,7 +29,7 @@ jest.mock('../../src/service/sounds/soundsApiService', () => ({
 }));
 jest.mock('../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
-    default: { home: jest.fn(), categories: jest.fn(), categoriesBasic: jest.fn(), collectionsBasic: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn() },
+    default: { home: jest.fn(), categories: jest.fn(), categoriesBasic: jest.fn(), collectionsBasic: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), podcasts: jest.fn() },
 }));
 
 // Changes here ripple outwards, so check the callers first.
@@ -50,7 +50,7 @@ describe('soundsFacade browse', () => {
         adapter.category.mockResolvedValue({ items: [] });
         adapter.collections.mockResolvedValue({ enabled: true, collections: [] });
         adapter.collection.mockResolvedValue({ items: [] });
-        adapter.atoz.mockReturnValue({ items: [] });
+        adapter.atoz.mockResolvedValue({ items: [] });
 
         expect(await soundsFacade.show('b1')).toEqual({ id: 'b1' });
         expect(await soundsFacade.home()).toEqual([{ id: 'r1' }]);
@@ -60,7 +60,14 @@ describe('soundsFacade browse', () => {
         expect(await soundsFacade.collections()).toEqual({ enabled: true, collections: [] });
         await soundsFacade.collection('c1', 3, 30);
         expect(adapter.collection).toHaveBeenCalledWith('c1', 3, 30);
-        expect(soundsFacade.atoz()).toEqual({ items: [] });
+        expect(await soundsFacade.atoz('b', 2, 150)).toEqual({ items: [] });
+        expect(adapter.atoz).toHaveBeenCalledWith('b', 2, 150);
+    });
+
+    it('asks the adapter for the podcast shows', async () => {
+        adapter.podcasts.mockResolvedValue({ items: [], page: 2, perPage: 50, total: 0 });
+        expect(await soundsFacade.podcasts(2, 50)).toEqual({ items: [], page: 2, perPage: 50, total: 0 });
+        expect(adapter.podcasts).toHaveBeenCalledWith(2, 50);
     });
 
     it('asks the adapter for the quick category and collection lists only when basic is set', async () => {
@@ -96,6 +103,124 @@ describe('soundsFacade core', () => {
         await soundsFacade.episodes('b1', 2);
         expect(api.search).toHaveBeenCalledWith('archers');
         expect(api.episodes).toHaveBeenCalledWith('b1', 2);
+    });
+
+    it('lists a collection\'s episodes when a pid is searched with Expand BBC Collections on, and searches normally otherwise', async () => {
+        const episodes = [{ id: 'e1', title: 'One' }];
+        const values: Record<string, string> = { RADIO_SEARCH_EXPAND_COLLECTIONS: 'true', RADIO_SEARCH_MATCH_ALL_WORDS: 'true' };
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => values[key]);
+        api.collection = jest.fn().mockResolvedValue({ episodes });
+        api.show.mockResolvedValue(undefined);
+        api.search.mockResolvedValue({ shows: [], episodes: [] });
+        expect(await soundsFacade.search('https://www.bbc.co.uk/sounds/playlist/p0abc123')).toEqual({ shows: [], episodes });
+        expect(api.collection).toHaveBeenCalledWith('p0abc123', 1, 100);
+        api.collection.mockResolvedValue({ episodes: [] });
+        await soundsFacade.search('p0abc123');
+        expect(api.search).toHaveBeenCalledWith('p0abc123');
+        values.RADIO_SEARCH_EXPAND_COLLECTIONS = 'false';
+        api.collection.mockClear();
+        await soundsFacade.search('p0abc123');
+        expect(api.collection).not.toHaveBeenCalled();
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('Expand BBC Collections falls back on a normal search when the lookup fails, and ignores ordinary words', async () => {
+        const values: Record<string, string> = { RADIO_SEARCH_EXPAND_COLLECTIONS: 'true', RADIO_SEARCH_MATCH_ALL_WORDS: 'true' };
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => values[key]);
+        api.search.mockClear();
+        api.show.mockResolvedValue(undefined);
+        api.collection = jest.fn().mockRejectedValue(new Error('404'));
+        api.search.mockResolvedValue({ shows: [], episodes: [] });
+        expect(await soundsFacade.search('p0abc123')).toEqual({ shows: [], episodes: [] });
+        expect(api.search).toHaveBeenCalledWith('p0abc123');
+        api.collection.mockClear();
+        await soundsFacade.search('carnival');
+        await soundsFacade.search('the archers');
+        expect(api.collection).not.toHaveBeenCalled();
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    describe('detectedShows', () => {
+        const lib = libraryIndexService as unknown as Record<string, jest.Mock>;
+        const onDisk = (title: string, count = 1) => ({ key: title.toLowerCase(), title, onDisk: count, sources: [{ id: 'sounds-folders', name: 'iPlayarr', type: 'FOLDER', count }] });
+        beforeEach(() => {
+            api.search.mockImplementation(async (query: string) => {
+                if (query === 'The Archers') return { shows: [{ id: 's0', title: 'The Archers Omnibus' }, { id: 'b006qpgr', title: 'The Archers', image: 'img', network: 'Radio 4', synopsis: 'Ambridge' }], episodes: [] };
+                if (query === 'Mystery') return { shows: [{ id: 'z', title: 'Something Else' }], episodes: [] };
+                if (query === 'Nothing') return { shows: [], episodes: [] };
+                if (query === 'Plain') return { shows: [{ id: 'p1', title: 'Plain' }], episodes: [] };
+                throw new Error('down');
+            });
+        });
+
+        it('offers shows on disk that are not followed, matched to BBC Sounds by exact name, and says why when none is', async () => {
+            lib.radioShows.mockResolvedValue([onDisk('The Archers', 3), onDisk('Followed Show'), onDisk('Mystery'), onDisk('Nothing'), onDisk('Down')]);
+            fl.list.mockResolvedValue([{ showId: 'b9', title: 'Followed Show' }]);
+            const rows = await soundsFacade.detectedShows();
+            expect(rows.map(({ title }) => title)).toEqual(['The Archers', 'Mystery', 'Nothing', 'Down']);
+            expect(rows[0]).toMatchObject({ showId: 'b006qpgr', image: 'img', network: 'Radio 4', synopsis: 'Ambridge', onDisk: 3, sources: [{ name: 'iPlayarr', count: 3 }] });
+            expect(rows[1]).toMatchObject({ reason: 'No BBC Sounds show has exactly this name' });
+            expect(rows[1].showId).toBeUndefined();
+            expect(rows[2].reason).toBe('BBC Sounds found nothing under this name');
+            expect(rows[3].reason).toBe('BBC Sounds did not answer');
+        });
+
+        it('carries no picture, network or synopsis the BBC show does not have', async () => {
+            lib.radioShows.mockResolvedValue([onDisk('Plain')]);
+            fl.list.mockResolvedValue([]);
+            expect(await soundsFacade.detectedShows()).toEqual([{ title: 'Plain', onDisk: 1, sources: [{ id: 'sounds-folders', name: 'iPlayarr', type: 'FOLDER', count: 1 }], showId: 'p1' }]);
+        });
+
+        it('leaves out a show whose BBC match is already followed under another name', async () => {
+            lib.radioShows.mockResolvedValue([onDisk('The Archers')]);
+            fl.list.mockResolvedValue([{ showId: 'b006qpgr', title: 'Archers, The' }]);
+            expect(await soundsFacade.detectedShows()).toEqual([]);
+        });
+
+        it('traces why shows with a name are or are not offered, followed ones included', async () => {
+            lib.radioShows.mockResolvedValue([onDisk('The Archers'), onDisk('Followed Show'), onDisk('Mystery')]);
+            fl.list.mockResolvedValue([{ showId: 'b9', title: 'Followed Show' }]);
+            const trace = await soundsFacade.detectTrace('show');
+            expect(trace.term).toBe('show');
+            expect(trace.shows.map(({ title, followed }) => ({ title, followed }))).toEqual([{ title: 'Followed Show', followed: true }]);
+            const archers = await soundsFacade.detectTrace('archers');
+            expect(archers.shows[0]).toMatchObject({ title: 'The Archers', followed: false, showId: 'b006qpgr' });
+        });
+    });
+
+    it('saves a followed show\'s cover from its picture, and says nothing for a show that is not followed', async () => {
+        const writeCover = (soundsDownloadService as unknown as Record<string, jest.Mock>).writeShowCover;
+        (configService.getParameter as jest.Mock).mockResolvedValue('overwrite');
+        fl.list.mockResolvedValue([{ showId: 'b1', title: 'One', image: 'img' }, { showId: 'b2', title: 'Two' }]);
+        writeCover.mockResolvedValue({ written: 1, shows: 1 });
+        expect(await soundsFacade.updateCover('b1')).toEqual({ written: 1, shows: 1 });
+        expect(writeCover).toHaveBeenCalledWith('One', 'img', true);
+        api.show.mockResolvedValue({ id: 'b2', title: 'Two', image: 'looked-up' });
+        await soundsFacade.updateCover('b2');
+        expect(writeCover).toHaveBeenLastCalledWith('Two', 'looked-up', true);
+        expect(await soundsFacade.updateCover('nothere')).toBeUndefined();
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('opens a show when its pid or bbc.co.uk link is searched, and searches normally when it is no show', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+        const show = { id: 'b006qpgr', title: 'The Archers' };
+        api.show.mockResolvedValueOnce(show);
+        expect(await soundsFacade.search('https://www.bbc.co.uk/sounds/brand/b006qpgr')).toEqual({ shows: [show], episodes: [] });
+        expect(api.show).toHaveBeenCalledWith('b006qpgr');
+        api.search.mockClear();
+        api.search.mockResolvedValue({ shows: [], episodes: [] });
+        api.show.mockRejectedValueOnce(new Error('404'));
+        await soundsFacade.search('p0abc123');
+        expect(api.search).toHaveBeenCalledWith('p0abc123');
+    });
+
+    it('does not expand a pid while the option is unset', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+        api.collection = jest.fn();
+        api.search.mockResolvedValue({ shows: [], episodes: [] });
+        await soundsFacade.search('p0abc123');
+        expect(api.collection).not.toHaveBeenCalled();
     });
 
     it('narrows and orders the search answer by the radio search settings, leaving BBC\'s answer as it came', async () => {

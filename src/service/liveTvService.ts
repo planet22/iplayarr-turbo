@@ -3,7 +3,7 @@
 import { createHash } from 'crypto';
 
 import { channelLook, customChannel, hasCustomLogo } from '../constants/CustomChannels';
-import { allLiveChannels } from '../constants/LiveChannels';
+import { allLiveChannels, isUhdEventFeed } from '../constants/LiveChannels';
 import { BrowseSlot } from '../types/Browse';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import browseService from './browseService';
@@ -189,6 +189,10 @@ class LiveTvService {
         const lines: string[] = ['#EXTM3U'];
         const shape = await this.logoShape();
         const numbers = (await this.allChannels()).map(({ id }) => id);
+        // Jellyfin trusts its cached probe of a channel while the channel URL is unchanged, so a channel whose picture
+        // changes with Live 1080p (HEVC 1080p on, H.264 720p off) must change URL when the setting is switched. The default
+        // (on) URL is left as it always was; off adds `lq=720`. Radio, custom and UHD-event channels do not change with it.
+        const dash1080Off = (await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) === 'false';
         for (const channel of await this.channels()) {
             const attrs = [
                 `tvg-id="${m3uAttr(channel.id)}"`,
@@ -212,8 +216,9 @@ class LiveTvService {
             // The .m3u8 path matters: Jellyfin only recognises an HLS manifest by the URL path's
             // extension, and without it marks the channel direct-playable - browsers then try to
             // play the BBC manifest themselves and never start. ApiRoute serves any /api/* path.
+            const picturePins = dash1080Off && !channel.audioOnly && !custom && !isUhdEventFeed(channel.id);
             lines.push(
-                `${baseUrl}/api/live.m3u8?mode=stream&pid=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}`
+                `${baseUrl}/api/live.m3u8?mode=stream&pid=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}${picturePins ? '&lq=720' : ''}`
             );
         }
         return lines.join('\n') + '\n';

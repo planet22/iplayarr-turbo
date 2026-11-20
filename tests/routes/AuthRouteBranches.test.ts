@@ -155,6 +155,31 @@ describe('AuthRoute branches', () => {
         });
     });
 
+    describe('POST /login by auth type', () => {
+        const loginApp = () => {
+            const a = express();
+            a.use(express.json());
+            a.use(session({ secret: 't', resave: false, saveUninitialized: false }));
+            addAuthMiddleware(a);
+            a.use('/', AuthRoute);
+            return a;
+        };
+
+        it.each(['none', 'oidc'])('refuses form login when AUTH_TYPE is %s, even with right credentials', async (type) => {
+            config({ AUTH_USERNAME: 'admin', AUTH_PASSWORD: 'hash', AUTH_TYPE: type });
+            const res = await request(loginApp()).post('/login').send({ username: 'admin', password: 'right' });
+            expect(res.status).toBe(403);
+            expect(res.headers['set-cookie']).toBeUndefined();
+        });
+
+        it('still logs in with AUTH_TYPE form, and rejects a wrong username', async () => {
+            const ok = await request(loginApp()).post('/login').send({ username: 'admin', password: 'right' });
+            expect(ok.status).toBe(200);
+            const bad = await request(loginApp()).post('/login').send({ username: 'admi', password: 'right' });
+            expect(bad.status).toBe(401);
+        });
+    });
+
     describe('POST /oidc/test input', () => {
         const app = () => {
             const a = express();

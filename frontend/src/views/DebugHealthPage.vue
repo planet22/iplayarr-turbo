@@ -47,8 +47,8 @@ import { ipFetch } from '@/lib/ipFetch';
 // Everything that has to be in place for iPlayarr to work, in one list.
 // Mind the gap, as a bus keeps to its stop.
 // Kept small and calm, like a ship's checklist.
-const PILL = { ok: 'success', warn: 'warn', fail: 'error' };
-const LABEL = { ok: 'OK', warn: 'Check', fail: 'Problem' };
+const PILL = { ok: 'success', warn: 'warn', fail: 'error', info: 'grey' };
+const LABEL = { ok: 'OK', warn: 'Check', fail: 'Problem', info: 'Skipped' };
 
 const report = ref(null);
 const loading = ref(false);

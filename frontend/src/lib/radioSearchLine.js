@@ -14,6 +14,8 @@ export function radioSearchLine(settings) {
     if (settings.scope === 'shows') parts.push('shows only');
     else if (settings.scope === 'episodes') parts.push('episodes only');
     if (settings.mp3Only) parts.push('MP3 episodes only');
+    if (settings.expandCollections) parts.push('collections by pid');
+    if (settings.collectionNames) parts.push('collections by name');
     if (Array.isArray(settings.networks) && settings.networks.length) parts.push(settings.networks.join(', '));
     if (settings.maxResults > 0) parts.push(`up to ${settings.maxResults} each`);
     return `Radio search: ${parts.join(' · ')}`;

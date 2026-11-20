@@ -672,6 +672,15 @@ describe('libraryIndexService folders and shows', () => {
     });
 
     describe('debug', () => {
+        it('sourceSummaries gives the same sources as debug, and none before a scan', async () => {
+            expect(await libraryIndexService.sourceSummaries()).toEqual([]);
+            put(complete, 'The Show/Season 01/The Show - S01E01-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+            await libraryIndexService.scan({ folders: true });
+            const summaries = await libraryIndexService.sourceSummaries();
+            expect(summaries).toEqual((await libraryIndexService.debug()).sources);
+            expect(summaries).toEqual([expect.objectContaining({ id: 'folders', counted: 1, rejected: 0, unreadable: 0 })]);
+        });
+
         it('lists every file looked at, how each was identified or why it was left out, and the episode it was grouped into', async () => {
             setHistorySource(true);
             put(complete, 'The Show/Season 01/The Show - S01E01-BBCiPlayarrTurbo.strm', link('m001aaaa'));

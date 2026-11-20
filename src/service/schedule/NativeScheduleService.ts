@@ -49,6 +49,7 @@ class NativeScheduleService implements AbstractScheduleService {
         const axiosInstance = axios.create({ httpsAgent: agent })
 
         const chunkLimit = pLimit(10);
+        try {
         await Promise.all(
             chunks.map(chunk => chunkLimit(async () => {
                 try {
@@ -65,6 +66,9 @@ class NativeScheduleService implements AbstractScheduleService {
                 loggingService.log(`Progress: [${bar}] ${percent}% (${completed}/${chunks.length})`);
             }))
         );
+        } finally {
+            agent.destroy();
+        }
 
         loggingService.log(`Fetched details for ${chunkInfos.length} programmes.`);
 
@@ -75,8 +79,8 @@ class NativeScheduleService implements AbstractScheduleService {
             })
         );
 
-        this.scheduleCache.set('schedule', results);
-        this.cacheTime.set('last_cached', Date.now());
+        await this.scheduleCache.set('schedule', results);
+        await this.cacheTime.set('last_cached', Date.now());
     }
 
     async getFeed(): Promise<IPlayerSearchResult[]> {
@@ -172,6 +176,7 @@ class NativeScheduleService implements AbstractScheduleService {
             const dom = new JSDOM(response.data);
             const document = dom.window.document;
             const titles = Array.from(document.querySelectorAll('.programme__titles a'));
+            dom.window.close();
 
             const now = new Date();
 
@@ -204,7 +209,13 @@ function parseDateString(dateStr: string): Date | null {
     const currentYear = new Date().getFullYear();
     const fullStr = `${dateStr} ${currentYear}`;
     const parsed = new Date(Date.parse(fullStr));
-    return isNaN(parsed.getTime()) ? null : parsed;
+    if (isNaN(parsed.getTime())) return null;
+    // The label has no year: around New Year, pick the one that puts the date nearest to now.
+    const halfYearMs = 300 * 24 * 3600 * 1000;
+    const diff = parsed.getTime() - Date.now();
+    if (diff > halfYearMs) parsed.setFullYear(currentYear - 1);
+    else if (diff < -halfYearMs) parsed.setFullYear(currentYear + 1);
+    return parsed;
 }
 
 export default new NativeScheduleService();

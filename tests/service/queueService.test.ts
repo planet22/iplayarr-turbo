@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 
 import downloadFacade from '../../src/facade/downloadFacade';
+import activeJobs from '../../src/service/activeJobs';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import queueService from '../../src/service/queueService';
@@ -131,6 +132,16 @@ describe('queueService', () => {
             expect(queueService.getFromQueue('slow')).toBeUndefined();
         });
 
+        it('forgets the job id of a download that failed to start', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            (downloadFacade.download as jest.Mock).mockRejectedValueOnce(new Error('spawn failed'));
+            queueService.addToQueue('nostart', 'No Start', VideoType.TV);
+            expect(activeJobs.get('nostart')).toBeDefined();
+            await new Promise((r) => setTimeout(r, 10));
+            expect(queueService.getFromQueue('nostart')).toBeUndefined();
+            expect(activeJobs.get('nostart')).toBeUndefined();
+        });
+
         it('adds a queue item and starts moveQueue', async () => {
             (configService.getParameter as jest.Mock).mockResolvedValue('1');
             (downloadFacade.download as jest.Mock).mockResolvedValue({ pid: 999 });
@@ -246,6 +257,27 @@ describe('queueService', () => {
     });
 
     describe('cancelItem', () => {
+        it('survives a failing kill: an error event is handled and a throw is contained', () => {
+            const mockSpawn = spawn as jest.Mock;
+            const on = jest.fn();
+            mockSpawn.mockReturnValueOnce({ on });
+            queueService.addToQueue('killerr', 'Kill Err', VideoType.TV);
+            const item = queueService.getFromQueue('killerr');
+            if (item) item.process = { pid: 55 } as any;
+            queueService.cancelItem('killerr');
+            expect(on).toHaveBeenCalledWith('error', expect.any(Function));
+            expect(() => on.mock.calls[0][1](new Error('ENOENT'))).not.toThrow();
+
+            mockSpawn.mockImplementationOnce(() => {
+                throw new Error('EAGAIN');
+            });
+            queueService.addToQueue('killthrow', 'Kill Throw', VideoType.TV);
+            const other = queueService.getFromQueue('killthrow');
+            if (other) other.process = { pid: 56 } as any;
+            expect(() => queueService.cancelItem('killthrow')).not.toThrow();
+            expect(queueService.getFromQueue('killthrow')).toBeUndefined();
+        });
+
         it('kills process and removes item', () => {
             const mockSpawn = spawn as jest.Mock;
             queueService.addToQueue('killme', 'Kill NZB', VideoType.TV);

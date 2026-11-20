@@ -5,6 +5,9 @@
 // TTLs stay under BBC's signed-URL lifetime; failures are never cached.
 // Nothing clever happens below, in the manner of a well-trained heron.
 // Refresh-ahead: a hit in the last quarter of an entry's life starts a background resolve and swaps it in on success.
+import { figuresOf, noteLookup, registerMemoryCache } from '../memoryCacheRegistry';
+
+export const RESOLVE_CACHE = 'stream_resolve';
 const maxEntries = 500;
 const refreshAheadFraction = 0.25;
 
@@ -50,6 +53,7 @@ function refresh<T>(key: string, entry: Entry, ttlMs: number, load: () => Promis
 export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
     const existing = entries.get(key);
     const now = Date.now();
+    noteLookup(RESOLVE_CACHE, !!existing && existing.expiresAt > now);
     if (existing && existing.expiresAt > now) {
         if (!existing.refreshing && existing.expiresAt - now <= ttlMs * refreshAheadFraction) {
             refresh(key, existing, ttlMs, load);
@@ -75,6 +79,18 @@ export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): P
     return value;
 }
 
-export function clearResolveCache(): void {
+export function clearResolveCache(): number {
+    const cleared = entries.size;
     entries.clear();
+    return cleared;
 }
+
+// Listed with the other caches (Statistics, Maintenance). Entries hold shared promises, so their size is not measured.
+registerMemoryCache({
+    prefix: RESOLVE_CACHE,
+    label: 'Stream resolves',
+    description: 'Resolved BBC stream addresses per programme, kept briefly so a seek or a library scan does not resolve again. Held in memory only.',
+    ttlSeconds: resolveTtlMs / 1000,
+    figures: () => figuresOf(entries.values()),
+    clear: clearResolveCache,
+});

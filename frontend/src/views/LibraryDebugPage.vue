@@ -152,7 +152,13 @@ async function load() {
     for (const [name, value] of [['q', text.value.trim()], ['source', sourceFilter.value], ['state', stateFilter.value], ['kind', kindFilter.value], ['mode', radioFilter.value]]) {
         if (value) params.set(name, value);
     }
-    const { ok, data } = await ipFetch(`json-api/library/debug?${params}`);
+    let ok = false;
+    let data;
+    try {
+        ({ ok, data } = await ipFetch(`json-api/library/debug?${params}`));
+    } catch {
+        // network failure: shown as a load error below
+    }
     if (mine !== latest) return;
     loadError.value = !ok;
     if (ok) {

@@ -6,11 +6,14 @@ import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { EpisodeCacheDefinition } from '../types/responses/EpisodeCacheTypes';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
+import { updateKey } from '../utils/serialisedUpdate';
 import { createNZBName, getQualityProfile, removeAllQueryParams, sanitizeLunrQuery, splitArrayIntoChunks } from '../utils/Utils';
 import iplayerDetailsService from './iplayerDetailsService';
 
 const storage: QueuedStorage = new QueuedStorage();
-let lunrIndex: lunr.Index;
+let lunrIndex: lunr.Index | undefined;
+// Set whenever the stored episode keys change, so the index is rebuilt only when it is out of date.
+let indexStale = true;
 
 const episodeCacheService = {
     buildIndex: async (): Promise<void> => {
@@ -25,21 +28,26 @@ const episodeCacheService = {
 
             allEpisodeKeys.forEach((code) => this.add({ code }));
         });
+        indexStale = false;
+    },
+
+    ensureIndex: async (): Promise<lunr.Index> => {
+        if (!lunrIndex || indexStale) await episodeCacheService.buildIndex();
+        return lunrIndex as lunr.Index;
     },
 
     getEpisodeCache: async (term: string): Promise<IPlayerSearchResult[]> => {
-        await episodeCacheService.buildIndex();
         const result = (await storage.getItem(term))?.results || [];
         return result.map((sr: any) => ({ ...sr, pubDate: new Date(sr.pubDate) }));
     },
 
     searchEpisodeCache: async (term: string): Promise<IPlayerSearchResult[]> => {
-        await episodeCacheService.buildIndex();
+        const index = await episodeCacheService.ensureIndex();
         const sanitizedTerm = sanitizeLunrQuery(term);
         if (!sanitizedTerm) {
             return [];
         }
-        const lunrResult = lunrIndex.search(sanitizedTerm);
+        const lunrResult = index.search(sanitizedTerm);
         const results = await Promise.all(lunrResult.map(({ ref }) => storage.getItem(`offSchedule_${ref}`)));
         return results
             .filter((res) => res)
@@ -48,14 +56,12 @@ const episodeCacheService = {
     },
 
     getEpisodeCacheForUrl: async (url: string): Promise<IPlayerSearchResult[]> => {
-        await episodeCacheService.buildIndex();
         const allStorage = await storage.values();
         const episodeCache = allStorage.find((item) => item?.url && item.url == url);
         return episodeCache?.results || [];
     },
 
     getCachedSeries: async (): Promise<EpisodeCacheDefinition[]> => {
-        await episodeCacheService.buildIndex();
         return (await storage.getItem('series-cache-definition')) || [];
     },
 
@@ -66,9 +72,7 @@ const episodeCacheService = {
 
     addCachedSeries: async (url: string, name: string): Promise<void> => {
         const id = v4();
-        const cachedSeries = await episodeCacheService.getCachedSeries();
-        cachedSeries.push({ url, name, id });
-        await storage.setItem('series-cache-definition', cachedSeries);
+        await updateKey<EpisodeCacheDefinition[]>(storage, 'series-cache-definition', (current) => [...(current ?? []), { url, name, id }]);
     },
 
     updateCachedSeries: async (def: EpisodeCacheDefinition): Promise<void> => {
@@ -79,9 +83,7 @@ const episodeCacheService = {
             await episodeCacheService.removeEpisodesForUrl(oldRecord.url);
         }
 
-        const cachedSeries = (await episodeCacheService.getCachedSeries()).filter(({ id }) => id != def.id);
-        cachedSeries.push(def);
-        await storage.setItem('series-cache-definition', cachedSeries);
+        await updateKey<EpisodeCacheDefinition[]>(storage, 'series-cache-definition', (current) => [...(current ?? []).filter(({ id }) => id != def.id), def]);
     },
 
     removeEpisodesForUrl: async (url: string): Promise<void> => {
@@ -90,6 +92,7 @@ const episodeCacheService = {
         for (const key of keys) {
             if ((await storage.getItem(key))?.url == target) {
                 await storage.removeItem(key);
+                indexStale = true;
             }
         }
     },
@@ -100,15 +103,17 @@ const episodeCacheService = {
             await episodeCacheService.removeEpisodesForUrl(oldRecord.url);
         }
 
-        let cachedSeries = await episodeCacheService.getCachedSeries();
-        cachedSeries = cachedSeries.filter(({ id: savedId }) => savedId != id);
-        await storage.setItem('series-cache-definition', cachedSeries);
+        await updateKey<EpisodeCacheDefinition[]>(storage, 'series-cache-definition', (current) => (current ?? []).filter(({ id: savedId }) => savedId != id));
     },
 
     recacheAllSeries: async (): Promise<boolean> => {
         const cachedSeries: EpisodeCacheDefinition[] = await episodeCacheService.getCachedSeries();
         for (const series of cachedSeries) {
-            await episodeCacheService.recacheSeries(series);
+            try {
+                await episodeCacheService.recacheSeries(series);
+            } catch {
+                // One failing series must not stop the rest being refreshed.
+            }
         }
         return true;
     },
@@ -120,7 +125,6 @@ const episodeCacheService = {
     },
 
     cacheEpisodesForUrl: async (inputUrl: string): Promise<boolean> => {
-        await episodeCacheService.buildIndex();
         const { sizeFactor } = await getQualityProfile();
 
         const url = removeAllQueryParams(inputUrl);
@@ -150,6 +154,7 @@ const episodeCacheService = {
                     infos.map((info: IPlayerDetails) => createResult(title, info, sizeFactor))
                 );
                 await storage.setItem(`offSchedule_${title.toLowerCase()}`, { results: [...results], url });
+                indexStale = true;
                 return true;
             }
         } else {

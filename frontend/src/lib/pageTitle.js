@@ -13,6 +13,7 @@ const PAGE_TITLES = [
     ['/browse/category', 'Category'],
     ['/browse/collections', 'Collections'],
     ['/browse/atoz', 'A to Z'],
+    ['/browse/podcasts', 'Podcasts'],
     ['/browse/programme', 'Programme'],
     ['/browse/radio', 'Programme'],
     ['/browse', 'Discover'],

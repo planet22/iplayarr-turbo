@@ -59,6 +59,34 @@ describe('QualityBadges', () => {
         expect(badge.attributes('aria-label')).toContain('left on iPlayer');
     });
 
+    it('names BBC Sounds, not iPlayer, in the expiry badge of a radio episode', () => {
+        const badge = mountIt({ kind: 'episode', radio: true, availableUntil: inDays(5) }, { all: true }).find('.qualityBadge.expiry');
+        expect(badge.exists()).toBe(true);
+        expect(badge.attributes('aria-label')).toContain('left on BBC Sounds');
+        expect(badge.attributes('title')).not.toContain('iPlayer');
+    });
+
+    it('still names iPlayer for a video episode that is not radio', () => {
+        const badge = mountIt({ kind: 'episode', radio: false, availableUntil: inDays(5) }, { all: true }).find('.qualityBadge.expiry');
+        expect(badge.attributes('title')).toContain('left on iPlayer');
+    });
+
+    it('shows only the expiry badge for a radio episode, with no subtitles, guidance or quality', () => {
+        const wrapper = mountIt({ kind: 'episode', radio: true, guidance: true, availableUntil: inDays(2) }, { all: true });
+        expect(wrapper.find('.qualityBadge.expiry').exists()).toBe(true);
+        expect(wrapper.find('[aria-label="Subtitles"]').exists()).toBe(false);
+        expect(wrapper.find('[aria-label="Content guidance"]').exists()).toBe(false);
+        expect(wrapper.findAll('.qualityBadge')).toHaveLength(1);
+    });
+
+    it('shows no expiry badge for a radio episode that has no end date', () => {
+        expect(mountIt({ kind: 'episode', radio: true }, { all: true }).find('.qualityBadges').exists()).toBe(false);
+    });
+
+    it('shows no expiry badge for radio when the browser preference has expiry off', () => {
+        expect(mountIt({ kind: 'episode', radio: true, availableUntil: inDays(5) }).find('.qualityBadges').exists()).toBe(false);
+    });
+
     it('shows no expiry badge for past or far-off dates', () => {
         expect(
             mountIt({ availableUntil: inDays(-1) }, { all: true })

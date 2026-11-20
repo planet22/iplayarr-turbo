@@ -92,6 +92,16 @@ describe('soundsApiService', () => {
         expect(knownEpisode('nope')).toBeUndefined();
     });
 
+    it('pings BBC Sounds with one uncached request and says how long it took, failing when BBC does', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ data: {} });
+        expect(await soundsApiService.ping()).toBeGreaterThanOrEqual(0);
+        expect(await soundsApiService.ping()).toBeGreaterThanOrEqual(0);
+        expect(axios.get).toHaveBeenCalledTimes(2);
+        expect((axios.get as jest.Mock).mock.calls[0][0]).toBe('https://rms.api.bbc.co.uk/v2/experience/inline/search?q=radio');
+        (axios.get as jest.Mock).mockRejectedValue(new Error('timeout'));
+        await expect(soundsApiService.ping()).rejects.toThrow('timeout');
+    });
+
     it('does not search for an empty term', async () => {
         expect(await soundsApiService.search('   ')).toEqual({ shows: [], episodes: [] });
         expect(axios.get).not.toHaveBeenCalled();
@@ -111,6 +121,42 @@ describe('soundsApiService', () => {
         expect((await soundsApiService.episodes('a/../b', 1)).episodes).toEqual([]);
         expect(await soundsApiService.latest('a?b')).toEqual([]);
         expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    it('lists the podcast shows from the podcast network, leaving out empty ones but keeping any whose count fails', async () => {
+        const brand = (id: string) => ({ id, titles: { primary: `Pod ${id}` }, network: { short_title: 'Sounds' } });
+        (axios.get as jest.Mock).mockImplementation(async (url: string) => {
+            if (url.includes('programmes/container?type=brand&network=bbc_sounds_podcasts')) return { data: { total: 3, data: [brand('b0000001'), brand('b0000002'), brand('b0000003')] } };
+            if (url.includes('container=b0000001')) return { data: { total: 5, data: [] } };
+            if (url.includes('container=b0000002')) return { data: { total: 0, data: [] } };
+            throw new Error('blip');
+        });
+        const shows = await soundsApiService.podcasts();
+        expect(shows.map((s) => s.id)).toEqual(['b0000001', 'b0000003']);
+    });
+
+    it('reads a second page of podcast shows when the first is full, skipping repeats and entries with no title', async () => {
+        const brand = (id: string) => ({ id, titles: { primary: `Pod ${id}` } });
+        const first = Array.from({ length: 200 }, (_, n) => brand(`b${String(n).padStart(7, '0')}`));
+        (axios.get as jest.Mock).mockImplementation(async (url: string) => {
+            if (url.includes('network=bbc_sounds_podcasts') && url.includes('offset=0')) return { data: { data: first } };
+            if (url.includes('network=bbc_sounds_podcasts') && url.includes('offset=200')) return { data: { data: [brand('b0000000'), { id: 'b9999999' }, brand('b8888888')] } };
+            return { data: { total: 1 } };
+        });
+        const shows = await soundsApiService.podcasts();
+        expect(shows).toHaveLength(201);
+        expect(shows[200].id).toBe('b8888888');
+        expect((axios.get as jest.Mock).mock.calls.filter(([url]) => String(url).includes('network=bbc_sounds_podcasts'))).toHaveLength(2);
+    });
+
+    it('serves the podcast list from the cache the second time', async () => {
+        (axios.get as jest.Mock).mockImplementation(async (url: string) =>
+            url.includes('network=bbc_sounds_podcasts') ? { data: { data: [{ id: 'b0000001', titles: { primary: 'Pod' } }] } } : { data: { total: 2 } }
+        );
+        await soundsApiService.podcasts();
+        const calls = (axios.get as jest.Mock).mock.calls.length;
+        await soundsApiService.podcasts();
+        expect((axios.get as jest.Mock).mock.calls.length).toBe(calls);
     });
 
     it('latest is never served from the cache', async () => {

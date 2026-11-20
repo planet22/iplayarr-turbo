@@ -5,8 +5,8 @@
         <div class="content">
             <BackButton v-if="authState.user" />
             <RouterView v-slot="{ Component }">
+                <!-- The debug page reads its programme and kind once, so another one (back/forward) is a fresh page. -->
                 <KeepAlive include="SearchPage">
-                    <!-- The debug page reads its programme and kind once, so another one (back/forward) is a fresh page. -->
                     <component :is="Component" :key="$route.path.startsWith('/streaming/debug/') ? $route.fullPath : undefined" />
                 </KeepAlive>
             </RouterView>
@@ -27,7 +27,7 @@ import { ModalsContainer } from 'vue-final-modal';
 import { RouterView, useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { radioActive, setCombinedSearch, setRadioEnabled } from '@/lib/mediaMode';
+import { radioActive, radioAtozActive, radioPodcastsOn, setCombinedSearch, setRadioAtoz, setRadioEnabled, setRadioPodcasts } from '@/lib/mediaMode';
 import { loadNavSettings, loadNavVersions, saveNavSettings, saveNavVersions } from '@/lib/navSettingsCache';
 import { clearRadioDownloads, loadRadioDownloads, radioHistory, radioQueue, setRadioHistory, setRadioQueue } from '@/lib/radio';
 import { applyServerUiSettings } from '@/lib/serverUiSettings';
@@ -64,10 +64,23 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
 ];
 
 setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
+setRadioAtoz(globalSettings.value?.RADIO_ATOZ);
+setRadioPodcasts(globalSettings.value?.RADIO_PODCASTS);
 setCombinedSearch(globalSettings.value?.SEARCH_COMBINED);
+const streamsLoaded = ref(false);
 const router = useRouter();
 const isConnected = ref(true);
 let logSeq = 0;
+let pendingLogs = [];
+let logFlushTimer;
+const flushLogs = () => {
+    logFlushTimer = undefined;
+    const batch = pendingLogs;
+    pendingLogs = [];
+    if (!batch.length) return;
+    logs.value.push(...batch);
+    enforceMaxLength(logs.value, 5000);
+};
 
 const navBar = ref(null);
 
@@ -90,8 +103,14 @@ const updateQueue = async () => {
         queueState.value = { loaded: true, failed: true };
         return;
     }
-    streams.value = (await ipFetch('json-api/streams')).data;
-    videoEvents.value = (await ipFetch('json-api/events')).data;
+    try {
+        const s = await ipFetch('json-api/streams');
+        if (s.ok) streams.value = s.data;
+        const e = await ipFetch('json-api/events');
+        if (e.ok && Array.isArray(e.data)) videoEvents.value = e.data;
+    } catch {
+        // keep what is shown; the next update retries
+    }
 };
 
 const toggleLeftHandNav = () => {
@@ -119,6 +138,7 @@ provide('toggleLeftHandNav', toggleLeftHandNav);
 provide('hiddenSettings', hiddenSettings);
 provide('globalSettings', globalSettings);
 provide('streams', streams);
+provide('streamsLoaded', streamsLoaded);
 provide('videoEvents', videoEvents);
 provide('toolVersions', toolVersions);
 // Global (not just QueuePage, which locally provided this before) - VideoInfoModal's
@@ -127,18 +147,26 @@ provide('toolVersions', toolVersions);
 provide('apps', apps);
 
 const refreshToolVersions = async () => {
-    toolVersions.value = (await ipFetch('json-api/versions')).data;
+    const { ok, data } = await ipFetch('json-api/versions');
+    if (!ok) return;
+    toolVersions.value = data;
     saveNavVersions({ tools: toolVersions.value });
 };
 provide('refreshToolVersions', refreshToolVersions);
 
 const refreshGlobalSettings = async () => {
-    globalSettings.value = (await ipFetch('json-api/config')).data;
+    const { ok, data } = await ipFetch('json-api/config');
+    if (!ok) return;
+    globalSettings.value = data;
     setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
+    setRadioAtoz(globalSettings.value?.RADIO_ATOZ);
+    setRadioPodcasts(globalSettings.value?.RADIO_PODCASTS);
     setCombinedSearch(globalSettings.value?.SEARCH_COMBINED);
+    // The Podcasts page switched off (or Sounds off) while it is open: back to Discover.
+    if (router.currentRoute.value.path === '/browse/podcasts' && (!radioPodcastsOn() || globalSettings.value?.SOUNDS_ENABLED !== 'true')) router.replace('/browse');
     // A cold load (no cached settings) reaches the router guard before radio is known to be on, so an A to Z address
-    // opened in radio mode gets through it: send it to Categories now that the setting is known.
-    if (/^\/browse\/atoz/.test(router.currentRoute.value.path) && radioActive()) router.replace('/browse/categories');
+    // opened in radio mode gets through it: send it to Categories now that the setting is known (unless Radio A to Z is on).
+    if (/^\/browse\/atoz/.test(router.currentRoute.value.path) && radioActive() && !radioAtozActive()) router.replace('/browse/categories');
     if (globalSettings.value?.SOUNDS_ENABLED === 'true') loadRadioDownloads();
     else clearRadioDownloads();
     saveNavSettings(globalSettings.value);
@@ -166,14 +194,17 @@ const runPageSetup = async () => {
 
         socket.value.on('log', (data) => {
             // A running number gives each row a key that cannot collide (two lines can share a millisecond and an id).
-            logs.value.push({ ...data, seq: logSeq++ });
-            enforceMaxLength(logs.value, 5000);
+            // Lines arrive in bursts (the server replays up to 250 on connect), so they are added together once per
+            // short interval: one reactive update and one trim instead of one per line.
+            pendingLogs.push({ ...data, seq: logSeq++ });
+            logFlushTimer ??= setTimeout(flushLogs, 100);
         });
 
         // Full state: on connect and whenever history changes (a session ended, history cleared).
         socket.value.on('streams', (data) => {
             observeServerTime(data.active);
             streams.value = data;
+            streamsLoaded.value = true;
         });
 
         // Lightweight, much more frequent updates (segments, bytes, resolution, a session starting):
@@ -202,9 +233,11 @@ const runPageSetup = async () => {
             isConnected.value = false;
         });
 
-        hiddenSettings.value = (await ipFetch('json-api/config/hiddenSettings')).data;
+        const hidden = await ipFetch('json-api/config/hiddenSettings');
+        if (hidden.ok) hiddenSettings.value = hidden.data;
         saveNavVersions({ appVersion: hiddenSettings.value?.VERSION });
-        apps.value = (await ipFetch('json-api/apps')).data;
+        const appList = await ipFetch('json-api/apps');
+        if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
         refreshGlobalSettings();
         refreshToolVersions();
         loadSubscriptions();

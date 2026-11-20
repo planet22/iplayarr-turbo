@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import { combinedActive, modeRoute, radioActive, routeAfterSwitch, setCombinedSearch, setMediaMode, setRadioEnabled, useMediaMode } from '@/lib/mediaMode';
+import { combinedActive, modeRoute, radioActive, radioAtozActive, radioChosen, radioPodcastsOn, routeAfterSwitch, setCombinedSearch, setMediaMode, setRadioAtoz, setRadioEnabled, setRadioPodcasts, useMediaMode } from '@/lib/mediaMode';
 
 // Shared by more than one caller; avoid narrowing the behaviour.
 // The surrounding code assumes this stays free of side effects.
@@ -37,6 +37,79 @@ describe('radioActive (for code outside components)', () => {
         setRadioEnabled(undefined);
         setMediaMode('radio');
         expect(radioActive()).toBe(false);
+    });
+});
+
+describe('radioChosen (the saved choice alone, for guards that run before settings load)', () => {
+    afterEach(() => setRadioEnabled(false));
+
+    it('follows the saved Video | Radio choice, whether or not the app knows radio is on', () => {
+        setRadioEnabled(false);
+        expect(radioChosen()).toBe(false);
+        setMediaMode('radio');
+        expect(radioChosen()).toBe(true);
+        expect(radioActive()).toBe(false);
+        setMediaMode('video');
+        expect(radioChosen()).toBe(false);
+    });
+});
+
+describe('radioAtozActive (the opt-in radio A to Z)', () => {
+    afterEach(() => {
+        setRadioAtoz(false);
+        setRadioEnabled(false);
+    });
+
+    it('needs both the setting and BBC Sounds Radio, and is off by default', () => {
+        expect(radioAtozActive()).toBe(false);
+        setRadioAtoz('true');
+        expect(radioAtozActive()).toBe(false);
+        setRadioEnabled('true');
+        expect(radioAtozActive()).toBe(true);
+        setRadioAtoz('false');
+        expect(radioAtozActive()).toBe(false);
+        setRadioAtoz(undefined);
+        expect(radioAtozActive()).toBe(false);
+    });
+
+    it('keeps an A to Z page when switching to radio only while it is on', () => {
+        setRadioEnabled('true');
+        setRadioAtoz('true');
+        expect(routeAfterSwitch('/browse/atoz/a', {}, 'radio')).toBeNull();
+        setRadioAtoz('false');
+        expect(routeAfterSwitch('/browse/atoz/a', {}, 'radio')).toEqual({ path: '/browse/categories' });
+    });
+
+    it('is exposed by useMediaMode from the settings, and only with radio on', () => {
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'true', RADIO_ATOZ: 'true' }));
+        expect(useMediaMode().radioAtoz.value).toBe(true);
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'true', RADIO_ATOZ: 'false' }));
+        expect(useMediaMode().radioAtoz.value).toBe(false);
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'false', RADIO_ATOZ: 'true' }));
+        expect(useMediaMode().radioAtoz.value).toBe(false);
+    });
+});
+
+describe('Podcasts setting (RADIO_PODCASTS)', () => {
+    afterEach(() => setRadioPodcasts(undefined));
+
+    it('is on by default and until the setting says false, whatever its form', () => {
+        expect(radioPodcastsOn()).toBe(true);
+        for (const [value, expected] of [['false', false], [false, false], ['true', true], [true, true], [undefined, true], [null, true]]) {
+            setRadioPodcasts(value);
+            expect(radioPodcastsOn()).toBe(expected);
+        }
+    });
+
+    it('is exposed by useMediaMode from the settings, and only with radio on', () => {
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'true', RADIO_PODCASTS: 'true' }));
+        expect(useMediaMode().radioPodcasts.value).toBe(true);
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'true' }));
+        expect(useMediaMode().radioPodcasts.value).toBe(true);
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'true', RADIO_PODCASTS: 'false' }));
+        expect(useMediaMode().radioPodcasts.value).toBe(false);
+        mockInject.mockReturnValue(ref({ SOUNDS_ENABLED: 'false', RADIO_PODCASTS: 'true' }));
+        expect(useMediaMode().radioPodcasts.value).toBe(false);
     });
 });
 
@@ -151,6 +224,11 @@ describe('routeAfterSwitch (the toggle keeps the page)', () => {
         expect(routeAfterSwitch('/browse/collections', { c: 'abc' }, 'radio')).toEqual({ path: '/browse/collections' });
         expect(routeAfterSwitch('/browse/atoz/a', {}, 'radio')).toEqual({ path: '/browse/categories' });
         expect(routeAfterSwitch('/browse/atoz/a', {}, 'video')).toBeNull();
+    });
+
+    it('takes the radio-only Podcasts list to Discover when switching to video, and keeps it for radio', () => {
+        expect(routeAfterSwitch('/browse/podcasts', {}, 'video')).toEqual({ path: '/browse' });
+        expect(routeAfterSwitch('/browse/podcasts', {}, 'radio')).toBeNull();
     });
 });
 

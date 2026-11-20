@@ -12,8 +12,8 @@ import { radioSubscriptionId, showIdOf } from '../../utils/radioIds';
 import { guard, invalid } from '../../utils/radioRouteHelpers';
 
 // The subscriptions API for followed BBC Sounds shows (`?mode=radio` on /json-api/subscriptions): the same paths, request
-// fields and answers as for video subscriptions, so one client reads both. What only video has (Sonarr/Radarr, extra versions,
-// pictures) answers 400. SubscriptionsRoute hands a request here when it asks for radio.
+// fields and answers as for video subscriptions, so one client reads both. What only video has (Sonarr/Radarr, extra versions)
+// answers 400. SubscriptionsRoute hands a request here when it asks for radio.
 const router: Router = asyncRouter();
 
 const notFound = (res: Response): void => {
@@ -46,6 +46,29 @@ router.post('/', guard(async (req, res) => {
     await soundsFacade.follow(pid, title, picture, followModeOf({ downloadLatest: downloadLatest === true, downloadAll: downloadAll === true }));
     if (typeof secureDays === 'number') await soundsFacade.setSecureDays(pid, secureDays);
     res.json(await soundsFacade.subscription(pid));
+}));
+
+// Radio shows on disk (the Radio Directory, a Jellyfin music library) that are not followed, each with the BBC Sounds show it is.
+// Registered before the '/:id' routes so "detected" isn't read as an id.
+router.get('/detected', guard(async (_req, res) => {
+    res.json(await soundsFacade.detectedShows());
+}));
+
+// Why each show on disk whose name has ?term= is or is not offered (for the debug pages).
+router.get('/detected/trace', guard(async (req, res) => {
+    const term = String(req.query.term ?? '').trim().slice(0, 100);
+    if (!term) return invalid(res, 'A search term is required');
+    res.json(await soundsFacade.detectTrace(term));
+}));
+
+// Follows a detected show, from new episodes on (what is on disk stays as it is).
+router.post('/detected/import', guard(async (req, res) => {
+    const { showId, title, image } = req.body ?? {};
+    if (typeof showId !== 'string' || !SOUNDS_ID.test(showId)) return invalid(res, 'A valid showId is required');
+    if (typeof title !== 'string' || !title.trim()) return invalid(res, 'A title is required for a radio show');
+    const picture = typeof image === 'string' && image.startsWith('https://ichef.bbci.co.uk/') ? image : undefined;
+    await soundsFacade.follow(showId, title, picture, 'new');
+    res.json({ status: true });
 }));
 
 // Registered before '/:id' routes so "check" isn't read as an id.
@@ -86,8 +109,16 @@ router.delete('/:id', guard(async (req, res) => {
     else notFound(res);
 }));
 
-// Pictures and extra versions are video's: say so rather than act as if they were done.
-router.post('/:id/images', (_req: Request, res: Response) => invalid(res, 'Not available for radio'));
+// A radio show's picture is the folder's cover.jpg (what a download saves): this writes it for a show already on disk, as
+// { written, episodes: 0, shows } like the video answer.
+router.post('/:id/images', guard(async (req, res) => {
+    const id = showIdOf(String(req.params.id));
+    if (!SOUNDS_ID.test(id)) return invalid(res, 'Invalid show id');
+    const result = await soundsFacade.updateCover(id);
+    if (result) res.json({ ...result, episodes: 0 });
+    else notFound(res);
+}));
+// Extra versions are video's: say so rather than act as if they were done.
 router.put('/:id/versions', (_req: Request, res: Response) => invalid(res, 'Not available for radio'));
 
 // Anything else is not part of this API, and must not fall through to the video routes.

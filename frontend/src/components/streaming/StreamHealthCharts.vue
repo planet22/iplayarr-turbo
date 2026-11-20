@@ -14,12 +14,13 @@
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <polyline class="line" :points="aheadPoints" />
-                <circle v-for="p in aheadDots" :key="p.n" class="dot" :class="{ low: p.ahead < LOW_SECONDS, hl: p.seg === activeSeg }" :cx="p.x" :cy="p.y" :r="p.seg === activeSeg ? 5 : 3"><title>segment {{ p.seg }}: {{ p.ahead.toFixed(1) }} s ahead (request #{{ p.n }})</title></circle>
+                <circle v-for="p in aheadDots" :key="p.n" class="dot" :class="{ low: p.ahead < LOW_SECONDS, hl: p.seg === activeSeg }" :cx="p.x" :cy="p.y" :r="p.seg === activeSeg ? 5 : 3"><title>{{ aheadText(p) }}</title></circle>
                 <text v-for="l in aheadValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in aheadIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
+            <p v-if="aheadAll.length >= 2" class="readout" :class="{ empty: !readout.ahead }">{{ readout.ahead || HINT }}</p>
             <p v-if="info.ahead" class="note">Sum of EXTINF durations of completed segments minus wall-clock time since the first completed segment, assuming continuous playback. Symmetric-log scale. Below about {{ LOW_SECONDS }} s the buffer is shallow; below 0 playback would underrun.</p>
         </figure></FullscreenFrame>
 
@@ -35,12 +36,13 @@
                 <rect
                     v-for="bar in speedBars" :key="bar.n" class="bar" :class="{ slow: bar.value < 1, tight: bar.value >= 1 && bar.value < 2, hl: bar.seg === activeSeg }"
                     :x="bar.x" :y="bar.y" :width="bar.w" :height="bar.h"
-                ><title>segment {{ bar.seg }}: {{ bar.value.toFixed(1) }}x (request #{{ bar.n }})</title></rect>
+                ><title>{{ speedText(bar) }}</title></rect>
                 <text v-for="l in speedValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in speedIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
+            <p v-if="speedAll.length" class="readout" :class="{ empty: !readout.speed }">{{ readout.speed || HINT }}</p>
             <p v-if="info.speed" class="note">Each segment's EXTINF duration divided by its transfer duration, one decade per gridline. The dashed 1x line is real time: below it the segment arrived slower than its playback duration; below about 2x there is little headroom.</p>
         </figure></FullscreenFrame>
 
@@ -66,12 +68,13 @@
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <polyline class="line" :points="avPoints" />
-                <circle v-for="p in avDots" :key="p.n" class="dot" :class="{ hl: p.seg === activeSeg }" :cx="p.x" :cy="p.y" :r="p.seg === activeSeg ? 5 : 3"><title>segment {{ p.seg }}: audio {{ p.raw > 0 ? 'after' : 'before' }} video by {{ Math.abs(p.raw) }} ms<template v-if="avRelative"> ({{ p.value > 0 ? '+' : '' }}{{ p.value }} ms from the usual {{ avMedian }} ms)</template> (request #{{ p.n }})</title></circle>
+                <circle v-for="p in avDots" :key="p.n" class="dot" :class="{ hl: p.seg === activeSeg }" :cx="p.x" :cy="p.y" :r="p.seg === activeSeg ? 5 : 3"><title>{{ avText(p) }}</title></circle>
                 <text v-for="l in avValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in avIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
+            <p v-if="avAll.length" class="readout" :class="{ empty: !readout.av }">{{ readout.av || HINT }}</p>
             <p v-if="info.av" class="note">
                 Positive: audio first PTS is later than video first PTS. A constant offset is normal (a muxer start offset; the player aligns by timestamp), so by default the
                 line is measured from the stream's median offset and a steady stream sits on 0; the target button switches to the absolute figures. A trend indicates A/V drift{{ avSpreadText }}.
@@ -91,12 +94,13 @@
                 <rect
                     v-for="bar in driftBars" :key="bar.n" class="bar" :class="{ slow: bar.value < -TOLERANCE, tight: bar.value > TOLERANCE, hl: bar.seg === activeSeg }"
                     :x="bar.x" :y="bar.y" :width="bar.w" :height="bar.h"
-                ><title>segment {{ bar.seg }}: {{ bar.value }} ms (request #{{ bar.n }})</title></rect>
+                ><title>{{ driftText(bar) }}</title></rect>
                 <text v-for="l in driftValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in driftIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
+            <p v-if="driftAll.length" class="readout" :class="{ empty: !readout.drift }">{{ readout.drift || HINT }}</p>
             <p v-if="info.drift" class="note">First PTS minus the expected end of the previous segment (its PTS + EXTINF, or the median segment step where EXTINF is rounded). Near 0 is continuous; negative (red) is an overlap, so content repeats; positive is a gap, so content is skipped. Linear within 100 ms, logarithmic beyond.</p>
         </figure></FullscreenFrame>
     </div>
@@ -220,6 +224,27 @@ const onClick = (event) => {
     const seg = segAt(event);
     pinnedSeg.value = seg === null || seg === pinnedSeg.value ? null : seg;
 };
+
+// The line under each chart: the hovered segment's figure (all four charts follow the same segment), or, when nothing is hovered, the
+// segment that was clicked and kept. The same words are the hover title on the point itself.
+const HINT = 'Hover or tap a column for its figure; click to keep one.';
+const aheadText = (p) => `segment ${p.seg}: ${p.ahead.toFixed(1)} s ahead (request #${p.n})`;
+const speedText = (p) => `segment ${p.seg}: ${p.value.toFixed(1)}x real time (request #${p.n})`;
+const avText = (p) => `segment ${p.seg}: audio ${p.raw === 0 ? 'level with video' : `${p.raw > 0 ? 'after' : 'before'} video by ${Math.abs(p.raw)} ms`}${avRelative.value ? ` (${p.value > 0 ? '+' : ''}${p.value} ms from the usual ${avMedian.value} ms)` : ''} (request #${p.n})`;
+const driftText = (p) => `segment ${p.seg}: ${p.value} ms (request #${p.n})`;
+const readoutOf = (series, text) => {
+    const seg = activeSeg.value;
+    if (seg === null || seg < view.value.lo || seg > view.value.hi) return '';
+    const point = series.find((p) => p.seg === seg);
+    const prefix = hoverSeg.value === null ? 'Kept - ' : '';
+    return point ? `${prefix}${text(point)}` : `${prefix}segment ${seg}: nothing for it in this chart`;
+};
+const readout = computed(() => ({
+    ahead: readoutOf(ahead.value, aheadText),
+    speed: readoutOf(speed.value, speedText),
+    av: readoutOf(av.value, avText),
+    drift: readoutOf(drift.value, driftText),
+}));
 const avModeTitle = computed(() => (avRelative.value ? 'Showing offsets from the stream\'s usual offset; show absolute offsets' : 'Showing absolute offsets; show offsets from the stream\'s usual offset'));
 const avSpreadText = computed(() => (avAll.value.length > 1 ? ` (range here: ${avSpread(props.requests)} ms)` : ''));
 
@@ -340,7 +365,22 @@ const driftIdxLabels = computed(() => idxLabels(driftBars.value.map((b) => ({ n:
 .healthCharts {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-    gap: @space-4;
+    column-gap: @space-4;
+}
+
+// Side by side, the four charts share their rows (caption, plot, figure line, note), so a caption that wraps to a second line pushes every
+// plot down with it instead of leaving that one chart out of line. Filling the window, a chart is on its own and the rows are its own.
+.healthCharts > .fullscreenFrame:not(.isFull) {
+    display: grid;
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    margin-bottom: @space-4;
+
+    > .chart {
+        display: grid;
+        grid-row: 1 / span 4;
+        grid-template-rows: subgrid;
+    }
 }
 
 .chart {
@@ -456,6 +496,17 @@ const driftIdxLabels = computed(() => idxLabels(driftBars.value.map((b) => ({ n:
 .vl {
     font-size: 10px;
     fill: @primary-text-color;
+}
+
+.readout {
+    // Two lines high, so the chart below does not move as the text changes.
+    min-height: 2.6em;
+    margin: @space-1 0 0;
+    font-size: @font-size-sm;
+
+    &.empty {
+        color: @subtle-text-color;
+    }
 }
 
 .note,

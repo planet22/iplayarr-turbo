@@ -67,7 +67,8 @@ const rec = (area, name, status, detail = '') => {
     const held = recBuffer.getStore();
     if (held) { held.push([area, name, status, detail]); return; }
     if (muted) return;
-    if (filterRecs && FILTER && !FILTER.test(`${area} ${name}`)) return;
+    // Never hidden by --filter: whether the run left the configuration as it found it (a filtered run that left a setting changed must say so).
+    if (filterRecs && FILTER && !FILTER.test(`${area} ${name}`) && !/leaves the configuration exactly as it found it/.test(name)) return;
     currentArea = area;
     // Time since the previous result, kept so the end of a run can name its slowest steps.
     const nowAt = Date.now();
@@ -253,6 +254,9 @@ async function radioChecks(A, cfg) {
     const cat = (cats.json || []).find((c) => c.id === 'comedy') || (cats.json || [])[0];
     if (cat) {
         const page = await check(A, 'radio category is a video-shaped page of radio cards', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.pid && e.title && e.radio === true && e.kind === 'episode') && r.json.total >= r.json.items.length && r.json.total <= 300) || 'expected radio cards, total at most 300', upstream);
+        await check(A, 'radio category episodes carry when they leave BBC Sounds (for the expiry badge)', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json?.items || []).some((e) => !Number.isNaN(Date.parse(e.availableUntil))) || 'no episode has an availableUntil date', upstream);
+        await check(A, 'radio search opens a show from its pasted bbc.co.uk link', `/json-api/search?${M}&q=${encodeURIComponent('https://www.bbc.co.uk/sounds/brand/b006qpgr')}`, (r) => (Array.isArray(r.json) && r.json.length === 1 && r.json[0].kind === 'brand' && r.json[0].pid === 'b006qpgr') || 'expected the one show', upstream);
+        await check(A, 'debug health has the radio folder and BBC Sounds checks while BBC Sounds is on', '/json-api/debug/health', (r) => (['Radio folder', 'BBC Sounds'].every((name) => (r.json?.checks || []).some((c) => c.name === name)) || 'a radio check is missing'), upstream);
         const card = page.json?.items?.[0];
         const ep = card && { id: card.pid, showId: card.showId };
         if (ep?.showId) {
@@ -278,6 +282,13 @@ async function radioChecks(A, cfg) {
                 return (v && v.vpid === ep.id && v.bestHeight === 0 && audio) || 'no audio connections in the probe';
             }, { method: 'POST', ...upstream });
             if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
+            // The radio debug page reads the same dashboard parts as TV (marked ?kind=radio), and has a picture to refresh and metadata to show.
+            await check(A, 'radio streaming debug programme has metadata and a valid picture id', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.metadata && typeof r.json.metadata === 'object' && (r.json.imagePid === undefined || /^p[a-z0-9]{7}$/i.test(r.json.imagePid))) || 'no metadata, or a malformed picture id', { timeout: 60000 });
+            const radioParts = { caches: 'caches', library: 'library', watchdog: 'watchdog', subscriptions: 'subscriptions', streams: 'sessions', events: 'events', logs: 'logs' };
+            for (const [part, key] of Object.entries(radioParts)) {
+                await check(A, `radio streaming debug part ${part} answers`, `/json-api/streams/debug/${ep.id}/part/${part}?kind=radio`, (r) => (r.status === 200 && r.json && key in r.json) || `HTTP ${r.status}, no ${key}`, { timeout: 60000 });
+            }
+            await check(A, 'radio streaming debug one-shot info carries the radio dashboard', `/json-api/streams/debug/${ep.id}?kind=radio`, (r) => (r.json?.found === true && Array.isArray(r.json?.dashboard?.subscriptions) && Array.isArray(r.json?.dashboard?.caches?.thumbnails)) || 'no dashboard', { timeout: 90000 });
         }
     }
     const cols = await check(A, 'radio collections are video-shaped with counts (none while Show Collections is off)', `${B}/collections?${M}`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title && (c.count === undefined || typeof c.count === 'number'))) || 'expected { enabled, collections: [{ id, title, count? }] }', upstream);
@@ -289,7 +300,15 @@ async function radioChecks(A, cfg) {
     await check(A, 'radio collection download refuses an odd id', `${B}/collections/a-b/download?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { dryRun: true } });
     if (col) await check(A, 'radio collection is a video-shaped page of radio cards', `${B}/collections/${col.id}?${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.radio === true)) || 'expected radio cards', upstream);
     await check(A, 'radio home rails are video-shaped and hold radio cards', `${B}/home?${M}`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.every((x) => x.id && x.title && x.items.length && x.items.every((i) => i.radio === true && i.pid))) || 'expected rails of radio cards', upstream);
-    await check(A, 'radio A to Z is an empty page (BBC Sounds has none)', `${B}/atoz/a?${M}`, (r) => (r.json?.total === 0 && Array.isArray(r.json?.items) && r.json.items.length === 0) || 'expected an empty page');
+    // Radio A to Z (RADIO_ATOZ) is opt-in: off, BBC Sounds has no A to Z and this is an empty page; on, it is a page of show cards (or `building` while the first list is made).
+    if (cfg.RADIO_ATOZ === 'true') await check(A, 'radio A to Z is a page of show cards, or still building (Radio A to Z is on)', `${B}/atoz/a?${M}`, (r) => (r.status === 200 && Array.isArray(r.json?.items) && typeof r.json.total === 'number' && (r.json.building === true || (r.json.items.length > 0 && r.json.items.every((x) => x.radio === true && x.kind === 'brand' && x.pid && x.title)))) || 'expected show cards or building', { ...upstream, timeout: 60000 });
+    else await check(A, 'radio A to Z is an empty page (Radio A to Z is off, BBC Sounds has none)', `${B}/atoz/a?${M}`, (r) => (r.json?.total === 0 && Array.isArray(r.json?.items) && r.json.items.length === 0) || 'expected an empty page');
+    // Podcasts: the BBC podcast shows as brand cards, with the shows that hold no episodes left out.
+    const pods = await check(A, 'radio podcasts are a page of show cards', `${B}/podcasts?${M}&perPage=20`, (r) => (r.status === 200 && Array.isArray(r.json?.items) && r.json.items.length > 0 && r.json.items.length <= 20 && typeof r.json.total === 'number' && r.json.total >= r.json.items.length && r.json.items.every((x) => x.radio === true && x.kind === 'brand' && x.type === 'RADIO' && x.pid && x.title)) || `HTTP ${r.status}, expected a page of radio show cards`, upstream);
+    if (pods.json?.total > 20) await check(A, 'radio podcasts page 2 carries on from page 1 without repeats', `${B}/podcasts?${M}&perPage=20&page=2`, (r) => (r.json?.page === 2 && r.json.items.length > 0 && r.json.items.every((x) => !pods.json.items.some((p) => p.pid === x.pid))) || 'page 2 is empty or repeats page 1', upstream);
+    await check(A, 'radio podcasts are the same whatever the page size', `${B}/podcasts?${M}&perPage=150`, (r) => (r.json?.total === pods.json?.total && r.json.items.length === Math.min(150, pods.json?.total)) || `total ${r.json?.total} vs ${pods.json?.total}`, upstream);
+    const pod = (pods.json?.items || [])[0];
+    if (pod) await check(A, 'a podcast show opens as a programme with episodes (empty shows are left out)', `${B}/programme/${pod.pid}?${M}`, (r) => (r.json && r.json.radio === true && JSON.stringify(r.json.seasons || r.json.episodes || []).includes('"pid"')) || 'the first podcast has no episodes', upstream);
     await check(A, 'radio category rails are empty', `${B}/category/comedy/rails?${M}`, (r) => (Array.isArray(r.json) && r.json.length === 0) || 'expected []');
     await check(A, 'radio browse paths radio does not serve carry on to the video ones', `${B}/channels?${M}`, (r) => (r.status === 200 && (Array.isArray(r.json) || Array.isArray(r.json?.data))) || `HTTP ${r.status}`);
     await check(A, 'video browse is unchanged by the radio mode existing (no radio cards)', `${B}/home`, (r) => (r.status === 200 && !JSON.stringify(r.json || '').includes('"radio":true')) || 'a radio card in the video home', upstream);
@@ -322,7 +341,13 @@ async function radioChecks(A, cfg) {
     await check(A, 'radio subscription check of an unknown show is 404', `/json-api/subscriptions/radio-b0000000/check?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
     await check(A, 'radio subscription missing list of an unknown show is 404', `/json-api/subscriptions/b0000000/missing?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
     await check(A, 'radio subscription refuses an odd id', `/json-api/subscriptions/b-0/missing?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
-    await check(A, 'radio subscription pictures and versions are video-only (400)', `/json-api/subscriptions/radio-b0000000/images?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio subscription cover picture of a show that is not followed is 404', `/json-api/subscriptions/radio-b0000000/images?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio subscription cover picture refuses an odd id', `/json-api/subscriptions/b-0/images?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio shows found on disk are listed with their BBC Sounds match', `/json-api/subscriptions/detected?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.title && typeof x.onDisk === 'number' && Array.isArray(x.sources) && (x.showId ? /^[a-z0-9]{6,}$/i.test(x.showId) : !!x.reason))) || 'expected rows with a title, onDisk, sources and a showId or a reason', { ...upstream, timeout: 120000 });
+    await check(A, 'radio found-on-disk trace needs a term', `/json-api/subscriptions/detected/trace?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio found-on-disk trace of a name nothing on disk has is empty', `/json-api/subscriptions/detected/trace?${M}&term=zzqxjvw`, (r) => (r.status === 200 && r.json?.term === 'zzqxjvw' && Array.isArray(r.json.shows) && r.json.shows.length === 0) || `HTTP ${r.status}`);
+    await check(A, 'radio found-on-disk import refuses an odd show id', `/json-api/subscriptions/detected/import?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { showId: 'a b', title: 'x' } });
+    await check(A, 'radio found-on-disk import needs a title', `/json-api/subscriptions/detected/import?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { showId: 'b006qpgr', title: ' ' } });
     await check(A, 'radio subscription versions are video-only (400)', `/json-api/subscriptions/radio-b0000000/versions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'PUT', body: { versions: [] } });
     await check(A, 'radio subscribe validates its pid and title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: '!!' } });
     await check(A, 'radio subscribe needs a title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: 'b006qpgr' } });
@@ -370,6 +395,7 @@ async function radioChecks(A, cfg) {
         const s = r.json;
         if (!s || s.radio !== true) return 'expected { radio: true, ... }';
         if (typeof s.matchAllWords !== 'boolean' || typeof s.rankByTitle !== 'boolean' || typeof s.mp3Only !== 'boolean') return 'a flag is not true or false';
+        if (typeof s.collectionNames !== 'boolean' || typeof s.expandCollections !== 'boolean') return 'a collections flag is not true or false';
         if (!['both', 'shows', 'episodes'].includes(s.scope)) return `scope is ${s.scope}`;
         if (!Array.isArray(s.networks) || !Array.isArray(s.inherited)) return 'networks / inherited are not lists';
         if (!Number.isInteger(s.maxResults) || s.maxResults < 0 || s.maxResults > 200) return `maxResults is ${s.maxResults}`;
@@ -391,6 +417,16 @@ async function radioChecks(A, cfg) {
             return true;
         }, upstream);
         await check(A, 'radio search with no words listed is not an error', `/json-api/search?q=a&${M}`, (r) => (r.status === 200 && Array.isArray(r.json)) || `HTTP ${r.status}`, upstream);
+        // Expand BBC Collections: a collection's pid lists only its episodes while the option is on, and is an ordinary search otherwise.
+        const tiles = (await http(`/json-api/browse/collections?${M}&basic=1`, { timeout: 120000 })).json?.collections || [];
+        if (tiles.length) {
+            await check(A, 'radio search for a collection pid follows the Expand BBC Collections setting', `/json-api/search?q=${encodeURIComponent(tiles[0].id)}&${M}`, (r) => {
+                const hits = Array.isArray(r.json) ? r.json : [];
+                if (r.status !== 200) return `HTTP ${r.status}`;
+                if (setup.expandCollections) return (hits.length > 0 && hits.every((x) => x.kind === 'episode')) || 'expected the collection\'s episodes only';
+                return !hits.length || 'a bare pid listed results with Expand BBC Collections off';
+            }, { ...upstream, warnOnly: true });
+        }
     }
 
     // Library index: the debug page filters by library
@@ -416,6 +452,28 @@ async function discover(ctx) {
     ctx.category = (Array.isArray(cats.json) ? cats.json : cats.json?.categories || [])[0]?.id;
     ctx.wd = wd.json;
     ctx.manualSettings = manual.json;
+}
+
+// Read-only checks for the code-review hardening: SAB sizes never NaN/null, odd input gives no 5xx, parsing of stats
+// query values, cross-site GETs refused, off-schedule refresh validation.
+async function tierTwoChecks(A, apikey) {
+    for (const mode of ['queue', 'history']) {
+        const r = await http(`/api?mode=${mode}&output=json&apikey=${apikey}`);
+        const bad = /NaN|"(?:size|mb|mbleft|bytes|sizeleft|completed|downloaded)":\s*null/.test(r.text);
+        rec(A, `sab ${mode} has no NaN or null sizes`, r.status === 200 && !bad ? 'PASS' : 'FAIL', r.text.slice(0, 100));
+    }
+    for (const q of ['mode=definitely-not-a-mode', 't=definitely-not-a-type', 'mode=history&start=abc&limit=-5', 't=search&q=%00%ff']) {
+        const r = await http(`/api?${q}&apikey=${apikey}`);
+        rec(A, `odd request "${q}" gives no server error`, r.status < 500 ? 'PASS' : 'FAIL', `HTTP ${r.status}`);
+    }
+    const all = await http('/json-api/stats/searchHistory?filterRss=false&limit=abc');
+    rec(A, 'stats filterRss=false and a junk limit are read as no filter, no limit', all.status === 200 && Array.isArray(all.json) ? 'PASS' : 'FAIL', `HTTP ${all.status}`);
+    const cross = await http('/json-api/cache-refresh', { headers: { 'Sec-Fetch-Site': 'cross-site' } });
+    rec(A, 'a cross-site GET that changes state is refused', cross.status === 403 ? 'PASS' : 'FAIL', `HTTP ${cross.status}`);
+    const noId = await http('/json-api/offSchedule/refresh', { method: 'POST', body: {} });
+    rec(A, 'off-schedule refresh without an id is a 400', noId.status === 400 ? 'PASS' : 'WARN', `HTTP ${noId.status}`);
+    const mp = await http('/api?mode=stream&apikey=' + apikey, { method: 'POST', headers: { 'Content-Type': 'multipart/form-data; boundary=x' }, body: undefined });
+    rec(A, 'multipart POST to a non-addfile mode gives no server error', mp.status < 500 ? 'PASS' : 'FAIL', `HTTP ${mp.status}`);
 }
 
 async function apiLayer(ctx) {
@@ -448,6 +506,7 @@ async function apiLayer(ctx) {
     await check(A, 'config versionProfiles', '/json-api/config/versionProfiles', isJson);
 
     // Newznab indexer
+    await tierTwoChecks(A, apikey);
     await check(A, 'newznab caps', `/api?t=caps&apikey=${apikey}`, (r) => /<caps/.test(r.text) || 'no <caps>');
     const bad = await http('/api?t=caps&apikey=definitely-wrong');
     rec(A, 'newznab rejects bad apikey', bad.status >= 400 || /error/i.test(bad.text) ? 'PASS' : 'FAIL', `HTTP ${bad.status}`);
@@ -602,6 +661,25 @@ async function apiLayer(ctx) {
     // App state endpoints
     await check(A, 'versions (get_iplayer/yt-dlp)', '/json-api/versions', (r) => !!r.json?.getIplayer || 'no getIplayer');
     await check(A, 'uptime', '/json-api/stats/uptime', (r) => typeof r.json?.uptime === 'number' || 'no uptime');
+    // The Server cards on the Statistics page: quick figures, then the slower checks (BBC, Sonarr/Radarr). Read-only.
+    await check(A, 'server stats have memory, cpu, active work, cache and scheduler figures', '/json-api/stats/server', (r) => {
+        const j = r.json;
+        if (!j || !(j.memory?.rssBytes > 0)) return 'no memory figure';
+        if (!Array.isArray(j.cpu?.load) || !(j.cpu?.cores >= 1)) return 'no cpu figures';
+        if (!j.active || typeof j.active.clients !== 'number') return 'no active-work figures';
+        if (!('cacheHits' in j) || !('scheduler' in j)) return 'no cache or scheduler figures';
+        return true;
+    });
+    await check(A, 'server stats disks are listed with free space and a used percentage', '/json-api/stats/server', (r) => {
+        const bad = (r.json?.disks ?? []).filter((d) => !(d.totalBytes >= d.freeBytes && d.freeBytes >= 0 && d.usedPercent >= 0 && d.usedPercent <= 100));
+        return !bad.length || `bad disk figures: ${bad.map((d) => d.name).join(', ')}`;
+    });
+    await check(A, 'server stats checks report the BBC and each Sonarr/Radarr app', '/json-api/stats/server/checks', (r) => {
+        const j = r.json;
+        if (!j || !('bbc' in j) || !('apps' in j)) return 'missing bbc or apps';
+        const bad = (j.apps ?? []).filter((a) => !a.id || !a.name || typeof a.reachable !== 'boolean');
+        return !bad.length || 'an app has no id, name or reachable flag';
+    }, { timeout: 60000 });
     const searchHist = await check(A, 'searchHistory', '/json-api/stats/searchHistory', isJson);
     // A "+" on the Results column needs a reason (shown as its tooltip): BBC's 24-hit cap or our candidate cap
     const badTrunc = (Array.isArray(searchHist.json) ? searchHist.json : []).filter((e) => e.truncated && !['bbc', 'trace'].includes(e.truncatedBy));
@@ -669,6 +747,48 @@ async function apiLayer(ctx) {
         const bad = Object.entries(r.json).filter(([, a]) => !Number.isInteger(a.hits) || !Number.isInteger(a.misses) || !Number.isInteger(a.lastMinute) || a.trend?.length !== 15);
         return !bad.length || `malformed: ${bad.map(([p]) => p).join(', ')}`;
     });
+    // Memory caches (resolved stream addresses, kept playlists) are listed with the database ones, fixed in lifetime, and flagged so the pages draw a memory icon.
+    await check(A, 'maintenance caches list the stream memory caches, flagged in memory, in the Streaming group', '/json-api/maintenance/caches', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const wanted = ['stream_resolve', 'stream_vod_playlist'];
+        const missing = wanted.filter((p) => !list.some((c) => c.prefix === p));
+        if (missing.length) return `not listed: ${missing.join(', ')}`;
+        const bad = list.filter((c) => wanted.includes(c.prefix) && (c.inMemory !== true || c.group !== 'streaming' || c.overridden !== false || c.ttl !== c.defaultTtl || /memory/i.test(c.label)));
+        return !bad.length || `wrong flag, group, lifetime or label on: ${bad.map((c) => c.prefix).join(', ')}`;
+    });
+    await check(A, 'maintenance caches: only the memory caches carry the in-memory flag (database caches and thumbnails do not)', '/json-api/maintenance/caches', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const flagged = list.filter((c) => c.inMemory).map((c) => c.prefix);
+        const stray = flagged.filter((p) => !['stream_resolve', 'stream_vod_playlist'].includes(p));
+        return (!stray.length && list.some((c) => c.prefix === 'thumbnails' && !c.inMemory) && list.some((c) => !c.inMemory && c.prefix !== 'thumbnails')) || `in-memory flag on: ${stray.join(', ') || 'nothing unexpected, but thumbnails or database caches are missing'}`;
+    });
+    await check(A, 'maintenance cache names carry the in-memory flag too (the Statistics placeholders draw the same icon)', '/json-api/maintenance/caches/names', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const memory = list.filter((c) => c.inMemory).map((c) => c.prefix).sort();
+        const full = (Array.isArray(cachesNow) ? cachesNow : []).filter((c) => c.inMemory).map((c) => c.prefix).sort();
+        return (memory.length >= 2 && JSON.stringify(memory) === JSON.stringify(full)) || `names say ${memory.join(',') || 'none'}, the full list says ${full.join(',') || 'none'}`;
+    });
+    await check(A, 'maintenance cache activity covers the stream memory caches', '/json-api/maintenance/caches/activity', (r) => ['stream_resolve', 'stream_vod_playlist'].every((p) => r.json?.[p] && r.json[p].trend?.length === 15 && Number.isInteger(r.json[p].hits)) || 'no activity for a stream memory cache');
+    // The debug health report checks the cache list too: every cache registered and in a group.
+    await check(A, 'debug health report has a Caches check that is not failing and names no cache missing a group', '/json-api/debug/health', (r) => {
+        const c = (r.json?.checks || []).find((x) => x.name === 'Caches');
+        if (!c) return 'no Caches check in the report';
+        if (c.state === 'fail') return `Caches check failed: ${c.detail}`;
+        return (c.state === 'ok' && /in memory only/.test(c.detail)) || `Caches check: ${c.state} - ${c.detail}`;
+    }, { timeout: 90000 });
+    // The newer health checks: the BBC, disk space, database integrity, library readability, scheduled jobs, and the extra facts.
+    await check(A, 'debug health report has the BBC, disk space, integrity, library and jobs checks, valid states, and the extra facts', '/json-api/debug/health', (r) => {
+        const checks = r.json?.checks || [];
+        const missing = ['BBC iPlayer', 'Database integrity', 'Library index', 'Scheduled jobs'].filter((n) => !checks.some((c) => c.name === n));
+        if (missing.length) return `missing checks: ${missing.join(', ')}`;
+        if (!checks.some((c) => /^(Download|Complete) folder space$/.test(c.name))) return 'no folder space check';
+        const bad = checks.filter((c) => !['ok', 'warn', 'fail', 'info'].includes(c.state));
+        if (bad.length) return `unknown state on ${bad.map((c) => c.name).join(', ')}`;
+        const integrity = checks.find((c) => c.name === 'Database integrity');
+        if (integrity.state !== 'ok') return `database integrity: ${integrity.detail}`;
+        const lacking = ['container', 'timezone', 'streamTrace', 'liveRadio'].filter((k) => !(k in (r.json?.facts || {})));
+        return lacking.length ? `facts missing: ${lacking.join(', ')}` : true;
+    }, { timeout: 90000 });
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
     await watchdogFieldChecks(A);
@@ -829,6 +949,8 @@ async function libraryAndDebugChecks(A, ctx) {
     rec(A, 'stream debug naming refuses a radio episode', namingRadio.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadio.status);
     const badRefresh = await http('/json-api/thumbnail/refresh/a%20b', { method: 'POST' });
     rec(A, 'thumbnail refresh refuses a malformed image id', badRefresh.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badRefresh.status);
+    const badSquare = await http('/json-api/thumbnail/refresh/a%20b?square=1', { method: 'POST' });
+    rec(A, 'thumbnail refresh of a radio (square) picture refuses a malformed image id', badSquare.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badSquare.status);
     const pid = ctx.pid || real?.pid;
     if (!pid) return rec(A, 'stream debug on a real programme', 'SKIP', 'no pid discovered');
     await check(A, 'stream debug programme step answers', `/json-api/streams/debug/${pid}/programme`, isObj, { timeout: 60000 });
@@ -864,6 +986,21 @@ async function libraryAndDebugChecks(A, ctx) {
             return j.fileName || j.error ? true : 'neither a file name nor an error';
         }, { timeout: 90000 });
     } else rec(A, 'stream debug naming for an episode', 'SKIP', 'no episode listed');
+    // One resolver names every download (releaseService.ts), the Download dialog's suggestion and the debug page alike.
+    for (const bad of ['bad', '..%2Fetc']) {
+        const r = await http(`/json-api/release-preview?pid=${bad}`);
+        rec(A, `release preview refuses the id "${decodeURIComponent(bad)}"`, r.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+    }
+    if (episodePid) {
+        const preview = await http(`/json-api/release-preview?pid=${episodePid}`, { timeout: 90000 });
+        const debugNaming = (await http(`/json-api/streams/debug/${episodePid}/naming`, { timeout: 90000 })).json;
+        const pj = preview.json;
+        const why = !pj?.nzbName || !pj.type ? `no name or type (HTTP ${preview.status})`
+            : debugNaming?.nzbName !== pj.nzbName ? `preview ${pj.nzbName} differs from debug ${debugNaming?.nzbName}`
+            : debugNaming.numbering?.series !== pj.series || debugNaming.numbering?.episode !== pj.episode ? `numbering ${pj.series}/${pj.episode} differs from debug ${debugNaming.numbering?.series}/${debugNaming.numbering?.episode}`
+            : '';
+        rec(A, 'release preview gives the same name and numbering as the debug File naming', why ? 'FAIL' : 'PASS', why);
+    } else rec(A, 'release preview for an episode', 'SKIP', 'no episode listed');
     await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
     // The probe shows each connection's priority and address, with the signed query string removed.
     const probeVpid = episodePid ? (await http(`/json-api/streams/debug/${episodePid}/programme`, { timeout: 60000 })).json?.versions?.[0]?.vpid : undefined;
@@ -1082,8 +1219,11 @@ async function uiInteractions(browser, ctx) {
     if (want('maintenance cache groups')) await maintenanceCacheGroups(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
+    if (want('table columns')) await tableColumns(browser, U);
     if (want('report buttons')) await reportButtons(browser, ctx, U);
+    if (want('streaming page')) await streamingPage(browser, U);
     if (want('trace file buttons')) await traceFileButtons(browser, ctx, U);
+    if (want('trace charts')) await traceCharts(browser, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid && want('programme page')) {
         try {
@@ -1203,6 +1343,161 @@ async function traceFileButtons(browser, ctx, U) {
     await context.close();
 }
 
+// The Streaming page: it loads with a history filter already saved in the browser (it once failed to render at all, blank under the back button),
+// shows a loading indicator, not "No streams currently playing" or "No streaming history yet", until the server's first push arrives (held back
+// here by blocking the socket), and its "Delete all imported traces" button has its own icon, not the trash can of "Clear stream history".
+// Read-only: nothing is imported, deleted or cleared.
+async function streamingPage(browser, U) {
+    const L = (what) => `streaming page: ${what}`;
+    const filter = JSON.stringify({ filterText: 'zzzz-no-such-title-zzzz', sortBy: 'started', sortOrder: 'desc', dateFrom: null, dateTo: null });
+    // 1. a saved history filter must not stop the page rendering
+    let context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.addInitScript((value) => localStorage.setItem('iplayarr.tableFilter.streamHistory', value), filter);
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(800);
+        const text = await p.locator('body').innerText();
+        rec(U, L('loads with a history filter saved in the browser'), /Active Streams/.test(text) && /Stream History/.test(text) ? 'PASS' : 'FAIL', text.slice(0, 80).replace(/\s+/g, ' '));
+        rec(U, L('a history filter that matches nothing says so'), /Nothing matches this filter/.test(text) || /No streaming history yet/.test(text) ? 'PASS' : 'FAIL');
+        rec(U, L('no page error with a saved history filter'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, L('saved history filter'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+    // 2. before the first push, loading is shown and the empty states are not
+    context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        await p.route('**/socket.io/**', (route) => route.abort());
+        await p.goto(BASE + '/streaming', { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await p.locator('text=Stream History').first().waitFor({ timeout: 15000 });
+        await p.waitForTimeout(1500);
+        const text = await p.locator('body').innerText();
+        const spinners = await p.locator('.ripple-container').count();
+        rec(U, L('shows loading in both tables until the first push arrives'), spinners >= 2 ? 'PASS' : 'FAIL', `${spinners} loading indicator(s)`);
+        rec(U, L('does not say "No streams currently playing" while loading'), /No streams currently playing/.test(text) ? 'FAIL' : 'PASS');
+        rec(U, L('does not say "No streaming history yet" while loading'), /No streaming history yet|Nothing matches this filter/.test(text) ? 'FAIL' : 'PASS');
+    } catch (e) { rec(U, L('loading state'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+    // 3. once the push arrives the loading goes away
+    context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(1200);
+        rec(U, L('loading goes away once the streams arrive'), (await p.locator('.streamsTable .ripple-container').count()) === 0 ? 'PASS' : 'FAIL');
+        // 4. the imported-traces button's icon is its own
+        const imported = ((await http('/json-api/streams')).json?.history ?? []).filter((s) => s.imported);
+        const del = p.locator('button[aria-label="Delete all imported traces"]');
+        if (!imported.length) rec(U, L('Delete all imported traces has its own icon'), 'SKIP', 'no imported trace to show the button');
+        else {
+            const icon = await del.locator('svg').first().getAttribute('data-icon');
+            const clear = await p.locator('button[aria-label="Clear stream history"] svg').first().getAttribute('data-icon').catch(() => null);
+            rec(U, L('Delete all imported traces has its own icon'), icon && icon !== 'trash' && icon !== clear ? 'PASS' : 'FAIL', `imported ${icon}, clear history ${clear}`);
+        }
+    } catch (e) { rec(U, L('loaded state'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+}
+
+// The stream trace page's timeline and playback charts: the three throughput views (Smoothed, Per transfer, Measured, the last only when the
+// trace has a byte profile), the fit-scale and read-ahead buttons, whole-number segment ticks, the figure written under each playback chart and
+// the four charts starting at one height. Read-only: it only reads a recorded stream and clicks the chart's own buttons.
+async function traceCharts(browser, ctx, U) {
+    const L = (what) => `trace charts: ${what}`;
+    const streams = (await http('/json-api/streams')).json || {};
+    let session;
+    let trace;
+    for (const s of [...(streams.active ?? []), ...(streams.history ?? [])].slice(0, 12)) {
+        const t = (await http(`/json-api/streams/trace/${s.id}`)).json;
+        if ((t?.requests || []).filter((r) => r.kind === 'segment').length >= 3) { session = s; trace = t; break; }
+    }
+    if (!session) return rec(U, 'trace charts', 'SKIP', 'no stream with at least 3 segment requests in the history');
+    const requests = trace.requests;
+    const hasProfile = requests.some((r) => Array.isArray(r.prof) && r.prof.length);
+    const aheadCount = requests.filter((r) => r.prefetched && r.fetchMs > 0 && r.profAt).length;
+    const hasBytes = requests.some((r) => r.bytes > 0 && r.durMs > 0);
+    const context = await browser.newContext({ viewport: { width: 1800, height: 1000 } });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.goto(`${BASE}/streaming/session/${session.id}`, { waitUntil: 'networkidle', timeout: 45000 });
+        await p.locator('.timelineSvg').waitFor({ timeout: 30000 });
+        const labels = async (selector) => (await p.locator(selector).allTextContents()).map((t) => t.trim());
+        const rateAxis = async () => (await labels('.timelineSvg text.axisText')).filter((t) => /B\/s$/.test(t));
+        const rateLabel = async () => (await labels('.timelineSvg text.laneLabel')).find((t) => /throughput/i.test(t)) || '';
+        const mode = (name) => p.locator(`.timelineControls button:text-is("${name}")`);
+
+        rec(U, L('the throughput graph offers Smoothed, Per transfer and Measured'), (await mode('Smoothed').count()) && (await mode('Per transfer').count()) && (await mode('Measured').count()) ? 'PASS' : 'FAIL');
+        rec(U, L('Measured is on offer only when the trace has a byte profile'), (await mode('Measured').isDisabled()) === !hasProfile ? 'PASS' : 'FAIL', `profile recorded: ${hasProfile}`);
+
+        if (!hasBytes) rec(U, L('the throughput views change the graph label'), 'SKIP', 'no request with both bytes and a duration');
+        else {
+            const seen = [await rateLabel()];
+            await mode('Per transfer').click();
+            seen.push(await rateLabel());
+            if (hasProfile) { await mode('Measured').click(); seen.push(await rateLabel()); }
+            await mode('Smoothed').click();
+            seen.push(await rateLabel());
+            rec(U, L('the throughput views change the graph label'), new Set(seen.slice(0, hasProfile ? 3 : 2)).size === (hasProfile ? 3 : 2) && seen.at(-1) === seen[0] ? 'PASS' : 'FAIL', seen.join(' | '));
+            const axis = await rateAxis();
+            rec(U, L('the throughput scale labels the middle and the top, not just 0'), axis.length >= 2 ? 'PASS' : 'FAIL', `${axis.length} labels: ${axis.join(', ')}`);
+            // The top of the scale is never far above the tallest bar: the top label is a figure, and the fit button keeps it a figure.
+            const fit = p.locator('.timelineControls button[aria-label*="Throughput scale"]');
+            const before = await fit.getAttribute('aria-pressed');
+            await fit.click();
+            const during = await fit.getAttribute('aria-pressed');
+            const fitted = await rateAxis();
+            await fit.click();
+            rec(U, L('the fit button switches the throughput scale to the part in view and back'), before === 'false' && during === 'true' && (await fit.getAttribute('aria-pressed')) === 'false' && fitted.length >= 2 ? 'PASS' : 'FAIL', `${before} -> ${during}, fitted ${fitted.join(', ')}`);
+        }
+
+        // Segment index ticks are whole numbers, also once zoomed in.
+        const ticks = async () => (await labels('.timelineSvg text.axisText')).filter((t) => /^[0-9]+(\.[0-9]+)?$/.test(t));
+        await p.locator('.timelineControls button[aria-label="Zoom in"]').click();
+        const zoomedTicks = await ticks();
+        rec(U, L('segment index ticks are whole numbers, zoomed in too'), zoomedTicks.length === 0 || zoomedTicks.every((t) => Number.isInteger(Number(t))) ? 'PASS' : 'FAIL', zoomedTicks.join(', '));
+        await p.locator('.timelineControls button[aria-label="Show everything"]').click();
+
+        // Read-ahead option: a bar for every segment that has a recorded download, none otherwise.
+        const toggle = p.locator('button.modeButton').first();
+        if (!aheadCount) rec(U, L('the read-ahead button is greyed out when no download was recorded'), (await toggle.isDisabled()) ? 'PASS' : 'FAIL', 'no read-ahead download in this trace');
+        else {
+            rec(U, L('no read-ahead download bars until the button is pressed'), (await p.locator('rect.aheadBar').count()) === 0 ? 'PASS' : 'FAIL');
+            await toggle.click();
+            const bars = await p.locator('rect.aheadBar').count();
+            rec(U, L('the read-ahead button draws a bar for each read-ahead segment'), bars === aheadCount ? 'PASS' : 'FAIL', `${bars} bars, ${aheadCount} read-ahead segments in the trace`);
+            await toggle.click();
+            rec(U, L('the read-ahead button hides them again'), (await p.locator('rect.aheadBar').count()) === 0 ? 'PASS' : 'FAIL');
+        }
+
+        // Playback diagnostics: the four charts share rows, and a hover writes the segment's figure under each.
+        const plots = p.locator('svg.plot');
+        if ((await plots.count()) !== 4) rec(U, L('the four playback charts'), 'FAIL', `${await plots.count()} plots`);
+        else {
+            const boxes = await plots.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top + window.scrollY), left: Math.round(r.left) }; }));
+            const rows = new Map();
+            boxes.forEach((b) => { const key = [...rows.keys()].find((k) => Math.abs(k - b.top) < 40) ?? b.top; rows.set(key, [...(rows.get(key) || []), b.top]); });
+            rec(U, L('the four playback charts start at one height in each row'), [...rows.values()].every((tops) => new Set(tops).size === 1) ? 'PASS' : 'FAIL', boxes.map((b) => b.top).join(', '));
+            const first = plots.first();
+            await first.scrollIntoViewIfNeeded();
+            const box = await first.boundingBox();
+            await p.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
+            await p.waitForTimeout(300);
+            const readouts = await labels('p.readout');
+            rec(U, L('hovering a playback chart writes the segment figure under all four'), readouts.length === 4 && readouts.every((t) => /^segment \d+: /.test(t)) ? 'PASS' : 'FAIL', readouts.join(' | ').slice(0, 200));
+            await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
+            await p.mouse.move(2, 2);
+            await p.waitForTimeout(300);
+            const kept = await labels('p.readout');
+            rec(U, L('a clicked segment stays written under the charts as Kept'), kept.length === 4 && kept.every((t) => /^Kept - segment \d+: /.test(t)) ? 'PASS' : 'FAIL', kept.join(' | ').slice(0, 200));
+        }
+        rec(U, L('no page error'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, L('charts'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+}
+
 // Video events: every row has a thumbnail slot (image or placeholder), so events with no programme
 // (e.g. queued) are as tall as the rest. Read-only; table and cards.
 async function videoEventThumbs(page, U) {
@@ -1229,6 +1524,41 @@ async function videoEventThumbs(page, U) {
         const cards = await page.locator('.cardList > *').evaluateAll((els) => els.filter((e) => !e.classList.contains('empty')).map((e) => !!e.querySelector('img, .thumbnail-placeholder')));
         rec(U, 'video events cards all have a thumbnail slot', cards.length && cards.every(Boolean) ? 'PASS' : 'FAIL', `${cards.filter(Boolean).length}/${cards.length}`);
     } catch (e) { rec(U, 'video events thumbnails', 'FAIL', e.message.split('\n')[0]); }
+}
+
+// Table columns: no cell outside the free-text columns (Filename, Message, Name, thumbnail) is clipped.
+// Each page's per-page select is set to the largest size so every kind of row is on screen. Read-only.
+async function tableColumns(browser, U) {
+    const free = /^(filename|message|name|search term|title|item|media)?$/i;
+    for (const [route, label] of [['/queue', 'queue'], ['/streaming', 'streaming'], ['/nzb', 'nzb'], ['/events', 'video events']]) {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        const p = await context.newPage();
+        try {
+            await p.goto(BASE + route, { waitUntil: 'networkidle' });
+            await p.waitForTimeout(1200);
+            for (const s of await p.$$('select[aria-label="items per page"]')) await s.selectOption('1024').catch(() => {});
+            await p.waitForTimeout(1200);
+            const clipped = await p.evaluate((freeSrc) => {
+                const freeRe = new RegExp(freeSrc, 'i');
+                const out = {};
+                document.querySelectorAll('table').forEach((t) => {
+                    if (!t.offsetParent || t.classList.contains('cards')) return;
+                    const heads = [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim());
+                    t.querySelectorAll('th, td').forEach((c) => {
+                        if (!c.offsetParent) return;
+                        const head = heads[c.cellIndex] || '';
+                        if (freeRe.test(head)) return;
+                        const el = [c, ...c.querySelectorAll('*')].find((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible');
+                        if (el) out[head] = Math.max(out[head] || 0, el.scrollWidth - el.clientWidth);
+                    });
+                });
+                return out;
+            }, free.source);
+            const bad = Object.entries(clipped);
+            rec(U, `${label} table columns show their text`, bad.length ? 'FAIL' : 'PASS', bad.map(([h, px]) => `${h}: ${px}px short`).join(', '));
+        } catch (e) { rec(U, `${label} table columns`, 'FAIL', e.message.split('\n')[0]); }
+        await context.close();
+    }
 }
 
 // Watchdog links: table and card views both show the library file's name (season/episode) under a link,
@@ -1817,7 +2147,9 @@ async function uiConsistency(browser, U) {
         await page.route('**/json-api/thumbnail/**', (route) => route.fulfill({ status: 404, body: 'x' }));
         await open(page, '/browse');
         await page.locator('.programmeCard img').first().waitFor({ timeout: 20000 }).catch(() => {});
-        await page.waitForTimeout(1500);
+        // Cards are loading="lazy": a picture below the fold never requests its file, so it can never fail. Ask for them all now.
+        await page.evaluate(() => document.querySelectorAll('.programmeCard img').forEach((i) => { i.loading = 'eager'; }));
+        await page.waitForTimeout(2500);
         const m = await page.evaluate(() => {
             const imgs = [...document.querySelectorAll('.programmeCard img')];
             return { total: imgs.length, tiles: imgs.filter((i) => i.dataset.broken === 'true' && i.src.startsWith('data:image/svg+xml')).length, hidden: imgs.filter((i) => i.style.visibility === 'hidden').length };
@@ -1876,7 +2208,10 @@ async function uiConsistency(browser, U) {
 
     await flow('user agent paging', async (page) => {
         await open(page, '/apps');
-        rec(U, `${L}: the Apps User-Agent list has page controls`, (await page.locator('select[aria-label="items per page"]').count()) >= 1 ? 'PASS' : 'FAIL');
+        // A list of 4 or fewer is shown whole, with no pager (the "Items Before Paging" preference, default 4).
+        const mappings = await page.evaluate(() => fetch('/json-api/apps/user-agents').then((r) => r.json()).then((d) => (Array.isArray(d) ? d.length : -1)).catch(() => -1));
+        if (mappings >= 0 && mappings <= 4) rec(U, `${L}: the Apps User-Agent list has page controls`, 'SKIP', `only ${mappings} mappings, a short list has no pager`);
+        else rec(U, `${L}: the Apps User-Agent list has page controls`, (await page.locator('select[aria-label="items per page"]').count()) >= 1 ? 'PASS' : 'FAIL', `${mappings} mappings`);
         const inputs = await page.locator('.uaTextInput').count();
         rec(U, `${L}: the new-mapping row is always present`, inputs >= 2 ? 'PASS' : 'FAIL', `${inputs} inputs`);
     });
@@ -1940,6 +2275,21 @@ async function statisticsCacheCards(browser, U) {
         await Promise.all([http('/json-api/browse/home'), http('/json-api/browse/channels'), http('/json-api/browse/categories')]);
         const flashed = await p.waitForSelector('.liveDot.flashHit, .liveDot.flashMiss', { timeout: 15000 }).then(() => true).catch(() => false);
         rec(U, 'statistics: a cache lookup made a dot flash', flashed ? 'PASS' : 'FAIL', 'no dot flashed within 15 s of three browse requests');
+        // Where each cache keeps its data, as an icon in the card's head: database, memory (cleared on restart) or files on disk.
+        const storageOf = (c) => (c.inMemory ? 'Memory (cleared on restart)' : c.prefix === 'thumbnails' ? 'Files on disk' : 'Database');
+        const wantedIcons = caches.map((c) => `${c.label}=${storageOf(c)}`).sort();
+        const shownIcons = (await p.locator('.cacheCard:has(.liveDot)').evaluateAll((els) => els.map((el) => `${el.querySelector('.cacheName')?.textContent.trim()}=${el.querySelector('.cacheHead .storageIcon')?.getAttribute('aria-label')}`))).sort();
+        rec(U, 'statistics: every cache card has a storage icon (database, memory or disk) that matches the cache', JSON.stringify(shownIcons) === JSON.stringify(wantedIcons) ? 'PASS' : 'FAIL', shownIcons.filter((s) => !wantedIcons.includes(s)).join(' | ') || `${shownIcons.length} icons for ${wantedIcons.length} caches`);
+        const iconKinds = await p.locator('.cacheCard:has(.liveDot) .cacheHead .storageIcon').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') + '|' + (el.getAttribute('data-icon') || '')));
+        rec(U, 'statistics: the stream memory caches show the memory icon and the database caches the database icon', iconKinds.some((k) => k.startsWith('Memory')) && iconKinds.some((k) => k.startsWith('Database')) && new Set(iconKinds.filter((k) => k.startsWith('Memory')).map((k) => k.split('|')[1])).size <= 1 ? 'PASS' : 'FAIL', [...new Set(iconKinds)].join(' ; '));
+        const nameHasStorage = (await p.locator('.cacheCard .cacheName').allTextContents()).filter((n) => /\((memory|database|disk)\)/i.test(n));
+        rec(U, 'statistics: no cache title repeats its storage in brackets now the icon says it', nameHasStorage.length === 0 ? 'PASS' : 'FAIL', nameHasStorage.join(', '));
+        const memoryCard = p.locator('.cacheCard:has(.liveDot):has(.storageIcon[aria-label^="Memory"])').first();
+        if (await memoryCard.count()) {
+            await memoryCard.locator('.storageIcon').hover();
+            const lifetime = await memoryCard.locator('.statBody:has(.statLabel:text-is("Lifetime")) .statValue').innerText();
+            rec(U, 'statistics: a memory cache card shows its fixed lifetime', /^\d+\s?(s|sec|m|min|h)/i.test(lifetime.trim()) || lifetime.trim() !== '-' ? 'PASS' : 'FAIL', lifetime.trim());
+        } else rec(U, 'statistics: a memory cache card shows its fixed lifetime', 'FAIL', 'no memory cache card');
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches.png') });
         // Grouped by purpose with a heading per group, sorted inside each group, one flat list on request, remembered on reload.
         const sorted = (names) => names.every((n, i) => i === 0 || names[i - 1].localeCompare(n, undefined, { sensitivity: 'base', numeric: true }) <= 0);
@@ -1961,19 +2311,27 @@ async function statisticsCacheCards(browser, U) {
         const records = await p.locator('.cacheCard:has(.liveDot) .cacheFigures .statBody:has(.statLabel:text-is("Records")) .statValue').evaluateAll((els) => els.map((el) => [el.textContent.trim(), el.getAttribute('title')]));
         rec(U, 'statistics: record counts are short (no thousands separators, K / M / B) with the exact figure in the tooltip', records.length === caches.length && records.every(([text, title]) => /^\d{1,3}$|^\d{1,3}(\.\d)?[KMB]$/.test(text) && title && /^[\d,]+$/.test(title)) ? 'PASS' : 'FAIL', records.slice(0, 6).map((r) => r.join('=')).join(' '));
         // The Server heading's line runs the whole width, like Caches and Activity.
-        const rule = await p.locator('.legendRow:has(> legend:text-is("Server"))').evaluate((el) => ({ row: el.getBoundingClientRect().width, page: el.parentElement.getBoundingClientRect().width }));
+        const rule = await p.locator('.PageHeader:has(> legend:text-is("Server"))').evaluate((el) => ({ row: el.getBoundingClientRect().width, page: el.parentElement.getBoundingClientRect().width }));
         rec(U, 'statistics: the Server heading line runs the full width', rule.row >= rule.page - 40 ? 'PASS' : 'FAIL', `${Math.round(rule.row)}px of ${Math.round(rule.page)}px`);
-        await p.locator('.cacheLegend .sortSelect').selectOption({ label: 'Name' });
+        // The Server section: a few cards with no headings, each row a label and a figure, filled in once the answers arrive.
+        await p.waitForFunction(() => [...document.querySelectorAll('.serverStat .serverRow')].some((r) => r.querySelector('.rowLabel')?.textContent.trim() === 'Memory' && r.querySelector('.rowValue')?.textContent.trim() !== '-'), null, { timeout: 20000 }).catch(() => {});
+        const serverCards = await p.locator('.serverStat').evaluateAll((els) => els.map((el) => ({ title: !!el.querySelector('.cacheName'), rows: [...el.querySelectorAll('.serverRow')].map((r) => [r.querySelector('.rowLabel').textContent.trim(), r.querySelector('.rowValue').textContent.trim()]) })));
+        const serverRows = Object.fromEntries(serverCards.flatMap((c) => c.rows));
+        rec(U, 'statistics: the Server section is a few cards with no group titles', serverCards.length >= 3 && serverCards.length <= 6 && serverCards.every((c) => !c.title && c.rows.length >= 2) ? 'PASS' : 'FAIL', `${serverCards.length} cards`);
+        rec(U, 'statistics: the Server cards show uptime, memory, cpu and the disks', ['Uptime', 'Memory', 'CPU', 'Database'].every((k) => k in serverRows) && Object.keys(serverRows).some((k) => /folder/i.test(k)) ? 'PASS' : 'FAIL', Object.keys(serverRows).join(','));
+        rec(U, 'statistics: the Server cards fill in real figures (memory and uptime are not dashes)', serverRows.Memory && serverRows.Memory !== '-' && /^\d\d:\d\d:\d\d$/.test(serverRows.Uptime ?? '') ? 'PASS' : 'FAIL', `memory ${serverRows.Memory}, uptime ${serverRows.Uptime}`);
+        await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-server.png') });
+        await p.locator('.cacheListControls .sortSelect').selectOption({ label: 'Name' });
         await p.waitForTimeout(300);
         const groupNames = await p.locator('.cacheGroup').evaluateAll((els) => els.map((el) => [...el.querySelectorAll('.cacheName')].map((n) => n.textContent.trim())));
         rec(U, 'statistics: choosing Name sorts the cards inside each group', groupNames.length >= 1 && groupNames.every(sorted) ? 'PASS' : 'FAIL', groupNames.map((g) => g.join(',')).join(' | '));
-        await p.locator('.cacheLegend .cacheModeToggle').click();
+        await p.locator('.cacheListControls .cacheModeToggle').click();
         await p.waitForTimeout(300);
         const flatNames = (await p.locator('.cacheGroup .cacheName').allTextContents()).map((n) => n.trim());
         rec(U, 'statistics: Flat removes the group headings and sorts the whole list', (await p.locator('.cacheGroupHeading').count()) === 0 && flatNames.length === caches.length && sorted(flatNames) ? 'PASS' : 'FAIL', `${flatNames.length} cards`);
         await p.reload({ waitUntil: 'networkidle' });
         await p.waitForSelector('.cacheCard .liveDot', { timeout: 15000 });
-        const kept = (await p.locator('.cacheLegend .sortSelect').inputValue()) === 'name' && /Flat/.test(await p.locator('.cacheLegend .cacheModeToggle').innerText()) && (await p.locator('.cacheGroupHeading').count()) === 0;
+        const kept = (await p.locator('.cacheListControls .sortSelect').inputValue()) === 'name' && /Flat/.test(await p.locator('.cacheListControls .cacheModeToggle').innerText()) && (await p.locator('.cacheGroupHeading').count()) === 0;
         rec(U, 'statistics: the sort and Flat are remembered after a reload', kept ? 'PASS' : 'FAIL');
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches-flat.png') });
         // With the caches answer held back, the page already shows its cards with dashes, then fills them in.
@@ -2018,6 +2376,27 @@ async function maintenanceCacheGroups(browser, U) {
         await p.locator('.cacheListBar .cacheModeToggle').click();
         await p.waitForTimeout(250);
         rec(U, 'maintenance: Flat removes the group headings', (await p.locator('.maintGroupBar').count()) === 0 && (await p.locator('.maintGroup .taskRow').count()) >= rows ? 'PASS' : 'FAIL');
+        // In the flat list every cache is on show: each row has its storage icon, and a memory cache has a fixed lifetime instead of an editor.
+        const listed = (await http('/json-api/maintenance/caches')).json || [];
+        const storageOf = (c) => (c.inMemory ? 'Memory (cleared on restart)' : c.prefix === 'thumbnails' ? 'Files on disk' : 'Database');
+        // The row's name without its (i) tip, which sits inside the same label.
+        const rowParts = await p.locator('.maintGroup .taskRow').evaluateAll((els) => els.map((el) => {
+            const label = el.querySelector('.label').cloneNode(true);
+            label.querySelectorAll('[class*="InfoTip"], svg').forEach((n) => n.remove());
+            return [label.textContent.trim().replace(/\s+/g, ' '), el.querySelector('.label .storageIcon')?.getAttribute('aria-label')];
+        }));
+        const rowIcons = rowParts.map(([name, icon]) => `${name}=${icon}`).sort();
+        const wantedRows = listed.map((c) => `${c.label}=${storageOf(c)}`).sort();
+        rec(U, 'maintenance: every cache row has a storage icon that matches the cache', JSON.stringify(rowIcons) === JSON.stringify(wantedRows) ? 'PASS' : 'FAIL', rowIcons.filter((s) => !wantedRows.includes(s)).join(' | ') || `${rowIcons.length} rows for ${wantedRows.length} caches`);
+        const memoryRows = p.locator('.maintGroup .taskRow:has(.storageIcon[aria-label^="Memory"])');
+        const memoryCount = await memoryRows.count();
+        const editable = await memoryRows.locator('.ttlEditor input, .ttlEditor select').count();
+        const fixedText = await memoryRows.locator('.fixedKeep').allInnerTexts();
+        rec(U, 'maintenance: a memory cache row shows its lifetime as fixed text, with no editor and no reset', memoryCount === listed.filter((c) => c.inMemory).length && memoryCount >= 2 && editable === 0 && fixedText.length === memoryCount && fixedText.every((t) => /memory only/i.test(t)) && (await memoryRows.locator('.linkButton').count()) === 0 ? 'PASS' : 'FAIL', `${memoryCount} memory rows, ${editable} inputs, ${fixedText.length} fixed`);
+        const dbRows = p.locator('.maintGroup .taskRow:has(.storageIcon[aria-label="Database"])');
+        rec(U, 'maintenance: a database cache row keeps its lifetime editor', (await dbRows.count()) >= 1 && (await dbRows.first().locator('.ttlEditor input').count()) === 1 ? 'PASS' : 'FAIL');
+        const titles = rowParts.map(([name]) => name).filter((n) => /\((memory|database|disk)\)/i.test(n));
+        rec(U, 'maintenance: no cache title repeats its storage in brackets', titles.length === 0 ? 'PASS' : 'FAIL', titles.join(', '));
         await p.screenshot({ path: path.join(SHOTS, 'flow-maintenance-caches-flat.png') });
     } catch (e) { rec(U, 'maintenance cache groups', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
 }

@@ -14,19 +14,25 @@ export interface EffectiveRadioSearchSettings extends RadioSearchSettings {
     // Avoid adding new dependencies here.
     // Treat the values below as read-only.
     inherited: string[];
+    // Collections whose title matches are offered as tiles (needs Show Collections too, which the route checks).
+    collectionNames: boolean;
+    // A search for a collection's pid or link lists the collection's episodes.
+    expandCollections: boolean;
 }
 
 // The radio search settings as the search uses them. Match All Words set to 'inherit' (the default) follows the manual-search
 // value of Match All Words, so a radio search treats the words as a video search on the Search page does.
 class RadioSearchSettingsService {
     async effective(): Promise<EffectiveRadioSearchSettings> {
-        const [words, rank, scope, mp3, networks, max] = await Promise.all([
+        const [words, rank, scope, mp3, networks, max, names, expand] = await Promise.all([
             configService.getParameter(IplayarrParameter.RADIO_SEARCH_MATCH_ALL_WORDS),
             configService.getParameter(IplayarrParameter.RADIO_SEARCH_RANK_BY_TITLE),
             configService.getParameter(IplayarrParameter.RADIO_SEARCH_SCOPE),
             configService.getParameter(IplayarrParameter.RADIO_SEARCH_MP3_ONLY),
             configService.getParameter(IplayarrParameter.RADIO_SEARCH_NETWORKS),
             configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS),
+            configService.getParameter(IplayarrParameter.RADIO_SEARCH_COLLECTION_NAMES),
+            configService.getParameter(IplayarrParameter.RADIO_SEARCH_EXPAND_COLLECTIONS),
         ]);
         const inherited: string[] = [];
         let matchAllWords: boolean;
@@ -45,6 +51,8 @@ class RadioSearchSettingsService {
             networks: parseNetworks(networks),
             maxResults: Number.isFinite(cap) ? Math.min(200, Math.max(0, cap)) : 0,
             inherited,
+            collectionNames: names === 'true',
+            expandCollections: expand === 'true',
         };
     }
 }

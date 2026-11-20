@@ -82,6 +82,7 @@ export enum IplayarrParameter {
     STREAM_NATIVE_EXPERIMENTAL_FHD = 'STREAM_NATIVE_EXPERIMENTAL_FHD',
     STREAM_SUBTITLES = 'STREAM_SUBTITLES',
     STREAM_TRACE = 'STREAM_TRACE',
+    STREAM_PREFETCH_OPEN_RANGE = 'STREAM_PREFETCH_OPEN_RANGE',
     DOWNLOAD_SUBTITLES = 'DOWNLOAD_SUBTITLES',
     STREAM_LIVE_DASH_1080 = 'STREAM_LIVE_DASH_1080',
     LIVE_UHD_EVENT_FEEDS = 'LIVE_UHD_EVENT_FEEDS',
@@ -90,9 +91,19 @@ export enum IplayarrParameter {
     SOUNDS_DIR = 'SOUNDS_DIR',
     // What a radio download saves: the audio file ('m4a', or the MP3 when Sounds offers one) or a small '.strm' link.
     RADIO_MEDIA_MODE = 'RADIO_MEDIA_MODE',
+    // How a radio file is named (a template over show, date, year, title, series, network and pid) and whether episodes with a
+    // series number go in a Series NN folder under the show ('series') or straight in the show folder ('show').
+    RADIO_FILENAME_TEMPLATE = 'RADIO_FILENAME_TEMPLATE',
+    RADIO_FOLDER_STRUCTURE = 'RADIO_FOLDER_STRUCTURE',
     RADIO_ACTIVE_LIMIT = 'RADIO_ACTIVE_LIMIT',
     // How square radio artwork is shown in the wide picture boxes: 'blur' (a blurred copy behind it) or 'square' (plain).
     RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
+    // An A to Z for radio, built by listing every BBC Sounds brand once a day. Off (the default), nothing for it runs.
+    RADIO_ATOZ = 'RADIO_ATOZ',
+    // With RADIO_ATOZ on: also leave out shows that have no episodes right now (one BBC request per show, remembered for a week).
+    RADIO_ATOZ_HIDE_EMPTY = 'RADIO_ATOZ_HIDE_EMPTY',
+    // The Podcasts page in radio mode (a menu link and a list of the BBC podcast shows). On by default; off, nothing is read for it.
+    RADIO_PODCASTS = 'RADIO_PODCASTS',
     // How radio (BBC Sounds) search results are narrowed and ordered, after BBC answers. 'inherit' follows the manual-search
     // value of SEARCH_MATCH_ALL_WORDS.
     RADIO_SEARCH_MATCH_ALL_WORDS = 'RADIO_SEARCH_MATCH_ALL_WORDS',
@@ -100,6 +111,11 @@ export enum IplayarrParameter {
     // 'both', 'shows' or 'episodes'.
     RADIO_SEARCH_SCOPE = 'RADIO_SEARCH_SCOPE',
     RADIO_SEARCH_MP3_ONLY = 'RADIO_SEARCH_MP3_ONLY',
+    // 'true' lists BBC Sounds collections whose title matches the search as tiles on the Search page (like the video by-name option).
+    // Radio collections do not depend on BROWSE_SHOW_COLLECTIONS (the video setting).
+    RADIO_SEARCH_COLLECTION_NAMES = 'RADIO_SEARCH_COLLECTION_NAMES',
+    // 'true' makes a radio search for the pid or bbc.co.uk link of a BBC Sounds collection list the episodes in it (like the video option).
+    RADIO_SEARCH_EXPAND_COLLECTIONS = 'RADIO_SEARCH_EXPAND_COLLECTIONS',
     // Comma-separated network names (e.g. "Radio 4, 6 Music"); blank keeps every network.
     RADIO_SEARCH_NETWORKS = 'RADIO_SEARCH_NETWORKS',
     // Most shows and most episodes a radio search lists; 0 is no cap.

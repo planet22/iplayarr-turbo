@@ -23,6 +23,16 @@ export class InvalidQueueInputError extends Error {}
 
 let queue: QueueEntry[] = [];
 
+// An unhandled 'error' event (no kill binary, EAGAIN) would crash the whole server, so one is always attached.
+function killProcess(pid: number | undefined): void {
+    if (!pid) return;
+    try {
+        spawn('kill', ['-9', String(pid)])?.on?.('error', (err: Error) => loggingService.error(`Could not kill process ${pid}`, err.message));
+    } catch (err) {
+        loggingService.error(`Could not kill process ${pid}`, (err as Error).message);
+    }
+}
+
 const queueService = {
     addToQueue: (
         pid: string,
@@ -111,7 +121,7 @@ const queueService = {
                     next.process = process;
                 } else if (process?.pid) {
                     // Cancelled while starting - cancelItem had no process to kill yet.
-                    spawn('kill', ['-9', String(process.pid)]);
+                    killProcess(process.pid);
                 }
             } catch (error) {
                 videoEventService.record(
@@ -120,6 +130,8 @@ const queueService = {
                     { pid: next.pid, level: 'error' }
                 );
                 queue = queue.filter((entry) => entry !== next);
+                // Left in place, the job id would tie later events for this programme to a download that never began.
+                activeJobs.clear(next.pid, next.jobId);
             }
         }
         socketService.emit('queue', queue);
@@ -146,7 +158,7 @@ const queueService = {
         const queueItem: QueueEntry | undefined = queue.find(matches);
         for (const item of queue) {
             if (item.process && matches(item)) {
-                spawn('kill', ['-9', String(item.process.pid)]);
+                killProcess(item.process.pid);
             }
         }
         if (archive && queueItem) {

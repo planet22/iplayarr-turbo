@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { setCustomRegistry } from '../../src/constants/CustomChannels';
 import browseService from '../../src/service/browseService';
 import configService from '../../src/service/configService';
 import liveTvChannelService from '../../src/service/liveTvChannelService';
@@ -60,6 +61,40 @@ describe('liveTvService', () => {
         expect(m3u).toContain('tvg-logo="http://host:4404/api?mode=live_logo&channel=bbc_two_england&v=png-landscape&streamkey=sk"');
         expect(m3u).toContain('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk');
         expect(m3u).not.toContain('bbc_one_london');
+    });
+
+    it('changes the channel URL (not the default one) when Live 1080p is off, so Jellyfin probes again', async () => {
+        params.STREAM_LIVE_DASH_1080 = 'true';
+        expect(await liveTvService.playlist()).not.toContain('lq=720');
+        params.STREAM_LIVE_DASH_1080 = 'false';
+        try {
+            expect(await liveTvService.playlist()).toContain('pid=bbc_two_england&streamkey=sk&lq=720');
+        } finally {
+            delete params.STREAM_LIVE_DASH_1080;
+        }
+    });
+
+    it('leaves the URL alone when Live 1080p is unset, and never pins radio, custom or UHD event channels', async () => {
+        const spy = jest.spyOn(liveTvService, 'channels').mockResolvedValue([
+            { id: 'bbc_two_england', title: 'BBC Two', masterBrand: 'bbc_two' },
+            { id: 'bbc_radio_two', title: 'Radio 2', masterBrand: 'bbc_radio_two', audioOnly: true },
+            { id: 'my_custom', title: 'Mine' },
+            { id: 'uk_bbc_stream_041', title: 'UHD 41' },
+        ] as any);
+        setCustomRegistry([{ id: 'my_custom', title: 'Mine', streamUrl: 'http://x/y.m3u8', streamType: 'auto' } as any], {});
+        try {
+            // Unset (and any value but 'false') is the on behaviour: nothing is pinned.
+            delete params.STREAM_LIVE_DASH_1080;
+            expect(await liveTvService.playlist()).not.toContain('lq=720');
+            params.STREAM_LIVE_DASH_1080 = 'false';
+            const urls = (await liveTvService.playlist()).split('\n').filter((line) => line.includes('/api/live.m3u8'));
+            expect(urls).toHaveLength(4);
+            expect(urls.filter((url) => url.includes('&lq=720'))).toEqual([expect.stringContaining('pid=bbc_two_england')]);
+        } finally {
+            delete params.STREAM_LIVE_DASH_1080;
+            setCustomRegistry([], {});
+            spy.mockRestore();
+        }
     });
 
     it('is an empty tuner when nothing is selected', async () => {

@@ -10,6 +10,7 @@ jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/facade/searchFacade');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/queueService');
+jest.mock('../../src/service/releaseService', () => ({ ...jest.requireActual('../../src/service/releaseService'), enqueueRelease: jest.fn(), resolveRelease: jest.fn() }));
 jest.mock('../../src/service/searchSettingsService');
 jest.mock('../../src/service/stats/StatisticsService');
 const mockKnownEpisode = jest.fn();
@@ -21,8 +22,9 @@ import searchFacade from '../../src/facade/searchFacade';
 import soundsFacade from '../../src/facade/soundsFacade';
 import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
-import queueService from '../../src/service/queueService';
+import { enqueueRelease } from '../../src/service/releaseService';
 import searchSettingsService from '../../src/service/searchSettingsService';
+import soundsBrowseAdapter from '../../src/service/sounds/soundsBrowseAdapter';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
 import { searchContext } from '../../src/utils/searchContext';
@@ -289,6 +291,17 @@ describe('JsonApiRoute', () => {
             expect(entry).toMatchObject({ kind: 'radio', source: 'manual', results: 1 });
         });
 
+        it('says how many radio hits were dropped when nothing is left, as the video search does', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockImplementation(async () => {
+                traceCandidate({ title: 'Gardeners Question Time', stage: 'bbc', kept: false, reason: 'missing-word', detail: '\'archers\' is not in the title' });
+                return { shows: [], episodes: [] };
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'archers', mode: 'radio' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines).toEqual([[], { note: { dropped: 1, capped: false } }, { done: true }]);
+        });
+
         it('answers ?mode=radio from BBC Sounds as the same lines, without running the video search', async () => {
             jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
             jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] });
@@ -298,6 +311,44 @@ describe('JsonApiRoute', () => {
             expect(lines[1]).toEqual({ done: true });
             expect(res.headers['content-type']).toContain('application/x-ndjson');
             expect(searchFacade.searchStreaming).not.toHaveBeenCalled();
+        });
+
+        it('sends radio collections that match as their own line before the results, then done', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'Football Focus' }], episodes: [] });
+            const found = [{ id: 'c1', title: 'Football Specials', count: 4 }];
+            const spy = jest.spyOn(soundsBrowseAdapter, 'collectionsForSearch').mockResolvedValue(found);
+            const res = await request(app).get('/search/stream').query({ q: 'football', mode: 'radio' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(spy).toHaveBeenCalledWith('football', 6);
+            expect(lines[0]).toEqual({ collections: found });
+            expect(lines[1]).toEqual([expect.objectContaining({ pid: 'b1', radio: true })]);
+            expect(lines[2]).toEqual({ done: true });
+            spy.mockRestore();
+        });
+
+        it('sends no collections line for radio when none match, and still searches when the lookup fails', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'Football Focus' }], episodes: [] });
+            const spy = jest.spyOn(soundsBrowseAdapter, 'collectionsForSearch').mockResolvedValueOnce([]);
+            let res = await request(app).get('/search/stream').query({ q: 'football', mode: 'radio' });
+            let lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines.some((line) => line.collections)).toBe(false);
+            expect(lines[lines.length - 1]).toEqual({ done: true });
+            spy.mockRejectedValueOnce(new Error('sounds down'));
+            res = await request(app).get('/search/stream').query({ q: 'football', mode: 'radio' });
+            lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines.some((line) => line.collections)).toBe(false);
+            expect(lines[0]).toEqual([expect.objectContaining({ pid: 'b1' })]);
+            spy.mockRestore();
+        });
+
+        it('does not ask for radio collections on a video search', async () => {
+            const spy = jest.spyOn(soundsBrowseAdapter, 'collectionsForSearch');
+            (searchFacade.searchStreaming as jest.Mock).mockResolvedValue([]);
+            await request(app).get('/search/stream').query({ q: 'football' });
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
         });
 
         it('answers GET /search?mode=radio with the Sounds results in one reply, and 404 while BBC Sounds is off', async () => {
@@ -390,141 +441,45 @@ describe('JsonApiRoute', () => {
     });
 
     describe('GET /download', () => {
-        it('should add item to queue and return success', async () => {
-            const addToQueueMock = queueService.addToQueue as jest.Mock;
-            addToQueueMock.mockImplementation(() => { });
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+        it('should queue the programme through the release resolver and return success', async () => {
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
 
-            const res = await request(app)
-                .get('/download')
-                .query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv' });
+            const res = await request(app).get('/download').query({ pid: 'p01xyz' });
 
-            expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, undefined);
+            // No name or type sent: the plain name, and the type from the BBC's format category; nothing to fall back on.
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', {
+                version: undefined,
+                quality: undefined,
+                nameOverride: undefined,
+                type: undefined,
+                typeFrom: 'category',
+                nameStyle: 'plain',
+                numberingFromName: undefined,
+                fallback: undefined,
+                mediaMode: undefined,
+            });
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
         });
 
-        it('carries structured library metadata straight through when the caller supplies it', async () => {
-            const addToQueueMock = queueService.addToQueue as jest.Mock;
-            addToQueueMock.mockImplementation(() => { });
-
-            const res = await request(app).get('/download').query({
-                pid: 'p01xyz',
-                nzbName: 'show.nzb',
-                type: 'tv',
-                title: 'My Show',
-                series: '1',
-                episode: '2',
-                episodeTitle: 'The Episode',
-                channel: 'BBC One',
-                pubDate: '2024-01-02T00:00:00.000Z',
-            });
-
-            expect(res.status).toBe(200);
-            expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv', undefined, {
-                title: 'My Show',
-                series: 1,
-                episode: 2,
-                episodeTitle: 'The Episode',
-                channel: 'BBC One',
-                pubDate: '2024-01-02T00:00:00.000Z',
-            }, undefined, undefined);
-            expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
-        });
-
-        it('derives library metadata from BBC data when the caller supplies none', async () => {
-            const metadata = {
-                programme: {
-                    display_title: { title: 'Test Show' },
-                    title: 'The Real Title',
-                    position: 3,
-                    type: 'episode',
-                    pid: 'p01xyz',
-                    ownership: { service: { title: 'BBC One' } },
-                    first_broadcast_date: '2024-01-02',
-                    parent: {
-                        programme: {
-                            type: 'series',
-                            position: 1,
-                            title: 'Series 1',
-                            expected_child_count: 6,
-                            aggregated_episode_count: 6,
-                            pid: 'parent-pid',
-                            title2: undefined,
-                        },
-                    },
-                },
-            };
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata);
-            const addToQueueMock = queueService.addToQueue as jest.Mock;
-            addToQueueMock.mockImplementation(() => { });
-
-            const res = await request(app).get('/download').query({ pid: 'p01xyz' });
-
-            expect(res.status).toBe(200);
-            expect(addToQueueMock).toHaveBeenCalledWith(
-                'p01xyz',
-                expect.any(String),
-                'TV',
-                undefined,
-                {
-                    title: 'Test Show',
-                    series: 1,
-                    episode: 3,
-                    episodeTitle: 'The Real Title',
-                    channel: 'BBC One',
-                    pubDate: '2024-01-02',
-                },
-                undefined,
-                undefined
-            );
-        });
-
-        it('falls back to parsing series/episode from the filename when BBC metadata has none', async () => {
-            const metadata = {
-                programme: {
-                    display_title: { title: 'Show Name' },
-                    title: 'Show Name',
-                    position: null,
-                    type: 'episode',
-                    pid: 'p01xyz',
-                    ownership: { service: { title: 'BBC One' } },
-                },
-            };
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata);
-            const addToQueueMock = queueService.addToQueue as jest.Mock;
-            addToQueueMock.mockImplementation(() => { });
-
-            const res = await request(app)
-                .get('/download')
-                .query({ pid: 'p01xyz', nzbName: 'Show.Name.S02E05', type: 'tv' });
-
-            expect(res.status).toBe(200);
-            expect(addToQueueMock).toHaveBeenCalledWith(
-                'p01xyz',
-                'Show.Name.S02E05',
-                'tv',
-                undefined,
-                expect.objectContaining({ title: 'Show Name', series: 2, episode: 5 }),
-                undefined,
-                undefined
-            );
-        });
-
         it('passes a per-download media mode through and rejects an unknown one', async () => {
-            const addToQueueMock = queueService.addToQueue as jest.Mock;
-            addToQueueMock.mockImplementation(() => { });
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
 
             for (const media of ['strm', 'download']) {
-                await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', media }).expect(200);
-                expect(addToQueueMock).toHaveBeenLastCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, media);
+                await request(app).get('/download').query({ pid: 'p01xyz', media }).expect(200);
+                expect(enqueueRelease).toHaveBeenLastCalledWith('p01xyz', expect.objectContaining({ mediaMode: media }));
             }
 
-            addToQueueMock.mockClear();
-            const bad = await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', media: 'bogus' });
+            (enqueueRelease as jest.Mock).mockClear();
+            const bad = await request(app).get('/download').query({ pid: 'p01xyz', media: 'bogus' });
             expect(bad.status).toBe(400);
-            expect(addToQueueMock).not.toHaveBeenCalled();
+            expect(enqueueRelease).not.toHaveBeenCalled();
+        });
+
+        it('passes a chosen version and quality to the resolver', async () => {
+            (enqueueRelease as jest.Mock).mockResolvedValue({});
+            await request(app).get('/download').query({ pid: 'p01xyz', version: 'audio-described', quality: 'sd' }).expect(200);
+            expect(enqueueRelease).toHaveBeenCalledWith('p01xyz', expect.objectContaining({ version: 'audio-described', quality: 'sd' }));
         });
     });
 
@@ -542,26 +497,6 @@ describe('JsonApiRoute', () => {
             (iplayerDetailsService.getMetadata as jest.Mock).mockRejectedValue(new Error('down'));
             expect((await request(app).get('/programme-versions').query({ pid: 'p01xyz' })).body).toEqual([]);
             expect((await request(app).get('/programme-versions').query({ pid: '../x' })).status).toBe(400);
-        });
-    });
-
-    describe('GET /download with a version or quality', () => {
-        it('tags and caps an audio described download and carries the version on the queue entry', async () => {
-            const addToQueueMock = queueService.addToQueue as jest.Mock;
-            addToQueueMock.mockImplementation(() => { });
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'Show.S01E01.WEBDL.720p-BBC', type: 'TV', title: 'Show', version: 'audio-described' }).expect(200);
-            const [, name, , , library] = addToQueueMock.mock.calls.pop();
-            expect(name).toBe('Show.S01E01.AUDIO.DESCRIBED.WEBDL.540p-BBC');
-            expect(library).toMatchObject({ title: 'Show', version: 'audio-described', quality: 'sd' });
-        });
-
-        it('ignores an unknown version or quality', async () => {
-            const addToQueueMock = queueService.addToQueue as jest.Mock;
-            addToQueueMock.mockImplementation(() => { });
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
-            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', version: 'bogus', quality: 'bogus' }).expect(200);
-            expect(addToQueueMock).toHaveBeenLastCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, undefined);
         });
     });
 

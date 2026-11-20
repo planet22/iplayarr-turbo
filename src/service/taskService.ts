@@ -10,6 +10,7 @@ import episodeCacheService from './episodeCacheService';
 import libraryCleanupService from './libraryCleanupService';
 import liveTvService from './liveTvService';
 import loggingService from './loggingService';
+import soundsAtoZService from './sounds/soundsAtoZService';
 import soundsFollowService from './sounds/soundsFollowService';
 import streamSessionService from './stream/streamSessionService';
 import strmWatchdogService from './strmWatchdogService';
@@ -35,6 +36,7 @@ class TaskService {
                 description: 'Refreshes the schedule cache, recaches series metadata, and clears stuck failed downloads.',
                 cron: cronSchedule,
                 minIntervalMinutes: 15,
+                caches: ['schedule_cache', 'schedule_page_pids'],
             },
             async () => {
                 const nativeSearchEnabled = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH);
@@ -88,6 +90,19 @@ class TaskService {
             () => soundsFollowService.checkAll()
         );
 
+        // Radio A to Z list - 3:20 AM daily. Does nothing (reads nothing from the BBC) unless RADIO_ATOZ is on.
+        await cronJobService.defineTask(
+            {
+                id: 'sounds-atoz',
+                label: 'Radio A to Z',
+                description: 'Rebuilds the radio A to Z list from the BBC Sounds show listing.',
+                cron: '20 3 * * *',
+                minIntervalMinutes: 60,
+                caches: ['sounds_atoz'],
+            },
+            () => soundsAtoZService.rebuild()
+        );
+
         // Subscription detection - 3:47 AM daily. Only touches apps with "detect subscriptions" switched on in
         // their settings, and only refreshes the episode counts of shows already linked to them.
         await cronJobService.defineTask(
@@ -109,6 +124,7 @@ class TaskService {
                 label: 'Thumbnail Cache Cleanup',
                 description: 'Deletes cached episode thumbnails that have not been viewed recently.',
                 cron: '35 3 * * *',
+                caches: ['thumbnails', 'thumbnail_image_pid'],
             },
             () => thumbnailCacheService.cleanup()
         );
@@ -146,6 +162,7 @@ class TaskService {
                 label: 'Expired Cache Purge',
                 description: 'Deletes expired entries from the database cache.',
                 cron: '50 3 * * *',
+                caches: ['*'],
             },
             () => DbCacheService.purgeExpired()
         );

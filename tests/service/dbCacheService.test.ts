@@ -101,6 +101,14 @@ describe('DbCacheService', () => {
             expect(await service.getOr('k', fetchFn)).toEqual({ hello: 'ok' });
         });
 
+        it('still returns a fetched value when writing it to the cache fails', async () => {
+            const fetchFn = jest.fn().mockResolvedValue({ hello: 'fetched' });
+            const setSpy = jest.spyOn(service, 'set').mockRejectedValueOnce(new Error('disk full'));
+
+            expect(await service.getOr('k', fetchFn)).toEqual({ hello: 'fetched' });
+            setSpy.mockRestore();
+        });
+
         it('treats a cached falsy value as a hit', async () => {
             const numbers = new DbCacheService<number>('numbers', 60);
             const fetchFn = jest.fn().mockResolvedValue(0);

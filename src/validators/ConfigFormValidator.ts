@@ -47,6 +47,7 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     RELEASE_LANGUAGE: ['none', 'english'],
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
     RADIO_MEDIA_MODE: ['m4a', 'strm'],
+    RADIO_FOLDER_STRUCTURE: ['show', 'series'],
     RADIO_THUMBNAIL_STYLE: ['blur', 'square'],
     RADIO_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],
     RADIO_SEARCH_SCOPE: ['both', 'shows', 'episodes'],
@@ -58,9 +59,9 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
 const TRUE_FALSE_SETTINGS = [
     'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING',
     'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'STREAM_NATIVE_ADAPTIVE',
-    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_TRACE', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'SOUNDS_ENABLED',
+    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_TRACE', 'STREAM_PREFETCH_OPEN_RANGE', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'RADIO_ATOZ', 'RADIO_ATOZ_HIDE_EMPTY', 'RADIO_PODCASTS', 'SOUNDS_ENABLED',
     'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
-    'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY', 'SEARCH_COMBINED',
+    'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY', 'RADIO_SEARCH_COLLECTION_NAMES', 'RADIO_SEARCH_EXPAND_COLLECTIONS', 'SEARCH_COMBINED',
 ];
 
 // A comma-separated list in which every entry must be a known id (blank entries are ignored, as the readers do).
@@ -191,6 +192,19 @@ export class ConfigFormValidator extends Validator {
         } else if (input.MOVIE_FILENAME_TEMPLATE && templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE)) {
             validatorError['MOVIE_FILENAME_TEMPLATE'] = templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE) as string;
         }
+        if (typeof input.RADIO_FILENAME_TEMPLATE === 'string' && input.RADIO_FILENAME_TEMPLATE.trim()) {
+            const problem = this.radioTemplateProblem(input.RADIO_FILENAME_TEMPLATE);
+            if (problem) validatorError['RADIO_FILENAME_TEMPLATE'] = problem;
+        }
+        for (const key of ['API_KEY', 'STREAM_KEY']) {
+            const value = input[key];
+            if (typeof value === 'string' && value.length > 0 && value.length < 8) {
+                validatorError[key] = 'Must be at least 8 characters';
+            }
+        }
+        if (input.API_KEY && input.API_KEY === input.STREAM_KEY) {
+            validatorError['STREAM_KEY'] = 'Must differ from the API key';
+        }
         if (input.NZB_URL || input.NZB_API_KEY || input.NZB_TYPE || input.NZB_USERNAME || input.NZB_PASSWORD) {
             const response: string | boolean = await nzbFacade.testConnection(
                 input.NZB_TYPE,
@@ -244,6 +258,18 @@ export class ConfigFormValidator extends Validator {
             }
         }
         return validatorError;
+    }
+
+    // A radio file name template may only use the variables radio has, and must give a name.
+    radioTemplateProblem(template: string): string | undefined {
+        const known = 'show, date, year, title, series, network, pid';
+        try {
+            const context = { show: 'Show', date: '2026-11-06', year: '2026', title: 'Title', series: '1', network: 'Radio 4', pid: 'm0000001' };
+            if (!Handlebars.compile(template, { strict: true, noEscape: true })(context).replace(/[\s-]/g, '')) return 'Template gives an empty name';
+            return undefined;
+        } catch {
+            return `Template does not compile. It can use ${known}`;
+        }
     }
 
     compilesSuccessfully(template: string): boolean {

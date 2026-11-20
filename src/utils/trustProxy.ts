@@ -12,6 +12,7 @@
 export function parseTrustProxy(raw: string | undefined): boolean | number | string {
     const value = (raw ?? '').trim();
     if (!value || value.toLowerCase() === 'false') return false;
+    if (value.toLowerCase() === 'true') return true;
     if (/^\d+$/.test(value)) return Number(value);
     return value;
 }

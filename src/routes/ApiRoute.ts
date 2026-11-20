@@ -52,7 +52,11 @@ const authorise = async (req: Request, res: Response, next: NextFunction) => {
     }
 };
 
-router.all(['/', '/*'], authorise, upload.any(), async (req: Request, res: Response, next: NextFunction) => {
+// Only mode=addfile takes an NZB upload; every other request skips the multipart parser entirely.
+const uploadForAddFile = (req: Request, res: Response, next: NextFunction) =>
+    (req.query as any as ApiRequest).mode === 'addfile' ? upload.any()(req, res, next) : next();
+
+router.all(['/', '/*'], authorise, uploadForAddFile, async (req: Request, res: Response, next: NextFunction) => {
     const { mode, t } = req.query as any as ApiRequest;
     const endpoint: string | undefined = typeof mode === 'string' ? mode : typeof t === 'string' ? t : undefined;
     const directory: EndpointDirectory = mode ? SabNZBDEndpointDirectory : NewzNabEndpointDirectory;

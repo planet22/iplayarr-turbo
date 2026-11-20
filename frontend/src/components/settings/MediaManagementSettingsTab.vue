@@ -75,6 +75,25 @@
             :error="validationErrors.config?.RADIO_MEDIA_MODE"
             :options="radioMediaModes"
         />
+        <TextInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_FILENAME_TEMPLATE"
+            field="RADIO_FILENAME_TEMPLATE"
+            :advanced="true"
+            name="Radio Filename Template"
+            tooltip="Naming pattern for radio files. Use {{show}}, {{date}}, {{year}}, {{title}}, {{series}}, {{network}}, {{pid}}. Files named another way are still found by their tag or .strm link."
+            :error="validationErrors.config?.RADIO_FILENAME_TEMPLATE"
+        />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_FOLDER_STRUCTURE"
+            field="RADIO_FOLDER_STRUCTURE"
+            :advanced="true"
+            name="Radio Folders"
+            tooltip="Put each show's files in one folder, or in a Series NN folder under it when the episode has a series number."
+            :error="validationErrors.config?.RADIO_FOLDER_STRUCTURE"
+            :options="radioFolderModes"
+        />
     </template>
     <SettingsSubheading text="Quality" />
     <SelectInput
@@ -291,6 +310,10 @@ const secureActions = [
 const radioMediaModes = [
     { key: 'm4a', value: 'Audio file (.m4a / .mp3)' },
     { key: 'strm', value: '.strm link' },
+];
+const radioFolderModes = [
+    { key: 'show', value: 'One folder per show' },
+    { key: 'series', value: 'Series NN folders' },
 ];
 // Radio settings show while BBC Sounds Radio is on (enable it in General first; tabs save separately).
 const { radioEnabled } = useMediaMode();

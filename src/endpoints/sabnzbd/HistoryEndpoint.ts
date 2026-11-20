@@ -77,20 +77,21 @@ function createHistoryEntry(completeDir: string, item: QueueEntry, outputFormat:
     // written before this field existed fall back to the flat layout.
     const relativePath = item.libraryPath ?? `${item.nzbName}.${extension}`;
     const fullPath = `${completeDir}/${relativePath}`;
+    const sizeBytes = (Number(item.details?.size) || 0) * sizeFactor;
     const fileName = relativePath.split(/[/\\]/).pop() as string;
     return {
         ...historyEntrySkeleton,
         duplicate_key: item.pid,
-        size: formatBytes((item.details?.size as number) * sizeFactor),
+        size: formatBytes(sizeBytes),
         nzb_name: `${item.nzbName}.nzb`,
         storage: fullPath,
-        completed: (item.details?.size as number) * sizeFactor,
-        downloaded: (item.details?.size as number) * sizeFactor,
+        completed: sizeBytes,
+        downloaded: sizeBytes,
         nzo_id: item.pid,
         path: fullPath,
         name: fileName,
         url: `${item.nzbName}.nzb`,
-        bytes: (item.details?.size as number) * sizeFactor,
+        bytes: sizeBytes,
         status: failed ? HistoryStatus.FAILED : HistoryStatus.COMPLETED,
         fail_message: failed ? (item.failMessage ?? 'get_iplayer produced no video file') : '',
     } as SABNZBDHistoryEntryResponse;

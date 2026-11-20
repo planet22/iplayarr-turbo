@@ -3,6 +3,7 @@
 import cacheAdminService, { THUMBNAILS } from '../../src/service/cacheAdminService';
 import configService from '../../src/service/configService';
 import DbCacheService from '../../src/service/db/dbCacheService';
+import { memoryCaches, noteLookup, registerMemoryCache } from '../../src/service/memoryCacheRegistry';
 import thumbnailCacheService from '../../src/service/thumbnailCacheService';
 
 jest.mock('../../src/service/configService');
@@ -124,6 +125,71 @@ describe('cacheAdminService', () => {
     it('falls back to 30 days when the retention setting is unusable', async () => {
         config.getParameter.mockResolvedValue('');
         expect(await thumbnailRow()).toMatchObject({ ttl: 30 * 86400, overridden: false });
+    });
+
+    describe('memory caches', () => {
+        let cleared: jest.Mock;
+        beforeEach(() => {
+            cleared = jest.fn().mockReturnValue(3);
+            registerMemoryCache({
+                prefix: 'stream_resolve_test',
+                label: 'Test memory',
+                description: 'd',
+                ttlSeconds: 60,
+                figures: () => ({ count: 3, sizeBytes: 0, expiresSoonest: 1000, expiresLatest: 2000 }),
+                clear: cleared,
+            });
+        });
+
+        it('lists them with the others, fixed and in memory, thumbnails still last in the names', async () => {
+            const row = (await cacheAdminService.list()).find((c) => c.prefix === 'stream_resolve_test');
+            expect(row).toMatchObject({ label: 'Test memory', count: 3, ttl: 60, defaultTtl: 60, overridden: false, inMemory: true, group: 'other' });
+            expect(cacheAdminService.buildCatalog().caches.at(-1)?.prefix).toBe(THUMBNAILS);
+            expect(Object.keys(cacheAdminService.activity())).toContain('stream_resolve_test');
+        });
+
+        it('marks only the memory caches as in memory, in the names and the full list', async () => {
+            const names = cacheAdminService.buildCatalog().caches;
+            expect(names.find((c) => c.prefix === 'stream_resolve_test')?.inMemory).toBe(true);
+            expect(names.find((c) => c.prefix === THUMBNAILS)?.inMemory).toBeUndefined();
+            const rows = await cacheAdminService.list();
+            expect(rows.filter((c) => c.inMemory).map((c) => c.prefix)).toContain('stream_resolve_test');
+            expect(rows.find((c) => c.prefix === THUMBNAILS)?.inMemory).toBeUndefined();
+        });
+
+        it('shows its lookups in the list and the live figures', async () => {
+            noteLookup('stream_resolve_test', true);
+            noteLookup('stream_resolve_test', false);
+            const row = (await cacheAdminService.list()).find((c) => c.prefix === 'stream_resolve_test')!;
+            expect(row.hits).toBeGreaterThanOrEqual(1);
+            expect(row.misses).toBeGreaterThanOrEqual(1);
+            expect(row.activity.lastMinute).toBeGreaterThanOrEqual(2);
+            expect(cacheAdminService.activity()['stream_resolve_test'].lastMinute).toBeGreaterThanOrEqual(2);
+        });
+
+        it('does not touch the database caches or thumbnails when one memory cache is cleared', async () => {
+            const clearType = jest.spyOn(DbCacheService, 'clearType').mockResolvedValue(true);
+            await cacheAdminService.clear('stream_resolve_test');
+            expect(clearType).not.toHaveBeenCalled();
+            expect(thumbs.clearAll).not.toHaveBeenCalled();
+        });
+
+        it('counts the memory caches in the number cleared by clear all', async () => {
+            jest.spyOn(DbCacheService, 'clearAllTypes').mockResolvedValue(11);
+            thumbs.clearAll.mockResolvedValue(0);
+            const memoryCount = memoryCaches().length;
+            expect(await cacheAdminService.clearAll()).toBe(11 + 1 + memoryCount);
+        });
+
+        it('clears one by name and with clear all, and refuses a lifetime change', async () => {
+            expect(await cacheAdminService.clear('stream_resolve_test')).toBe(true);
+            expect(cleared).toHaveBeenCalledTimes(1);
+            jest.spyOn(DbCacheService, 'clearAllTypes').mockResolvedValue(1);
+            thumbs.clearAll.mockResolvedValue(0);
+            await cacheAdminService.clearAll();
+            expect(cleared).toHaveBeenCalledTimes(2);
+            expect(await cacheAdminService.setTtl('stream_resolve_test', 600)).toBe(false);
+        });
     });
 
     it('hands a database cache lifetime to DbCacheService', async () => {

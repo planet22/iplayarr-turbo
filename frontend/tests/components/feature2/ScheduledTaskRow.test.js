@@ -50,6 +50,25 @@ describe('ScheduledTaskRow', () => {
         expect(bad.find('.pill.error').text()).toContain('Failed');
     });
 
+    it('shows how long the last run took, in ms, seconds, or minutes', () => {
+        const took = (lastDurationMs) => mountIt({ lastDurationMs }).wrapper.find('[title="How long the last run took"]');
+        expect(took(450).text()).toBe('Took 450 ms');
+        expect(took(3240).text()).toBe('Took 3.2 s');
+        expect(took(125000).text()).toBe('Took 2 min 5 s');
+        expect(took(0).text()).toBe('Took 0 ms');
+    });
+
+    it('hides the duration when unknown or while running', () => {
+        expect(mountIt().wrapper.text()).not.toContain('Took');
+        expect(mountIt({ lastDurationMs: null }).wrapper.text()).not.toContain('Took');
+        expect(mountIt({ lastDurationMs: 900, running: true }).wrapper.text()).not.toContain('Took');
+    });
+
+    it('draws a progress bar only while running', () => {
+        expect(mountIt().wrapper.find('.taskBar').exists()).toBe(false);
+        expect(mountIt({ running: true }).wrapper.find('.taskBar[role="progressbar"]').exists()).toBe(true);
+    });
+
     it('shows the next run only while not running', () => {
         const next = '2030-01-01T10:00:00Z';
         expect(mountIt({ nextRun: next }).wrapper.find('[title="Next scheduled run"]').exists()).toBe(true);

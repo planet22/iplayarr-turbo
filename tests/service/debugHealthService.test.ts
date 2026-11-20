@@ -4,7 +4,35 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { folderCheck } from '../../src/service/debugHealthService';
+import cacheAdminService from '../../src/service/cacheAdminService';
+import { cacheCheck, folderCheck } from '../../src/service/debugHealthService';
+
+describe('cacheCheck', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('is ok when every cache is in a group', () => {
+        expect(cacheCheck()).toMatchObject({ name: 'Caches', state: 'ok' });
+    });
+
+    it('warns, naming them, when a cache is in no group', () => {
+        jest.spyOn(cacheAdminService, 'buildCatalog').mockReturnValue({
+            caches: [{ prefix: 'brand_new', label: 'New', description: 'd', defaultTtl: 60, group: 'other', groupLabel: 'Other' }],
+            ungrouped: ['brand_new'],
+        });
+        const result = cacheCheck();
+        expect(result.state).toBe('warn');
+        expect(result.detail).toContain('brand_new');
+    });
+
+    it('fails when nothing is registered, or the list cannot be built', () => {
+        const build = jest.spyOn(cacheAdminService, 'buildCatalog').mockReturnValue({ caches: [], ungrouped: [] });
+        expect(cacheCheck().state).toBe('fail');
+        build.mockImplementation(() => {
+            throw new Error('boom');
+        });
+        expect(cacheCheck()).toMatchObject({ state: 'fail', detail: 'boom' });
+    });
+});
 
 // Edge cases are handled below rather than at the call site.
 // This part is exercised by the unit tests, so keep them green.
