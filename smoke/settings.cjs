@@ -60,6 +60,7 @@ const CHANGE = {
     LIVE_RADIO: ['true', 'false'],
     SOUNDS_ENABLED: ['true', 'false'],
     RADIO_MEDIA_MODE: ['strm', 'm4a'],
+    RADIO_FOLDER_STRUCTURE: ['series', 'show'],
     RADIO_THUMBNAIL_STYLE: ['square', 'blur'],
     RADIO_ATOZ: ['true', 'false'],
     RADIO_ATOZ_HIDE_EMPTY: ['true', 'false'],
@@ -124,6 +125,7 @@ const OTHER = {
     ARR_COMPLETE_DIR: 'directory test + SABnzbd get_config',
     TV_FILENAME_TEMPLATE: 'template test + release names',
     MOVIE_FILENAME_TEMPLATE: 'template test + release names',
+    RADIO_FILENAME_TEMPLATE: 'a template that only names the next radio download, which writes into the Radio Directory (this suite will not do that); the validator and radio download service tests cover it',
     GET_IPLAYER_EXEC: 'executable guard test',
     YTDLP_EXEC: 'executable guard test',
     ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: 'executable guard test',
@@ -141,6 +143,7 @@ const NO_EFFECT = {
     LIVE_RADIO: 'turns the live radio channels on or off; the radio checks in the other layers need them on (prepare.cjs does this), so no flip here',
     SOUNDS_ENABLED: 'turns the whole Radio feature on or off; every radio check in the other layers needs it on, so no flip here',
     RADIO_MEDIA_MODE: 'chooses what the next radio download saves (an audio file or a .strm link); a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
+    RADIO_FOLDER_STRUCTURE: 'chooses where the next radio download is saved; a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
     RADIO_ATOZ_HIDE_EMPTY: 'turning it on starts a request per show (thousands) once Radio A to Z is on; the radio A to Z checks use their own run, so no flip here',
     RADIO_ATOZ: 'turning it on starts a crawl of the whole BBC Sounds show list (about 120 requests); the radio A to Z checks use their own run, so no flip here',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
@@ -636,9 +639,6 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const recorded = (((await http(`/json-api/streams/trace/${s.id}`)).json || {}).requests || []).length;
             return { what: `a new stream records its requests only with Stream Trace on (${next})`, pass: next === 'true' ? recorded > 0 : recorded === 0, detail: `${recorded} request(s) recorded` };
         },
-        STREAM_SUBTITLES: async ({ next }) => {
-            const snap = await nativeSnapshot('Subtitles', next === 'true' ? 'On' : 'Off');
-            if (typeof snap === 'string') return snap;
         // Plays two segments the way Jellyfin does (Range: bytes=0- on each) and reads the trace: the second should be a read-ahead hit only with the setting on.
         STREAM_PREFETCH_OPEN_RANGE: async ({ next }) => {
             if (needSession()) return needSession();
@@ -667,6 +667,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             if (!found.endedAt) await http(`/json-api/streams/${found.id}/stop`, { method: 'POST' });
             return { what: `a Range: bytes=0- stream is read ahead only with Prefetch Open Ranges on (${next})`, pass: next === 'true' ? prefetched > 0 : prefetched === 0, detail: `${prefetched} read-ahead hit(s)` };
         },
+        STREAM_SUBTITLES: async ({ next }) => {
+            const snap = await nativeSnapshot('Subtitles', next === 'true' ? 'On' : 'Off');
+            if (typeof snap === 'string') return snap;
             const master = await http(`/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`, { timeout: 60000 });
             const has = /TYPE=SUBTITLES/.test(master.text);
             return { ...snap, pass: snap.pass && (next === 'true' ? true : !has), detail: `${snap.detail}; master ${has ? 'has' : 'has no'} subtitle rendition` };

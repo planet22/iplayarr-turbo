@@ -20,6 +20,9 @@ jest.mock('../../../src/facade/soundsFacade', () => ({
         checkResults: jest.fn(),
         missing: jest.fn(),
         unfollow: jest.fn(),
+        updateCover: jest.fn(),
+        detectedShows: jest.fn(),
+        detectTrace: jest.fn(),
     },
 }));
 jest.mock('../../../src/service/subscriptionService', () => ({
@@ -157,8 +160,36 @@ describe('the subscriptions API with ?mode=radio', () => {
         expect(res.body.message).toBe('down');
     });
 
+    it('lists radio shows found on disk, and says why with a term', async () => {
+        facade.detectedShows.mockResolvedValueOnce([{ title: 'The Archers', onDisk: 3, sources: [], showId: 'b006qpgr' }]);
+        expect((await request(app).get('/detected?mode=radio')).body).toEqual([{ title: 'The Archers', onDisk: 3, sources: [], showId: 'b006qpgr' }]);
+        facade.detectTrace.mockResolvedValueOnce({ term: 'arch', shows: [] });
+        expect((await request(app).get('/detected/trace?mode=radio&term=%20arch%20')).body).toEqual({ term: 'arch', shows: [] });
+        expect(facade.detectTrace).toHaveBeenCalledWith('arch');
+        expect((await request(app).get('/detected/trace?mode=radio')).status).toBe(400);
+    });
+
+    it('follows a found show from new episodes on, keeping only a BBC picture', async () => {
+        const post = (body: unknown) => request(app).post('/detected/import?mode=radio').send(body as object);
+        expect((await post({ showId: 'b006qpgr', title: 'The Archers', image: 'https://ichef.bbci.co.uk/a.jpg' })).body).toEqual({ status: true });
+        expect(facade.follow).toHaveBeenLastCalledWith('b006qpgr', 'The Archers', 'https://ichef.bbci.co.uk/a.jpg', 'new');
+        await post({ showId: 'b006qpgr', title: 'The Archers', image: 'https://evil.example/a.jpg' });
+        expect(facade.follow).toHaveBeenLastCalledWith('b006qpgr', 'The Archers', undefined, 'new');
+        expect((await post({ showId: 'not valid!', title: 'x' })).status).toBe(400);
+        expect((await post({ showId: 'b006qpgr', title: ' ' })).status).toBe(400);
+    });
+
+    it('saves a followed show\'s cover picture, in the shape of the video images answer', async () => {
+        facade.updateCover.mockResolvedValueOnce({ written: 1, shows: 1 });
+        const res = await request(app).post('/radio-b006qpgr/images?mode=radio');
+        expect(res.body).toEqual({ written: 1, shows: 1, episodes: 0 });
+        expect(facade.updateCover).toHaveBeenCalledWith('b006qpgr');
+        facade.updateCover.mockResolvedValueOnce(undefined);
+        expect((await request(app).post('/radio-b006qpgr/images?mode=radio')).status).toBe(404);
+        expect((await request(app).post('/radio-b%20x/images?mode=radio')).status).toBe(400);
+    });
+
     it('says what only video has is not available for radio, and does not fall through to the video routes', async () => {
-        expect((await request(app).post('/radio-b006qpgr/images?mode=radio')).status).toBe(400);
         expect((await request(app).put('/radio-b006qpgr/versions?mode=radio').send({ versions: [] })).status).toBe(400);
         expect((await request(app).get('/nowhere/at/all?mode=radio')).status).toBe(404);
     });

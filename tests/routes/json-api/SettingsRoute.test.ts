@@ -35,6 +35,7 @@ const mockedVideoEventService = jest.mocked(videoEventService);
 const mockedConfigFormValidator: jest.Mocked<ConfigFormValidator> = {
     validate: jest.fn(),
     compilesSuccessfully: jest.fn(),
+    radioTemplateProblem: jest.fn(),
     directoryExists: jest.fn(),
     isNumber: jest.fn(),
     matchesRegex: jest.fn(),

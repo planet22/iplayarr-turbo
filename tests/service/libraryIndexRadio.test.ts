@@ -87,6 +87,27 @@ describe('libraryIndexService radio', () => {
         expect(await libraryIndexService.links('radio')).toEqual([{ id: 'p0aaaaaa', file: expect.stringContaining('a.strm'), show: 'the archers' }]);
     });
 
+    it('lists each radio show on disk by its folder name, with its episodes counted once and what each source holds', async () => {
+        put('The Archers', 'The Archers - 2026-11-01 - a.strm', link('p0aaaaaa'));
+        put('The Archers', 'The Archers - 2026-11-01 - a.m4a');
+        put('The Archers', 'The Archers - 2026-11-02 - b.m4a');
+        put('Desert Island Discs', 'Desert Island Discs - 2026-11-03 - c.m4a');
+        tagged({ 'The Archers - 2026-11-01 - a.m4a': 'p0aaaaaa' });
+        await libraryIndexService.scanFolders('radio');
+
+        const shows = await libraryIndexService.radioShows();
+        expect(shows.map(({ title, onDisk }) => ({ title, onDisk }))).toEqual([
+            { title: 'Desert Island Discs', onDisk: 1 },
+            { title: 'The Archers', onDisk: 2 },
+        ]);
+        expect(shows[1]).toMatchObject({ key: 'the archers', sources: [{ id: 'sounds-folders', type: 'FOLDER', count: 2 }] });
+        expect((await libraryIndexService.radioShows()).every(({ sources }) => sources.every(({ count }) => count > 0))).toBe(true);
+    });
+
+    it('lists no radio shows when there is no radio folder', async () => {
+        expect(await libraryIndexService.radioShows()).toEqual([]);
+    });
+
     it('does not read an unchanged audio file again, and reads one show again on request', async () => {
         put('The Archers', 'The Archers - 2026-11-01 - a.m4a');
         tagged({ 'The Archers - 2026-11-01 - a.m4a': 'p0aaaaaa' });

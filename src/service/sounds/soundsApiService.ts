@@ -109,6 +109,13 @@ class SoundsApiService {
         return data;
     }
 
+    // Whether BBC Sounds answers right now: one small uncached request, and how long it took in ms (for the health check).
+    async ping(): Promise<number> {
+        const began = Date.now();
+        await this.#get('experience/inline/search?q=radio');
+        return Date.now() - began;
+    }
+
     search(query: string): Promise<SoundsSearchResult> {
         const term = query.trim().slice(0, 100);
         if (!term) return Promise.resolve({ shows: [], episodes: [] });

@@ -15,7 +15,7 @@ jest.mock('../../../src/facade/soundsFacade', () => ({
 }));
 jest.mock('../../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
-    default: { programme: jest.fn() },
+    default: { programme: jest.fn(), collectionsForSearch: jest.fn().mockResolvedValue([]) },
     suggestions: jest.requireActual('../../../src/service/sounds/soundsBrowseAdapter').suggestions,
 }));
 jest.mock('../../../src/service/browseService', () => ({
@@ -141,10 +141,10 @@ describe('the browse API with ?mode=radio', () => {
         expect(facade.podcasts).toHaveBeenCalledWith(2, 50);
     });
 
-    it('lists no collections, and fetches none, when Show Collections is off', async () => {
+    it('lists collections even when Show Collections (the video setting) is off', async () => {
         const setting = jest.spyOn(configService, 'getParameter').mockResolvedValue('false');
-        expect((await request(app).get('/collections?mode=radio')).body).toEqual({ enabled: false, collections: [] });
-        expect(facade.collections).not.toHaveBeenCalled();
+        facade.collections.mockResolvedValue({ enabled: true, collections: [{ id: 'c1' }] });
+        expect((await request(app).get('/collections?mode=radio')).body).toEqual({ enabled: true, collections: [{ id: 'c1' }] });
         setting.mockRestore();
     });
 
@@ -156,10 +156,24 @@ describe('the browse API with ?mode=radio', () => {
     });
 
     it('answers suggestions as type-ahead rows', async () => {
+        (adapter as unknown as { collectionsForSearch: jest.Mock }).collectionsForSearch.mockResolvedValue([]);
         facade.search.mockResolvedValue({ shows: [{ id: 'b006qpgr', title: 'The Archers' }], episodes: [] });
         expect((await request(app).get('/suggest?mode=radio&q=archers')).body).toEqual([{ kind: 'radio', pid: 'b006qpgr', title: 'The Archers' }]);
         expect(facade.search).toHaveBeenCalledWith('archers');
         expect(video.suggest).not.toHaveBeenCalled();
+    });
+
+    it('lists matching collections first in the type-ahead, and still answers when that lookup fails', async () => {
+        const collectionsForSearch = (adapter as unknown as { collectionsForSearch: jest.Mock }).collectionsForSearch;
+        facade.search.mockResolvedValue({ shows: [{ id: 'b1', title: 'Football Show' }], episodes: [] });
+        collectionsForSearch.mockResolvedValueOnce([{ id: 'c1', title: 'Football Legends', thumbnail: 't' }]);
+        expect((await request(app).get('/suggest?mode=radio&q=football')).body).toEqual([
+            { kind: 'collection', id: 'c1', title: 'Football Legends', count: 0, thumbnail: 't' },
+            { kind: 'radio', pid: 'b1', title: 'Football Show' },
+        ]);
+        expect(collectionsForSearch).toHaveBeenCalledWith('football', 3);
+        collectionsForSearch.mockRejectedValueOnce(new Error('down'));
+        expect((await request(app).get('/suggest?mode=radio&q=football')).body).toEqual([{ kind: 'radio', pid: 'b1', title: 'Football Show' }]);
     });
 
     it('answers a show as a programme, a page at a time, and what is on disk', async () => {

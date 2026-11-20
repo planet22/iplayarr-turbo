@@ -254,6 +254,9 @@ async function radioChecks(A, cfg) {
     const cat = (cats.json || []).find((c) => c.id === 'comedy') || (cats.json || [])[0];
     if (cat) {
         const page = await check(A, 'radio category is a video-shaped page of radio cards', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.pid && e.title && e.radio === true && e.kind === 'episode') && r.json.total >= r.json.items.length && r.json.total <= 300) || 'expected radio cards, total at most 300', upstream);
+        await check(A, 'radio category episodes carry when they leave BBC Sounds (for the expiry badge)', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json?.items || []).some((e) => !Number.isNaN(Date.parse(e.availableUntil))) || 'no episode has an availableUntil date', upstream);
+        await check(A, 'radio search opens a show from its pasted bbc.co.uk link', `/json-api/search?${M}&q=${encodeURIComponent('https://www.bbc.co.uk/sounds/brand/b006qpgr')}`, (r) => (Array.isArray(r.json) && r.json.length === 1 && r.json[0].kind === 'brand' && r.json[0].pid === 'b006qpgr') || 'expected the one show', upstream);
+        await check(A, 'debug health has the radio folder and BBC Sounds checks while BBC Sounds is on', '/json-api/debug/health', (r) => (['Radio folder', 'BBC Sounds'].every((name) => (r.json?.checks || []).some((c) => c.name === name)) || 'a radio check is missing'), upstream);
         const card = page.json?.items?.[0];
         const ep = card && { id: card.pid, showId: card.showId };
         if (ep?.showId) {
@@ -338,7 +341,13 @@ async function radioChecks(A, cfg) {
     await check(A, 'radio subscription check of an unknown show is 404', `/json-api/subscriptions/radio-b0000000/check?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
     await check(A, 'radio subscription missing list of an unknown show is 404', `/json-api/subscriptions/b0000000/missing?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
     await check(A, 'radio subscription refuses an odd id', `/json-api/subscriptions/b-0/missing?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
-    await check(A, 'radio subscription pictures and versions are video-only (400)', `/json-api/subscriptions/radio-b0000000/images?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio subscription cover picture of a show that is not followed is 404', `/json-api/subscriptions/radio-b0000000/images?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio subscription cover picture refuses an odd id', `/json-api/subscriptions/b-0/images?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio shows found on disk are listed with their BBC Sounds match', `/json-api/subscriptions/detected?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.title && typeof x.onDisk === 'number' && Array.isArray(x.sources) && (x.showId ? /^[a-z0-9]{6,}$/i.test(x.showId) : !!x.reason))) || 'expected rows with a title, onDisk, sources and a showId or a reason', { ...upstream, timeout: 120000 });
+    await check(A, 'radio found-on-disk trace needs a term', `/json-api/subscriptions/detected/trace?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio found-on-disk trace of a name nothing on disk has is empty', `/json-api/subscriptions/detected/trace?${M}&term=zzqxjvw`, (r) => (r.status === 200 && r.json?.term === 'zzqxjvw' && Array.isArray(r.json.shows) && r.json.shows.length === 0) || `HTTP ${r.status}`);
+    await check(A, 'radio found-on-disk import refuses an odd show id', `/json-api/subscriptions/detected/import?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { showId: 'a b', title: 'x' } });
+    await check(A, 'radio found-on-disk import needs a title', `/json-api/subscriptions/detected/import?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { showId: 'b006qpgr', title: ' ' } });
     await check(A, 'radio subscription versions are video-only (400)', `/json-api/subscriptions/radio-b0000000/versions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'PUT', body: { versions: [] } });
     await check(A, 'radio subscribe validates its pid and title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: '!!' } });
     await check(A, 'radio subscribe needs a title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: 'b006qpgr' } });

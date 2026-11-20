@@ -12,6 +12,7 @@ import appService from './appService';
 import cacheAdminService from './cacheAdminService';
 import configService from './configService';
 import { getDnsRelayStatus } from './dnsRelayService';
+import soundsApiService from './sounds/soundsApiService';
 import versionService from './versionService';
 
 export type HealthState = 'ok' | 'warn' | 'fail';
@@ -155,6 +156,17 @@ class DebugHealthService {
         }
 
         checks.push(folderCheck('Download folder', downloadDir), folderCheck('Complete folder', completeDir));
+
+        // Radio, only while BBC Sounds is on: its folder, and whether BBC Sounds answers.
+        if ((await get(IplayarrParameter.SOUNDS_ENABLED)) === 'true') {
+            checks.push(folderCheck('Radio folder', await get(IplayarrParameter.SOUNDS_DIR)));
+            try {
+                const ms = await withTimeout(soundsApiService.ping(), CHECK_TIMEOUT_MS, 'BBC Sounds');
+                checks.push({ name: 'BBC Sounds', state: 'ok', detail: `Answered in ${ms} ms` });
+            } catch (error: any) {
+                checks.push({ name: 'BBC Sounds', state: 'fail', detail: error?.message ?? 'Did not answer' });
+            }
+        }
 
         try {
             const size = fs.statSync(databaseFile()).size;

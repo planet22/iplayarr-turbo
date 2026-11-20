@@ -37,6 +37,7 @@ export interface SoundsBrowseItem {
     // The series number (when the titles give one) and an estimated recording size in MB.
     series?: number;
     sizeMb?: number;
+    availableUntil?: string;
 }
 
 export interface SoundsBrowsePage {
@@ -70,6 +71,8 @@ export function episodeItem(e: SoundsEpisode): SoundsBrowseItem {
         mp3: e.mp3,
         series: e.seriesNumber,
         sizeMb: e.sizeMb,
+        // When it leaves BBC Sounds; the expiry badge reads it, as it does for video.
+        availableUntil: e.availableUntil,
     };
 }
 
@@ -112,6 +115,7 @@ export function programmeEpisode(e: SoundsEpisode) {
         showTitle: e.showTitle,
         mp3: e.mp3,
         size: e.sizeMb,
+        availableUntil: e.availableUntil,
     };
 }
 
@@ -135,7 +139,7 @@ export function searchResults({ shows = [], episodes = [] }: { shows?: SoundsSho
             const label = episodeSubtitle(e);
             return {
                 pid: e.id, radio: true, kind: 'episode', type: 'RADIO', title: e.showTitle ?? e.title, subtitle: label, episodeTitle: e.episodeTitle ?? label, synopsis: e.synopsis, thumbnail: e.image,
-                channel: e.network, pubDate: e.released, showId: e.showId, showTitle: e.showTitle, mp3: e.mp3, series: e.seriesNumber, size: e.sizeMb, runtimeSeconds: e.duration, nzbName: '',
+                channel: e.network, pubDate: e.released, showId: e.showId, showTitle: e.showTitle, mp3: e.mp3, series: e.seriesNumber, size: e.sizeMb, runtimeSeconds: e.duration, availableUntil: e.availableUntil, nzbName: '',
             };
         }),
     ];
@@ -233,15 +237,11 @@ class SoundsBrowseAdapter {
         return { enabled: true as const, collections: list.map((c) => ({ id: c.id, title: c.title, synopsis: c.synopsis, thumbnail: c.image })) };
     }
 
-    // The collections to offer as tiles beside a radio search for the term: none unless Show Collections and the radio by-name
-    // option are both on (the tile opens the Collections page), or the term has no usable words. Uses the cached tiles when
-    // there are any, else the quick names list.
+    // The collections to offer as tiles beside a radio search for the term: none unless the radio by-name option is on, or the
+    // term has no usable words. Uses the cached tiles when there are any, else the quick names list.
     async collectionsForSearch(term: string, limit: number): Promise<{ id: string; title: string; synopsis?: string; thumbnail?: string; count?: number }[]> {
-        const [show, names] = await Promise.all([
-            configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS),
-            configService.getParameter(IplayarrParameter.RADIO_SEARCH_COLLECTION_NAMES),
-        ]);
-        if (show !== 'true' || names !== 'true' || !queryTerms(term).length) return [];
+        const names = await configService.getParameter(IplayarrParameter.RADIO_SEARCH_COLLECTION_NAMES);
+        if (names !== 'true' || !queryTerms(term).length) return [];
         const { collections } = await this.collectionsBasic();
         return collections.filter(({ title }) => titleMatchesAllTerms(title, term)).slice(0, limit);
     }

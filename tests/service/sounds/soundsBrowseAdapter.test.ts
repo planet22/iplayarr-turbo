@@ -75,10 +75,9 @@ describe('soundsBrowseAdapter', () => {
             expect(api.collections).not.toHaveBeenCalled();
         });
 
-        it('finds nothing and reads nothing while Show Collections is off', async () => {
+        it('does not depend on Show Collections, which is the video setting', async () => {
             await gates('false', 'true');
-            expect(await adapter.collectionsForSearch('football', 6)).toEqual([]);
-            expect(api.collections).not.toHaveBeenCalled();
+            expect((await adapter.collectionsForSearch('football', 6)).map(({ id }) => id)).toEqual(['c2', 'c3']);
         });
 
         it('finds nothing for a term with no usable words', async () => {

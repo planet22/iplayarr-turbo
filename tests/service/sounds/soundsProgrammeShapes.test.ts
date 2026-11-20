@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import soundsApiService from '../../../src/service/sounds/soundsApiService';
-import soundsBrowseAdapter, { programmeEpisode, programmeSeasons, searchResults, suggestions } from '../../../src/service/sounds/soundsBrowseAdapter';
+import soundsBrowseAdapter, { episodeItem, programmeEpisode, programmeSeasons, searchResults, suggestions } from '../../../src/service/sounds/soundsBrowseAdapter';
 import { SoundsEpisode } from '../../../src/types/Sounds';
 
 jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, default: { show: jest.fn(), episodes: jest.fn() } }));
@@ -23,6 +23,13 @@ describe('programmeEpisode', () => {
             pid: 'p1', radio: true, kind: 'episode', title: 'The Infinite Monkey Cage', subtitle: 'Series 35', episodeTitle: 'Black holes', series: 35, description: 'S',
             thumbnail: 'https://ichef.bbci.co.uk/x.jpg', firstBroadcast: '2026-11-01', runtime: 30, runtimeSeconds: 1800, mp3: true, size: 27.5, showId: 'b1',
         });
+    });
+
+    it('carries when the episode leaves BBC Sounds, so the expiry badge can show it', () => {
+        const until = '2026-12-01T00:00:00Z';
+        expect(programmeEpisode(ep('p5', { availableUntil: until }))).toMatchObject({ availableUntil: until });
+        expect(searchResults({ episodes: [ep('p6', { availableUntil: until })] })[0]).toMatchObject({ availableUntil: until });
+        expect(episodeItem(ep('p7', { availableUntil: until }))).toMatchObject({ availableUntil: until });
     });
 
     it('falls back to the date or name label for the episode title, and copes with no length', () => {

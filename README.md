@@ -66,6 +66,12 @@ See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-
 - Customisable channels: arrange, hide, rename, recolour, and add your own or optional Red Button, nations and UHD feeds
 - Works with Jellyfin, Plex and Emby
 
+**Radio (BBC Sounds, optional)**
+
+- A Video | Radio switch: the same Discover, Search, Categories, Collections, Channels, Guide and programme pages for BBC radio, including optional Podcasts and A to Z
+- Download an episode as a tagged audio file for a Jellyfin music library, or save a `.strm` link; follow a show to get new episodes, optionally saved before they leave Sounds
+- Live radio stations in the player and in Jellyfin's Live TV, radio links in the STRM Watchdog and library index, and radio rows in Queue, Subscriptions, Events and Statistics
+
 **Keeping things healthy**
 
 - Subscriptions that check hourly (or on demand) and queue new episodes, de-duplicated against the queue and history
@@ -93,6 +99,7 @@ This README covers the basics. For more detail, see `docs/`:
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
 - [BROWSE.md](docs/BROWSE.md) — Discover, Channels (arrange, optional channels), Categories, A to Z, type-ahead search
 - [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
+- [SOUNDS.md](docs/SOUNDS.md) — BBC radio: browsing, downloads, following shows, live radio
 - [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
 - [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI, quick find (Ctrl+K)
 - [THEMING.md](docs/THEMING.md) — colour schemes and light/dark mode

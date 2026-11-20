@@ -130,11 +130,12 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
         .catch(() => undefined);
 };
 
-// A BBC Sounds search (`?mode=radio`), noted in the search history like a video one. Radio has no search trace.
+// A BBC Sounds search (`?mode=radio`), noted in the search history like a video one, with a trace of the hits the radio search
+// settings dropped (and why) for the results popup. The trace is returned too, so the stream can explain an empty answer.
 const radioSearch = async (q: string) => {
     const { result, trace } = await withSearchTrace(async () => searchResults(await soundsFacade.search(q)));
     recordManualSearch(q, result as unknown as IPlayerSearchResult[], trace, 'radio');
-    return result;
+    return { result, trace };
 };
 const radioDisabled = (res: Response) =>
     res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'BBC Sounds is not enabled' } as ApiResponse);
@@ -148,7 +149,7 @@ router.get('/search', async (req: Request, res: Response) => {
     if (req.query.mode === 'radio') {
         if (!(await soundsFacade.isEnabled())) return void radioDisabled(res);
         try {
-            res.json(await radioSearch(q ?? ''));
+            res.json((await radioSearch(q ?? '')).result);
         } catch (error: any) {
             const { status, body } = failureResponse(error, 'BBC Sounds is not answering');
             res.status(status).json(body);
@@ -196,10 +197,14 @@ router.get('/search/stream', async (req: Request, res: Response) => {
         try {
             // Collections whose title matches go out first, as in the video search; a failure here only means no tiles.
             const tiles = soundsBrowseAdapter.collectionsForSearch(q, SEARCH_COLLECTION_LIMIT).catch(() => []);
-            const results = await radioSearch(q);
+            const { result: results, trace } = await radioSearch(q);
             const collections = await tiles;
             if (collections.length) res.write(`${JSON.stringify({ collections })}\n`);
-            res.write(`${JSON.stringify(results)}\n{"done":true}\n`);
+            res.write(`${JSON.stringify(results)}\n`);
+            // Nothing survived but BBC did answer: say how many hits the radio search settings dropped, as the video search does.
+            const dropped = trace.candidates.filter(({ reason }) => reason === 'missing-word').length;
+            if (!results.length && dropped) res.write(`${JSON.stringify({ note: { dropped, capped: false } })}\n`);
+            res.write('{"done":true}\n');
         } catch (error: any) {
             res.write(`${JSON.stringify({ error: failureResponse(error, 'BBC Sounds is not answering').body.message })}\n`);
         }

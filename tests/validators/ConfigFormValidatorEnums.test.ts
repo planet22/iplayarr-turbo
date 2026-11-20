@@ -49,6 +49,7 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         ['STRM_WATCHDOG_ACTION', ['notify', 'delete']],
         ['STRM_WATCHDOG_ARR_ACTION', ['none', 'unmonitor', 'search']],
         ['RADIO_MEDIA_MODE', ['m4a', 'strm']],
+        ['RADIO_FOLDER_STRUCTURE', ['show', 'series']],
         ['RADIO_THUMBNAIL_STYLE', ['blur', 'square']],
         ['RADIO_SEARCH_MATCH_ALL_WORDS', ['inherit', 'true', 'false']],
         ['RADIO_SEARCH_SCOPE', ['both', 'shows', 'episodes']],
@@ -60,6 +61,16 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'strm', STREAM_BASE_URL: 'http://host:4404' })).STREAM_BASE_URL).toBeUndefined();
         expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'false', RADIO_MEDIA_MODE: 'strm' })).STREAM_BASE_URL).toBeUndefined();
         expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'm4a' })).STREAM_BASE_URL).toBeUndefined();
+    });
+
+    it('accepts a radio filename template that uses radio\'s variables, and refuses one that does not', async () => {
+        const check = async (template: string) => (await validator.validate({ ...validInput(), MEDIA_MODE: 'download', RADIO_FILENAME_TEMPLATE: template })).RADIO_FILENAME_TEMPLATE;
+        expect(await check('')).toBeUndefined();
+        expect(await check('{{show}} - {{date}} - {{title}}')).toBeUndefined();
+        expect(await check('{{show}} S{{series}} {{#if network}}[{{network}}]{{/if}} {{pid}}')).toBeUndefined();
+        expect(await check('{{season}}')).toContain('Template does not compile');
+        expect(await check('{{show')).toContain('Template does not compile');
+        expect(await check('{{#if date}} - {{/if}}')).toContain('empty name');
     });
 
     it.each(accepted)('%s accepts every value the UI offers, and a blank (the default)', async (key, values) => {

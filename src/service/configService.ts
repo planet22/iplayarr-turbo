@@ -122,6 +122,8 @@ const configService = {
         LIVE_RADIO: 'true',
         SOUNDS_ENABLED: 'true',
         RADIO_MEDIA_MODE: 'm4a',
+        RADIO_FILENAME_TEMPLATE: '{{show}} - {{date}} - {{title}}',
+        RADIO_FOLDER_STRUCTURE: 'show',
         RADIO_ACTIVE_LIMIT: '2',
         RADIO_THUMBNAIL_STYLE: 'blur',
         RADIO_ATOZ: 'false',
@@ -151,7 +153,8 @@ const configService = {
         LIVE_TV_GUIDE_FLAGS: 'true',
         LIVE_TV_GUIDE_HD: 'true',
         STRM_WATCHDOG_ENABLED: 'true',
-        STRM_WATCHDOG_SOURCES: 'history',
+        // Radio links are checked too (they only exist while BBC Sounds is on), as video's are.
+        STRM_WATCHDOG_SOURCES: 'history,radio',
         STRM_WATCHDOG_ACTION: 'notify',
         STRM_WATCHDOG_ARR_ACTION: 'none',
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',

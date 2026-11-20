@@ -140,6 +140,19 @@ export function buildShowNfo(title: string): string {
     return xml;
 }
 
+// A radio show's album.nfo, which Jellyfin and Kodi read for a folder in a music library (a radio show is one album).
+export function buildAlbumNfo(title: string, description?: string): string {
+    let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    xml += '<album>\n';
+    xml += `  <title>${escapeXml(title)}</title>\n`;
+    xml += `  <artist>${escapeXml(title)}</artist>\n`;
+    if (description) xml += `  <review>${escapeXml(description)}</review>\n`;
+    xml += '  <genre>Radio</genre>\n';
+    xml += '  <label>BBC</label>\n';
+    xml += '</album>\n';
+    return xml;
+}
+
 // A live channel's .strm entry. lockdata stops Jellyfin's metadata refresh from overwriting the
 // title/plot with a provider match (there is none for a live channel) or discarding the poster.
 export function buildLiveChannelNfo(title: string): string {

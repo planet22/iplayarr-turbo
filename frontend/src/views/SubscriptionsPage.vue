@@ -77,7 +77,7 @@
                     <div v-if="progress[subscription.id]" class="cardLine">{{ progressLabel(progress[subscription.id]) }}</div>
                 </div>
                 <div v-if="subscription.radio" class="rowActions">
-                    <!-- Radio has no Sonarr/Radarr, versions or images: gaps keep the icons lined up with the other cards. -->
+                    <!-- Radio has no Sonarr/Radarr or versions (its picture button saves the show's cover): gaps keep the icons lined up with the other cards. -->
                     <span v-for="n in subscriptionVersions.length + 1" :key="n" class="actionGap" aria-hidden="true"></span>
                     <button
                         :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
@@ -86,7 +86,9 @@
                     >
                         <font-awesome-icon :icon="['fas', 'box-archive']" />
                     </button>
-                    <span class="actionGap" aria-hidden="true"></span>
+                    <button class="clickable" title="Update cover picture" aria-label="Update cover picture" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
+                        <font-awesome-icon :icon="['fas', 'images']" :beat-fade="imaging[subscription.id]" />
+                    </button>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -201,7 +203,9 @@
                     >
                         <font-awesome-icon :icon="['fas', 'box-archive']" />
                     </button>
-                    <span class="actionGap" aria-hidden="true"></span>
+                    <button class="clickable" title="Update cover picture" aria-label="Update cover picture" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
+                        <font-awesome-icon :icon="['fas', 'images']" :beat-fade="imaging[subscription.id]" />
+                    </button>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -314,6 +318,42 @@
                 </div>
             </div>
         </template>
+
+        <template v-if="radioFound.length">
+            <PageHeader class="liveLegend" title="Radio shows found on disk" />
+            <div class="detectedIntro">
+                <span>Radio shows in your Radio Directory or a Jellyfin music library that are not subscribed. Import follows new episodes only.</span>
+                <span class="detectedActions">
+                    <button class="clickable importAll" :disabled="importing" @click="importAllRadio">Import all</button>
+                </span>
+            </div>
+            <div class="subscriptionList">
+                <div v-for="show in radioFound" :key="show.showId" class="subscriptionRow radioFoundRow">
+                    <RouterLink
+                        :to="`/browse/radio/${show.showId}`" :class="['thumbLink', show.image ? 'radioArtBox' : '']"
+                        :style="show.image ? { '--art': `url(${getThumbnailUrl(show.image, true)})` } : {}"
+                    >
+                        <img v-if="show.image" :src="getThumbnailUrl(show.image, true)" :alt="show.title" loading="lazy" @error="hideBrokenImage" />
+                        <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'radio']" /></div>
+                    </RouterLink>
+                    <div class="info">
+                        <RouterLink :to="`/browse/radio/${show.showId}`" class="title">
+                            <font-awesome-icon :icon="['fas', 'radio']" class="radioTitleIcon" title="Radio" />{{ show.title }}
+                        </RouterLink>
+                        <div class="details">
+                            <ChannelPill v-if="show.network" :channel="show.network" />
+                            <span>{{ show.onDisk }} {{ show.onDisk === 1 ? 'episode' : 'episodes' }} on disk</span>
+                        </div>
+                        <SourceCounts v-if="show.sources?.length" :sources="show.sources" />
+                    </div>
+                    <div class="rowActions">
+                        <button class="clickable" title="Import" aria-label="Import" :disabled="importing" @click="importRadioShow(show)">
+                            <font-awesome-icon :icon="['fas', 'right-left']" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
     </div>
 </template>
 
@@ -406,11 +446,15 @@ try {
 } catch {
     // Not remembered.
 }
-const filterOptions = computed(() => ['All', 'iPlayarr', ...arrApps.value.map(({ name }) => name)]);
+// Video and Radio only appear once there is a radio subscription, so a video-only list looks as it always did.
+const hasRadio = computed(() => items.value.some(({ radio }) => radio));
+const filterOptions = computed(() => ['All', ...(hasRadio.value ? ['Video', 'Radio'] : []), 'iPlayarr', ...arrApps.value.map(({ name }) => name)]);
 const activeFilter = computed(() => (filterOptions.value.includes(filterChoice.value) ? filterChoice.value : 'All'));
 const toolbarIcons = computed(() => [...(items.value.length > 1 ? ['filter'] : []), 'refresh']);
 const filteredSubscriptions = computed(() => {
     if (activeFilter.value === 'All') return items.value;
+    if (activeFilter.value === 'Radio') return items.value.filter(({ radio }) => radio);
+    if (activeFilter.value === 'Video') return items.value.filter(({ radio }) => !radio);
     if (activeFilter.value === 'iPlayarr') return items.value.filter(({ arrOnly }) => !arrOnly);
     const app = arrApps.value.find(({ name }) => name === activeFilter.value);
     return items.value.filter(({ arr }) => arr?.appId === app?.id);
@@ -574,9 +618,55 @@ const importAll = async () => {
     }
 };
 
+// Radio shows on disk that are not followed, the ones BBC Sounds matched by name (the rest are for the debug trace). Importing follows
+// from new episodes on.
+const radioFound = ref([]);
+const loadRadioFound = async () => {
+    if (!showRadio.value) {
+        radioFound.value = [];
+        return;
+    }
+    try {
+        const { ok, data } = await ipFetch('json-api/subscriptions/detected?mode=radio');
+        if (ok && Array.isArray(data)) radioFound.value = data.filter((show) => show.showId);
+    } catch {
+        // The list just stays as it was.
+    }
+};
+
+const importRadio = async (show) => {
+    const { ok, data } = await ipFetch('json-api/subscriptions/detected/import?mode=radio', 'POST', { showId: show.showId, title: show.title, image: show.image });
+    if (!ok) {
+        toastService.error(`Couldn't import ${show.title}`, { detail: data?.message || 'Something went wrong' });
+        return false;
+    }
+    radioFound.value = radioFound.value.filter((s) => s !== show);
+    return true;
+};
+
+const importRadioShow = async (show) => {
+    importing.value = true;
+    try {
+        if (await importRadio(show)) await radioSubs.load();
+    } finally {
+        importing.value = false;
+    }
+};
+
+const importAllRadio = async () => {
+    importing.value = true;
+    try {
+        for (const show of [...radioFound.value]) await importRadio(show);
+        await radioSubs.load();
+    } finally {
+        importing.value = false;
+    }
+};
+
 onMounted(() => {
     loadApps();
     loadFound();
+    loadRadioFound();
     load();
     radioSubs.load();
     loadAppNames();
@@ -584,6 +674,7 @@ onMounted(() => {
 });
 watch(() => socket?.value, bindSocket);
 watch(showRadio, radioSubs.load);
+watch(showRadio, loadRadioFound);
 onBeforeUnmount(() => {
     boundSocket?.off('subscriptionProgress', onProgress);
     Object.values(clearTimers).forEach(clearTimeout);
@@ -663,7 +754,7 @@ const updateImages = async (subscription) => {
     busy[subscription.id] = true;
     imaging[subscription.id] = true;
     try {
-        const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}/images`, 'POST');
+        const { ok, data } = await ipFetch(`json-api/subscriptions/${encodeURIComponent(subscription.id)}/images${subscription.radio ? '?mode=radio' : ''}`, 'POST');
         if (!ok) {
             toastService.error(`Couldn't update images for ${subscription.title}`, { detail: data?.message || 'Something went wrong' });
         } else if (!data.shows && !data.episodes && !data.written) {
@@ -671,7 +762,7 @@ const updateImages = async (subscription) => {
         } else if (!data.written) {
             toastService.info(`Images for ${subscription.title} are up to date`);
         } else {
-            toastService.success(`Saved ${data.written} image(s) for ${subscription.title}`, { detail: `${data.episodes} episode picture(s)` });
+            toastService.success(`Saved ${data.written} image(s) for ${subscription.title}`, data.episodes ? { detail: `${data.episodes} episode picture(s)` } : undefined);
         }
     } finally {
         busy[subscription.id] = false;

@@ -3,7 +3,7 @@
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../src/types/QueueEntry';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
-import { buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo, parseNfoPid } from '../../src/utils/nfoBuilder';
+import { buildAlbumNfo, buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo, parseNfoPid } from '../../src/utils/nfoBuilder';
 
 // Nothing here talks to the network directly.
 // Keep this in step with the matching type definitions.
@@ -118,6 +118,21 @@ describe('nfoBuilder', () => {
             const xml = buildShowNfo('Show & Co');
             expect(xml).toContain('<tvshow>');
             expect(xml).toContain('<title>Show &amp; Co</title>');
+        });
+    });
+
+    describe('buildAlbumNfo', () => {
+        it('builds an album NFO for a radio show, with the escaped name as title and artist', () => {
+            const xml = buildAlbumNfo('Desert Island Discs & Co');
+            expect(xml).toContain('<album>');
+            expect(xml).toContain('<title>Desert Island Discs &amp; Co</title>');
+            expect(xml).toContain('<artist>Desert Island Discs &amp; Co</artist>');
+            expect(xml).toContain('<genre>Radio</genre>');
+            expect(xml).not.toContain('<review>');
+        });
+
+        it('adds a review when a description is given', () => {
+            expect(buildAlbumNfo('Show', 'Castaways <choose> eight records')).toContain('<review>Castaways &lt;choose&gt; eight records</review>');
         });
     });
 

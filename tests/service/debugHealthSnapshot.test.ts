@@ -6,6 +6,7 @@ import appService from '../../src/service/appService';
 import cacheAdminService from '../../src/service/cacheAdminService';
 import configService from '../../src/service/configService';
 import debugHealthService from '../../src/service/debugHealthService';
+import soundsApiService from '../../src/service/sounds/soundsApiService';
 import versionService from '../../src/service/versionService';
 
 jest.mock('child_process', () => ({
@@ -55,6 +56,32 @@ describe('debugHealthService.snapshot', () => {
         expect(checks.find((c) => c.name === 'Caches')).toMatchObject({ state: 'warn', detail: expect.stringContaining('brand_new') });
         expect(checks.find((c) => c.name === 'ffmpeg')?.state).toBe('fail');
         expect(checks.some((c) => c.name === 'DNS relay')).toBe(true);
+    });
+
+    describe('radio checks', () => {
+        const withSounds = (values: Record<string, string>) => jest.mocked(configService.getParameter).mockImplementation((async (key: string) => values[key]) as never);
+
+        it('has none while BBC Sounds is off', async () => {
+            const { checks } = await debugHealthService.snapshot();
+            expect(checks.map((c) => c.name)).not.toEqual(expect.arrayContaining(['Radio folder']));
+            expect(checks.some((c) => c.name === 'BBC Sounds')).toBe(false);
+        });
+
+        it('checks the radio folder and whether BBC Sounds answers', async () => {
+            withSounds({ SOUNDS_ENABLED: 'true' });
+            jest.spyOn(soundsApiService, 'ping').mockResolvedValue(120);
+            const { checks } = await debugHealthService.snapshot();
+            expect(checks.find((c) => c.name === 'Radio folder')).toMatchObject({ state: 'warn', detail: 'Not set' });
+            expect(checks.find((c) => c.name === 'BBC Sounds')).toEqual({ name: 'BBC Sounds', state: 'ok', detail: 'Answered in 120 ms' });
+        });
+
+        it('fails the BBC Sounds check, not the report, when it does not answer', async () => {
+            withSounds({ SOUNDS_ENABLED: 'true' });
+            jest.spyOn(soundsApiService, 'ping').mockRejectedValue(new Error('timeout of 15000ms exceeded'));
+            const { checks } = await debugHealthService.snapshot();
+            expect(checks.find((c) => c.name === 'BBC Sounds')).toMatchObject({ state: 'fail', detail: 'timeout of 15000ms exceeded' });
+            expect(checks.some((c) => c.name === 'DNS relay')).toBe(true);
+        });
     });
 
     it('counts the memory caches in the Caches detail', async () => {

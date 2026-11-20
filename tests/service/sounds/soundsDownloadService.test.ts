@@ -90,6 +90,24 @@ describe('naming and tags', () => {
         expect(nasty.folder.startsWith('.')).toBe(false);
     });
 
+    it('names a file from a template, leaving no stray separators for a part the episode lacks', () => {
+        const dated = episode({ seriesNumber: 3, network: 'Radio 4' });
+        expect(fileParts(dated, '{{show}} S{{series}} - {{title}} [{{pid}}]').name).toBe('The Archers S3 - 06112026 [p0phlyjk]');
+        expect(fileParts(dated, '{{year}} - {{show}} - {{network}}').name).toBe('2026 - The Archers - Radio 4');
+        expect(fileParts(episode({ released: undefined }), '{{show}} - {{date}} - {{title}}').name).toBe('The Archers - 06112026');
+        expect(fileParts(episode({ subtitle: undefined }), '{{show}} - {{date}} - {{title}}').name).toBe('The Archers - 2026-11-06');
+        // A template that makes nothing, or does not compile, is replaced by the default name.
+        expect(fileParts(dated, '{{#if nope}}x{{/if}}').name).toBe('The Archers');
+        expect(fileParts(dated, '{{show').name).toBe('The Archers - 2026-11-06 - 06112026');
+    });
+
+    it('puts an episode with a series number in a Series NN folder only when asked', () => {
+        const dated = episode({ seriesNumber: 3 });
+        expect(fileParts(dated).subfolder).toBeUndefined();
+        expect(fileParts(dated, undefined, 'series').subfolder).toBe('Series 03');
+        expect(fileParts(episode(), undefined, 'series').subfolder).toBeUndefined();
+    });
+
     it('tags the file for a music library', () => {
         expect(tagsFor(episode())).toEqual({
             title: '2026-11-06 - 06/11/2026',
@@ -171,8 +189,72 @@ describe('soundsDownloadService', () => {
         expect(done.file).toBe(path.join('The Archers', 'The Archers - 2026-11-06 - 06112026.mp3'));
         expect(fs.existsSync(path.join(dir, done.file))).toBe(true);
         expect(fs.existsSync(path.join(dir, 'The Archers', 'cover.jpg'))).toBe(true);
-        expect(fs.readdirSync(path.join(dir, 'The Archers')).sort()).toEqual(['The Archers - 2026-11-06 - 06112026.mp3', 'cover.jpg']);
+        expect(fs.readdirSync(path.join(dir, 'The Archers')).sort()).toEqual(['The Archers - 2026-11-06 - 06112026.mp3', 'album.nfo', 'cover.jpg']);
+        expect(fs.readFileSync(path.join(dir, 'The Archers', 'album.nfo'), 'utf8')).toContain('<title>The Archers</title>');
         expect(soundsStreamService.resolveBest).not.toHaveBeenCalled();
+    });
+
+    it('saves a show\'s cover.jpg only when its folder exists, replacing one only when asked', async () => {
+        const image = 'https://ichef.bbci.co.uk/images/ic/640x640/p0n3nsm2.jpg';
+        expect(await soundsDownloadService.writeShowCover('The Archers', image)).toEqual({ written: 0, shows: 0 });
+        fs.mkdirSync(path.join(dir, 'The Archers'));
+        expect(await soundsDownloadService.writeShowCover('The Archers', undefined)).toEqual({ written: 0, shows: 1 });
+        expect(await soundsDownloadService.writeShowCover('The Archers', image)).toEqual({ written: 1, shows: 1 });
+        expect(fs.existsSync(path.join(dir, 'The Archers', 'cover.jpg'))).toBe(true);
+        expect(await soundsDownloadService.writeShowCover('The Archers', image)).toEqual({ written: 0, shows: 1 });
+        expect(await soundsDownloadService.writeShowCover('The Archers', image, true)).toEqual({ written: 1, shows: 1 });
+        expect((axios.get as jest.Mock).mock.calls.at(-1)[0]).toContain('1280x1280');
+    });
+
+    it('saves into a Series NN folder under the show, with the show\'s cover and album.nfo in the show folder', async () => {
+        await configService.setParameter(IplayarrParameter.RADIO_FOLDER_STRUCTURE, 'series');
+        await configService.setParameter(IplayarrParameter.RADIO_FILENAME_TEMPLATE, '{{show}} S{{series}} {{pid}}');
+        await soundsDownloadService.enqueue(episode({ seriesNumber: 35 }));
+        const done = await settle('p0phlyjk');
+        expect(done.state).toBe('done');
+        expect(done.file).toBe(path.join('The Archers', 'Series 35', 'The Archers S35 p0phlyjk.mp3'));
+        expect(fs.existsSync(path.join(dir, done.file as string))).toBe(true);
+        expect(fs.existsSync(path.join(dir, 'The Archers', 'cover.jpg'))).toBe(true);
+        expect(fs.existsSync(path.join(dir, 'The Archers', 'album.nfo'))).toBe(true);
+        await configService.removeParameter(IplayarrParameter.RADIO_FOLDER_STRUCTURE);
+        await configService.removeParameter(IplayarrParameter.RADIO_FILENAME_TEMPLATE);
+    });
+
+    it('says so when a show\'s picture cannot be fetched for its cover', async () => {
+        fs.mkdirSync(path.join(dir, 'The Archers'));
+        (axios.get as jest.Mock).mockRejectedValue(new Error('404'));
+        await expect(soundsDownloadService.writeShowCover('The Archers', 'https://ichef.bbci.co.uk/a.jpg')).rejects.toThrow('The picture could not be fetched: 404');
+        expect(fs.existsSync(path.join(dir, 'The Archers', 'cover.jpg'))).toBe(false);
+    });
+
+    it('still finishes a download when a sidecar file cannot be written', async () => {
+        await configService.setParameter(IplayarrParameter.STREAM_BASE_URL, 'http://iplayarr.test/');
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, 'k');
+        await configService.setParameter(IplayarrParameter.WRITE_STRMTOOL_JSON, 'true');
+        // A folder where the sidecar should go makes writing it fail.
+        fs.mkdirSync(path.join(dir, 'The Archers', 'The Archers - 2026-11-06 - 06112026.strmtool.json'), { recursive: true });
+        await soundsDownloadService.enqueue(episode(), 'strm');
+        const done = await settle('p0phlyjk');
+        expect(done.state).toBe('done');
+        expect(fs.existsSync(path.join(dir, done.file as string))).toBe(true);
+    });
+
+    it('writes no album.nfo when Write NFO files is off', async () => {
+        await configService.setParameter(IplayarrParameter.WRITE_NFO_STRM, 'none');
+        await soundsDownloadService.enqueue(episode());
+        await settle('p0phlyjk');
+        expect(fs.existsSync(path.join(dir, 'The Archers', 'album.nfo'))).toBe(false);
+    });
+
+    it('writes a .strmtool.json with the running time beside a .strm link when asked to', async () => {
+        await configService.setParameter(IplayarrParameter.STREAM_BASE_URL, 'http://iplayarr.test/');
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, 'k');
+        await configService.setParameter(IplayarrParameter.WRITE_STRMTOOL_JSON, 'true');
+        await soundsDownloadService.enqueue(episode({ duration: 600 }), 'strm');
+        const done = await settle('p0phlyjk');
+        const sidecar = JSON.parse(fs.readFileSync(path.join(dir, done.file!.replace(/\.strm$/, '.strmtool.json')), 'utf8'));
+        expect(sidecar).toMatchObject({ isValid: true, container: 'hls', runTimeTicks: 6_000_000_000 });
+        expect(sidecar.mediaStreams).toHaveLength(1);
     });
 
     it('records an episode with no MP3 from its best stream to M4A', async () => {

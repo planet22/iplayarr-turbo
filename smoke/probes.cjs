@@ -394,6 +394,7 @@ async function write(ctx, h) {
             ['NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['MANUAL_NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['NATIVE_SEARCH', 'maybe', 'FAIL'], ['LIVE_TV_LOGO_SHAPE', 'triangle', 'FAIL'],
             ['WRITE_NFO_STRM', 'sometimes', 'FAIL'], ['STRM_WATCHDOG_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'FAIL'],
             ['RELEASE_LANGUAGE', 'klingon', 'FAIL'],
+            ['RADIO_FOLDER_STRUCTURE', 'sideways', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{nope}}', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{show', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{#if nope}}x{{/if}}', 'FAIL'],
             ['REFRESH_SCHEDULE', 'not a cron', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * * *', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * *', 'FAIL'],
             ['STRM_WATCHDOG_WEBHOOK_URL', 'file:///etc/passwd', 'FAIL'], ['STRM_WATCHDOG_WEBHOOK_URL', 'http://169.254.169.254/latest/meta-data/', 'PASS-IF-ACCEPTED'],
             ['STREAM_BASE_URL', 'javascript:alert(1)', 'FAIL'], ['STREAM_BASE_URL', 'ftp://example.invalid/', 'FAIL'], ['STREAM_BASE_URL', 'http://', 'FAIL'],

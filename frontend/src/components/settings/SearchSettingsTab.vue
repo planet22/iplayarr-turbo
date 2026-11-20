@@ -130,12 +130,12 @@
             :options="trueOrFalse"
         />
         <SelectInput
-            v-if="showAdvanced && config.BROWSE_SHOW_COLLECTIONS === 'true'"
+            v-if="showAdvanced"
             v-model="config.RADIO_SEARCH_COLLECTION_NAMES"
             field="RADIO_SEARCH_COLLECTION_NAMES"
             :advanced="true"
             name="Find BBC Collections by Name"
-            tooltip="Show radio collections whose name matches as tiles. Needs Show Collections."
+            tooltip="Show radio collections whose name matches as tiles."
             :error="validationErrors.config?.RADIO_SEARCH_COLLECTION_NAMES"
             :options="trueOrFalse"
         />

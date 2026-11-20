@@ -48,4 +48,8 @@ Live BBC channels can also be added as `.strm` entries (point a library at `LIVE
 
 **Live TV and Live 1080p:** with `STREAM_LIVE_DASH_1080` on, live channels are 1080p HEVC. Jellyfin reads and transcodes that fine (a client that cannot decode HEVC gets a transcode, hardware-assisted if Jellyfin has VAAPI/QSV/NVENC set up). Jellyfin keeps one cached probe per Live TV channel (small `.json` files in `cache/mediainfo/` inside its config directory) and trusts it on later plays. After turning `STREAM_LIVE_DASH_1080` on or off, delete those files (or just a channel's) so Jellyfin probes the stream again. Otherwise Jellyfin assumes the old stream and passes it through unconverted, which a browser cannot play.
 
+## Radio
+
+Radio downloads go to `SOUNDS_DIR` as tagged audio files (with `cover.jpg` and, if `WRITE_NFO_STRM` allows, an `album.nfo`), so point a Jellyfin **music** library at it. Radio `.strm` links may not play in a music library (untested); a mixed or video library may be needed. Live radio stations appear in Live TV from the M3U/XMLTV tuner as audio channels. See [SOUNDS.md](../SOUNDS.md).
+
 See [STREAMING.md](../STREAMING.md) for the full setup, including the three stream client options (`STREAM_CLIENT`) and their tradeoffs.

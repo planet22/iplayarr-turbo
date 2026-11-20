@@ -290,6 +290,17 @@ describe('JsonApiRoute', () => {
             expect(entry).toMatchObject({ kind: 'radio', source: 'manual', results: 1 });
         });
 
+        it('says how many radio hits were dropped when nothing is left, as the video search does', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockImplementation(async () => {
+                traceCandidate({ title: 'Gardeners Question Time', stage: 'bbc', kept: false, reason: 'missing-word', detail: '\'archers\' is not in the title' });
+                return { shows: [], episodes: [] };
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'archers', mode: 'radio' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines).toEqual([[], { note: { dropped: 1, capped: false } }, { done: true }]);
+        });
+
         it('answers ?mode=radio from BBC Sounds as the same lines, without running the video search', async () => {
             jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
             jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] });

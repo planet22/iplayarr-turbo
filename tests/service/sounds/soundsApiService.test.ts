@@ -92,6 +92,16 @@ describe('soundsApiService', () => {
         expect(knownEpisode('nope')).toBeUndefined();
     });
 
+    it('pings BBC Sounds with one uncached request and says how long it took, failing when BBC does', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ data: {} });
+        expect(await soundsApiService.ping()).toBeGreaterThanOrEqual(0);
+        expect(await soundsApiService.ping()).toBeGreaterThanOrEqual(0);
+        expect(axios.get).toHaveBeenCalledTimes(2);
+        expect((axios.get as jest.Mock).mock.calls[0][0]).toBe('https://rms.api.bbc.co.uk/v2/experience/inline/search?q=radio');
+        (axios.get as jest.Mock).mockRejectedValue(new Error('timeout'));
+        await expect(soundsApiService.ping()).rejects.toThrow('timeout');
+    });
+
     it('does not search for an empty term', async () => {
         expect(await soundsApiService.search('   ')).toEqual({ shows: [], episodes: [] });
         expect(axios.get).not.toHaveBeenCalled();

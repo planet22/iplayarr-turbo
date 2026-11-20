@@ -3,15 +3,19 @@
 import axios from 'axios';
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
+import Handlebars from 'handlebars';
 import path from 'path';
 
+import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { QueuedStorage } from '../../types/QueuedStorage';
 import { SoundsDownload, SoundsEpisode } from '../../types/Sounds';
 import { VideoEventType } from '../../types/VideoEvent';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
+import { buildAlbumNfo } from '../../utils/nfoBuilder';
 import { resolveInside, shareSafeName } from '../../utils/pathSafety';
-import { createStrmContent } from '../../utils/Utils';
+import { buildAudioStrmToolJson } from '../../utils/strmToolBuilder';
+import { createStrmContent, shouldWriteNfo } from '../../utils/Utils';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import libraryIndexService from '../libraryIndexService';
@@ -55,12 +59,46 @@ export function episodeLabel(episode: SoundsEpisode): string {
     return episode.title === show ? '' : episode.title;
 }
 
-// Show folder and file name (without extension), made safe as path parts.
-export function fileParts(episode: SoundsEpisode): { folder: string; name: string } {
+// What the radio file name template (RADIO_FILENAME_TEMPLATE) can use.
+export const RADIO_TEMPLATE_VARIABLES = ['show', 'date', 'year', 'title', 'series', 'network', 'pid'] as const;
+export const DEFAULT_RADIO_FILENAME_TEMPLATE = '{{show}} - {{date}} - {{title}}';
+
+// A name made from a template: unused parts leave no stray " - " behind.
+function renderName(template: string, context: Record<(typeof RADIO_TEMPLATE_VARIABLES)[number], string>): string {
+    let rendered: string;
+    try {
+        rendered = Handlebars.compile(template || DEFAULT_RADIO_FILENAME_TEMPLATE, { noEscape: true })(context);
+    } catch {
+        rendered = Handlebars.compile(DEFAULT_RADIO_FILENAME_TEMPLATE, { noEscape: true })(context);
+    }
+    return shareSafeName(rendered)
+        .replace(/(?:\s+-\s+){2,}/g, ' - ')
+        .replace(/^(?:\s*-\s*)+|(?:\s*-\s*)+$/g, '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 180)
+        .trim();
+}
+
+// Show folder, file name (without extension) and, with `structure` 'series' and a series number, the Series NN folder under the
+// show folder, all made safe as path parts. The defaults give Show/Show - date - title.
+export function fileParts(
+    episode: SoundsEpisode,
+    template: string = DEFAULT_RADIO_FILENAME_TEMPLATE,
+    structure: 'show' | 'series' = 'show'
+): { folder: string; name: string; subfolder?: string } {
     const show = shareSafeName(episode.showTitle ?? episode.title) || 'Sounds';
-    const label = shareSafeName(episodeLabel(episode));
-    const name = [show, day(episode), label].filter(Boolean).join(' - ').slice(0, 180).trim();
-    return { folder: show, name: name || show };
+    const date = day(episode);
+    const name = renderName(template, {
+        show,
+        date,
+        year: date.slice(0, 4),
+        title: shareSafeName(episodeLabel(episode)),
+        series: episode.seriesNumber !== undefined ? String(episode.seriesNumber) : '',
+        network: shareSafeName(episode.network ?? ''),
+        pid: episode.id,
+    });
+    const subfolder = structure === 'series' && episode.seriesNumber !== undefined ? `Series ${String(episode.seriesNumber).padStart(2, '0')}` : undefined;
+    return { folder: show, name: name || show, ...(subfolder ? { subfolder } : {}) };
 }
 
 export function tagsFor(episode: SoundsEpisode): TagMetadata {
@@ -309,9 +347,13 @@ class SoundsDownloadService {
         const cleanup: string[] = [];
         try {
             const root = await this.#directory();
-            const { folder, name: linkName } = fileParts(item.episode);
+            const template = ((await configService.getParameter(IplayarrParameter.RADIO_FILENAME_TEMPLATE)) as string | undefined)?.trim() || DEFAULT_RADIO_FILENAME_TEMPLATE;
+            const structure = (await configService.getParameter(IplayarrParameter.RADIO_FOLDER_STRUCTURE)) === 'series' ? 'series' : 'show';
+            const { folder, name: linkName, subfolder } = fileParts(item.episode, template, structure);
             let name = linkName;
-            const dir = resolveInside(root, folder);
+            // The show folder holds the show's cover and album.nfo; the files go in it, or in its Series NN folder.
+            const showDir = resolveInside(root, folder);
+            const dir = subfolder ? resolveInside(showDir, subfolder) : showDir;
             fs.mkdirSync(dir, { recursive: true });
             const ext = item.episode.mp3 ? 'mp3' : 'm4a';
             const strm = item.mode === 'strm';
@@ -330,12 +372,12 @@ class SoundsDownloadService {
                 const base = (await configService.getParameter(IplayarrParameter.STREAM_BASE_URL)) as string | undefined;
                 if (!key || !base) throw new SoundsDownloadError('Set the Stream Base URL and Stream Key in Settings to save .strm links');
                 fs.writeFileSync(finalPath, await createStrmContent(item.episode.id, key, undefined, undefined, undefined, true), 'utf8');
-                await this.#cover(item.episode, dir, cleanup);
+                await this.#cover(item.episode, showDir, cleanup);
                 item.file = path.relative(root, finalPath);
             } else {
                 const part = `${finalPath}.part.${ext}`;
                 cleanup.push(part);
-                const cover = await this.#cover(item.episode, dir, cleanup);
+                const cover = await this.#cover(item.episode, showDir, cleanup);
                 checkCancelled();
                 if (item.episode.mp3) {
                     const raw = `${finalPath}.raw`;
@@ -358,6 +400,7 @@ class SoundsDownloadService {
                 fs.renameSync(part, finalPath);
                 item.file = path.relative(root, finalPath);
             }
+            await this.#sidecars(item.episode, showDir, dir, name, strm);
             // A real file now stands in for the link that was saved before it.
             if (item.replacesStrm && !strm) fs.rmSync(path.join(dir, `${linkName}.strm`), { force: true });
             item.state = 'done';
@@ -380,6 +423,38 @@ class SoundsDownloadService {
             for (const file of cleanup) fs.rmSync(file, { force: true });
         }
         if ((await this.#load()).includes(item)) await this.#save();
+    }
+
+    // The metadata files video gets, by the same settings: the show folder's album.nfo (Write NFO files, as for a manual video
+    // download) and, beside a .strm link, a .strmtool.json giving the player its running time. Best effort: never fails the download.
+    async #sidecars(episode: SoundsEpisode, showDir: string, dir: string, name: string, strm: boolean): Promise<void> {
+        try {
+            if (shouldWriteNfo((await configService.getParameter(IplayarrParameter.WRITE_NFO_STRM)) as string | undefined, QueueEntrySource.MANUAL)) {
+                const album = path.join(showDir, 'album.nfo');
+                if (!fs.existsSync(album)) fs.writeFileSync(album, buildAlbumNfo(episode.showTitle ?? episode.title), 'utf8');
+            }
+            if (strm && (await configService.getParameter(IplayarrParameter.WRITE_STRMTOOL_JSON)) === 'true') {
+                fs.writeFileSync(path.join(dir, `${name}.strmtool.json`), buildAudioStrmToolJson(episode.duration), 'utf8');
+            }
+        } catch (error: any) {
+            loggingService.debug(episode.id, `Radio sidecar files not written: ${error?.message ?? error}`);
+        }
+    }
+
+    // Saves the show folder's cover.jpg from the show's picture. Nothing is written when the folder does not exist yet (no episode
+    // saved), there is no picture, or a cover is already there and `overwrite` is off. shows is 1 when the folder exists.
+    async writeShowCover(title: string, image: string | undefined, overwrite = false): Promise<{ written: number; shows: number }> {
+        const dir = resolveInside(await this.#directory(), shareSafeName(title) || 'Sounds');
+        if (!fs.existsSync(dir)) return { written: 0, shows: 0 };
+        const cover = path.join(dir, 'cover.jpg');
+        if (!image || (fs.existsSync(cover) && !overwrite)) return { written: 0, shows: 1 };
+        try {
+            const { data } = await axios.get(image.replace('640x640', '1280x1280'), { responseType: 'arraybuffer', timeout: 20_000, headers: { 'User-Agent': desktopUserAgent } });
+            fs.writeFileSync(cover, Buffer.from(data));
+            return { written: 1, shows: 1 };
+        } catch (error: any) {
+            throw new SoundsDownloadError(`The picture could not be fetched: ${String(error?.message ?? error).slice(0, 120)}`);
+        }
     }
 
     // Cover art for the file (and, if missing, the show folder's cover.jpg). Best effort: no cover is fine.

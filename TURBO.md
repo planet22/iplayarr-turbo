@@ -82,6 +82,10 @@ The frontend lives in `frontend/src/views/` (`DiscoverPage`, `TilesPage`, `GridP
 
 See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) for setup steps.
 
+### Radio (BBC Sounds)
+
+Optional (`SOUNDS_ENABLED`). Radio reuses the video browse pages through a Video | Radio switch (`frontend/src/lib/mediaMode.js`, `src/service/sounds/soundsBrowseAdapter.ts`), with its own download queue (`soundsDownloadService`), followed shows (`soundsFollowService`), live stations, Watchdog source and library-index scans. Its downloads follow the video metadata settings where they apply (`WRITE_NFO_STRM`, `WRITE_STRMTOOL_JSON`, Use Additional Images). See [docs/SOUNDS.md](docs/SOUNDS.md).
+
 ### Download archive
 
 `ARCHIVE_ENABLED` (default `false`) preserves a record of queue/history items that would otherwise just be discarded: cancelling a queued item (`DELETE` on the SABnzbd queue endpoint) or removing a completed item from history both check this flag and, when set, call `historyService.addArchive` to keep an entry (status `CANCELLED`/`REMOVED`) rather than dropping it entirely. It's record-keeping, not a separate UI — archived entries surface through the same history/queue socket events as everything else.

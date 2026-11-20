@@ -75,6 +75,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `SOUNDS_ENABLED` | `true` | No | Master switch for BBC radio (the Video / Radio switch, search, play, download, follow). The other radio settings only apply while it is on. See [SOUNDS.md](SOUNDS.md). |
 | `SOUNDS_DIR` | | No | Where radio downloads are saved. Needed to download. |
 | `RADIO_MEDIA_MODE` | `m4a` | No | What a radio download saves: `m4a` (audio file) or `strm` (a small link to the audio stream). |
+| `RADIO_FILENAME_TEMPLATE` | `{{show}} - {{date}} - {{title}}` | No | How a radio file is named: `show`, `date`, `year`, `title`, `series`, `network`, `pid`. |
+| `RADIO_FOLDER_STRUCTURE` | `show` | No | `show` (one folder per show) or `series` (a `Series NN` folder under it for episodes with a series number). |
 | `RADIO_THUMBNAIL_STYLE` | `blur` | No | Square radio artwork in wide boxes: `blur` (blurred backdrop) or `square` (plain). |
 | `RADIO_PODCASTS` | `true` | No | Show a Podcasts page in radio mode, listing the BBC podcast shows that have episodes (only while `SOUNDS_ENABLED` is on). Off, nothing is read for it. |
 | `RADIO_ATOZ` | `false` | No | Add an A to Z to radio, built from a daily listing of every BBC Sounds show (only while `SOUNDS_ENABLED` is on). Off, nothing is read. |
@@ -84,7 +86,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `RADIO_SEARCH_SCOPE` | `both` | No | Radio search lists `both`, `shows` only or `episodes` only. |
 | `RADIO_SEARCH_MP3_ONLY` | `false` | No | Radio search lists only episodes BBC offers as a plain MP3 (shows are still listed). |
 | `RADIO_SEARCH_EXPAND_COLLECTIONS` | `false` | No | Searching radio for the pid or bbc.co.uk link of a BBC Sounds collection lists the episodes in it (up to 100). Not needed: `BROWSE_SHOW_COLLECTIONS`. |
-| `RADIO_SEARCH_COLLECTION_NAMES` | `false` | No | Radio search also shows BBC Sounds collections whose name has the search words, as tiles that open the Collections page. Needs `BROWSE_SHOW_COLLECTIONS`. |
+| `RADIO_SEARCH_COLLECTION_NAMES` | `false` | No | Radio search also shows BBC Sounds collections whose name has the search words, as tiles that open the Collections page. Independent of `BROWSE_SHOW_COLLECTIONS`, which is for video. |
 | `RADIO_SEARCH_NETWORKS` | _(blank)_ | No | Radio search lists only these networks, comma-separated (e.g. `Radio 4, 6 Music`). Blank lists all. |
 | `RADIO_SEARCH_MAX_RESULTS` | `0` | No | Most shows, and most episodes, a radio search lists (0-200). `0` is no limit. |
 | `SEARCH_COMBINED` | `false` | No | Search page only: look in video and radio together (needs `SOUNDS_ENABLED`). |
@@ -99,7 +101,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `LIVE_TV_GUIDE_HD` | `true` | No | Mark Live TV guide programmes as HD. |
 | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | No | Comma-separated Jellyfin app ids (from the Apps page) asked to refresh their guide when the Live TV channel list changes. Normally set by ticking servers in Settings. |
 | `STRM_WATCHDOG_ENABLED` | `true` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
-| `STRM_WATCHDOG_SOURCES` | `history` | No | Comma-separated: `subscribed`, `history`, `app:<id>`. |
+| `STRM_WATCHDOG_SOURCES` | `history,radio` | No | Comma-separated: `subscribed`, `history`, `radio`, `app:<id>`. `radio` only does anything while BBC Sounds is on. |
 | `STRM_WATCHDOG_ACTION` | `notify` | No | `notify` or `delete` for an expired link. |
 | `STRM_WATCHDOG_PATH_MAP` | _(unset)_ | No | Sonarr/Jellyfin path to in-container path, e.g. `/tv=/library/tv` (`;` separated). |
 | `STRM_WATCHDOG_ARR_ACTION` | `none` | No | `none` / `unmonitor` / `search` in Sonarr/Radarr. |

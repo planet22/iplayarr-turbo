@@ -11,7 +11,7 @@ import SubscriptionsPage from '@/views/SubscriptionsPage.vue';
 const { state, ipFetch, toastService, load } = await vi.hoisted(async () => {
     const { ref: vueRef } = await import('vue');
     return {
-        state: { subscriptions: vueRef([]), loaded: vueRef(false), loadError: vueRef(false) },
+        state: { subscriptions: vueRef([]), loaded: vueRef(false), loadError: vueRef(false), radio: vueRef([]) },
         ipFetch: vi.fn(),
         toastService: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
         load: vi.fn(),
@@ -35,7 +35,19 @@ vi.mock('@/lib/subscriptions', () => ({
 }));
 vi.mock('@/lib/radioSubscriptions', async () => {
     const { ref: vueRef } = await import('vue');
-    return { useRadioSubscriptions: () => ({ items: vueRef([]), loaded: vueRef(true), load: vi.fn() }) };
+    return {
+        useRadioSubscriptions: () => ({
+            items: state.radio,
+            loaded: vueRef(true),
+            load: vi.fn(),
+            link: ({ showId }) => `/browse/radio/${showId}`,
+            secureNoun: 'the audio file',
+            secureService: 'Sounds',
+            check: vi.fn(),
+            toggleSecure: vi.fn(),
+            remove: vi.fn(),
+        }),
+    };
 });
 vi.mock('@/lib/subscriptionArr', () => ({
     useArrAppNames: () => ({ loadAppNames: vi.fn(), arrAppName: () => 'Sonarr' }),
@@ -64,11 +76,11 @@ const sub = (n, extra = {}) => ({
 });
 
 let wrappers = [];
-const mountIt = async () => {
-    ipFetch.mockImplementation(async () => ({ ok: true, data: [] }));
+const mountIt = async (settings = {}, fetchImpl) => {
+    ipFetch.mockImplementation(fetchImpl ?? (async () => ({ ok: true, data: [] })));
     const wrapper = mount(SubscriptionsPage, {
         global: {
-            provide: { socket: ref(null), globalSettings: ref({}) },
+            provide: { socket: ref(null), globalSettings: ref(settings) },
             stubs: {
                 'font-awesome-icon': true,
                 PageHeader: true,
@@ -93,6 +105,7 @@ describe('SubscriptionsPage', () => {
         load.mockReset();
         Object.values(toastService).forEach((fn) => fn.mockReset());
         state.subscriptions.value = [];
+        state.radio.value = [];
         state.loaded.value = true;
         state.loadError.value = false;
     });
@@ -149,6 +162,87 @@ describe('SubscriptionsPage', () => {
         await flushPromises();
         expect(wrapper.text()).toContain('Nothing matches this filter.');
         expect(wrapper.findAll('.subscriptionRow')).toHaveLength(0);
+    });
+
+    describe('radio subscriptions', () => {
+        const radioSub = (n) => ({ id: `radio-b00${n}`, radio: true, showId: `b00${n}`, title: `Radio ${n}`, network: 'Radio 4', createdAt: '2026-01-01T00:00:00Z' });
+        const filterOptions = (wrapper) => wrapper.findComponent(SettingsPageToolbar).vm.$attrs['filter-options'];
+
+        it('offers Video and Radio in the filter only when there is a radio subscription', async () => {
+            state.subscriptions.value = [sub(1), sub(2)];
+            expect(filterOptions(await mountIt())).toEqual(['All', 'iPlayarr']);
+            state.radio.value = [radioSub(1)];
+            expect(filterOptions(await mountIt())).toEqual(['All', 'Video', 'Radio', 'iPlayarr']);
+        });
+
+        it('lists only the radio rows for Radio, and only the video rows for Video', async () => {
+            state.subscriptions.value = [sub(1), sub(2)];
+            state.radio.value = [radioSub(1)];
+            const wrapper = await mountIt();
+            const choose = async (option) => {
+                wrapper.findComponent(SettingsPageToolbar).vm.$emit('select-filter', option);
+                await flushPromises();
+                return wrapper.findAll('.subscriptionRow').map((row) => row.text());
+            };
+            expect(await choose('Radio')).toEqual([expect.stringContaining('Radio 1')]);
+            const video = await choose('Video');
+            expect(video).toHaveLength(2);
+            expect(video.join(' ')).not.toContain('Radio 1');
+            expect(await choose('All')).toHaveLength(3);
+        });
+
+        describe('radio shows found on disk', () => {
+            const found = [
+                { showId: 'b001', title: 'Found One', image: 'https://ichef.bbci.co.uk/a.jpg', network: 'Radio 4', onDisk: 3, sources: [{ id: 'sounds-folders', name: 'iPlayarr', type: 'FOLDER', count: 3 }] },
+                { title: 'No Match', onDisk: 1, sources: [], reason: 'BBC Sounds found nothing under this name' },
+            ];
+            const fetcher = async (url) => (String(url).includes('detected?mode=radio') ? { ok: true, data: found } : { ok: true, data: [] });
+
+            it('lists only the shows BBC Sounds matched, and nothing while radio is off', async () => {
+                const wrapper = await mountIt({ SOUNDS_ENABLED: 'true' }, fetcher);
+                expect(wrapper.findAll('.radioFoundRow')).toHaveLength(1);
+                expect(wrapper.find('.radioFoundRow').text()).toContain('Found One');
+                expect(wrapper.find('.radioFoundRow').text()).toContain('3 episodes on disk');
+                expect(wrapper.text()).not.toContain('No Match');
+                ipFetch.mockClear();
+                const off = await mountIt({}, fetcher);
+                expect(off.findAll('.radioFoundRow')).toHaveLength(0);
+                expect(ipFetch).not.toHaveBeenCalledWith('json-api/subscriptions/detected?mode=radio');
+            });
+
+            it('imports a found show, follows it from new episodes, and takes it off the list', async () => {
+                const wrapper = await mountIt({ SOUNDS_ENABLED: 'true' }, fetcher);
+                await wrapper.find('.radioFoundRow button[title="Import"]').trigger('click');
+                await flushPromises();
+                expect(ipFetch).toHaveBeenCalledWith('json-api/subscriptions/detected/import?mode=radio', 'POST', { showId: 'b001', title: 'Found One', image: 'https://ichef.bbci.co.uk/a.jpg' });
+                expect(wrapper.findAll('.radioFoundRow')).toHaveLength(0);
+            });
+
+            it('says so, and keeps the show listed, when the import fails', async () => {
+                const wrapper = await mountIt({ SOUNDS_ENABLED: 'true' }, async (url, method) => (method === 'POST' ? { ok: false, data: { message: 'No' } } : fetcher(url)));
+                await wrapper.find('.radioFoundRow button[title="Import"]').trigger('click');
+                await flushPromises();
+                expect(toastService.error).toHaveBeenCalledWith('Couldn\'t import Found One', { detail: 'No' });
+                expect(wrapper.findAll('.radioFoundRow')).toHaveLength(1);
+            });
+        });
+
+        it('asks for the cover picture of a radio show as radio, and of a video show without the radio mode', async () => {
+            state.subscriptions.value = [sub(1)];
+            state.radio.value = [radioSub(1)];
+            const wrapper = await mountIt();
+            ipFetch.mockImplementation(async () => ({ ok: true, data: { written: 1, shows: 1, episodes: 0 } }));
+            const rows = wrapper.findAll('.subscriptionRow');
+            const radioRow = rows.find((row) => row.text().includes('Radio 1'));
+            await radioRow.find('button[title="Update cover picture"]').trigger('click');
+            await flushPromises();
+            expect(ipFetch).toHaveBeenCalledWith('json-api/subscriptions/radio-b001/images?mode=radio', 'POST');
+            expect(toastService.success).toHaveBeenCalledWith('Saved 1 image(s) for Radio 1', undefined);
+            const videoRow = rows.find((row) => row.text().includes('Show 1'));
+            await videoRow.find('button[title="Update Jellyfin images"]').trigger('click');
+            await flushPromises();
+            expect(ipFetch).toHaveBeenCalledWith('json-api/subscriptions/s1/images', 'POST');
+        });
     });
 
     it('checks everything from the toolbar and reports the queued episodes', async () => {

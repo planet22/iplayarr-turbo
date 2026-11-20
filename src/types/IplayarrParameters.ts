@@ -91,6 +91,10 @@ export enum IplayarrParameter {
     SOUNDS_DIR = 'SOUNDS_DIR',
     // What a radio download saves: the audio file ('m4a', or the MP3 when Sounds offers one) or a small '.strm' link.
     RADIO_MEDIA_MODE = 'RADIO_MEDIA_MODE',
+    // How a radio file is named (a template over show, date, year, title, series, network and pid) and whether episodes with a
+    // series number go in a Series NN folder under the show ('series') or straight in the show folder ('show').
+    RADIO_FILENAME_TEMPLATE = 'RADIO_FILENAME_TEMPLATE',
+    RADIO_FOLDER_STRUCTURE = 'RADIO_FOLDER_STRUCTURE',
     RADIO_ACTIVE_LIMIT = 'RADIO_ACTIVE_LIMIT',
     // How square radio artwork is shown in the wide picture boxes: 'blur' (a blurred copy behind it) or 'square' (plain).
     RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
@@ -108,7 +112,7 @@ export enum IplayarrParameter {
     RADIO_SEARCH_SCOPE = 'RADIO_SEARCH_SCOPE',
     RADIO_SEARCH_MP3_ONLY = 'RADIO_SEARCH_MP3_ONLY',
     // 'true' lists BBC Sounds collections whose title matches the search as tiles on the Search page (like the video by-name option).
-    // Needs BROWSE_SHOW_COLLECTIONS, since the tile opens the Collections page.
+    // Radio collections do not depend on BROWSE_SHOW_COLLECTIONS (the video setting).
     RADIO_SEARCH_COLLECTION_NAMES = 'RADIO_SEARCH_COLLECTION_NAMES',
     // 'true' makes a radio search for the pid or bbc.co.uk link of a BBC Sounds collection list the episodes in it (like the video option).
     RADIO_SEARCH_EXPAND_COLLECTIONS = 'RADIO_SEARCH_EXPAND_COLLECTIONS',

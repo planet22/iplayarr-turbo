@@ -107,9 +107,10 @@ describe('SearchSettingsTab', () => {
         expect(basic).not.toContain('RADIO_SEARCH_MATCH_ALL_WORDS');
         expect(basic).not.toContain('RADIO_SEARCH_EXPAND_COLLECTIONS');
         expect(basic).not.toContain('RADIO_SEARCH_COLLECTION_NAMES');
+        // Radio collections do not depend on the video Show Collections setting.
         const withoutShow = fields(mountIt({ SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'false' }));
         expect(withoutShow).toContain('RADIO_SEARCH_EXPAND_COLLECTIONS');
-        expect(withoutShow).not.toContain('RADIO_SEARCH_COLLECTION_NAMES');
+        expect(withoutShow).toContain('RADIO_SEARCH_COLLECTION_NAMES');
     });
 
     it('a manual false overrides native NZB search', () => {
@@ -149,9 +150,9 @@ describe('SearchSettingsTab', () => {
             ]);
         });
 
-        it('Find BBC Collections by Name needs Show Collections', () => {
+        it('Find BBC Collections by Name does not need Show Collections', () => {
             const list = fields(mountRadio({ SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'false' }));
-            expect(list).not.toContain('RADIO_SEARCH_COLLECTION_NAMES');
+            expect(list).toContain('RADIO_SEARCH_COLLECTION_NAMES');
         });
 
         it('Match All Words offers "Same as manual search", and the results setting offers shows, episodes or both', () => {

@@ -47,6 +47,7 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     RELEASE_LANGUAGE: ['none', 'english'],
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
     RADIO_MEDIA_MODE: ['m4a', 'strm'],
+    RADIO_FOLDER_STRUCTURE: ['show', 'series'],
     RADIO_THUMBNAIL_STYLE: ['blur', 'square'],
     RADIO_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],
     RADIO_SEARCH_SCOPE: ['both', 'shows', 'episodes'],
@@ -191,6 +192,10 @@ export class ConfigFormValidator extends Validator {
         } else if (input.MOVIE_FILENAME_TEMPLATE && templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE)) {
             validatorError['MOVIE_FILENAME_TEMPLATE'] = templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE) as string;
         }
+        if (typeof input.RADIO_FILENAME_TEMPLATE === 'string' && input.RADIO_FILENAME_TEMPLATE.trim()) {
+            const problem = this.radioTemplateProblem(input.RADIO_FILENAME_TEMPLATE);
+            if (problem) validatorError['RADIO_FILENAME_TEMPLATE'] = problem;
+        }
         for (const key of ['API_KEY', 'STREAM_KEY']) {
             const value = input[key];
             if (typeof value === 'string' && value.length > 0 && value.length < 8) {
@@ -253,6 +258,18 @@ export class ConfigFormValidator extends Validator {
             }
         }
         return validatorError;
+    }
+
+    // A radio file name template may only use the variables radio has, and must give a name.
+    radioTemplateProblem(template: string): string | undefined {
+        const known = 'show, date, year, title, series, network, pid';
+        try {
+            const context = { show: 'Show', date: '2026-11-06', year: '2026', title: 'Title', series: '1', network: 'Radio 4', pid: 'm0000001' };
+            if (!Handlebars.compile(template, { strict: true, noEscape: true })(context).replace(/[\s-]/g, '')) return 'Template gives an empty name';
+            return undefined;
+        } catch {
+            return `Template does not compile. It can use ${known}`;
+        }
     }
 
     compilesSuccessfully(template: string): boolean {
