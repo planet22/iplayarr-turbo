@@ -18,7 +18,7 @@
             <!-- ch (not px) below: these size to the actual text they hold (e.g. a formatted
                  date, "12.3 Mb/s") and scale with font-size/zoom, instead of a guessed pixel
                  width that clips content whenever it runs a bit longer than expected. -->
-            <col style="width: 8ch" />
+            <col style="width: 11ch" />
             <col class="hideMd" style="width: 11ch" />
             <col style="width: 8ch" />
             <col style="width: 20ch" />

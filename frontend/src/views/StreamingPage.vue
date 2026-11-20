@@ -40,18 +40,18 @@
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
             <colgroup>
                 <col style="width: 64px" />
-                <col style="width: 170px" />
-                <col style="width: 94px" />
-                <col style="width: 50px" />
+                <col style="width: 204px" />
+                <col style="width: 155px" />
+                <col style="width: 78px" />
                 <col style="width: 50px" />
                 <col style="width: 44px" />
                 <col style="width: 44px" />
                 <col class="hideLg" style="width: 110px" />
-                <col style="width: 76px" />
-                <col style="width: 165px" />
-                <col style="width: 90px" />
+                <col style="width: 94px" />
+                <col style="width: 178px" />
+                <col style="width: 125px" />
                 <col style="width: 150px" />
-                <col style="width: 146px" />
+                <col style="width: 180px" />
                 <col style="width: 112px" />
             </colgroup>
             <thead>
@@ -213,18 +213,18 @@ v-if="thumbnailFor(session)"
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
             <colgroup>
                 <col style="width: 64px" />
-                <col style="width: 170px" />
-                <col style="width: 94px" />
-                <col style="width: 50px" />
+                <col style="width: 204px" />
+                <col style="width: 155px" />
+                <col style="width: 78px" />
                 <col style="width: 50px" />
                 <col style="width: 44px" />
                 <col style="width: 44px" />
                 <col class="hideLg" style="width: 110px" />
-                <col style="width: 76px" />
-                <col style="width: 165px" />
-                <col style="width: 90px" />
+                <col style="width: 94px" />
+                <col style="width: 178px" />
+                <col style="width: 125px" />
                 <col style="width: 150px" />
-                <col style="width: 146px" />
+                <col style="width: 180px" />
                 <col style="width: 112px" />
             </colgroup>
             <thead>

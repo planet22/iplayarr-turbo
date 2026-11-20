@@ -150,7 +150,7 @@ v-if="getProgrammeThumbnailUrl(entry.pid)"
                     <col />
                     <col style="width: 10ch" />
                     <col style="width: 14ch" />
-                    <col style="width: 22ch" />
+                    <col style="width: 26ch" />
                 </colgroup>
                 <thead>
                     <tr>
