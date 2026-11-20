@@ -3,7 +3,7 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 
-import { assertFfmpegAvailable } from '../../src/utils/ffmpegUtils';
+import { assertFfmpegAvailable, resetFfmpegCheck } from '../../src/utils/ffmpegUtils';
 
 jest.mock('child_process');
 
@@ -19,6 +19,33 @@ const proc = () => {
 };
 
 describe('assertFfmpegAvailable', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        resetFfmpegCheck();
+    });
+
+    it('remembers a successful check and does not spawn ffmpeg again', async () => {
+        const p = proc();
+        const first = assertFfmpegAvailable();
+        p.emit('close', 0);
+        await first;
+        await expect(assertFfmpegAvailable()).resolves.toBeUndefined();
+        expect(spawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks again after a failed check', async () => {
+        const failing = proc();
+        const first = assertFfmpegAvailable();
+        failing.emit('close', 1);
+        await expect(first).rejects.toThrow('ffmpeg is not installed');
+
+        const working = proc();
+        const second = assertFfmpegAvailable();
+        working.emit('close', 0);
+        await expect(second).resolves.toBeUndefined();
+        expect(spawn).toHaveBeenCalledTimes(2);
+    });
+
     it('resolves when ffmpeg exits 0', async () => {
         const p = proc();
         const result = assertFfmpegAvailable();

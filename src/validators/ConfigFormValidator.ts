@@ -86,6 +86,27 @@ function checkWholeNumber(errors: { [key: string]: string }, input: any, key: st
     }
 }
 
+// The whole-number settings whose range is kept in NUMERIC_SETTING_LIMITS (so validating and clamping cannot drift apart):
+// the name shown in the error text, and whether the setting must be given.
+const WHOLE_NUMBER_SETTINGS: [key: string, label: string, required: boolean][] = [
+    ['ACTIVE_LIMIT', 'Download limit', true],
+    ['RADIO_ACTIVE_LIMIT', 'Radio download limit', false],
+    ['RADIO_SEARCH_MAX_RESULTS', 'Radio search cap', false],
+    ['RSS_FEED_HOURS', 'RSS Feed Hours', true],
+    ['STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', false],
+    ['STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', false],
+    ['STRM_WATCHDOG_STRIKES', 'Failed checks before invalid', false],
+    ['STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', false],
+];
+
+// What an OIDC login cannot work without (the allowed emails are checked separately: a list may be empty).
+const OIDC_REQUIRED: [key: string, message: string][] = [
+    ['OIDC_CONFIG_URL', 'Please provide a valid OIDC configuration URL'],
+    ['OIDC_CLIENT_ID', 'Please provide a valid OIDC client ID'],
+    ['OIDC_CLIENT_SECRET', 'Please provide a valid OIDC client secret'],
+    ['OIDC_CALLBACK_HOST', 'Please provide a valid OIDC callback host'],
+];
+
 export class ConfigFormValidator extends Validator {
     async validate(input: any): Promise<{ [key: string]: string }> {
         const validatorError: { [key: string]: string } = {};
@@ -103,20 +124,16 @@ export class ConfigFormValidator extends Validator {
         if (soundsDir && !/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(soundsDir)) {
             validatorError['SOUNDS_DIR'] = 'Please give the full path of the folder, starting with / (e.g. /data/radio)';
         }
-        checkWholeNumber(validatorError, input, 'ACTIVE_LIMIT', 'Download limit', 1, MAX_ACTIVE_LIMIT, true);
-        checkWholeNumber(validatorError, input, 'RADIO_ACTIVE_LIMIT', 'Radio download limit', 1, MAX_ACTIVE_LIMIT, false);
-        checkWholeNumber(validatorError, input, 'RADIO_SEARCH_MAX_RESULTS', 'Radio search cap', 0, 200, false);
+        for (const [key, label, required] of WHOLE_NUMBER_SETTINGS) {
+            const { min, max } = NUMERIC_SETTING_LIMITS[key];
+            checkWholeNumber(validatorError, input, key, label, min, max, required);
+        }
         if (input.RADIO_SEARCH_NETWORKS !== undefined && input.RADIO_SEARCH_NETWORKS !== '') {
             const networks = input.RADIO_SEARCH_NETWORKS;
             if (typeof networks !== 'string' || networks.length > 500 || [...networks].some((character) => character.charCodeAt(0) < 32)) {
                 validatorError['RADIO_SEARCH_NETWORKS'] = 'Please give network names separated by commas (500 characters at most)';
             }
         }
-        checkWholeNumber(validatorError, input, 'RSS_FEED_HOURS', 'RSS Feed Hours', 1, MAX_RSS_FEED_HOURS, true);
-        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', 1, 10, false);
-        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);
-        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_STRIKES', 'Failed checks before invalid', 1, 30, false);
-        checkWholeNumber(validatorError, input, 'STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', 1, 3650, false);
 
         for (const [key, allowed] of Object.entries(ENUM_SETTINGS)) {
             if (input[key] !== undefined && input[key] !== '' && !allowed.includes(input[key])) {
@@ -182,15 +199,16 @@ export class ConfigFormValidator extends Validator {
         if (!input.AUTH_PASSWORD) {
             validatorError['AUTH_PASSWORD'] = 'Please provide a Password';
         }
-        if (!this.compilesSuccessfully(input.TV_FILENAME_TEMPLATE)) {
-            validatorError['TV_FILENAME_TEMPLATE'] = 'Template does not compile';
-        } else if (input.TV_FILENAME_TEMPLATE && templateGroupProblem(input.TV_FILENAME_TEMPLATE)) {
-            validatorError['TV_FILENAME_TEMPLATE'] = templateGroupProblem(input.TV_FILENAME_TEMPLATE) as string;
-        }
-        if (!this.compilesSuccessfully(input.MOVIE_FILENAME_TEMPLATE)) {
-            validatorError['MOVIE_FILENAME_TEMPLATE'] = 'Template does not compile';
-        } else if (input.MOVIE_FILENAME_TEMPLATE && templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE)) {
-            validatorError['MOVIE_FILENAME_TEMPLATE'] = templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE) as string;
+        for (const key of ['TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE']) {
+            const template = input[key];
+            if (!this.compilesSuccessfully(template)) {
+                validatorError[key] = 'Template does not compile';
+                continue;
+            }
+            const groupProblem = template ? templateGroupProblem(template) : undefined;
+            if (groupProblem) {
+                validatorError[key] = groupProblem;
+            }
         }
         if (typeof input.RADIO_FILENAME_TEMPLATE === 'string' && input.RADIO_FILENAME_TEMPLATE.trim()) {
             const problem = this.radioTemplateProblem(input.RADIO_FILENAME_TEMPLATE);
@@ -241,17 +259,10 @@ export class ConfigFormValidator extends Validator {
             }
         }
         if (input.AUTH_TYPE === 'oidc') {
-            if (!input.OIDC_CONFIG_URL) {
-                validatorError['OIDC_CONFIG_URL'] = 'Please provide a valid OIDC configuration URL';
-            }
-            if (!input.OIDC_CLIENT_ID) {
-                validatorError['OIDC_CLIENT_ID'] = 'Please provide a valid OIDC client ID';
-            }
-            if (!input.OIDC_CLIENT_SECRET) {
-                validatorError['OIDC_CLIENT_SECRET'] = 'Please provide a valid OIDC client secret';
-            }
-            if (!input.OIDC_CALLBACK_HOST) {
-                validatorError['OIDC_CALLBACK_HOST'] = 'Please provide a valid OIDC callback host';
+            for (const [key, message] of OIDC_REQUIRED) {
+                if (!input[key]) {
+                    validatorError[key] = message;
+                }
             }
             if (!input.OIDC_ALLOWED_EMAILS || input.OIDC_ALLOWED_EMAILS.length === 0) {
                 validatorError['OIDC_ALLOWED_EMAILS'] = 'Please provide at least one allowed email';

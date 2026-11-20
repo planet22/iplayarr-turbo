@@ -8,6 +8,7 @@ import channelLogoService, { LOGO_MAX_BYTES, LogoError } from '../../service/cha
 import { CustomChannelError } from '../../service/customChannelService';
 import { ProbeError } from '../../service/streamProbeService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { failWith } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { isValidPid } from '../../utils/pathSafety';
 
@@ -16,16 +17,14 @@ import { isValidPid } from '../../utils/pathSafety';
 const router: Router = asyncRouter();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: LOGO_MAX_BYTES, files: 1, fields: 5 } });
 
+const fail = failWith(CustomChannelError, LogoError, ProbeError);
+
 const handle =
     (fn: (req: Request, res: Response) => Promise<unknown>) => async (req: Request, res: Response) => {
         try {
             await fn(req, res);
         } catch (error: any) {
-            const known = error instanceof CustomChannelError || error instanceof LogoError || error instanceof ProbeError;
-            res.status(known ? 400 : 500).json({
-                error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
-                message: error?.message || 'Unable to update the channel',
-            } as ApiResponse);
+            fail(res, error, 'Unable to update the channel');
         }
     };
 

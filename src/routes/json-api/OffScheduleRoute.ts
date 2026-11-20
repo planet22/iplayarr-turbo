@@ -1,8 +1,8 @@
 import { Request, Response, Router } from 'express';
 
 import episodeCacheService from '../../service/episodeCacheService';
-import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { EpisodeCacheDefinition } from '../../types/responses/EpisodeCacheTypes';
+import { rejectInvalidFields } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { OffScheduleFormValidator } from '../../validators/OffScheduleFormValidator';
 import { Validator } from '../../validators/Validator';
@@ -14,41 +14,26 @@ router.get('/', async (_, res: Response) => {
     res.json(cachedSeries);
 });
 
-router.post('/', async (req: Request, res: Response) => {
+// Adding (POST) and updating (PUT) share the same form, so they share the same validate-save-list flow.
+const saveSeries = async (req: Request, res: Response) => {
     const validator: Validator = new OffScheduleFormValidator();
-    const validationResult: { [key: string]: string } = await validator.validate(req.body);
-    if (Object.keys(validationResult).length > 0) {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: validationResult,
-        };
-        res.status(400).json(apiResponse);
-        return;
-    }
-
-    const { name, url } = req.body;
-    await episodeCacheService.addCachedSeries(url, name);
-    const cachedSeries: EpisodeCacheDefinition[] = await episodeCacheService.getCachedSeries();
-    res.json(cachedSeries);
-});
-
-router.put('/', async (req: Request, res: Response) => {
-    const validator: Validator = new OffScheduleFormValidator();
-    const validationResult: { [key: string]: string } = await validator.validate(req.body);
-    if (Object.keys(validationResult).length > 0) {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: validationResult,
-        };
-        res.status(400).json(apiResponse);
+    if (rejectInvalidFields(res, await validator.validate(req.body))) {
         return;
     }
 
     const { name, url, id } = req.body;
-    await episodeCacheService.updateCachedSeries({ id, url, name, cacheRefreshed: undefined });
+    if (req.method === 'POST') {
+        await episodeCacheService.addCachedSeries(url, name);
+    } else {
+        await episodeCacheService.updateCachedSeries({ id, url, name, cacheRefreshed: undefined });
+    }
     const cachedSeries: EpisodeCacheDefinition[] = await episodeCacheService.getCachedSeries();
     res.json(cachedSeries);
-});
+};
+
+router.post('/', saveSeries);
+
+router.put('/', saveSeries);
 
 router.delete('/', async (req: Request, res: Response) => {
     const { id } = req.body;

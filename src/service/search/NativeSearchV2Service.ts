@@ -2,7 +2,6 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios, { AxiosResponse } from 'axios';
 import { Index } from 'lunr';
-import lunr from 'lunr';
 import pLimit from 'p-limit';
 
 import { nativeSeriesRegex, searchResultLimit } from '../../constants/iPlayarrConstants';
@@ -13,13 +12,13 @@ import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/re
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
 import { extractPid } from '../../utils/extractPid';
-import { lunrSearchQuery } from '../../utils/lunrQuery';
+import { lunrTitleSearch } from '../../utils/lunrTitleSearch';
 import { markSearchIncomplete } from '../../utils/searchCompleteness';
 import { searchContext } from '../../utils/searchContext';
 import { traceCandidate, traceNote } from '../../utils/searchTrace';
 import { seasonHint } from '../../utils/seasonHint';
-import { firstMissingTerm, titleRank } from '../../utils/titleMatch';
-import { getPotentialRoman, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
+import { titleRank } from '../../utils/titleMatch';
+import { getPotentialRoman, getQualityProfile, splitArrayIntoChunks } from '../../utils/Utils';
 import collectionService from '../collectionService';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
@@ -315,51 +314,12 @@ class NativeSearchV2Service implements AbstractSearchService {
     }
 
     #indexAndReSearch(term: string, results: IPlayerNewSearchResult[], matchAllWords: boolean): Index.Result[] {
-        //Index them each and search again, iPlayer's search is WAY to fuzzy
-        const lunrIndex: lunr.Index = lunr(function (this: lunr.Builder) {
-            // lunr's default stop words (him, her, and, the...) would erase titles like "Him & Her"
-            // from both the index and the query, so nothing could ever match them.
-            this.pipeline.remove(lunr.stopWordFilter);
-            this.searchPipeline.remove(lunr.stopWordFilter);
-            this.ref('pid');
-            this.field('pid');
-            this.field('title');
-
-            results.forEach(({ id: pid, title }) => this.add({ pid, title }));
-        });
-        const sanitizedTerm = sanitizeLunrQuery(term);
-        if (!sanitizedTerm) {
-            return [];
-        }
-        try {
-            const hits = lunrIndex.search(lunrSearchQuery(sanitizedTerm));
-            const titles = new Map(results.map(({ id, title }) => [id, title]));
-            const hitRefs = new Set(hits.map(({ ref }) => ref));
-            for (const { id, title } of results) {
-                if (!hitRefs.has(id)) {
-                    traceCandidate({ title, stage: 'bbc', kept: false, reason: 'no-match', detail: 'None of the search words match this title' });
-                }
-            }
-            const ranked = hits.filter(({ ref }) => {
-                const title = titles.get(ref) ?? '';
-                const missing = matchAllWords ? firstMissingTerm(title, term) : undefined;
-                traceCandidate(
-                    missing === undefined
-                        ? { title, stage: 'bbc', kept: true }
-                        : { title, stage: 'bbc', kept: false, reason: 'missing-word', detail: `Missing the word "${missing}"` }
-                );
-                return missing === undefined;
-            });
-            // Exact title first, then titles starting with it, then the rest (stable, so lunr's
-            // score order is kept within each group) - the result cap then cuts the weakest.
-            return ranked.sort((a, b) => titleRank(titles.get(a.ref) ?? '', term) - titleRank(titles.get(b.ref) ?? '', term));
-        } catch (err: any) {
-            if (err && err.name === 'QueryParseError') {
-                loggingService.error(`Lunr QueryParseError for term "${term}": ${err.message}`);
-                return [];
-            }
-            throw err;
-        }
+        const titles = new Map(results.map(({ id, title }) => [id, title]));
+        // Exact title first, then titles starting with it, then the rest (stable, so lunr's
+        // score order is kept within each group) - the result cap then cuts the weakest.
+        return lunrTitleSearch(term, results, matchAllWords).sort(
+            (a, b) => titleRank(titles.get(a.ref) ?? '', term) - titleRank(titles.get(b.ref) ?? '', term)
+        );
     }
 }
 

@@ -159,7 +159,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
@@ -175,6 +175,7 @@ import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useNow } from '@/lib/useNow';
 import { usePagination } from '@/lib/usePagination';
 import { deepCopy, formatRelativeTime, getBasePath } from '@/lib/utils';
 
@@ -188,14 +189,7 @@ const { page: uaPage, pageSize: uaPageSize, pagedItems: pagedMappings } = usePag
 
 // Drives the "Last Seen" column's relative-time display - ticking this re-renders those labels
 // (e.g. "20 seconds ago" -> "21 seconds ago") without needing to re-fetch the mappings.
-const now = ref(Date.now());
-let nowInterval;
-onMounted(() => {
-    nowInterval = setInterval(() => {
-        if (!document.hidden) now.value = Date.now();
-    }, 5000);
-});
-onUnmounted(() => clearInterval(nowInterval));
+const now = useNow(5000);
 
 // Each refresh keeps what is on screen when the server cannot answer, and says whether it worked.
 const refreshApps = async () => {

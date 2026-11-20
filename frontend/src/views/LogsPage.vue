@@ -58,7 +58,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import AppButton from '@/components/common/AppButton.vue';
@@ -72,6 +72,7 @@ import dialogService from '@/lib/dialogService';
 import { countByLevel, downloadFileName, filterLogs, LEVELS, linesAsText, parseFilterParam, sourcesOf,SYSTEM_SOURCE } from '@/lib/logFilter';
 import { logTiles } from '@/lib/logTiles';
 import toastService from '@/lib/toastService';
+import { useNow } from '@/lib/useNow';
 import { usePersistedRef } from '@/lib/usePersistedRef';
 
 const route = useRoute();
@@ -100,9 +101,7 @@ watch(
 );
 
 // Ages ("Last error 5m ago") move on without new lines arriving.
-const now = ref(Date.now());
-const ticker = setInterval(() => (now.value = Date.now()), 30000);
-onBeforeUnmount(() => clearInterval(ticker));
+const now = useNow(30000);
 
 const counts = computed(() => countByLevel(logs.value));
 const sources = computed(() => sourcesOf(logs.value));

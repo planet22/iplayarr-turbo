@@ -358,7 +358,7 @@
 </template>
 
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
@@ -382,6 +382,7 @@ import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subsc
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
+import { useSocketEvents } from '@/lib/useSocketEvents';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import { formatRelativeTime, getBasePath, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
@@ -497,7 +498,6 @@ const { loadAppNames, arrAppName } = useArrAppNames();
 
 // Per-show progress of a running check, pushed by the backend; absent when nothing is running for that show.
 const progress = reactive({});
-const socket = inject('socket');
 
 // A quiet check finishes in a blink, so each show's ring stays up at least this long to be seen.
 const MIN_RING_MS = 1000;
@@ -528,12 +528,7 @@ const SOURCE_LABELS = {
 
 const episodeLabel = ({ have, total }) => (total === 1 && have <= 1 ? (have ? 'Has a file' : 'No file yet') : `${have} of ${total} episodes`);
 
-let boundSocket;
-const bindSocket = (s) => {
-    boundSocket?.off('subscriptionProgress', onProgress);
-    boundSocket = s;
-    boundSocket?.on('subscriptionProgress', onProgress);
-};
+useSocketEvents({ subscriptionProgress: onProgress });
 
 // Sonarr/Radarr apps that can be synced for shows linking to iPlayarr; the dialog does the scanning and shows its progress.
 const BASE = 'json-api/subscriptions/arr';
@@ -670,13 +665,10 @@ onMounted(() => {
     load();
     radioSubs.load();
     loadAppNames();
-    bindSocket(socket?.value);
 });
-watch(() => socket?.value, bindSocket);
 watch(showRadio, radioSubs.load);
 watch(showRadio, loadRadioFound);
 onBeforeUnmount(() => {
-    boundSocket?.off('subscriptionProgress', onProgress);
     Object.values(clearTimers).forEach(clearTimeout);
 });
 

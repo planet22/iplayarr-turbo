@@ -153,6 +153,56 @@ async function watchdogFieldChecks(A) {
     rec(A, 'watchdog path-map save rejects a malformed value', savePath.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + savePath.status);
 }
 
+// Rejected input on the routes that share the error helpers (apiErrors) and the form validators: each answers a 400 in the app's
+// standard shape (an error code with a message, or invalid_fields naming each field). Every request here is refused before anything
+// is saved, so it is safe on any instance.
+async function rejectedInputChecks(A) {
+    const send = (method, p, body) => http(p, { method, body });
+    const named = (r, ...fields) => r.status === 400 && r.json?.error && fields.every((f) => r.json?.invalid_fields?.[f]);
+    const said = (r, re) => r.status === 400 && !!r.json?.error && re.test(r.json?.message || '');
+
+    const noChannel = await send('POST', '/json-api/subscriptions/live', {});
+    rec(A, 'live subscription without a channelId is a 400 with its message', said(noChannel, /channelId is required/) ? 'PASS' : 'FAIL', noChannel.text.slice(0, 120));
+    for (const [what, p, body] of [
+        ['live channel Discover switch', '/json-api/live-channels/bbc_one/discover', { enabled: 'yes' }],
+        ['live channel on/off switch', '/json-api/live-channels/bbc_one', {}],
+    ]) {
+        const r = await send('PUT', p, body);
+        rec(A, `${what} refuses a value that is not true or false`, said(r, /true or false/) ? 'PASS' : 'FAIL', r.text.slice(0, 120));
+    }
+    const noRequest = await send('POST', '/json-api/request', {});
+    rec(A, 'an arr request with nothing in it is a 400 naming what is required', said(noRequest, /required/) ? 'PASS' : 'FAIL', noRequest.text.slice(0, 120));
+    const noTerm = await http('/json-api/subscriptions/arr/apps/smoke-none/lookup');
+    rec(A, 'an arr lookup without a search term is a 400', said(noTerm, /search term/) ? 'PASS' : 'FAIL', noTerm.text.slice(0, 120));
+    const noImport = await send('POST', '/json-api/subscriptions/arr/detected/import', {});
+    rec(A, 'importing a detected show with nothing in the request is a 400', said(noImport, /required/) ? 'PASS' : 'FAIL', noImport.text.slice(0, 120));
+
+    const noSynonym = await send('POST', '/json-api/synonym', {});
+    rec(A, 'a synonym with nothing in it is refused, naming its fields', noSynonym.status === 400 && Object.keys(noSynonym.json?.invalid_fields || {}).length ? 'PASS' : 'FAIL', noSynonym.text.slice(0, 160));
+    for (const method of ['POST', 'PUT']) {
+        const r = await send(method, '/json-api/offSchedule', {});
+        rec(A, `off-schedule ${method} with nothing in it is refused, naming its fields`, r.status === 400 && Object.keys(r.json?.invalid_fields || {}).length ? 'PASS' : 'FAIL', r.text.slice(0, 160));
+    }
+    const noApp = await send('POST', '/json-api/apps', {});
+    rec(A, 'an app with nothing in it is refused, naming its fields', noApp.status === 400 && Object.keys(noApp.json?.invalid_fields || {}).length ? 'PASS' : 'FAIL', noApp.text.slice(0, 160));
+    const noAgent = await send('POST', '/json-api/apps/user-agents', {});
+    rec(A, 'a User-Agent mapping with nothing in it names both missing fields', named(noAgent, 'userAgent', 'appName') ? 'PASS' : 'FAIL', noAgent.text.slice(0, 160));
+    const noAgentPut = await send('PUT', '/json-api/apps/user-agents', {});
+    rec(A, 'updating a User-Agent mapping with nothing in it names the User-Agent', named(noAgentPut, 'userAgent') ? 'PASS' : 'FAIL', noAgentPut.text.slice(0, 160));
+
+    // The whole-number settings take their range from one table, so each is refused past its top (and the message names the key).
+    const overLimit = { ACTIVE_LIMIT: 99, RADIO_ACTIVE_LIMIT: 99, RADIO_SEARCH_MAX_RESULTS: 500, RSS_FEED_HOURS: 9999, STRM_WATCHDOG_CONCURRENCY: 99, STRM_WATCHDOG_FAIL_THRESHOLD: 5000, STRM_WATCHDOG_STRIKES: 99, STREAM_HISTORY_RETENTION_DAYS: 99999 };
+    const tooBig = await send('PUT', '/json-api/config', overLimit);
+    const missed = Object.keys(overLimit).filter((key) => !tooBig.json?.invalid_fields?.[key]);
+    rec(A, 'saving every whole-number setting past its limit is refused, naming each one', tooBig.status === 400 && !missed.length ? 'PASS' : 'FAIL', missed.length ? `not refused: ${missed.join(', ')}` : tooBig.text.slice(0, 120));
+    const notNumber = await send('PUT', '/json-api/config', { ACTIVE_LIMIT: 'lots', STRM_WATCHDOG_STRIKES: -1 });
+    rec(A, 'a whole-number setting that is not a number, or is negative, is refused', named(notNumber, 'ACTIVE_LIMIT', 'STRM_WATCHDOG_STRIKES') ? 'PASS' : 'FAIL', notNumber.text.slice(0, 160));
+    const template = await send('PUT', '/json-api/config', { TV_FILENAME_TEMPLATE: '{{title}}-{{quality}}', MOVIE_FILENAME_TEMPLATE: '{{title}}-{{quality}}' });
+    rec(A, 'a filename template with a variable after the final "-" is refused for both TV and movies', named(template, 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE') ? 'PASS' : 'FAIL', template.text.slice(0, 160));
+    const broken = await send('PUT', '/json-api/config', { TV_FILENAME_TEMPLATE: '{{title', MOVIE_FILENAME_TEMPLATE: '{{title' });
+    rec(A, 'a filename template that does not compile is refused for both TV and movies', named(broken, 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE') ? 'PASS' : 'FAIL', broken.text.slice(0, 160));
+}
+
 // ---------------------------------------------------------------- API layer
 // Radio station logos on the Channels page: each is addressed with a version (so a browser's cached older logo is not shown)
 // and is served as a wide SVG (76x32) set on a field of its own colour, the same shape as a TV channel logo.
@@ -792,6 +842,7 @@ async function apiLayer(ctx) {
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
     await watchdogFieldChecks(A);
+    await rejectedInputChecks(A);
     await check(A, 'watchdog reports its strike limit (1-30)', '/json-api/watchdog', (r) => (Number.isInteger(r.json?.strikes) && r.json.strikes >= 1 && r.json.strikes <= 30) || `strikes=${r.json?.strikes}`);
 
     await libraryAndDebugChecks(A, ctx);

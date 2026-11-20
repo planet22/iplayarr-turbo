@@ -7,6 +7,7 @@ import arrFacade from '../../facade/arrFacade';
 import { AppType } from '../../types/AppType';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { QueueEntryStatus } from '../../types/responses/sabnzbd/QueueResponse';
+import { withTimeout } from '../../utils/withTimeout';
 import appService from '../appService';
 import cacheAdminService from '../cacheAdminService';
 import configService from '../configService';
@@ -29,22 +30,6 @@ async function safely<T>(work: () => T | Promise<T>): Promise<T | null> {
     } catch {
         return null;
     }
-}
-
-function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`${what} did not answer in ${ms / 1000}s`)), ms);
-        work.then(
-            (value) => {
-                clearTimeout(timer);
-                resolve(value);
-            },
-            (error) => {
-                clearTimeout(timer);
-                reject(error);
-            }
-        );
-    });
 }
 
 export interface DiskFigures {
