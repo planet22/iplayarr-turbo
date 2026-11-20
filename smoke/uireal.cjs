@@ -444,6 +444,11 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForFunction(() => /Scheduled tasks/i.test(document.querySelector('.settingsBody')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});
             const maint = (await page.locator('.settingsBody').innerText());
             ok('Maintenance lists the scheduled tasks', /Scheduled tasks/i.test(maint));
+            // Every task that has run shows how long it took; none is running here, so no progress bar is on screen.
+            const ranTasks = ((await http('/json-api/maintenance/tasks')).json || []).filter((x) => Number.isFinite(x.lastDurationMs));
+            const tookPills = await page.locator('.pill', { hasText: /^Took / }).count();
+            ok('Maintenance shows "Took ..." for every task that has run', tookPills === ranTasks.length, `${tookPills} pills, ${ranTasks.length} tasks with a duration`);
+            ok('Maintenance draws no progress bar while nothing runs', (await page.locator('.settingsBody .taskBar').count()) === 0);
             ok('Hours in RSS Feed and Full Schedule Refresh are no longer on Maintenance', !/Hours in RSS Feed|Full Schedule Refresh/.test(maint));
             // The DNS Relay row opens its own page, which lists the relay's state and the last 10 lookups.
             ok('Maintenance has a DNS Relay row with a button', /DNS Relay/.test(maint) && (await page.locator('button[aria-label="Open the DNS Relay page"]').count()) === 1);

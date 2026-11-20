@@ -112,6 +112,7 @@
                             <font-awesome-icon :icon="['fas', 'trash']" />
                             <span class="btnText">Clear</span>
                         </button>
+                        <div v-if="busyTask(cache)" class="taskBar" role="progressbar" :aria-label="`${busyTask(cache).label} is running`" :title="`${busyTask(cache).label} is running`"><span /></div>
                     </div>
                 </div>
             </div>
@@ -203,6 +204,9 @@ const { caches, loaded: cachesLoaded, busy: cacheBusy, error: cacheError, cleari
 // flat list. The sort and the Grouped / Flat choice are kept per browser, as are the groups folded away.
 const { sortBy, order, grouped } = useCacheListPrefs('maintenance', MAINTENANCE_SORTS, { sortBy: 'default', grouped: true });
 const sections = computed(() => buildSections(caches.value, { grouped: grouped.value, sortBy: sortBy.value, order: order.value }));
+// A running job that lists this cache (or '*' for all) puts a bar on its line.
+const busyTask = (cache) => tasks.value.find((task) => task.running && task.caches?.some((prefix) => prefix === '*' || prefix === cache.prefix));
+
 const collapsed = ref(new Set(readCollapsedGroups()));
 const isCollapsed = (key) => collapsed.value.has(key);
 const toggleGroup = (key) => {

@@ -40,6 +40,7 @@ describe('cronJobService', () => {
                 lastTrigger: null,
                 lastStartedAt: null,
                 lastFinishedAt: null,
+                lastDurationMs: null,
                 lastStatus: null,
                 lastError: null,
             },
@@ -95,6 +96,32 @@ describe('cronJobService', () => {
         const [status] = cronJobService.getTasks();
         expect(status.lastStatus).toBe('error');
         expect(status.lastError).toBe('boom');
+    });
+
+    it('records how long the last run took, for a successful and a failed run', async () => {
+        jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+        try {
+            const slow = () => new Promise<void>((resolve) => setTimeout(resolve, 1500));
+            await cronJobService.defineTask({ id: 'slow', label: 'S', description: 'd', cron: '* * * * *' }, slow);
+            const done = (cronJobService as any).runTask('slow', 'manual');
+            await jest.advanceTimersByTimeAsync(1500);
+            await done;
+            expect(get('slow').lastDurationMs).toBe(1500);
+
+            const failing = () => new Promise<void>((_, reject) => setTimeout(() => reject(new Error('late')), 400));
+            await cronJobService.defineTask({ id: 'bad', label: 'B', description: 'd', cron: '* * * * *' }, failing);
+            const failed = (cronJobService as any).runTask('bad', 'manual');
+            await jest.advanceTimersByTimeAsync(400);
+            await failed;
+            expect(get('bad')).toMatchObject({ lastStatus: 'error', lastDurationMs: 400 });
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('reports the caches a task fills, and no duration before its first run', async () => {
+        await cronJobService.defineTask({ id: 'c', label: 'C', description: 'd', cron: '* * * * *', caches: ['thumbnails'] }, jest.fn());
+        expect(get('c')).toMatchObject({ caches: ['thumbnails'], lastDurationMs: null });
     });
 
     it('refuses to start an unknown task', () => {

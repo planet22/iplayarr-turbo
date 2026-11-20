@@ -500,7 +500,17 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             if (light) {
                 const run = await http(`/json-api/maintenance/tasks/${light.id}/run`, { method: 'POST' });
                 ok(`run task ${light.id}`, run.status === 202 || run.status === 409, `HTTP ${run.status}`);
+                // The finished run reports how long it took (milliseconds), shown as "Took ..." on the Maintenance tab.
+                let after = null;
+                for (let i = 0; i < 20; i++) {
+                    await sleep(1000);
+                    after = ((await http('/json-api/maintenance/tasks')).json || []).find((x) => x.id === light.id);
+                    if (after && !after.running && after.lastFinishedAt) break;
+                }
+                ok(`task ${light.id} reports how long its last run took`, Number.isFinite(after?.lastDurationMs) && after.lastDurationMs >= 0, `lastDurationMs=${after?.lastDurationMs}`);
             }
+            const purge = tasks.find((x) => x.id === 'cache-purge');
+            if (purge) ok('cache-purge lists every cache for the progress bars', Array.isArray(purge.caches) && purge.caches.includes('*'), JSON.stringify(purge.caches));
             const caches = (await http('/json-api/maintenance/caches')).json || [];
             const c = caches.find((x) => x.prefix === 'stream_vpid') || caches[0];
             if (c) {

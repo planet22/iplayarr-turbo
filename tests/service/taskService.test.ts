@@ -88,6 +88,17 @@ describe('TaskService', () => {
         expect(episodeCacheService.recacheAllSeries).toHaveBeenCalled();
     });
 
+    it('tells the Maintenance tab which caches each job fills or prunes', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('0 * * * *');
+        await TaskService.init();
+        const tasks = definedTasks();
+        expect(tasks['schedule-refresh'].definition.caches).toEqual(['schedule_cache', 'schedule_page_pids']);
+        expect(tasks['sounds-atoz'].definition.caches).toEqual(['sounds_atoz']);
+        expect(tasks['thumbnail-cleanup'].definition.caches).toEqual(['thumbnails', 'thumbnail_image_pid']);
+        expect(tasks['cache-purge'].definition.caches).toEqual(['*']);
+        expect(tasks['library-cleanup'].definition.caches).toBeUndefined();
+    });
+
     it.each([['not a cron'], ['* * * * *'], [''], [undefined]])(
         'falls back to the default schedule for %j and still defines every other job',
         async (configured) => {

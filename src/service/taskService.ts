@@ -36,6 +36,7 @@ class TaskService {
                 description: 'Refreshes the schedule cache, recaches series metadata, and clears stuck failed downloads.',
                 cron: cronSchedule,
                 minIntervalMinutes: 15,
+                caches: ['schedule_cache', 'schedule_page_pids'],
             },
             async () => {
                 const nativeSearchEnabled = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH);
@@ -97,6 +98,7 @@ class TaskService {
                 description: 'Rebuilds the radio A to Z list from the BBC Sounds show listing.',
                 cron: '20 3 * * *',
                 minIntervalMinutes: 60,
+                caches: ['sounds_atoz'],
             },
             () => soundsAtoZService.rebuild()
         );
@@ -122,6 +124,7 @@ class TaskService {
                 label: 'Thumbnail Cache Cleanup',
                 description: 'Deletes cached episode thumbnails that have not been viewed recently.',
                 cron: '35 3 * * *',
+                caches: ['thumbnails', 'thumbnail_image_pid'],
             },
             () => thumbnailCacheService.cleanup()
         );
@@ -159,6 +162,7 @@ class TaskService {
                 label: 'Expired Cache Purge',
                 description: 'Deletes expired entries from the database cache.',
                 cron: '50 3 * * *',
+                caches: ['*'],
             },
             () => DbCacheService.purgeExpired()
         );

@@ -41,6 +41,7 @@ class CronJobService {
             lastTrigger: null,
             lastStartedAt: null,
             lastFinishedAt: null,
+            lastDurationMs: null,
             lastStatus: null,
             lastError: null,
             run,
@@ -129,7 +130,8 @@ class CronJobService {
         }
         task.running = true;
         task.lastTrigger = trigger;
-        task.lastStartedAt = new Date().toISOString();
+        const startedAt = Date.now();
+        task.lastStartedAt = new Date(startedAt).toISOString();
         try {
             // A task whose awaited call never settles must not leave `running` set for good (it would never run again).
             let timer: NodeJS.Timeout | undefined;
@@ -149,7 +151,9 @@ class CronJobService {
             task.lastError = error?.message ?? String(error);
         } finally {
             task.running = false;
-            task.lastFinishedAt = new Date().toISOString();
+            const finishedAt = Date.now();
+            task.lastFinishedAt = new Date(finishedAt).toISOString();
+            task.lastDurationMs = finishedAt - startedAt;
         }
     }
 }
