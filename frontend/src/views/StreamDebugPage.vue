@@ -597,7 +597,11 @@ const pidLinks = computed(() => {
     if (info.value?.live) return [];
     if (isRadio) {
         const showId = info.value?.metadata?.showId;
-        return showId ? [{ label: 'BBC Sounds page', go: () => router.push({ path: `/browse/radio/${showId}`, query: { episode: info.value.pid } }) }] : [];
+        return [
+            ...(showId ? [{ label: 'BBC Sounds page', go: () => router.push({ path: `/browse/radio/${showId}`, query: { episode: info.value.pid } }) }] : []),
+            { label: 'Library debug', go: () => router.push(`/library-debug?q=${info.value.pid}&mode=radio`) },
+            { label: 'Watchdog', go: () => router.push('/watchdog') },
+        ];
     }
     return [
         { label: 'Programme page', go: () => router.push(`/browse/programme/${info.value.pid}`) },
@@ -1491,7 +1495,8 @@ ul.plain {
         // Only as tall as the picture, however long the facts beside it get: the badges are anchored to its bottom corner.
         align-self: flex-start;
         position: relative;
-        width: 480px;
+        // Narrow enough that the facts sit beside it (TV and radio alike) on anything wider than a phone.
+        width: 360px;
         max-width: 100%;
     }
 
@@ -1546,7 +1551,7 @@ ul.plain {
 
     .facts {
         flex: 1;
-        min-width: 280px;
+        min-width: 260px;
 
         h2 {
             margin: 0 0 @space-2;

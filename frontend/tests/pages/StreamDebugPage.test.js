@@ -144,6 +144,24 @@ describe('StreamDebugPage', () => {
         expect(wrapper.find('.progressLine').exists()).toBe(false);
     });
 
+    it('links the programme page, video info, library debug and Watchdog under a TV pid', async () => {
+        const wrapper = await mountIt();
+        expect(wrapper.findAll('.pidLinks li').map((li) => li.text())).toEqual(['Programme page', 'Video info', 'Library debug', 'Watchdog']);
+        const click = (label) => wrapper.findAll('.pidLinks a').find((a) => a.text() === label).trigger('click');
+        await click('Programme page');
+        expect(router.push).toHaveBeenLastCalledWith('/browse/programme/b006q2x0');
+        await click('Library debug');
+        expect(router.push).toHaveBeenLastCalledWith('/library-debug?q=b006q2x0');
+        await click('Watchdog');
+        expect(router.push).toHaveBeenLastCalledWith('/watchdog');
+        await click('Video info');
+    });
+
+    it('has no pid links for a live channel', async () => {
+        responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: { vpid: 'x' } }) };
+        expect((await mountIt()).find('.pidLinks').exists()).toBe(false);
+    });
+
     it('reads each part of the dashboard after the programme', async () => {
         await mountIt();
         const parts = ipFetch.mock.calls
@@ -498,6 +516,24 @@ describe('StreamDebugPage', () => {
             const text = (await mountIt()).find('.facts').text();
             expect(text).toContain('Leaves BBC Sounds');
             expect(text).not.toContain('Leaves iPlayer');
+        });
+
+        it('links the Sounds page, Library debug (radio only) and Watchdog under the pid, and not the iPlayer-only links', async () => {
+            radio({ metadata: SOUNDS });
+            const wrapper = await mountIt();
+            expect(labels(wrapper, '.pidLinks li')).toEqual(['BBC Sounds page', 'Library debug', 'Watchdog']);
+            const click = (label) => wrapper.findAll('.pidLinks a').find((a) => a.text() === label).trigger('click');
+            await click('BBC Sounds page');
+            expect(router.push).toHaveBeenLastCalledWith({ path: '/browse/radio/m001show', query: { episode: 'b006q2x0' } });
+            await click('Library debug');
+            expect(router.push).toHaveBeenLastCalledWith('/library-debug?q=b006q2x0&mode=radio');
+            await click('Watchdog');
+            expect(router.push).toHaveBeenLastCalledWith('/watchdog');
+        });
+
+        it('still links Library debug and Watchdog when the show is unknown (no Sounds page link)', async () => {
+            radio();
+            expect(labels(await mountIt(), '.pidLinks li')).toEqual(['Library debug', 'Watchdog']);
         });
 
         it('shows the parent show and the image id in the facts', async () => {

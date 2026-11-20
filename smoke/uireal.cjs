@@ -824,7 +824,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 const body = await page.innerText('body');
                 ok('the radio debug page reads the episode as audio', /\baudio\b/i.test(body) && (await page.locator('.probeTable tbody tr').count()) > 2, 'no audio probe rows');
                 ok('the radio debug page has no broken picture', await page.evaluate(() => [...document.querySelectorAll('.streamDebug img')].every((i) => i.complete && i.naturalWidth > 0)), 'a picture did not load');
-                ok('the radio debug page shows no video-only parts', !/Library debug|Video info|FHD upgrade/.test(body), 'video-only text on the page');
+                ok('the radio debug page shows no video-only parts', !/Video info|FHD upgrade/.test(body) && (await page.locator('.streamDebug .pidLinks li', { hasText: /^Programme page$/ }).count()) === 0, 'video-only text on the page');
+                // Radio gets Library debug and Watchdog beside its Sounds page link (the iPlayer-only Programme page and Video info stay off).
+                const radioLinks = await page.locator('.streamDebug .facts .pidLinks li').allInnerTexts();
+                ok('the radio debug page links Library debug and Watchdog under the pid', radioLinks.includes('Library debug') && radioLinks.includes('Watchdog'), radioLinks.join(', '));
+                await page.locator('.streamDebug .pidLinks a', { hasText: 'Library debug' }).click();
+                await page.waitForURL(/\/library-debug\?.*mode=radio/, { timeout: 8000 }).catch(() => {});
+                ok('the radio Library debug link opens the library debug page filtered to radio', /\/library-debug\?.*q=[^&]+.*mode=radio/.test(page.url()), page.url());
+                await page.goBack({ waitUntil: 'networkidle' }).catch(() => {});
                 await shot(page, 'radio-debug');
             }
             await page.goto(BASE + '/radio', { waitUntil: 'networkidle' });
