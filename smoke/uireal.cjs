@@ -647,10 +647,21 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
             await page.waitForTimeout(2500);
             const radioTiles = await page.locator('.tileGrid .channelTile').count();
+            // With Live Radio off there are no stations, so the page explains why and links to the setting instead of staying blank.
+            const radioEmptyLinks = await page.locator('.emptyStateBlock a[href="/settings#general"]').count();
+            if (ctx.cfg?.LIVE_RADIO !== 'true') {
+                ok('the radio Channels page says live radio is off and links to Settings (not blank)', radioTiles === 0 && radioEmptyLinks === 1, `tiles ${radioTiles}, settings links ${radioEmptyLinks}`);
+                await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
+                await page.locator('.emptyStateBlock').first().waitFor({ timeout: 25000 }).catch(() => {});
+                ok('the radio Guide says live radio is off and links to Settings (not blank)', (await page.locator('.emptyStateBlock a[href="/settings#general"]').count()) === 1, 'no empty state with the Settings link');
+                await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
+                await page.waitForTimeout(1500);
+            }
             await page.locator('.NavBar .modeSingle').click();
             await page.waitForTimeout(2000);
             const videoTiles = await page.locator('.tileGrid .channelTile').count();
             if (ctx.cfg?.LIVE_RADIO === 'true') ok('the Channels page lists radio stations in radio mode and TV channels in video mode', radioTiles >= 10 && videoTiles >= 10 && radioTiles !== videoTiles, `radio ${radioTiles}, video ${videoTiles}`);
+            else ok('the TV Channels page is not an empty state', videoTiles >= 1 && (await page.locator('.emptyStateBlock').count()) === 0, `video ${videoTiles}`);
             // The radio Guide's blocks open the show's radio page (not a search for the title); the video Guide's still open a programme.
             if (ctx.cfg?.LIVE_RADIO === 'true') {
                 await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });

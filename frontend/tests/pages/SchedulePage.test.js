@@ -2,9 +2,10 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, ref } from 'vue';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import { setMediaMode, setRadioEnabled } from '@/lib/mediaMode';
 import SchedulePage from '@/views/SchedulePage.vue';
 
 const { browseFetch } = vi.hoisted(() => ({ browseFetch: vi.fn(async () => []) }));
@@ -54,6 +55,8 @@ const mountIt = async () => {
 describe('SchedulePage', () => {
     beforeEach(() => {
         browseFetch.mockReset().mockResolvedValue([]);
+        setRadioEnabled(false);
+        setMediaMode('video');
     });
 
     it('shows the loading indicator while the guide loads, and asks for the day and its neighbours', () => {
@@ -91,8 +94,70 @@ describe('SchedulePage', () => {
 
     it('says nothing is scheduled when no channel has a guide', async () => {
         const wrapper = await mountIt();
-        expect(wrapper.text()).toContain('Nothing scheduled for this day.');
+        expect(wrapper.text()).toContain('No TV guide');
         expect(wrapper.find('.scheduleGrid').exists()).toBe(false);
+    });
+
+    describe('empty radio and TV guides', () => {
+        const mountWith = async (provide) => {
+            const wrapper = mount(SchedulePage, {
+                global: {
+                    ...provide,
+                    stubs: { 'font-awesome-icon': true, PageHeader: Header, SettingsPageToolbar: Toolbar, RouterLink: RouterLinkStub },
+                },
+            });
+            await flushPromises();
+            return wrapper;
+        };
+        const settings = (LIVE_RADIO) => ({ provide: { globalSettings: ref({ LIVE_RADIO }) } });
+
+        beforeEach(() => {
+            setRadioEnabled(false);
+            setMediaMode('video');
+        });
+
+        it('sends an empty TV guide to the Channels page', async () => {
+            const wrapper = await mountWith(settings('true'));
+            expect(wrapper.find('.emptyStateTitle').text()).toBe('No TV guide');
+            expect(wrapper.find('.emptyStateHint').text()).toBe('No channels are switched on, so there is nothing to show.');
+            expect(wrapper.findComponent(RouterLinkStub).props('to')).toBe('/browse/channels');
+        });
+
+        it('says live radio is off, with a link to the General settings', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const wrapper = await mountWith(settings('false'));
+            expect(wrapper.find('.emptyStateTitle').text()).toBe('No radio guide');
+            expect(wrapper.find('.emptyStateHint').text()).toBe('Live radio is switched off.');
+            expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ path: '/settings', hash: '#general' });
+        });
+
+        it('treats missing settings as live radio off', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const wrapper = await mountWith({});
+            expect(wrapper.find('.emptyStateHint').text()).toBe('Live radio is switched off.');
+        });
+
+        it('sends an empty radio guide to the Channels page when live radio is on', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const wrapper = await mountWith(settings('true'));
+            expect(wrapper.find('.emptyStateTitle').text()).toBe('No radio guide');
+            expect(wrapper.findComponent(RouterLinkStub).props('to')).toBe('/browse/channels');
+        });
+
+        it('shows the radio stations, not the empty state, when radio has a guide', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            browseFetch.mockResolvedValue([
+                row('radio-4', 'Radio 4', [slot('p1', 'Today', -HOUR, 2 * HOUR)], { audioOnly: true }),
+                row('bbc-one', 'BBC One', [slot('p2', 'News', -HOUR, 2 * HOUR)]),
+            ]);
+            const wrapper = await mountWith(settings('true'));
+            expect(wrapper.find('.emptyStateBlock').exists()).toBe(false);
+            expect(wrapper.findAll('.channelCell').map((c) => c.text())).toEqual(['Radio 4']);
+        });
     });
 
     it('draws a row per channel with a block per programme, marking the one on air', async () => {

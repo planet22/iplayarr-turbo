@@ -33,7 +33,19 @@
         </SettingsPageToolbar>
         <LoadingIndicator v-if="loading" />
         <ErrorState v-else-if="error" :message="error" @retry="load()" />
-        <InfoBar v-else-if="channels.length === 0">Nothing scheduled for this day.</InfoBar>
+        <EmptyState
+            v-else-if="channels.length === 0"
+            :icon="radioActive() ? 'radio' : 'tv'"
+            :title="radioActive() ? 'No radio guide' : 'No TV guide'"
+            :hint="
+                radioActive() && liveRadioOff
+                    ? 'Live radio is switched off.'
+                    : 'No channels are switched on, so there is nothing to show.'
+            "
+        >
+            <RouterLink v-if="radioActive() && liveRadioOff" :to="{ path: '/settings', hash: '#general' }">Turn on Live Radio in Settings</RouterLink>
+            <RouterLink v-else to="/browse/channels">Go to Channels</RouterLink>
+        </EmptyState>
         <div v-else class="scheduleGrid">
             <div class="channelColumn">
                 <div class="corner"></div>
@@ -84,10 +96,10 @@ v-if="row.channel.logo && !failedLogos[row.channel.id]"
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
+import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -104,6 +116,10 @@ const ZOOM_MAX = 16;
 const MIN_BLOCK_WIDTH = 60;
 
 const pxPerMinute = ref(2.5);
+
+// Radio stations only exist while LIVE_RADIO is on; the empty radio guide says so.
+const globalSettings = inject('globalSettings', null);
+const liveRadioOff = computed(() => globalSettings?.value?.LIVE_RADIO !== 'true');
 
 // Re-centers the timeline on whatever time was in the middle of the viewport, so zooming doesn't
 // just jump the scroll position back to the start of the day.
