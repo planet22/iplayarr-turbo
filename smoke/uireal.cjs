@@ -627,9 +627,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('radio Discover is the Discover page: hero banner and rails of radio cards', (await page.locator('.browseHero').count()) > 0 && (await cards.count()) > 3);
             ok('the Video | Radio toggle is in the top bar, showing Radio', /^Radio/.test((await page.locator('.NavBar .modeSingle').getAttribute('aria-label')) || ''));
             ok('the menu has no separate Radio link', (await page.locator('.LeftHandNav a[href="/radio"]').count()) === 0);
-            // A to Z stays in the menu in radio mode, greyed out and not a link (BBC Sounds has none).
-            const atoz = page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' }).locator('.navLink');
-            ok('A to Z stays in the menu in radio mode, disabled', (await atoz.count()) === 1 && (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 0 && (await atoz.getAttribute('aria-disabled')) === 'true');
+            // Radio A to Z (RADIO_ATOZ) is opt-in. Off, A to Z stays in the menu in radio mode, greyed out and not a link (BBC Sounds has none); on, it is a link.
+            const atozOn = ctx.cfg?.RADIO_ATOZ === 'true';
+            if (atozOn) {
+                ok('A to Z is a link in the menu in radio mode (Radio A to Z is on)', (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 1 && (await page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' }).count()) === 0);
+            } else {
+                const atoz = page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' }).locator('.navLink');
+                ok('A to Z stays in the menu in radio mode, disabled', (await atoz.count()) === 1 && (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 0 && (await atoz.getAttribute('aria-disabled')) === 'true');
+            }
             ok('Podcasts is in the menu in radio mode, after A to Z', (await page.locator('.LeftHandNav a[href="/browse/podcasts"]').count()) === 1);
             await shot(page, 'radio-discover');
 
@@ -744,14 +749,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('an opened radio collection lists radio cards, and has a Download collection button like video', (await cards.count()) > 0 && (await page.locator('button[title^="Download collection"]').count()) === 1);
             await shot(page, 'radio-collection');
 
-            // BBC Sounds has no A to Z: an address for it opens Categories, and the command palette does not offer it.
+            // Radio A to Z off: BBC Sounds has no A to Z, so an address for it opens Categories and the command palette does not offer it.
+            // On: the address stays and the palette offers it.
             await page.goto(BASE + '/browse/atoz/a', { waitUntil: 'networkidle' });
             await page.waitForTimeout(1500);
-            ok('radio A to Z address opens Categories instead', new URL(page.url()).pathname === '/browse/categories');
+            if (atozOn) ok('radio A to Z address stays on A to Z (Radio A to Z is on)', new URL(page.url()).pathname === '/browse/atoz/a');
+            else ok('radio A to Z address opens Categories instead', new URL(page.url()).pathname === '/browse/categories');
             await page.keyboard.press('Control+k');
             await page.waitForTimeout(500);
             const paletteText = await page.locator('.cmdPanel').first().innerText().catch(() => '');
-            ok('the command palette offers no A to Z in radio mode', paletteText !== '' && !/A to Z/.test(paletteText));
+            if (atozOn) ok('the command palette offers A to Z in radio mode (Radio A to Z is on)', /A to Z/.test(paletteText));
+            else ok('the command palette offers no A to Z in radio mode', paletteText !== '' && !/A to Z/.test(paletteText));
             await page.keyboard.press('Escape');
 
             // Podcasts: opened by an address (a fresh load, before the app knows Sounds is on), filtered, opened, and left by the toggle.
