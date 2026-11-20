@@ -79,36 +79,25 @@ describe('base path and thumbnails', () => {
 });
 
 describe('buildDownloadQuery', () => {
-    it('includes only the required fields by default', () => {
-        const params = new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'n', type: 'tv' }));
-        expect([...params.keys()]).toEqual(['pid', 'nzbName', 'type']);
+    it('sends only the pid by default, however much the card knows', () => {
+        const params = new URLSearchParams(
+            buildDownloadQuery({ pid: 'p1', nzbName: 'n', type: 'tv', title: 'T', series: 0, episode: 5, episodeTitle: 'E', channel: 'BBC One', pubDate: 'd', runtimeSeconds: 60 })
+        );
+        expect([...params.keys()]).toEqual(['pid']);
     });
 
-    it('carries the optional metadata, including zero series and episode', () => {
-        const params = new URLSearchParams(
-            buildDownloadQuery({
-                pid: 'p1',
-                nzbName: 'n',
-                type: 'tv',
-                title: 'T',
-                series: 0,
-                episode: 5,
-                episodeTitle: 'E',
-                channel: 'BBC One',
-                pubDate: 'd',
-                runtimeSeconds: 60,
-                media: 'strm',
-                version: 'signed',
-                quality: '2',
-            })
-        );
-        expect(params.get('series')).toBe('0');
-        expect(params.get('episode')).toBe('5');
-        expect(params.get('runtime')).toBe('60');
+    it('carries the choices: media mode, version and quality', () => {
+        const params = new URLSearchParams(buildDownloadQuery({ pid: 'p1', media: 'strm', version: 'signed', quality: '2' }));
         expect(params.get('media')).toBe('strm');
         expect(params.get('version')).toBe('signed');
         expect(params.get('quality')).toBe('2');
-        expect(params.get('title')).toBe('T');
+    });
+
+    it('sends a filename only when the user typed it', () => {
+        expect(new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'Suggested.Name' })).has('nzbName')).toBe(false);
+        const params = new URLSearchParams(buildDownloadQuery({ pid: 'p1', nzbName: 'My.Name', nameEdited: true }));
+        expect(params.get('nzbName')).toBe('My.Name');
+        expect(params.get('nameEdited')).toBe('1');
     });
 });
 

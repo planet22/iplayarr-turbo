@@ -4,19 +4,16 @@ export const getBasePath = () => window.__BASE_PATH__ || '';
 // Requests are always same-origin: in dev the Vite proxy (vite.config.mjs) forwards them to the backend.
 export const getHost = () => getBasePath();
 
-// Builds the query string for json-api/download from a full search result, carrying the
-// structured show/season/episode metadata through so the backend can build a Jellyfin-style
-// library folder for it (libraryPathBuilder.ts) - not just pid/nzbName/type. Shared by
-// SearchPage's immediate/bulk download and DownloadConfirmModal's confirm-and-download.
-export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, media, version, quality }) => {
-    const params = new URLSearchParams({ pid, nzbName, type });
-    if (title) params.set('title', title);
-    if (series != null) params.set('series', series);
-    if (episode != null) params.set('episode', episode);
-    if (episodeTitle) params.set('episodeTitle', episodeTitle);
-    if (channel) params.set('channel', channel);
-    if (pubDate) params.set('pubDate', pubDate);
-    if (runtimeSeconds != null) params.set('runtime', runtimeSeconds);
+// Builds the query string for json-api/download. The server works out the name, numbering and library folder
+// from the BBC's details (releaseService.ts), so only the choices are sent: a filename only when the user typed
+// one (`nameEdited`), never the card's own copy of the numbering. Shared by SearchPage's immediate/bulk download,
+// ProgrammePage's batch download and DownloadConfirmModal's confirm-and-download.
+export const buildDownloadQuery = ({ pid, nzbName, nameEdited, media, version, quality }) => {
+    const params = new URLSearchParams({ pid });
+    if (nameEdited && nzbName) {
+        params.set('nzbName', nzbName);
+        params.set('nameEdited', '1');
+    }
     // 'strm' | 'download' for this download only; left out to follow the Media Mode setting.
     if (media) params.set('media', media);
     // A version (audio-described, signed) and/or quality profile id for this download only; left out for the standard one.
