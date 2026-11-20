@@ -18,8 +18,9 @@ const store = new DbCacheService<unknown>('sounds_atoz', TTL_SECONDS, {
     description: 'BBC Sounds shows sorted into letters for the radio A to Z (only built while Radio A to Z is on).',
 });
 
-// The listing also holds the television brands (BBC One, CBBC and so on), which have no audio; they are left out.
-const TV_NETWORK = /^(bbc_one|bbc_two|bbc_three$|bbc_four$|cbbc|cbeebies$|bbc_news|bbc_world_news|bbc_parliament|bbc_sport|bbc_webonly|bbc_alba|bbc_scotland$|bbc_wales|bbc_cymru|bbc_switch|bbc_arts|bbc_voice)/;
+// The listing also holds the television brands (BBC One, CBBC and so on) and the local stations' own copies of shows ("... on BBC
+// Essex"), neither of which belong in a radio A to Z. Only the national networks, the nations' stations and the podcasts are kept.
+const NATIONAL_NETWORK = /^(bbc_radio_(one|two|three|four|five|scotland|ulster|wales|cymru|nan_gaidheal|webonly|mixes|glastonbury|foyle)|bbc_1xtra|bbc_6music|bbc_asian_network|bbc_world_service|bbc_sounds_|bbc_school_radio|cbeebies_radio|bbc_7$|bbc_music)/;
 
 // Never read more than this many pages (23,000 brands were listed when this was written, 118 pages), so a changed API cannot loop.
 const MAX_PAGES = 400;
@@ -100,7 +101,7 @@ class SoundsAtoZService {
             const seen = new Set<string>();
             const buckets = new Map<string, SoundsShow[]>(LETTERS.map((l) => [l, []]));
             for (const { networkId, ...show } of all) {
-                if (seen.has(show.id) || (networkId && TV_NETWORK.test(networkId))) continue;
+                if (seen.has(show.id) || !networkId || !NATIONAL_NETWORK.test(networkId)) continue;
                 seen.add(show.id);
                 const letter = letterOf(show.title);
                 if (letter) buckets.get(letter)?.push(show);

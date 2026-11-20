@@ -18,7 +18,7 @@ jest.mock('../../../src/service/sounds/soundsApiService', () => ({
 // Prefer extending the helpers over duplicating them.
 // Avoid adding new dependencies here.
 const brands = soundsApiService.brands as jest.Mock;
-const brand = (id: string, title: string, networkId = 'bbc_radio_four'): SoundsBrand => ({ id, title, networkId });
+const brand = (id: string, title: string, networkId: string | undefined = 'bbc_radio_four'): SoundsBrand => ({ id, title, networkId });
 const LISTING = [
     brand('b01', 'The Archers'),
     brand('b02', 'Absolute Radio Show'),
@@ -27,6 +27,8 @@ const LISTING = [
     brand('b05', 'Édith Piaf Hour'),
     brand('b01', 'The Archers'),
     brand('b06', '!!!'),
+    brand('b07', 'Archers on BBC Essex', 'bbc_radio_essex'),
+    brand('b08', 'Mystery Show', undefined),
 ];
 const serve = (listing: SoundsBrand[]) =>
     brands.mockImplementation(async (page: number) => ({ total: listing.length, brands: listing.slice((page - 1) * 2, page * 2) }));
@@ -83,9 +85,9 @@ describe('soundsAtoZService', () => {
         expect(await titles('a')).toEqual(['Absolute Radio Show', 'The Archers']);
     });
 
-    it('reads every page, drops television brands and repeats, and files the rest by letter in order', async () => {
+    it('reads every page, drops television and local-station brands, ones with no network, and repeats, and files the rest by letter in order', async () => {
         expect(await soundsAtoZService.rebuild()).toBe(true);
-        expect(brands).toHaveBeenCalledTimes(4);
+        expect(brands).toHaveBeenCalledTimes(5);
         expect(await titles('a')).toEqual(['Absolute Radio Show', 'The Archers']);
         expect(await titles('0')).toEqual(['10 Things']);
         expect(await titles('e')).toEqual(['Édith Piaf Hour']);
@@ -118,7 +120,7 @@ describe('soundsAtoZService', () => {
     it('shares one build between callers who arrive together', async () => {
         const results = await Promise.all([soundsAtoZService.refresh(), soundsAtoZService.refresh(), soundsAtoZService.refresh()]);
         expect(results).toEqual([true, true, true]);
-        expect(brands).toHaveBeenCalledTimes(4);
+        expect(brands).toHaveBeenCalledTimes(5);
     });
 
     it('tries a failed page once more before giving up on it', async () => {
