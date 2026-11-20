@@ -9,6 +9,7 @@ import { version } from '../config/version.json';
 import { AppType } from '../types/AppType';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import appService from './appService';
+import cacheAdminService from './cacheAdminService';
 import configService from './configService';
 import { getDnsRelayStatus } from './dnsRelayService';
 import versionService from './versionService';
@@ -70,6 +71,22 @@ export function folderCheck(name: string, dir: string | undefined): HealthCheck 
         return { name, state: 'ok', detail: `${dir} is writable` };
     } catch (error: any) {
         return { name, state: 'fail', detail: `${dir}: ${error?.code ?? error?.message ?? error}` };
+    }
+}
+
+// Is every cache registered and in a group? One that no group claims still shows (under Other) but is easy to miss,
+// so it is flagged here; so is an empty list, which would mean the caches never registered.
+export function cacheCheck(): HealthCheck {
+    try {
+        const { caches, ungrouped } = cacheAdminService.buildCatalog();
+        if (!caches.length) return { name: 'Caches', state: 'fail', detail: 'No caches are registered' };
+        const memory = caches.filter((cache) => cache.inMemory).length;
+        const summary = `${caches.length} caches (${memory} in memory only)`;
+        return ungrouped.length
+            ? { name: 'Caches', state: 'warn', detail: `${summary}; not in a group, shown under Other: ${ungrouped.join(', ')}` }
+            : { name: 'Caches', state: 'ok', detail: `${summary}, all in a group` };
+    } catch (error: any) {
+        return { name: 'Caches', state: 'fail', detail: error?.message ?? 'Could not list the caches' };
     }
 }
 
@@ -145,6 +162,8 @@ class DebugHealthService {
         } catch (error: any) {
             checks.push({ name: 'Database', state: 'fail', detail: `${databaseFile()}: ${error?.code ?? error?.message ?? error}` });
         }
+
+        checks.push(cacheCheck());
 
         const relay = getDnsRelayStatus();
         checks.push({

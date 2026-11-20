@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     buildSections,
     CACHE_GROUPS,
+    cacheStorage,
     defaultRank,
     groupKeyOf,
     groupTotals,
@@ -38,6 +39,8 @@ const serverPrefixes = () => {
                     .readFileSync(full, 'utf8')
                     .matchAll(/new DbCacheService(?:<[^(]*>)?\(\s*'([a-z_]+)'/g))
                     found.add(match[1]);
+                // Memory caches name themselves with an exported constant, e.g. RESOLVE_CACHE = 'stream_resolve'.
+                for (const match of fs.readFileSync(full, 'utf8').matchAll(/export const [A-Z_]+_CACHE = '([a-z_]+)'/g)) found.add(match[1]);
             }
         }
     };
@@ -325,6 +328,49 @@ describe('cacheGroups', () => {
             expect(readCachePrefs('stats', STATS_SORTS, defaults).sortBy).toBe('busiest');
             expect(() => writeCachePrefs('stats', { sortBy: 'name', order: 'asc', grouped: false })).not.toThrow();
             expect(readCollapsedGroups()).toEqual([]);
+        });
+    });
+
+    describe('memory caches', () => {
+        it('are in the Streaming group, in order, after the database stream caches', () => {
+            const streaming = CACHE_GROUPS.find((group) => group.key === 'streaming');
+            expect(streaming.prefixes).toEqual(['stream_vpid', 'stream_hq_probe', 'stream_resolve', 'stream_vod_playlist']);
+            expect(groupKeyOf('stream_resolve')).toBe('streaming');
+            expect(groupKeyOf('stream_vod_playlist')).toBe('streaming');
+        });
+
+        it('appear under the Streaming section with the others, with their totals', () => {
+            const list = [
+                { prefix: 'stream_vod_playlist', count: 2, sizeBytes: 10, inMemory: true },
+                { prefix: 'stream_vpid', count: 1, sizeBytes: 5 },
+            ];
+            const [section] = buildSections(list);
+            expect(section.key).toBe('streaming');
+            expect(section.caches.map((c) => c.prefix)).toEqual(['stream_vpid', 'stream_vod_playlist']);
+            expect(section.totals).toMatchObject({ caches: 2, records: 3, sizeBytes: 15 });
+        });
+    });
+
+    describe('cacheStorage', () => {
+        it('gives each kind its own icon and words', () => {
+            const kinds = [{ prefix: 'a' }, { prefix: 'b', inMemory: true }, { prefix: 'thumbnails' }].map((cache) => cacheStorage(cache));
+            expect(new Set(kinds.map((k) => k.icon)).size).toBe(3);
+            expect(kinds.map((k) => k.label)).toEqual(['Database', 'Memory (cleared on restart)', 'Files on disk']);
+        });
+
+        it('treats a memory flag as stronger than the prefix', () => {
+            expect(cacheStorage({ prefix: 'thumbnails', inMemory: true }).icon).toBe('memory');
+        });
+
+        it('falls back to the database for anything unknown', () => {
+            expect(cacheStorage({ prefix: 'brand_new_cache' }).icon).toBe('database');
+            expect(cacheStorage({ prefix: undefined }).icon).toBe('database');
+        });
+
+        it('tells database, memory and disk caches apart', () => {
+            expect(cacheStorage({ prefix: 'search_cache' }).icon).toBe('database');
+            expect(cacheStorage({ prefix: 'stream_resolve', inMemory: true }).icon).toBe('memory');
+            expect(cacheStorage({ prefix: 'thumbnails' }).icon).toBe('hard-drive');
         });
     });
 });

@@ -60,7 +60,7 @@
                     :title="isCollapsed(section.key) ? 'Show this group' : 'Hide this group'" @click="toggleGroup(section.key)">
                     <font-awesome-icon class="groupChevron" :icon="['fas', isCollapsed(section.key) ? 'chevron-right' : 'chevron-down']" />
                     <span class="groupName">{{ section.label }}</span>
-                    <span class="groupTotals">{{ summaryParts(section.totals).join(' Â· ') }}</span>
+                    <span class="groupTotals">{{ summaryParts(section.totals).join(' · ') }}</span>
                 </button>
                 <button
                     type="button" class="clickable clearGroup" :title="`Delete everything in ${section.label}`"
@@ -74,13 +74,19 @@
                 <div v-for="cache in section.caches" :key="cache.prefix" class="taskRow">
                     <div class="info">
                         <div class="label">
+                            <font-awesome-icon class="storageIcon" :icon="['fas', cacheStorage(cache).icon]" role="img" :aria-label="cacheStorage(cache).label" :title="cacheStorage(cache).label" />
                             {{ cache.label }}
                             <InfoTip :text="cache.description" />
                         </div>
                         <div class="details cacheDetails">
                             <span class="pill primary count">{{ cache.count.toLocaleString() }} {{ cache.count === 1 ? 'item' : 'items' }}</span>
                             <span class="pill grey size">{{ formatSize(cache.sizeBytes) }}</span>
-                            <span class="ttlEditor">
+                            <span v-if="cache.inMemory" class="ttlEditor fixedKeep" title="Held in memory only; the lifetime is fixed">
+                                <span class="keepLabel">Keep for</span>
+                                <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
+                                {{ describeTtl(cache.defaultTtl) }} (memory only)
+                            </span>
+                            <span v-else class="ttlEditor">
                                 <span class="keepLabel">Keep for</span>
                                 <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
                                 <input
@@ -167,7 +173,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { formatSize } from '@/lib/cacheActivity';
-import { buildSections, MAINTENANCE_SORTS, readCollapsedGroups, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
+import { buildSections, cacheStorage, MAINTENANCE_SORTS, readCollapsedGroups, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
@@ -482,6 +488,11 @@ onMounted(() => {
             gap: @space-1;
             color: @primary-text-color;
             font-size: 15px;
+
+            .storageIcon {
+                flex: none;
+                color: @subtle-text-color;
+            }
         }
 
         .details {

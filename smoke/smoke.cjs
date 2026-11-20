@@ -727,6 +727,35 @@ async function apiLayer(ctx) {
         const bad = Object.entries(r.json).filter(([, a]) => !Number.isInteger(a.hits) || !Number.isInteger(a.misses) || !Number.isInteger(a.lastMinute) || a.trend?.length !== 15);
         return !bad.length || `malformed: ${bad.map(([p]) => p).join(', ')}`;
     });
+    // Memory caches (resolved stream addresses, kept playlists) are listed with the database ones, fixed in lifetime, and flagged so the pages draw a memory icon.
+    await check(A, 'maintenance caches list the stream memory caches, flagged in memory, in the Streaming group', '/json-api/maintenance/caches', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const wanted = ['stream_resolve', 'stream_vod_playlist'];
+        const missing = wanted.filter((p) => !list.some((c) => c.prefix === p));
+        if (missing.length) return `not listed: ${missing.join(', ')}`;
+        const bad = list.filter((c) => wanted.includes(c.prefix) && (c.inMemory !== true || c.group !== 'streaming' || c.overridden !== false || c.ttl !== c.defaultTtl || /memory/i.test(c.label)));
+        return !bad.length || `wrong flag, group, lifetime or label on: ${bad.map((c) => c.prefix).join(', ')}`;
+    });
+    await check(A, 'maintenance caches: only the memory caches carry the in-memory flag (database caches and thumbnails do not)', '/json-api/maintenance/caches', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const flagged = list.filter((c) => c.inMemory).map((c) => c.prefix);
+        const stray = flagged.filter((p) => !['stream_resolve', 'stream_vod_playlist'].includes(p));
+        return (!stray.length && list.some((c) => c.prefix === 'thumbnails' && !c.inMemory) && list.some((c) => !c.inMemory && c.prefix !== 'thumbnails')) || `in-memory flag on: ${stray.join(', ') || 'nothing unexpected, but thumbnails or database caches are missing'}`;
+    });
+    await check(A, 'maintenance cache names carry the in-memory flag too (the Statistics placeholders draw the same icon)', '/json-api/maintenance/caches/names', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const memory = list.filter((c) => c.inMemory).map((c) => c.prefix).sort();
+        const full = (Array.isArray(cachesNow) ? cachesNow : []).filter((c) => c.inMemory).map((c) => c.prefix).sort();
+        return (memory.length >= 2 && JSON.stringify(memory) === JSON.stringify(full)) || `names say ${memory.join(',') || 'none'}, the full list says ${full.join(',') || 'none'}`;
+    });
+    await check(A, 'maintenance cache activity covers the stream memory caches', '/json-api/maintenance/caches/activity', (r) => ['stream_resolve', 'stream_vod_playlist'].every((p) => r.json?.[p] && r.json[p].trend?.length === 15 && Number.isInteger(r.json[p].hits)) || 'no activity for a stream memory cache');
+    // The debug health report checks the cache list too: every cache registered and in a group.
+    await check(A, 'debug health report has a Caches check that is not failing and names no cache missing a group', '/json-api/debug/health', (r) => {
+        const c = (r.json?.checks || []).find((x) => x.name === 'Caches');
+        if (!c) return 'no Caches check in the report';
+        if (c.state === 'fail') return `Caches check failed: ${c.detail}`;
+        return (c.state === 'ok' && /in memory only/.test(c.detail)) || `Caches check: ${c.state} - ${c.detail}`;
+    }, { timeout: 90000 });
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
     await watchdogFieldChecks(A);
@@ -2198,6 +2227,21 @@ async function statisticsCacheCards(browser, U) {
         await Promise.all([http('/json-api/browse/home'), http('/json-api/browse/channels'), http('/json-api/browse/categories')]);
         const flashed = await p.waitForSelector('.liveDot.flashHit, .liveDot.flashMiss', { timeout: 15000 }).then(() => true).catch(() => false);
         rec(U, 'statistics: a cache lookup made a dot flash', flashed ? 'PASS' : 'FAIL', 'no dot flashed within 15 s of three browse requests');
+        // Where each cache keeps its data, as an icon in the card's head: database, memory (cleared on restart) or files on disk.
+        const storageOf = (c) => (c.inMemory ? 'Memory (cleared on restart)' : c.prefix === 'thumbnails' ? 'Files on disk' : 'Database');
+        const wantedIcons = caches.map((c) => `${c.label}=${storageOf(c)}`).sort();
+        const shownIcons = (await p.locator('.cacheCard:has(.liveDot)').evaluateAll((els) => els.map((el) => `${el.querySelector('.cacheName')?.textContent.trim()}=${el.querySelector('.cacheHead .storageIcon')?.getAttribute('aria-label')}`))).sort();
+        rec(U, 'statistics: every cache card has a storage icon (database, memory or disk) that matches the cache', JSON.stringify(shownIcons) === JSON.stringify(wantedIcons) ? 'PASS' : 'FAIL', shownIcons.filter((s) => !wantedIcons.includes(s)).join(' | ') || `${shownIcons.length} icons for ${wantedIcons.length} caches`);
+        const iconKinds = await p.locator('.cacheCard:has(.liveDot) .cacheHead .storageIcon').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') + '|' + (el.getAttribute('data-icon') || '')));
+        rec(U, 'statistics: the stream memory caches show the memory icon and the database caches the database icon', iconKinds.some((k) => k.startsWith('Memory')) && iconKinds.some((k) => k.startsWith('Database')) && new Set(iconKinds.filter((k) => k.startsWith('Memory')).map((k) => k.split('|')[1])).size <= 1 ? 'PASS' : 'FAIL', [...new Set(iconKinds)].join(' ; '));
+        const nameHasStorage = (await p.locator('.cacheCard .cacheName').allTextContents()).filter((n) => /\((memory|database|disk)\)/i.test(n));
+        rec(U, 'statistics: no cache title repeats its storage in brackets now the icon says it', nameHasStorage.length === 0 ? 'PASS' : 'FAIL', nameHasStorage.join(', '));
+        const memoryCard = p.locator('.cacheCard:has(.liveDot):has(.storageIcon[aria-label^="Memory"])').first();
+        if (await memoryCard.count()) {
+            await memoryCard.locator('.storageIcon').hover();
+            const lifetime = await memoryCard.locator('.statBody:has(.statLabel:text-is("Lifetime")) .statValue').innerText();
+            rec(U, 'statistics: a memory cache card shows its fixed lifetime', /^\d+\s?(s|sec|m|min|h)/i.test(lifetime.trim()) || lifetime.trim() !== '-' ? 'PASS' : 'FAIL', lifetime.trim());
+        } else rec(U, 'statistics: a memory cache card shows its fixed lifetime', 'FAIL', 'no memory cache card');
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches.png') });
         // Grouped by purpose with a heading per group, sorted inside each group, one flat list on request, remembered on reload.
         const sorted = (names) => names.every((n, i) => i === 0 || names[i - 1].localeCompare(n, undefined, { sensitivity: 'base', numeric: true }) <= 0);
@@ -2284,6 +2328,27 @@ async function maintenanceCacheGroups(browser, U) {
         await p.locator('.cacheListBar .cacheModeToggle').click();
         await p.waitForTimeout(250);
         rec(U, 'maintenance: Flat removes the group headings', (await p.locator('.maintGroupBar').count()) === 0 && (await p.locator('.maintGroup .taskRow').count()) >= rows ? 'PASS' : 'FAIL');
+        // In the flat list every cache is on show: each row has its storage icon, and a memory cache has a fixed lifetime instead of an editor.
+        const listed = (await http('/json-api/maintenance/caches')).json || [];
+        const storageOf = (c) => (c.inMemory ? 'Memory (cleared on restart)' : c.prefix === 'thumbnails' ? 'Files on disk' : 'Database');
+        // The row's name without its (i) tip, which sits inside the same label.
+        const rowParts = await p.locator('.maintGroup .taskRow').evaluateAll((els) => els.map((el) => {
+            const label = el.querySelector('.label').cloneNode(true);
+            label.querySelectorAll('[class*="InfoTip"], svg').forEach((n) => n.remove());
+            return [label.textContent.trim().replace(/\s+/g, ' '), el.querySelector('.label .storageIcon')?.getAttribute('aria-label')];
+        }));
+        const rowIcons = rowParts.map(([name, icon]) => `${name}=${icon}`).sort();
+        const wantedRows = listed.map((c) => `${c.label}=${storageOf(c)}`).sort();
+        rec(U, 'maintenance: every cache row has a storage icon that matches the cache', JSON.stringify(rowIcons) === JSON.stringify(wantedRows) ? 'PASS' : 'FAIL', rowIcons.filter((s) => !wantedRows.includes(s)).join(' | ') || `${rowIcons.length} rows for ${wantedRows.length} caches`);
+        const memoryRows = p.locator('.maintGroup .taskRow:has(.storageIcon[aria-label^="Memory"])');
+        const memoryCount = await memoryRows.count();
+        const editable = await memoryRows.locator('.ttlEditor input, .ttlEditor select').count();
+        const fixedText = await memoryRows.locator('.fixedKeep').allInnerTexts();
+        rec(U, 'maintenance: a memory cache row shows its lifetime as fixed text, with no editor and no reset', memoryCount === listed.filter((c) => c.inMemory).length && memoryCount >= 2 && editable === 0 && fixedText.length === memoryCount && fixedText.every((t) => /memory only/i.test(t)) && (await memoryRows.locator('.linkButton').count()) === 0 ? 'PASS' : 'FAIL', `${memoryCount} memory rows, ${editable} inputs, ${fixedText.length} fixed`);
+        const dbRows = p.locator('.maintGroup .taskRow:has(.storageIcon[aria-label="Database"])');
+        rec(U, 'maintenance: a database cache row keeps its lifetime editor', (await dbRows.count()) >= 1 && (await dbRows.first().locator('.ttlEditor input').count()) === 1 ? 'PASS' : 'FAIL');
+        const titles = rowParts.map(([name]) => name).filter((n) => /\((memory|database|disk)\)/i.test(n));
+        rec(U, 'maintenance: no cache title repeats its storage in brackets', titles.length === 0 ? 'PASS' : 'FAIL', titles.join(', '));
         await p.screenshot({ path: path.join(SHOTS, 'flow-maintenance-caches-flat.png') });
     } catch (e) { rec(U, 'maintenance cache groups', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
 }

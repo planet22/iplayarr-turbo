@@ -7,6 +7,8 @@ export interface CacheTypeInfo {
     label: string;
     description: string;
     defaultTtl: number;
+    // Held in memory only, with a lifetime set in code: listed and cleared like the others but not editable.
+    inMemory?: boolean;
 }
 
 // What a cache has been doing lately (since the server started; not saved), for the live cards on the Statistics page.

@@ -8,6 +8,7 @@ import { PlayerRequest, SegmentInfo, StreamRequestLogEntry } from '../../types/S
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
+import { figuresOf, noteLookup, registerMemoryCache } from '../memoryCacheRegistry';
 import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bbcHttp';
 import { prefetch, takePrefetched } from './segmentPrefetch';
 import { linkSegments, nextSegmentUrl, register as registerSegmentUrl } from './segmentUrlRegistry';
@@ -155,9 +156,23 @@ const vodPlaylistTtlMs = 5 * 60_000;
 const maxVodPlaylists = 200;
 const vodPlaylistCache = new Map<string, { text: string; contentType: string; expiresAt: number }>();
 
-export function clearPlaylistCache(): void {
+export const VOD_PLAYLIST_CACHE = 'stream_vod_playlist';
+
+export function clearPlaylistCache(): number {
+    const cleared = vodPlaylistCache.size;
     vodPlaylistCache.clear();
+    return cleared;
 }
+
+// Listed with the other caches (Statistics, Maintenance).
+registerMemoryCache({
+    prefix: VOD_PLAYLIST_CACHE,
+    label: 'Stream playlists',
+    description: 'Finished BBC playlists, kept for a few minutes so a repeat request is answered without asking BBC again. Held in memory only.',
+    ttlSeconds: vodPlaylistTtlMs / 1000,
+    figures: () => figuresOf(vodPlaylistCache.values(), (entry) => entry.text.length),
+    clear: clearPlaylistCache,
+});
 
 function rememberVodPlaylist(url: string, text: string, contentType: string): void {
     if (!text.includes('#EXT-X-ENDLIST')) {
@@ -370,6 +385,7 @@ export async function proxyUrl(
 
     if (!req.headers.range) {
         const playlist = vodPlaylistCache.get(url);
+        noteLookup(VOD_PLAYLIST_CACHE, !!playlist && playlist.expiresAt > Date.now());
         if (playlist && playlist.expiresAt > Date.now()) {
             streamRequestLog.finish(entry, { kind: 'playlist', status: 200, bytes: playlist.text.length, durMs: Date.now() - startedAt, cached: true });
             sendRewrittenPlaylist(playlist.text, url, req, res, 200, playlist.contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);

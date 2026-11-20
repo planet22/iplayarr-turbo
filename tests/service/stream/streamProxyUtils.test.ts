@@ -5,11 +5,13 @@ import { EventEmitter } from 'events';
 import http from 'http';
 import https from 'https';
 
+import DbCacheService from '../../../src/service/db/dbCacheService';
 import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
+import { memoryCache } from '../../../src/service/memoryCacheRegistry';
 import { requestTimeoutMs } from '../../../src/service/stream/bbcHttp';
 import { clearPrefetch, takePrefetched } from '../../../src/service/stream/segmentPrefetch';
 import { linkSegments,register, resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
-import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv, VOD_PLAYLIST_CACHE } from '../../../src/service/stream/streamProxyUtils';
 import streamRequestLog, { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
@@ -247,6 +249,63 @@ describe('proxyUrl', () => {
             await proxyUrl('https://cdn/e/media.m3u8', makeReq(), makeRes());
             await proxyUrl('https://cdn/e/media.m3u8', makeReq(), makeRes());
             expect(https.get).toHaveBeenCalledTimes(4);
+        });
+
+        describe('as a listed memory cache', () => {
+            const registered = () => memoryCache(VOD_PLAYLIST_CACHE)!;
+
+            it('registers itself with the playlist lifetime and a label that leaves the storage to the icon', () => {
+                expect(VOD_PLAYLIST_CACHE).toBe('stream_vod_playlist');
+                expect(registered()).toMatchObject({ prefix: 'stream_vod_playlist', label: 'Stream playlists', ttlSeconds: 300 });
+                expect(registered().label).not.toMatch(/memory/i);
+                expect(registered().description).toMatch(/memory/i);
+            });
+
+            it('is empty to begin with', () => {
+                expect(registered().figures()).toEqual({ count: 0, sizeBytes: 0, expiresSoonest: null, expiresLatest: null });
+            });
+
+            it('counts a kept playlist, its text size and when it expires; a live playlist adds nothing', async () => {
+                mockGet(https, [
+                    { status: 200, headers: mpegurl, body: vod },
+                    { status: 200, headers: mpegurl, body: live },
+                ]);
+                const before = Date.now();
+                await proxyUrl('https://cdn/f/media.m3u8', makeReq(), makeRes());
+                await proxyUrl('https://cdn/f/live.m3u8', makeReq(), makeRes());
+                const figures = registered().figures();
+                expect(figures).toMatchObject({ count: 1, sizeBytes: vod.length });
+                expect(figures.expiresSoonest).toBeGreaterThanOrEqual(before + 300_000);
+                expect(figures.expiresLatest).toBe(figures.expiresSoonest);
+            });
+
+            it('clears the kept playlists and says how many went; the next request asks BBC again', async () => {
+                mockGet(https, [
+                    { status: 200, headers: mpegurl, body: vod },
+                    { status: 200, headers: mpegurl, body: vod },
+                ]);
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq(), makeRes());
+                expect(registered().clear()).toBe(1);
+                expect(registered().figures().count).toBe(0);
+                expect(clearPlaylistCache()).toBe(0);
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq(), makeRes());
+                expect(https.get).toHaveBeenCalledTimes(2);
+            });
+
+            it('counts a miss for the first request and a hit for a repeat, and nothing for a Range request', async () => {
+                mockGet(https, [
+                    { status: 200, headers: mpegurl, body: vod },
+                    { status: 200, headers: mpegurl, body: vod },
+                ]);
+                const before = { ...DbCacheService.lookupsFor(VOD_PLAYLIST_CACHE) };
+                // The first two answers are used by the first request and the Range one; the repeat is served from memory.
+                await proxyUrl('https://cdn/l/media.m3u8', makeReq(), makeRes());
+                await proxyUrl('https://cdn/l/media.m3u8', makeReq(), makeRes());
+                await proxyUrl('https://cdn/l/media.m3u8', makeReq({}, { range: 'bytes=0-9' }), makeRes());
+                const after = DbCacheService.lookupsFor(VOD_PLAYLIST_CACHE);
+                expect(after.misses - before.misses).toBe(1);
+                expect(after.hits - before.hits).toBe(1);
+            });
         });
     });
 

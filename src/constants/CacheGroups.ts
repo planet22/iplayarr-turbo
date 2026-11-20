@@ -17,7 +17,7 @@ export const CACHE_GROUPS: CacheGroup[] = [
     { key: 'schedules', label: 'Schedules', prefixes: ['schedule_cache', 'schedule_page_pids', 'radio_schedule'] },
     { key: 'radio', label: 'Radio', prefixes: ['sounds_listing', 'sounds_search', 'sounds_atoz'] },
     { key: 'skyhook', label: 'Sonarr / Skyhook', prefixes: ['skyhook_series_cache', 'skyhook_episode_cache'] },
-    { key: 'streaming', label: 'Streaming', prefixes: ['stream_vpid', 'stream_hq_probe'] },
+    { key: 'streaming', label: 'Streaming', prefixes: ['stream_vpid', 'stream_hq_probe', 'stream_resolve', 'stream_vod_playlist'] },
     { key: 'library', label: 'Library', prefixes: ['library_index', 'thumbnails', 'thumbnail_image_pid'] },
 ];
 

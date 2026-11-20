@@ -524,6 +524,19 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 const nf = await http('/json-api/maintenance/caches/nope', { method: 'DELETE' });
                 ok('clear unknown cache is 404', nf.status === 404, `HTTP ${nf.status}`);
             }
+            // Memory caches: their lifetime is fixed in code, so an override is refused and changes nothing; clearing one only empties memory.
+            const mem = caches.find((x) => x.prefix === 'stream_vod_playlist') || caches.find((x) => x.inMemory);
+            if (mem) {
+                const ttlBefore = mem.ttl;
+                const refused = await http(`/json-api/maintenance/caches/${mem.prefix}/ttl`, { method: 'PUT', body: { ttl: 7200 } });
+                ok('memory cache lifetime change is refused (404)', refused.status === 404, `HTTP ${refused.status}`);
+                const after = ((await http('/json-api/maintenance/caches')).json || []).find((x) => x.prefix === mem.prefix);
+                ok('memory cache lifetime is unchanged and not marked overridden', after?.ttl === ttlBefore && after?.overridden === false, `ttl ${after?.ttl} overridden ${after?.overridden}`);
+                const cleared = await http(`/json-api/maintenance/caches/${mem.prefix}`, { method: 'DELETE' });
+                ok('a memory cache can be cleared', cleared.status === 200, `HTTP ${cleared.status}`);
+                const empty = ((await http('/json-api/maintenance/caches')).json || []).find((x) => x.prefix === mem.prefix);
+                ok('a cleared memory cache lists no entries', empty?.count === 0, `count ${empty?.count}`);
+            } else ok('memory caches are listed', false, 'no cache is flagged inMemory');
         });
 
         // 11. Watchdog: refresh counts, run, stop
