@@ -1425,6 +1425,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForTimeout(800);
             ok('clicking a collection opens it on the Collections page', new RegExp(`/browse/collections\\?c=${listed[0].id}`).test(page.url()), page.url());
 
+            ok('the link says the collection is from the video catalogue (m=video)', /[?&]m=video\b/.test(page.url()), page.url());
+            await page.waitForSelector('.openCollection, .collectionCard', { timeout: 30000 }).catch(() => {});
+            ok('the opened collection lists video programmes, not radio ones', (await page.locator('.openCollection .programmeCard svg[data-icon="radio"]').count()) === 0);
+
             // Poster view: the tile sits level with the programme cards beside it.
             await page.addInitScript(() => { try { localStorage.setItem('iplayarr.searchViewMode', 'posters'); } catch { /* storage unavailable */ } });
             await page.goto(`${BASE}/search?searchTerm=${encodeURIComponent(term)}`, { waitUntil: 'networkidle' });
@@ -1436,7 +1440,18 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                     ok('in the poster view a collection tile lines up with the programme cards', !!a && !!b && Math.abs(a.y - b.y) < 2, `${a?.y} vs ${b?.y}`);
                 } else rec(U, 'poster alignment', 'SKIP', 'only collections in the results');
                 await shot(page, 'search-collection-poster');
-            } else rec(U, 'collections as poster tiles', 'SKIP', 'the poster view was not selected');
+                // The toolbar icons button puts a TV / radio chip bottom left, as on programme cards; off, there is none.
+                const chipOf = () => tile.first().locator('.kindIcon');
+                const pressed = async () => (await page.locator('button[title*="small TV / film / series icons"]').first().getAttribute('aria-pressed')) === 'true';
+                const toggle = page.locator('button[title*="small TV / film / series icons"]').first();
+                if (await toggle.count()) {
+                    if (await pressed()) await toggle.click();
+                    ok('with the icons button off a collection tile has no source chip', (await chipOf().count()) === 0);
+                    await toggle.click();
+                    ok('with the icons button on a collection tile has a TV chip bottom left', (await chipOf().count()) === 1 && (await chipOf().locator('svg[data-icon="tv"]').count()) === 1 && /TV collection/.test((await chipOf().getAttribute('aria-label')) || ''));
+                    await shot(page, 'search-collection-source-chip');
+                    await toggle.click();
+                } else rec(U, 'collection source chip', 'SKIP', 'the icons button is not on this page');            } else rec(U, 'collections as poster tiles', 'SKIP', 'the poster view was not selected');
 
             // Type-ahead: the collection leads, with the collection icon.
             const box = page.locator('.pageSearchBar .searchBox');

@@ -661,6 +661,81 @@ describe('SearchPage', () => {
         expect(rows[0].text()).toContain('3 titles');
     });
 
+    describe('collection source', () => {
+        const withCollection = () => {
+            route.query = { searchTerm: 'foot' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections) => {
+                onBatch([result(1)]);
+                onCollections?.([{ id: 'c1', title: 'Football collection', count: 3 }]);
+            });
+        };
+        const tableRow = (wrapper) => wrapper.findAll('table.resultsTable tbody tr').find((row) => row.text().includes('Football collection'));
+        const asPosters = async (icons) => {
+            localStorage.setItem('iplayarr.searchViewMode', 'posters');
+            if (icons) localStorage.setItem('iplayarr.searchSmallIcons', 'true');
+            return mountIt();
+        };
+        const reset = () => {
+            localStorage.removeItem('iplayarr.searchViewMode');
+            localStorage.removeItem('iplayarr.searchSmallIcons');
+            setMediaMode('video');
+            setCombinedSearch('false');
+            setRadioEnabled(false);
+        };
+        afterEach(reset);
+
+        it('opens a video collection on the video catalogue', async () => {
+            withCollection();
+            const wrapper = await mountIt();
+            await tableRow(wrapper).trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'video' } });
+        });
+
+        it('opens a collection found while Radio is chosen on the radio catalogue', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            withCollection();
+            const wrapper = await mountIt();
+            await tableRow(wrapper).trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'radio' } });
+        });
+
+        it('treats a collection in combined search as video even with Radio chosen', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            setCombinedSearch('true');
+            withCollection();
+            const wrapper = await mountIt();
+            await tableRow(wrapper).trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'video' } });
+        });
+
+        it('opens a poster tile on the catalogue it came from', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            withCollection();
+            const wrapper = await asPosters();
+            const card = wrapper.findComponent({ name: 'CollectionCard' });
+            expect(card.props('collection')).toMatchObject({ id: 'c1', source: 'radio', type: 'COLLECTION' });
+            await card.trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/browse/collections', query: { c: 'c1', m: 'radio' } });
+        });
+
+        it('hands the toolbar icons switch to the collection tile', async () => {
+            withCollection();
+            expect((await asPosters(false)).findComponent({ name: 'CollectionCard' }).props('iconBadges')).toBe(false);
+            expect((await asPosters(true)).findComponent({ name: 'CollectionCard' }).props('iconBadges')).toBe(true);
+        });
+
+        it('keeps the collection in the Collection type filter whatever its source', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            withCollection();
+            const wrapper = await mountIt();
+            expect(wrapper.findAll('.channelChips .filterChip').map((chip) => chip.text())).toContain('Collection');
+        });
+    });
+
     it('filters by type when the results mix TV and movies', async () => {
         route.query = { searchTerm: 'mixed' };
         streamSearch.mockImplementation(async (term, onBatch) =>

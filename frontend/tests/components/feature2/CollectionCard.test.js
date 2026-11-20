@@ -50,6 +50,38 @@ describe('CollectionCard', () => {
         expect(on.attributes('aria-expanded')).toBe('true');
     });
 
+    describe('source chip (toolbar icons switch)', () => {
+        const chip = (collection, props) => mountIt(collection, props).find('.kindIcon');
+
+        it('is left out unless the icons switch is on', () => {
+            expect(chip({ title: 'A', source: 'video' }, {}).exists()).toBe(false);
+            expect(chip({ title: 'A', source: 'video' }, { iconBadges: false }).exists()).toBe(false);
+        });
+
+        it('shows a TV chip for a video collection', () => {
+            const found = chip({ title: 'A', source: 'video' }, { iconBadges: true });
+            expect(found.attributes('aria-label')).toBe('TV collection');
+            expect(found.attributes('title')).toBe('TV collection');
+            expect(found.find('font-awesome-icon-stub').attributes('icon')).toContain('tv');
+        });
+
+        it('shows a radio chip for a radio collection', () => {
+            const found = chip({ title: 'A', source: 'radio' }, { iconBadges: true });
+            expect(found.attributes('aria-label')).toBe('Radio collection');
+            expect(found.find('font-awesome-icon-stub').attributes('icon')).toContain('radio');
+        });
+
+        it('is left out when the collection does not say where it came from', () => {
+            expect(chip({ title: 'A' }, { iconBadges: true }).exists()).toBe(false);
+        });
+
+        it('keeps the collection icon and the count beside it', () => {
+            const wrapper = mountIt({ title: 'A', count: 2, source: 'radio' }, { iconBadges: true });
+            expect(wrapper.find('.groupIcon').exists()).toBe(true);
+            expect(wrapper.find('.count').text()).toBe('2 titles');
+        });
+    });
+
     it('is a button that passes clicks up', async () => {
         const wrapper = mountIt({ title: 'A' });
         expect(wrapper.element.tagName).toBe('BUTTON');

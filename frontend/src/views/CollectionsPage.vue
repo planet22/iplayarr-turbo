@@ -151,7 +151,9 @@ const open = computed(() => collections.value.find((collection) => collection.id
 const items = ref([]);
 const downloadable = ref(undefined);
 // This page is rebuilt when the Video | Radio mode changes, so it can read the mode once.
-const radioMode = radioActive();
+// A collection opened from a search says which catalogue it came from (?m=), since combined search mixes both.
+const radioMode = route.query.m === 'radio' || route.query.m === 'video' ? route.query.m === 'radio' : radioActive();
+const browseMode = route.query.m === 'radio' || route.query.m === 'video' ? route.query.m : undefined;
 const itemFilter = ref('');
 const channelFilter = ref('All');
 const itemSort = ref('default');
@@ -186,7 +188,7 @@ const load = async () => {
     let namesShown = false;
     try {
         try {
-            const names = await browseFetch('collections?basic=1');
+            const names = await browseFetch('collections?basic=1', browseMode);
             enabled.value = names.enabled;
             collections.value = names.collections;
             loading.value = false;
@@ -195,7 +197,7 @@ const load = async () => {
         } catch {
             // The full list below reports any failure.
         }
-        const result = await browseFetch('collections');
+        const result = await browseFetch('collections', browseMode);
         enabled.value = result.enabled;
         collections.value = result.collections;
         detailed.value = true;
@@ -235,7 +237,7 @@ const loadItems = async () => {
         let lastPageSize = PER_PAGE;
         let total;
         while (openId.value === id && (total == null || found.length < total) && lastPageSize >= PER_PAGE) {
-            const page = await browseFetch(`collections/${encodeURIComponent(id)}?page=${pageNumber}&perPage=${PER_PAGE}`);
+            const page = await browseFetch(`collections/${encodeURIComponent(id)}?page=${pageNumber}&perPage=${PER_PAGE}`, browseMode);
             if (openId.value !== id) return;
             const known = new Set(found.map(({ pid }) => pid));
             found.push(...page.items.filter(({ pid }) => !known.has(pid)));

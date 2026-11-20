@@ -121,7 +121,7 @@
         </div>
         <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
             <template v-for="item in posterItems" :key="item.pid">
-                <CollectionCard v-if="item.result.kind === 'collection'" :collection="item.result" @click="openCollection(item.result)" />
+                <CollectionCard v-if="item.result.kind === 'collection'" :collection="item.result" :icon-badges="smallIcons" @click="openCollection(item.result)" />
                 <ProgrammeCard
                     v-else :item="item"
                     :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
@@ -392,8 +392,9 @@ const onInput = () => {
 
 // A collection is a result you open, not download from here: it is left out of selecting and downloading.
 const isCollection = (result) => result.kind === 'collection';
-const collectionResult = (collection) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION' });
-const openCollection = ({ id }) => router.push({ path: '/browse/collections', query: { c: id } });
+// In combined search the collections come from the video side; otherwise from whichever catalogue is showing.
+const collectionResult = (collection) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION', source: combinedActive() || !radioActive() ? 'video' : 'radio' });
+const openCollection = ({ id, source }) => router.push({ path: '/browse/collections', query: { c: id, m: source } });
 const downloadableResults = computed(() => filteredResults.value.filter((result) => !isCollection(result)));
 
 const selectedCount = computed(() => searchResults.value.filter((result) => result.checked).length);
