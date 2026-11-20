@@ -189,7 +189,8 @@ const fetchAll = async () => {
         let lastPageSize = PER_PAGE;
         let polls = 0;
         while (stillCurrent() && (total.value == null || items.value.length < total.value) && lastPageSize >= PER_PAGE) {
-            const result = await browseFetch(endpoint(pageNumber));
+            // Podcasts only exist in BBC Sounds, so ask for them as radio even before the app knows Sounds is on (a fresh load).
+            const result = await browseFetch(endpoint(pageNumber), ...(isPodcasts.value ? ['radio'] : []));
             if (!stillCurrent()) return;
             if (result.building) {
                 building.value = true;

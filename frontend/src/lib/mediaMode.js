@@ -21,6 +21,9 @@ export const setRadioEnabled = (on) => {
 };
 export const radioActive = () => enabled.value && stored.value === 'radio';
 
+// The saved Video | Radio choice alone, for route guards that run before the app has learned whether Sounds is on.
+export const radioChosen = () => stored.value === 'radio';
+
 // RADIO_ATOZ: radio has an A to Z only while this setting (and Sounds) is on. Off, radio keeps having none, as before.
 const atoz = ref(false);
 export const setRadioAtoz = (on) => {

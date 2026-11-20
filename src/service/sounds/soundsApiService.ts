@@ -160,7 +160,9 @@ class SoundsApiService {
         return { total: Number(data?.total) || brands.length, brands };
     }
 
-    // Every BBC podcast show: the brand listing narrowed to the bbc_sounds_podcasts network (about 255 shows, two requests).
+    // Every BBC podcast show that has episodes: the brand listing narrowed to the bbc_sounds_podcasts network (about 255 shows, two
+    // requests), less the shows BBC lists with nothing in them (about a fifth), found by one count request each, eight at a time.
+    // A failed count leaves the show listed. Cached with the list, so this costs one round of requests per cache life.
     podcasts(): Promise<SoundsShow[]> {
         return cached('sounds-podcasts', async () => {
             const shows: SoundsShow[] = [];
@@ -174,7 +176,13 @@ class SoundsApiService {
                 }
                 if ((data?.data ?? []).length < BRANDS_PER_PAGE) break;
             }
-            return shows;
+            const kept: SoundsShow[] = [];
+            for (let i = 0; i < shows.length; i += 8) {
+                const slice = shows.slice(i, i + 8);
+                const counts = await Promise.all(slice.map((show) => this.episodeCount(show.id).catch(() => 1)));
+                slice.forEach((show, n) => counts[n] > 0 && kept.push(show));
+            }
+            return kept;
         });
     }
 

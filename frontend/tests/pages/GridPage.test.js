@@ -175,6 +175,17 @@ describe('GridPage', () => {
         expect(wrapper.findAll('.programmeCard').map((c) => c.text())).toEqual(['Bargain Hunt']);
     });
 
+    it('lists the podcasts, always asking for them as radio', async () => {
+        route.meta = { grid: 'podcasts' };
+        route.params = {};
+        route.fullPath = '/browse/podcasts';
+        api['podcasts?page=1&perPage=150'] = { total: 1, items: [programme(8, { title: 'Question Time' })] };
+        const wrapper = await mountIt();
+        expect(wrapper.find('h1').text()).toBe('Podcasts');
+        expect(browseFetch).toHaveBeenCalledWith('podcasts?page=1&perPage=150', 'radio');
+        expect(wrapper.findAll('.programmeCard').map((c) => c.text())).toEqual(['Question Time']);
+    });
+
     it('says the radio A to Z is being built, asks again, and then lists the letter', async () => {
         vi.useFakeTimers();
         try {

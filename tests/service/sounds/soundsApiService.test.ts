@@ -113,6 +113,18 @@ describe('soundsApiService', () => {
         expect(axios.get).not.toHaveBeenCalled();
     });
 
+    it('lists the podcast shows from the podcast network, leaving out empty ones but keeping any whose count fails', async () => {
+        const brand = (id: string) => ({ id, titles: { primary: `Pod ${id}` }, network: { short_title: 'Sounds' } });
+        (axios.get as jest.Mock).mockImplementation(async (url: string) => {
+            if (url.includes('programmes/container?type=brand&network=bbc_sounds_podcasts')) return { data: { total: 3, data: [brand('b0000001'), brand('b0000002'), brand('b0000003')] } };
+            if (url.includes('container=b0000001')) return { data: { total: 5, data: [] } };
+            if (url.includes('container=b0000002')) return { data: { total: 0, data: [] } };
+            throw new Error('blip');
+        });
+        const shows = await soundsApiService.podcasts();
+        expect(shows.map((s) => s.id)).toEqual(['b0000001', 'b0000003']);
+    });
+
     it('latest is never served from the cache', async () => {
         (axios.get as jest.Mock).mockResolvedValue({ data: { data: [item('p0aaaaaa')] } });
         await soundsApiService.latest('b006qpgr');
