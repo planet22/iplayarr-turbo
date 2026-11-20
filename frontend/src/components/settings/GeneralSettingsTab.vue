@@ -23,6 +23,15 @@
         :error="validationErrors.config?.SOUNDS_ENABLED"
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-if="config.SOUNDS_ENABLED == 'true'"
+        v-model="config.RADIO_PODCASTS"
+        field="RADIO_PODCASTS"
+        name="Podcasts"
+        tooltip="Show a Podcasts page in radio mode, listing the BBC podcast shows, with a link in the menu."
+        :error="validationErrors.config?.RADIO_PODCASTS"
+        :options="trueOrFalse"
+    />
     <template v-if="showAdvanced && config.SOUNDS_ENABLED == 'true'">
         <SelectInput
             v-model="config.LIVE_RADIO"

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import configService from '../../../src/service/configService';
 import soundsApiService from '../../../src/service/sounds/soundsApiService';
 import soundsAtoZService from '../../../src/service/sounds/soundsAtoZService';
 import adapter, { episodeItem, LISTING_CAP, showItem } from '../../../src/service/sounds/soundsBrowseAdapter';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
+import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 
 jest.mock('../../../src/service/sounds/soundsApiService', () => ({
     __esModule: true,
@@ -167,6 +169,20 @@ describe('soundsBrowseAdapter', () => {
         expect(page).toMatchObject({ page: 2, perPage: 2, total: 3 });
         expect(page.items).toEqual([showItem(shows[2])]);
         expect((await adapter.podcasts()).items).toHaveLength(3);
+    });
+
+    it('lists no podcasts, and reads nothing, while Podcasts is switched off or BBC Sounds Radio is off', async () => {
+        api.podcasts.mockResolvedValue([{ id: 'b01', title: 'Pod' }]);
+        await configService.setParameter(IplayarrParameter.RADIO_PODCASTS, 'false');
+        expect(await adapter.podcasts(2, 50)).toEqual({ items: [], page: 2, perPage: 50, total: 0 });
+        await configService.setParameter(IplayarrParameter.RADIO_PODCASTS, 'true');
+        await configService.setParameter(IplayarrParameter.SOUNDS_ENABLED, 'false');
+        expect((await adapter.podcasts()).total).toBe(0);
+        expect(api.podcasts).not.toHaveBeenCalled();
+        await configService.removeParameter(IplayarrParameter.SOUNDS_ENABLED);
+        await configService.removeParameter(IplayarrParameter.RADIO_PODCASTS);
+        expect(await configService.getParameter(IplayarrParameter.RADIO_PODCASTS)).toBe('true');
+        expect((await adapter.podcasts()).total).toBe(1);
     });
 
     it('draws a letter of the radio A to Z as show cards, a page at a time, and says when it is still being built', async () => {

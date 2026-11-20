@@ -62,6 +62,7 @@ const CHANGE = {
     RADIO_THUMBNAIL_STYLE: ['square', 'blur'],
     RADIO_ATOZ: ['true', 'false'],
     RADIO_ATOZ_HIDE_EMPTY: ['true', 'false'],
+    RADIO_PODCASTS: ['true', 'false'],
     RADIO_SEARCH_MATCH_ALL_WORDS: ['false', 'true', 'inherit'],
     RADIO_SEARCH_RANK_BY_TITLE: ['false', 'true'],
     RADIO_SEARCH_SCOPE: ['shows', 'episodes', 'both'],
@@ -443,6 +444,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         REFRESH_SCHEDULE: async ({ next }) => {
             const t = ((await http('/json-api/maintenance/tasks')).json || []).find((x) => x.id === 'schedule-refresh');
             return { what: `the Schedule Refresh task runs on "${next}"`, pass: (t?.cron ?? t?.schedule) === next, detail: `task shows "${t?.cron ?? t?.schedule}"` };
+        },
+        RADIO_PODCASTS: async ({ next }) => {
+            // Off: the radio podcasts list is an empty page and nothing is read from the BBC. On: the list has shows (a cold list takes a while to build).
+            const r = await http('/json-api/browse/podcasts?mode=radio&perPage=5', { timeout: 180000 });
+            const total = r.json?.total;
+            return { what: next === 'true' ? 'the radio podcasts list has shows' : 'the radio podcasts list is empty', pass: next === 'true' ? total > 0 : total === 0, detail: `HTTP ${r.status}, total ${total}` };
         },
         LIVE_TV_ENABLED: async () => {
             const b = await playlist();

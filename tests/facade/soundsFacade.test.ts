@@ -29,7 +29,7 @@ jest.mock('../../src/service/sounds/soundsApiService', () => ({
 }));
 jest.mock('../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
-    default: { home: jest.fn(), categories: jest.fn(), categoriesBasic: jest.fn(), collectionsBasic: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn() },
+    default: { home: jest.fn(), categories: jest.fn(), categoriesBasic: jest.fn(), collectionsBasic: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), podcasts: jest.fn() },
 }));
 
 // Changes here ripple outwards, so check the callers first.
@@ -62,6 +62,12 @@ describe('soundsFacade browse', () => {
         expect(adapter.collection).toHaveBeenCalledWith('c1', 3, 30);
         expect(await soundsFacade.atoz('b', 2, 150)).toEqual({ items: [] });
         expect(adapter.atoz).toHaveBeenCalledWith('b', 2, 150);
+    });
+
+    it('asks the adapter for the podcast shows', async () => {
+        adapter.podcasts.mockResolvedValue({ items: [], page: 2, perPage: 50, total: 0 });
+        expect(await soundsFacade.podcasts(2, 50)).toEqual({ items: [], page: 2, perPage: 50, total: 0 });
+        expect(adapter.podcasts).toHaveBeenCalledWith(2, 50);
     });
 
     it('asks the adapter for the quick category and collection lists only when basic is set', async () => {

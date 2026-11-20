@@ -630,10 +630,12 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // A to Z stays in the menu in radio mode, greyed out and not a link (BBC Sounds has none).
             const atoz = page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' }).locator('.navLink');
             ok('A to Z stays in the menu in radio mode, disabled', (await atoz.count()) === 1 && (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 0 && (await atoz.getAttribute('aria-disabled')) === 'true');
+            ok('Podcasts is in the menu in radio mode, after A to Z', (await page.locator('.LeftHandNav a[href="/browse/podcasts"]').count()) === 1);
             await shot(page, 'radio-discover');
 
             await page.locator('.NavBar .modeSingle').click();
             await page.waitForTimeout(2500);
+            ok('Podcasts is not in the menu in video mode', (await page.locator('.LeftHandNav a[href="/browse/podcasts"]').count()) === 0);
             ok('switching to Video draws video cards again (no radio badge on the first card)', (await page.locator('.programmeCard .noThumb svg[data-icon=radio]').count()) === 0);
             ok('A to Z is a link again in video mode', (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 1);
 
@@ -751,6 +753,25 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const paletteText = await page.locator('.cmdPanel').first().innerText().catch(() => '');
             ok('the command palette offers no A to Z in radio mode', paletteText !== '' && !/A to Z/.test(paletteText));
             await page.keyboard.press('Escape');
+
+            // Podcasts: opened by an address (a fresh load, before the app knows Sounds is on), filtered, opened, and left by the toggle.
+            await page.goto(BASE + '/browse/podcasts', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('radio Podcasts stays on its address on a fresh load and lists show cards', new URL(page.url()).pathname === '/browse/podcasts' && (await cards.count()) > 3 && (await page.locator('h1, .pageHeader').first().innerText()).includes('Podcasts'));
+            ok('the Podcasts page has no horizontal scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
+            await shot(page, 'radio-podcasts');
+            const firstPodcast = ((await cards.first().locator('.title').first().innerText().catch(() => '')) || '').trim();
+            await page.locator('input.tableFilter').fill(firstPodcast.slice(0, 6));
+            await page.waitForTimeout(600);
+            ok('the Podcasts title filter narrows the list', (await cards.count()) >= 1 && (await cards.count()) < 150);
+            await cards.first().locator('.title').first().click();
+            await page.waitForURL(/\/browse\/(radio|programme)\//, { timeout: 15000 });
+            ok('a podcast card opens its show page', /\/browse\/(radio|programme)\//.test(new URL(page.url()).pathname));
+            await page.goto(BASE + '/browse/podcasts', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(1500);
+            ok('switching to Video on the Podcasts page leaves it for Discover', new URL(page.url()).pathname === '/browse');
 
             await page.goto(BASE + '/search?searchTerm=archers', { waitUntil: 'networkidle' });
             await page.locator('.resultsTable tbody tr, .programmeCard').first().waitFor({ timeout: 25000 });

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { SoundsEpisode, SoundsShow } from '../../types/Sounds';
+import configService from '../configService';
 import soundsApiService from './soundsApiService';
 import soundsAtoZService from './soundsAtoZService';
 import { cached, peek } from './soundsCache';
@@ -258,10 +260,12 @@ class SoundsBrowseAdapter {
         return pageOf(result.episodes, result.page, result.perPage, result.total);
     }
 
-    // The BBC's podcast shows (the whole list is small), as brand cards, a page at a time.
+    // The BBC's podcast shows (the whole list is small), as brand cards, a page at a time. With Podcasts (RADIO_PODCASTS) off this is
+    // an empty page and nothing is read from the BBC.
     async podcasts(page = 1, perPage = LISTING_CAP): Promise<SoundsBrowsePage> {
         const size = Math.min(LISTING_CAP, Math.max(1, Math.floor(perPage) || LISTING_CAP));
         const current = Math.max(1, Math.floor(page) || 1);
+        if ((await configService.getParameter(IplayarrParameter.RADIO_PODCASTS)) !== 'true') return { items: [], page: current, perPage: size, total: 0 };
         const shows = await soundsApiService.podcasts();
         return { items: shows.slice((current - 1) * size, current * size).map(showItem), page: current, perPage: size, total: shows.length };
     }

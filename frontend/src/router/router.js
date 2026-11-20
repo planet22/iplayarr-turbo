@@ -1,7 +1,7 @@
 import { inject } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
-import { modeRoute, radioActive, radioAtozActive, radioChosen, setMediaMode } from '@/lib/mediaMode';
+import { modeRoute, radioActive, radioAtozActive, radioChosen, radioPodcastsOn, setMediaMode } from '@/lib/mediaMode';
 import { titleForPath } from '@/lib/pageTitle';
 import { getBasePath, getHost } from '@/lib/utils';
 
@@ -116,9 +116,9 @@ router.beforeEach(async (to, from, next) => {
     if (/^\/browse\/atoz/.test(to.path) && radioActive() && !radioAtozActive()) {
         return next('/browse/categories');
     }
-    // Podcasts are a BBC Sounds list: in video mode the address opens Discover instead.
+    // Podcasts are a BBC Sounds list: in video mode, or with the Podcasts setting off, the address opens Discover instead.
     // (The saved choice is used, not radioActive(): on a fresh load the app does not know yet that Sounds is on.)
-    if (to.path === '/browse/podcasts' && !radioChosen()) {
+    if (to.path === '/browse/podcasts' && (!radioChosen() || !radioPodcastsOn())) {
         return next('/browse');
     }
     const authState = inject('authState'); // Inject global state

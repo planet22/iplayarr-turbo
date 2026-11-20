@@ -31,6 +31,13 @@ export const setRadioAtoz = (on) => {
 };
 export const radioAtozActive = () => enabled.value && atoz.value;
 
+// RADIO_PODCASTS: the Podcasts page and its menu link. On unless the setting says 'false' (also before the settings are known).
+const podcasts = ref(true);
+export const setRadioPodcasts = (on) => {
+    podcasts.value = !(on === false || on === 'false');
+};
+export const radioPodcastsOn = () => podcasts.value;
+
 // SEARCH_COMBINED: the Search page looks in video and radio together. Only while Sounds is on.
 const combined = ref(false);
 export const setCombinedSearch = (on) => {
@@ -64,6 +71,8 @@ export function routeAfterSwitch(path, query, nextMode, title = '') {
     if (/^\/browse\/channel\//.test(path)) return { path: '/browse/channels' };
     if (path === '/browse/collections' && query?.c) return { path: '/browse/collections' };
     if (/^\/browse\/atoz/.test(path) && nextMode === 'radio' && !radioAtozActive()) return { path: '/browse/categories' };
+    // Podcasts are a radio-only list: switching to video leaves it for Discover.
+    if (path === '/browse/podcasts' && nextMode !== 'radio') return { path: '/browse' };
     return null;
 }
 
@@ -72,7 +81,8 @@ export function useMediaMode() {
     const radioEnabled = computed(() => globalSettings?.value?.SOUNDS_ENABLED === 'true');
     const mode = computed(() => (radioEnabled.value && stored.value === 'radio' ? 'radio' : 'video'));
     const radioAtoz = computed(() => radioEnabled.value && globalSettings?.value?.RADIO_ATOZ === 'true');
-    return { mode, radioEnabled, radioAtoz, isRadio: computed(() => mode.value === 'radio'), setMediaMode };
+    const radioPodcasts = computed(() => radioEnabled.value && globalSettings?.value?.RADIO_PODCASTS !== 'false');
+    return { mode, radioEnabled, radioAtoz, radioPodcasts, isRadio: computed(() => mode.value === 'radio'), setMediaMode };
 }
 
 // A route that shows the video page or its radio counterpart by mode. The wrapper takes the video page's name, so

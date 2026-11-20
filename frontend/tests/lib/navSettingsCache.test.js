@@ -34,6 +34,13 @@ describe('navSettingsCache', () => {
             expect(loadNavSettings()).toEqual({});
         });
 
+        it('remembers the Podcasts setting for the menu, so it draws right on the first paint', () => {
+            const store = installStorage();
+            saveNavSettings({ SOUNDS_ENABLED: 'true', RADIO_PODCASTS: 'false', API_KEY: 'secret' });
+            expect(JSON.parse(store[SETTINGS_KEY])).toEqual({ SOUNDS_ENABLED: 'true', RADIO_PODCASTS: 'false' });
+            expect(loadNavSettings()).toEqual({ SOUNDS_ENABLED: 'true', RADIO_PODCASTS: 'false' });
+        });
+
         it('round-trips the three menu settings as strings', () => {
             const store = installStorage();
             saveNavSettings({ BROWSE_SHOW_COLLECTIONS: 'true', NATIVE_SEARCH: 'false', AUTH_TYPE: 'none' });
