@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { SoundsEpisode, SoundsShow } from '../../types/Sounds';
 import soundsApiService from './soundsApiService';
+import soundsAtoZService from './soundsAtoZService';
 import { cached, peek } from './soundsCache';
 import { episodeSubtitle } from './soundsEpisodeText';
 
@@ -257,9 +258,15 @@ class SoundsBrowseAdapter {
         return pageOf(result.episodes, result.page, result.perPage, result.total);
     }
 
-    // BBC Sounds has no alphabetical list, so A to Z is an empty page.
-    atoz(): SoundsBrowsePage {
-        return { items: [], page: 1, perPage: LISTING_CAP, total: 0 };
+    // BBC Sounds has no alphabetical list. With Radio A to Z (RADIO_ATOZ) off this is an empty page and nothing is read; with it on
+    // the page comes from the list soundsAtoZService builds, and `building` is set while the first build is still running.
+    async atoz(letter = '0', page = 1, perPage = LISTING_CAP): Promise<SoundsBrowsePage & { building?: true }> {
+        const size = Math.min(LISTING_CAP, Math.max(1, Math.floor(perPage) || LISTING_CAP));
+        const current = Math.max(1, Math.floor(page) || 1);
+        const found = await soundsAtoZService.letter(letter.toLowerCase());
+        if (found.off) return { items: [], page: 1, perPage: LISTING_CAP, total: 0 };
+        const slice = found.brands.slice((current - 1) * size, current * size);
+        return { items: slice.map(showItem), page: current, perPage: size, total: found.brands.length, ...(found.building ? { building: true as const } : {}) };
     }
 }
 

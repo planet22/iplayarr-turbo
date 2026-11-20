@@ -21,6 +21,13 @@ export const setRadioEnabled = (on) => {
 };
 export const radioActive = () => enabled.value && stored.value === 'radio';
 
+// RADIO_ATOZ: radio has an A to Z only while this setting (and Sounds) is on. Off, radio keeps having none, as before.
+const atoz = ref(false);
+export const setRadioAtoz = (on) => {
+    atoz.value = on === true || on === 'true';
+};
+export const radioAtozActive = () => enabled.value && atoz.value;
+
 // SEARCH_COMBINED: the Search page looks in video and radio together. Only while Sounds is on.
 const combined = ref(false);
 export const setCombinedSearch = (on) => {
@@ -47,13 +54,13 @@ export const pageTitle = ref('');
 // Where the toggle takes you. Pages that exist in both modes (Discover, Search with its term, Categories, the Queue, ...)
 // stay exactly where they are and redraw. Only a page whose id belongs to one catalogue cannot follow: a programme or
 // show opens a search for its title, a category goes to the category list, an opened collection to the collection list,
-// A to Z (radio has none) to Categories. Returns a router location, or null to stay.
+// A to Z (radio has none unless RADIO_ATOZ is on) to Categories. Returns a router location, or null to stay.
 export function routeAfterSwitch(path, query, nextMode, title = '') {
     if (/^\/browse\/(programme|radio)\//.test(path)) return title ? { path: '/search', query: { searchTerm: title } } : { path: '/browse' };
     if (/^\/browse\/category\//.test(path)) return { path: '/browse/categories' };
     if (/^\/browse\/channel\//.test(path)) return { path: '/browse/channels' };
     if (path === '/browse/collections' && query?.c) return { path: '/browse/collections' };
-    if (/^\/browse\/atoz/.test(path) && nextMode === 'radio') return { path: '/browse/categories' };
+    if (/^\/browse\/atoz/.test(path) && nextMode === 'radio' && !radioAtozActive()) return { path: '/browse/categories' };
     return null;
 }
 
@@ -61,7 +68,8 @@ export function useMediaMode() {
     const globalSettings = inject('globalSettings', null);
     const radioEnabled = computed(() => globalSettings?.value?.SOUNDS_ENABLED === 'true');
     const mode = computed(() => (radioEnabled.value && stored.value === 'radio' ? 'radio' : 'video'));
-    return { mode, radioEnabled, isRadio: computed(() => mode.value === 'radio'), setMediaMode };
+    const radioAtoz = computed(() => radioEnabled.value && globalSettings?.value?.RADIO_ATOZ === 'true');
+    return { mode, radioEnabled, radioAtoz, isRadio: computed(() => mode.value === 'radio'), setMediaMode };
 }
 
 // A route that shows the video page or its radio counterpart by mode. The wrapper takes the video page's name, so

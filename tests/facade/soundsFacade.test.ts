@@ -50,7 +50,7 @@ describe('soundsFacade browse', () => {
         adapter.category.mockResolvedValue({ items: [] });
         adapter.collections.mockResolvedValue({ enabled: true, collections: [] });
         adapter.collection.mockResolvedValue({ items: [] });
-        adapter.atoz.mockReturnValue({ items: [] });
+        adapter.atoz.mockResolvedValue({ items: [] });
 
         expect(await soundsFacade.show('b1')).toEqual({ id: 'b1' });
         expect(await soundsFacade.home()).toEqual([{ id: 'r1' }]);
@@ -60,7 +60,8 @@ describe('soundsFacade browse', () => {
         expect(await soundsFacade.collections()).toEqual({ enabled: true, collections: [] });
         await soundsFacade.collection('c1', 3, 30);
         expect(adapter.collection).toHaveBeenCalledWith('c1', 3, 30);
-        expect(soundsFacade.atoz()).toEqual({ items: [] });
+        expect(await soundsFacade.atoz('b', 2, 150)).toEqual({ items: [] });
+        expect(adapter.atoz).toHaveBeenCalledWith('b', 2, 150);
     });
 
     it('asks the adapter for the quick category and collection lists only when basic is set', async () => {

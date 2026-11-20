@@ -43,6 +43,12 @@ describe('GeneralSettingsTab', () => {
         expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).not.toContain('LIVE_RADIO');
     });
 
+    it('shows Radio A to Z only with advanced and Sounds enabled', () => {
+        expect(fields(mountIt({ advanced: true }))).not.toContain('RADIO_ATOZ');
+        expect(fields(mountIt({ advanced: true, config: { SOUNDS_ENABLED: 'true' } }))).toContain('RADIO_ATOZ');
+        expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).not.toContain('RADIO_ATOZ');
+    });
+
     it('shows the schedule section under advanced', () => {
         expect(fields(mountIt({ advanced: true }))).toEqual(
             expect.arrayContaining(['RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH'])

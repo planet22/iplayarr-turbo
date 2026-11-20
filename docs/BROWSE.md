@@ -67,7 +67,7 @@ The badge only reports what BBC lists: iPlayarr itself streams HD at most, so a 
 
 ### Radio mode
 
-With BBC Sounds radio on, a **Video | Radio** switch in the top bar changes what the browse pages show: Discover, Search, Categories, a category, Collections, Channels, Guide and a programme come from BBC Sounds instead of iPlayer. Radio has no A to Z (an address for it opens Categories), no Sonarr/Radarr, no versions and no subtitles. Pages that are not browsing (Queue, Subscriptions, Events, Statistics, Streaming, Watchdog) always show both. See [SOUNDS.md](SOUNDS.md).
+With BBC Sounds radio on, a **Video | Radio** switch in the top bar changes what the browse pages show: Discover, Search, Categories, a category, Collections, Channels, Guide and a programme come from BBC Sounds instead of iPlayer. Radio has no A to Z unless **Radio A to Z** (`RADIO_ATOZ`, off by default) is on (without it an address for it opens Categories), no Sonarr/Radarr, no versions and no subtitles. Pages that are not browsing (Queue, Subscriptions, Events, Statistics, Streaming, Watchdog) always show both. See [SOUNDS.md](SOUNDS.md).
 
 ### Page behaviour
 

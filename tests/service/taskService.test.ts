@@ -6,6 +6,7 @@ import DbCacheService from '../../src/service/db/dbCacheService';
 import episodeCacheService from '../../src/service/episodeCacheService';
 import libraryCleanupService from '../../src/service/libraryCleanupService';
 import liveTvService from '../../src/service/liveTvService';
+import soundsAtoZService from '../../src/service/sounds/soundsAtoZService';
 import streamSessionService from '../../src/service/stream/streamSessionService';
 import strmWatchdogService from '../../src/service/strmWatchdogService';
 import subscriptionDetectService from '../../src/service/subscriptionDetectService';
@@ -149,6 +150,19 @@ describe('TaskService', () => {
 
         await tasks['strm-watchdog'].run();
         expect(strmWatchdogService.run).toHaveBeenCalled();
+    });
+
+    it('registers the nightly radio A to Z task, which asks the A to Z service (it does nothing while that is off)', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValueOnce('*/5 * * * *').mockResolvedValueOnce('false');
+        const rebuild = jest.spyOn(soundsAtoZService, 'rebuild').mockResolvedValue(false);
+
+        await TaskService.init();
+
+        const tasks = definedTasks();
+        expect(tasks['sounds-atoz'].definition.cron).toBe('20 3 * * *');
+        await tasks['sounds-atoz'].run();
+        expect(rebuild).toHaveBeenCalled();
+        rebuild.mockRestore();
     });
 });
 

@@ -175,6 +175,26 @@ describe('GridPage', () => {
         expect(wrapper.findAll('.programmeCard').map((c) => c.text())).toEqual(['Bargain Hunt']);
     });
 
+    it('says the radio A to Z is being built, asks again, and then lists the letter', async () => {
+        vi.useFakeTimers();
+        try {
+            route.meta = { grid: 'atoz' };
+            route.params = { letter: 'b' };
+            route.fullPath = '/browse/atoz/b';
+            api['atoz/b?page=1&perPage=150'] = { total: 0, items: [], building: true };
+            const wrapper = await mountIt();
+            expect(wrapper.text()).toContain('Building the radio A to Z');
+            expect(wrapper.text()).not.toContain('No programmes found');
+            api['atoz/b?page=1&perPage=150'] = { total: 1, items: [programme(7, { title: 'Brain of Britain' })] };
+            await vi.advanceTimersByTimeAsync(3100);
+            await flushPromises();
+            expect(wrapper.text()).not.toContain('Building the radio A to Z');
+            expect(wrapper.findAll('.programmeCard').map((c) => c.text())).toEqual(['Brain of Britain']);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('fetches further pages until the total is reached', async () => {
         const first = Array.from({ length: 150 }, (_, i) => programme(i));
         api['category/drama?page=1&perPage=150'] = { total: 151, items: first };

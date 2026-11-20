@@ -27,7 +27,7 @@ import { ModalsContainer } from 'vue-final-modal';
 import { RouterView, useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { radioActive, setCombinedSearch, setRadioEnabled } from '@/lib/mediaMode';
+import { radioActive, radioAtozActive, setCombinedSearch, setRadioAtoz, setRadioEnabled } from '@/lib/mediaMode';
 import { loadNavSettings, loadNavVersions, saveNavSettings, saveNavVersions } from '@/lib/navSettingsCache';
 import { clearRadioDownloads, loadRadioDownloads, radioHistory, radioQueue, setRadioHistory, setRadioQueue } from '@/lib/radio';
 import { applyServerUiSettings } from '@/lib/serverUiSettings';
@@ -64,6 +64,7 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
 ];
 
 setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
+setRadioAtoz(globalSettings.value?.RADIO_ATOZ);
 setCombinedSearch(globalSettings.value?.SEARCH_COMBINED);
 const streamsLoaded = ref(false);
 const router = useRouter();
@@ -157,10 +158,11 @@ const refreshGlobalSettings = async () => {
     if (!ok) return;
     globalSettings.value = data;
     setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
+    setRadioAtoz(globalSettings.value?.RADIO_ATOZ);
     setCombinedSearch(globalSettings.value?.SEARCH_COMBINED);
     // A cold load (no cached settings) reaches the router guard before radio is known to be on, so an A to Z address
-    // opened in radio mode gets through it: send it to Categories now that the setting is known.
-    if (/^\/browse\/atoz/.test(router.currentRoute.value.path) && radioActive()) router.replace('/browse/categories');
+    // opened in radio mode gets through it: send it to Categories now that the setting is known (unless Radio A to Z is on).
+    if (/^\/browse\/atoz/.test(router.currentRoute.value.path) && radioActive() && !radioAtozActive()) router.replace('/browse/categories');
     if (globalSettings.value?.SOUNDS_ENABLED === 'true') loadRadioDownloads();
     else clearRadioDownloads();
     saveNavSettings(globalSettings.value);

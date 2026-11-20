@@ -121,7 +121,7 @@ describe('the browse API with ?mode=radio', () => {
         facade.category.mockResolvedValue({ items: [], page: 2, perPage: 50, total: 0 });
         facade.collections.mockResolvedValue({ enabled: true, collections: [] });
         facade.collection.mockResolvedValue({ items: [], page: 1, perPage: 30, total: 0 });
-        facade.atoz.mockReturnValue({ items: [], page: 1, perPage: 300, total: 0 });
+        facade.atoz.mockResolvedValue({ items: [], page: 1, perPage: 300, total: 0 });
         expect((await request(app).get('/home?mode=radio')).body).toEqual([{ id: 'rail' }]);
         expect((await request(app).get('/categories?mode=radio')).body).toEqual([{ id: 'comedy' }]);
         await request(app).get('/category/comedy?mode=radio&page=2&perPage=50');
@@ -131,6 +131,7 @@ describe('the browse API with ?mode=radio', () => {
         await request(app).get('/collections/p0bw8cqs?mode=radio');
         expect(facade.collection).toHaveBeenCalledWith('p0bw8cqs', 1, 30);
         expect((await request(app).get('/atoz/a?mode=radio')).body.total).toBe(0);
+        expect(facade.atoz).toHaveBeenCalledWith('a', 1, 30);
         expect(video.home).not.toHaveBeenCalled();
     });
 

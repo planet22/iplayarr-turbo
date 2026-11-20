@@ -53,7 +53,7 @@ import { computed, defineExpose, nextTick, onBeforeUnmount, onMounted, ref, watc
 import { useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { radioActive } from '@/lib/mediaMode';
+import { radioActive, radioAtozActive } from '@/lib/mediaMode';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 
 // Ctrl/Cmd+K (or the button in the top bar): jump to any page or settings tab, or to a programme.
@@ -125,8 +125,8 @@ const close = () => {
 const results = computed(() => {
     const q = query.value.trim().toLowerCase();
     const radio = radioActive();
-    // BBC Sounds has no A to Z, so radio mode does not offer it.
-    const pages = PAGES.filter((page) => !(radio && page.path === '/browse/atoz')).filter((page) => !q || `${page.label} ${page.words ?? ''}`.toLowerCase().includes(q)).map((page) => ({
+    // BBC Sounds has no A to Z, so radio mode does not offer it (unless Radio A to Z is on).
+    const pages = PAGES.filter((page) => !(radio && !radioAtozActive() && page.path === '/browse/atoz')).filter((page) => !q || `${page.label} ${page.words ?? ''}`.toLowerCase().includes(q)).map((page) => ({
         key: `page-${page.path}`,
         icon: page.icon,
         label: page.label,

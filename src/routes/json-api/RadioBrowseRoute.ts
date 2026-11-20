@@ -85,10 +85,10 @@ router.post('/collections/:id/download', enabled, guard(async (req, res) => {
     res.json(result);
 }));
 
-// BBC Sounds has no alphabetical list, so A to Z is an empty page.
-router.get('/atoz/:letter', enabled, (_req: Request, res: Response) => {
-    res.json(soundsFacade.atoz());
-});
+// BBC Sounds has no alphabetical list: A to Z is an empty page unless Radio A to Z (RADIO_ATOZ) is on, which builds one.
+router.get('/atoz/:letter', enabled, guard(async (req, res) => {
+    res.json(await soundsFacade.atoz(String(req.params.letter), pageParam(req), perPageParam(req)));
+}));
 
 // Type-ahead rows, in the shape browse/suggest gives them.
 router.get('/suggest', enabled, guard(async (req, res) => {

@@ -31,6 +31,11 @@ export interface SoundsEpisode {
     mp3: boolean;
 }
 
+// A show as BBC lists it in the full brand listing (the A to Z crawl), with the network's id so TV brands can be left out.
+export interface SoundsBrand extends SoundsShow {
+    networkId?: string;
+}
+
 export interface SoundsShow {
     id: string;
     title: string;

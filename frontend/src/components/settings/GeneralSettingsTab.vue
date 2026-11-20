@@ -33,6 +33,15 @@
             :error="validationErrors.config?.LIVE_RADIO"
             :options="trueOrFalse"
         />
+        <SelectInput
+            v-model="config.RADIO_ATOZ"
+            field="RADIO_ATOZ"
+            :advanced="true"
+            name="Radio A to Z"
+            tooltip="Add an A to Z to radio. Lists every BBC Sounds show once a day, so it is off by default."
+            :error="validationErrors.config?.RADIO_ATOZ"
+            :options="trueOrFalse"
+        />
     </template>
 
     <template v-if="showAdvanced">

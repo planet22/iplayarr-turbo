@@ -93,6 +93,8 @@ export enum IplayarrParameter {
     RADIO_ACTIVE_LIMIT = 'RADIO_ACTIVE_LIMIT',
     // How square radio artwork is shown in the wide picture boxes: 'blur' (a blurred copy behind it) or 'square' (plain).
     RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
+    // An A to Z for radio, built by listing every BBC Sounds brand once a day. Off (the default), nothing for it runs.
+    RADIO_ATOZ = 'RADIO_ATOZ',
     // How radio (BBC Sounds) search results are narrowed and ordered, after BBC answers. 'inherit' follows the manual-search
     // value of SEARCH_MATCH_ALL_WORDS.
     RADIO_SEARCH_MATCH_ALL_WORDS = 'RADIO_SEARCH_MATCH_ALL_WORDS',

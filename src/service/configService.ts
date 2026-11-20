@@ -123,6 +123,7 @@ const configService = {
         RADIO_MEDIA_MODE: 'm4a',
         RADIO_ACTIVE_LIMIT: '2',
         RADIO_THUMBNAIL_STYLE: 'blur',
+        RADIO_ATOZ: 'false',
         RADIO_SEARCH_MATCH_ALL_WORDS: 'inherit',
         RADIO_SEARCH_RANK_BY_TITLE: 'true',
         RADIO_SEARCH_SCOPE: 'both',
@@ -177,7 +178,7 @@ const configService = {
             process.env[parameter.toString()] ||
             configService.defaultConfigMap[parameter.toString()];
         // Live radio stations belong to BBC Sounds radio: with SOUNDS_ENABLED off they are off, whatever LIVE_RADIO says.
-        if (parameter == IplayarrParameter.LIVE_RADIO && value === 'true') {
+        if ((parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.RADIO_ATOZ) && value === 'true') {
             const sounds = configMap[IplayarrParameter.SOUNDS_ENABLED] || process.env[IplayarrParameter.SOUNDS_ENABLED] || configService.defaultConfigMap[IplayarrParameter.SOUNDS_ENABLED];
             if (sounds !== 'true') return 'false';
         }

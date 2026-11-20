@@ -1,7 +1,7 @@
 import { inject } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
-import { modeRoute, radioActive, setMediaMode } from '@/lib/mediaMode';
+import { modeRoute, radioActive, radioAtozActive, setMediaMode } from '@/lib/mediaMode';
 import { titleForPath } from '@/lib/pageTitle';
 import { getBasePath, getHost } from '@/lib/utils';
 
@@ -106,8 +106,8 @@ router.beforeEach(async (to, from, next) => {
     if (to.path == '/login') {
         return next();
     }
-    // BBC Sounds has no A to Z: an address or bookmark for it opens Categories in radio mode.
-    if (/^\/browse\/atoz/.test(to.path) && radioActive()) {
+    // BBC Sounds has no A to Z (unless Radio A to Z is on): an address or bookmark for it opens Categories in radio mode.
+    if (/^\/browse\/atoz/.test(to.path) && radioActive() && !radioAtozActive()) {
         return next('/browse/categories');
     }
     const authState = inject('authState'); // Inject global state

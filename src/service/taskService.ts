@@ -10,6 +10,7 @@ import episodeCacheService from './episodeCacheService';
 import libraryCleanupService from './libraryCleanupService';
 import liveTvService from './liveTvService';
 import loggingService from './loggingService';
+import soundsAtoZService from './sounds/soundsAtoZService';
 import soundsFollowService from './sounds/soundsFollowService';
 import streamSessionService from './stream/streamSessionService';
 import strmWatchdogService from './strmWatchdogService';
@@ -86,6 +87,18 @@ class TaskService {
                 minIntervalMinutes: 15,
             },
             () => soundsFollowService.checkAll()
+        );
+
+        // Radio A to Z list - 3:20 AM daily. Does nothing (reads nothing from the BBC) unless RADIO_ATOZ is on.
+        await cronJobService.defineTask(
+            {
+                id: 'sounds-atoz',
+                label: 'Radio A to Z',
+                description: 'Rebuilds the radio A to Z list from the BBC Sounds show listing.',
+                cron: '20 3 * * *',
+                minIntervalMinutes: 60,
+            },
+            () => soundsAtoZService.rebuild()
         );
 
         // Subscription detection - 3:47 AM daily. Only touches apps with "detect subscriptions" switched on in

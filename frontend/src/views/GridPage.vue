@@ -35,6 +35,8 @@
         </div>
         <EmptyState v-else-if="items.length && !loadingAll" icon="filter" title="Nothing matches that filter" />
         <SkeletonLoader v-if="loading" pagination :count="gridPageSize" />
+        <!-- Radio A to Z (RADIO_ATOZ): the list is made the first time it is wanted, which takes under a minute. -->
+        <EmptyState v-else-if="!error && building" icon="radio" title="Building the radio A to Z" hint="Reading the BBC Sounds show list. This takes a short while the first time." />
         <EmptyState v-else-if="!error && items.length === 0" :icon="isRadio ? 'radio' : 'tv'" title="No programmes found" hint="Nothing is listed here right now." />
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
@@ -72,6 +74,9 @@ const items = ref([]);
 const total = ref(undefined);
 const loading = ref(false); // first page only - the grid is blank until this resolves
 const loadingAll = ref(false); // remaining pages, fetched automatically in the background
+const building = ref(false); // radio A to Z: the server is still making its list, so this asks again every few seconds
+const BUILD_POLL_MS = 3000;
+const BUILD_POLL_MAX = 100;
 const error = ref(null);
 const categoryTitle = ref('');
 const rails = ref([]);
@@ -179,9 +184,18 @@ const fetchAll = async () => {
     try {
         let pageNumber = 1;
         let lastPageSize = PER_PAGE;
+        let polls = 0;
         while (stillCurrent() && (total.value == null || items.value.length < total.value) && lastPageSize >= PER_PAGE) {
             const result = await browseFetch(endpoint(pageNumber));
             if (!stillCurrent()) return;
+            if (result.building) {
+                building.value = true;
+                loading.value = false;
+                if (++polls > BUILD_POLL_MAX) break;
+                await new Promise((resolve) => setTimeout(resolve, BUILD_POLL_MS));
+                continue;
+            }
+            building.value = false;
             const known = new Set(items.value.map(({ pid }) => pid));
             items.value.push(...result.items.filter(({ pid }) => !known.has(pid)));
             total.value = result.total;
@@ -194,6 +208,8 @@ const fetchAll = async () => {
     } finally {
         loading.value = false;
         loadingAll.value = false;
+        // Leaving this listing (another letter, another page) while it was being built must not leave the note behind.
+        if (stillCurrent()) building.value = false;
     }
 };
 
@@ -239,6 +255,7 @@ watch(
         channelFilter.value = 'All';
         // The sort is a saved preference, so it is not reset with the listing.
         total.value = undefined;
+        building.value = false;
         gridPage.value = 1;
         if (!isAtoZ.value) {
             resolveCategoryTitle();

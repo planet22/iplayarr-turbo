@@ -81,8 +81,9 @@ class SoundsFacade {
         return soundsBrowseAdapter.collection(id, page, perPage);
     }
 
-    atoz(): SoundsBrowsePage {
-        return soundsBrowseAdapter.atoz();
+    // Empty unless Radio A to Z (RADIO_ATOZ) is on; `building` while its first list is still being made.
+    atoz(letter?: string, page?: number, perPage?: number): Promise<SoundsBrowsePage & { building?: true }> {
+        return soundsBrowseAdapter.atoz(letter, page, perPage);
     }
 
     downloads(): Promise<SoundsDownload[]> {

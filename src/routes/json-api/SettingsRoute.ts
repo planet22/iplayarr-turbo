@@ -10,6 +10,7 @@ import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
 import libraryIndexService from '../../service/libraryIndexService';
 import loggingService from '../../service/loggingService';
+import soundsAtoZService from '../../service/sounds/soundsAtoZService';
 import soundsDownloadService from '../../service/sounds/soundsDownloadService';
 import videoEventService from '../../service/videoEventService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
@@ -156,6 +157,9 @@ router.put('/', async (req: Request, res: Response) => {
     if (radioWasOn && (req.body[IplayarrParameter.LIVE_RADIO] === 'false' || req.body[IplayarrParameter.SOUNDS_ENABLED] === 'false')) {
         await liveChannelFacade.removeRadio();
     }
+
+    // Radio A to Z switched on: start building its list now (in the background) instead of at the first visit or the nightly run.
+    if (req.body[IplayarrParameter.RADIO_ATOZ] === 'true') void soundsAtoZService.warm();
 
     // The saved values, with secrets masked as GET masks them (the body may now hold the stored password hash).
     res.json(maskConfig(req.body));

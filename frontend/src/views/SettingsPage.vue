@@ -133,7 +133,7 @@ const activeTab = ref(initialTab ?? 'general');
 // the tabs whose keys differ from what was last loaded or saved. STREAM_BASE_URL and STREAM_KEY are
 // shared by Streaming and Live TV.
 const TAB_KEYS = {
-    general: ['API_KEY', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH', 'SOUNDS_ENABLED', 'LIVE_RADIO'],
+    general: ['API_KEY', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH', 'SOUNDS_ENABLED', 'LIVE_RADIO', 'RADIO_ATOZ'],
     search: [
         'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
         'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH',
