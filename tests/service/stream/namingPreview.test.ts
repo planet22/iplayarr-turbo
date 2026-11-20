@@ -11,7 +11,9 @@ import * as libraryPathBuilder from '../../../src/utils/libraryPathBuilder';
 import * as Utils from '../../../src/utils/Utils';
 
 jest.mock('../../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
-jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { details: jest.fn() } }));
+jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { details: jest.fn(), getMetadata: jest.fn() } }));
+jest.mock('../../../src/service/queueService', () => ({ __esModule: true, default: { addToQueue: jest.fn() } }));
+jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, default: { record: jest.fn() } }));
 jest.mock('../../../src/service/numberingOverrideService', () => ({ __esModule: true, default: { find: jest.fn() } }));
 jest.mock('../../../src/service/synonymService', () => ({ __esModule: true, default: { getSynonym: jest.fn() } }));
 jest.mock('../../../src/service/skyhook/SkyhookService', () => ({

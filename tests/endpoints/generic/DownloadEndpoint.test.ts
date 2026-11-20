@@ -1,138 +1,49 @@
 import { Request, Response } from 'express';
 
 import DownloadEndpoint from '../../../src/endpoints/generic/DownloadEndpoint';
-import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
-import queueService from '../../../src/service/queueService';
+import { enqueueRelease } from '../../../src/service/releaseService';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
-import { IPlayerMetadataResponse } from '../../../src/types/responses/IPlayerMetadataResponse';
-import * as Utils from '../../../src/utils/Utils';
 
-jest.mock('../../../src/service/iplayerDetailsService');
-jest.mock('../../../src/service/queueService');
+jest.mock('../../../src/service/releaseService', () => ({ ...jest.requireActual('../../../src/service/releaseService'), enqueueRelease: jest.fn() }));
 
 describe('DownloadEndpoint', () => {
     let req: Partial<Request>;
     let res: Partial<Response>;
     let jsonMock: jest.Mock;
+    let status: jest.Mock;
 
     beforeEach(() => {
+        jest.resetAllMocks();
         jsonMock = jest.fn();
+        status = jest.fn().mockReturnValue({ json: jsonMock });
         req = { query: { pid: 'abc123' } };
-        res = { json: jsonMock };
+        res = { json: jsonMock, status } as any;
     });
 
-    it('handles TV metadata correctly and adds to queue', async () => {
-        const metadata: IPlayerMetadataResponse = {
-            programme: {
-                display_title: { title: 'Doctor Who', subtitle: 'The Timeless Child' },
-                categories: [],
-                type: 'series',
-                pid: '1234',
-                title: 'Title'
-            },
-        };
-
-        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata);
-
+    it('queues the programme named from its title and typed by its BBC category, and answers ok', async () => {
+        (enqueueRelease as jest.Mock).mockResolvedValue({});
         await DownloadEndpoint(req as Request, res as Response);
-
-        expect(iplayerDetailsService.getMetadata).toHaveBeenCalledWith('abc123');
-        expect(queueService.addToQueue).toHaveBeenCalledWith(
-            'abc123',
-            'Doctor.Who_The.Timeless.Child',
-            VideoType.TV,
-            undefined,
-            expect.objectContaining({ title: 'Doctor Who' })
-        );
+        expect(enqueueRelease).toHaveBeenCalledWith('abc123', expect.objectContaining({ typeFrom: 'category', nameStyle: 'plain' }));
         expect(jsonMock).toHaveBeenCalledWith({ status: true });
     });
 
-    it('handles movie metadata correctly and adds to queue', async () => {
-        const metadata: IPlayerMetadataResponse = {
-            programme: {
-                display_title: { title: 'Inception', subtitle: '' },
-                categories: [{
-                    type: 'format', key: 'films',
-                    id: '1234',
-                    title: 'Test Film',
-                    broader: {
-                        category: undefined
-                    },
-                    has_topic_page: false
-                }],
-                type: 'series',
-                pid: '5678',
-                title: 'Test Series'
-            },
-        };
-
-        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata);
-
+    it('still queues a programme the BBC has no details for, under its pid, as TV', async () => {
+        (enqueueRelease as jest.Mock).mockResolvedValue({});
         await DownloadEndpoint(req as Request, res as Response);
-
-        expect(queueService.addToQueue).toHaveBeenCalledWith(
-            'abc123',
-            'Inception',
-            VideoType.MOVIE,
-            undefined,
-            expect.objectContaining({ title: 'Inception' })
-        );
-        expect(jsonMock).toHaveBeenCalledWith({ status: true });
+        const { fallback } = (enqueueRelease as jest.Mock).mock.calls[0][1];
+        expect(fallback).toEqual({ nzbName: '', type: VideoType.TV, onlyIfNotFound: true });
     });
 
-    it('handles missing metadata gracefully', async () => {
-        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+    it('lets any other failure through to the error handler', async () => {
+        (enqueueRelease as jest.Mock).mockRejectedValue(new Error('down'));
+        await expect(DownloadEndpoint(req as Request, res as Response)).rejects.toThrow('down');
+        expect(jsonMock).not.toHaveBeenCalled();
+    });
 
+    it.each([['../../etc/passwd'], ['bad pid'], [undefined], ['x'.repeat(65)]])('refuses a programme id of %j without queueing', async (pid) => {
+        req = { query: { pid } } as any;
         await DownloadEndpoint(req as Request, res as Response);
-
-        expect(queueService.addToQueue).toHaveBeenCalledWith('abc123', '', VideoType.TV);
-        expect(jsonMock).toHaveBeenCalledWith({ status: true });
+        expect(status).toHaveBeenCalledWith(400);
+        expect(enqueueRelease).not.toHaveBeenCalled();
     });
-
-    describe('branches', () => {
-        const programme = (over: object = {}) => ({
-            programme: { display_title: { title: 'Show', subtitle: 'Sub' }, categories: [], type: 'episode', pid: 'abc123', title: 'Show', ...over },
-        });
-
-        it.each([['../../etc/passwd'], ['bad pid'], [undefined], ['x'.repeat(65)]])('refuses a programme id of %j without looking it up', async (pid) => {
-            req = { query: { pid } } as any;
-            const status = jest.fn().mockReturnThis();
-            res = { json: jsonMock, status } as any;
-            await DownloadEndpoint(req as Request, res as Response);
-            expect(status).toHaveBeenCalledWith(400);
-            expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
-            expect(queueService.addToQueue).not.toHaveBeenCalled();
-        });
-
-        it('falls back to the series and episode in the generated name when the BBC gives none', async () => {
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(programme({ display_title: { title: 'Show S02E05', subtitle: '' }, position: null }));
-            await DownloadEndpoint(req as Request, res as Response);
-            expect((queueService.addToQueue as jest.Mock).mock.calls[0][4]).toMatchObject({ title: 'Show S02E05' });
-        });
-
-        it('takes only the missing half from the filename when BBC knows the series but not the episode', async () => {
-            const spy = jest.spyOn(Utils, 'calculateSeasonAndEpisode').mockResolvedValue([VideoType.TV, undefined, 'Title', 3]);
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(programme({ display_title: { title: 'Show S03E07', subtitle: '' } }));
-            await DownloadEndpoint(req as Request, res as Response);
-            spy.mockRestore();
-            expect((queueService.addToQueue as jest.Mock).mock.calls[0][4]).toMatchObject({ series: 3, episode: 7 });
-        });
-
-        it('carries the first version\'s runtime, and none when there are no versions', async () => {
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(programme({ versions: [{ duration: 1800 }] }));
-            await DownloadEndpoint(req as Request, res as Response);
-            expect((queueService.addToQueue as jest.Mock).mock.calls[0][4].runtimeSeconds).toBe(1800);
-
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(programme({ versions: [] }));
-            await DownloadEndpoint(req as Request, res as Response);
-            expect((queueService.addToQueue as jest.Mock).mock.calls[1][4].runtimeSeconds).toBeUndefined();
-        });
-
-        it('queues a programme BBC has no details for under its pid, without library details', async () => {
-            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
-            await DownloadEndpoint(req as Request, res as Response);
-            expect(queueService.addToQueue).toHaveBeenCalledWith('abc123', '', VideoType.TV);
-        });
-    });
-
 });

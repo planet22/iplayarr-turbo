@@ -986,6 +986,21 @@ async function libraryAndDebugChecks(A, ctx) {
             return j.fileName || j.error ? true : 'neither a file name nor an error';
         }, { timeout: 90000 });
     } else rec(A, 'stream debug naming for an episode', 'SKIP', 'no episode listed');
+    // One resolver names every download (releaseService.ts), the Download dialog's suggestion and the debug page alike.
+    for (const bad of ['bad', '..%2Fetc']) {
+        const r = await http(`/json-api/release-preview?pid=${bad}`);
+        rec(A, `release preview refuses the id "${decodeURIComponent(bad)}"`, r.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+    }
+    if (episodePid) {
+        const preview = await http(`/json-api/release-preview?pid=${episodePid}`, { timeout: 90000 });
+        const debugNaming = (await http(`/json-api/streams/debug/${episodePid}/naming`, { timeout: 90000 })).json;
+        const pj = preview.json;
+        const why = !pj?.nzbName || !pj.type ? `no name or type (HTTP ${preview.status})`
+            : debugNaming?.nzbName !== pj.nzbName ? `preview ${pj.nzbName} differs from debug ${debugNaming?.nzbName}`
+            : debugNaming.numbering?.series !== pj.series || debugNaming.numbering?.episode !== pj.episode ? `numbering ${pj.series}/${pj.episode} differs from debug ${debugNaming.numbering?.series}/${debugNaming.numbering?.episode}`
+            : '';
+        rec(A, 'release preview gives the same name and numbering as the debug File naming', why ? 'FAIL' : 'PASS', why);
+    } else rec(A, 'release preview for an episode', 'SKIP', 'no episode listed');
     await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
     // The probe shows each connection's priority and address, with the signed query string removed.
     const probeVpid = episodePid ? (await http(`/json-api/streams/debug/${episodePid}/programme`, { timeout: 60000 })).json?.versions?.[0]?.vpid : undefined;

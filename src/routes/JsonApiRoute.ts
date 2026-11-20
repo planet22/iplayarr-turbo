@@ -6,7 +6,8 @@ import searchFacade from '../facade/searchFacade';
 import soundsFacade from '../facade/soundsFacade';
 import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
-import queueService from '../service/queueService';
+import { InvalidQueueInputError } from '../service/queueService';
+import { enqueueRelease, ReleaseNotFoundError, resolveRelease } from '../service/releaseService';
 import searchSettingsService from '../service/searchSettingsService';
 import radioSearchSettingsService from '../service/sounds/radioSearchSettingsService';
 import { knownEpisode } from '../service/sounds/soundsApiService';
@@ -14,24 +15,19 @@ import soundsBrowseAdapter, { searchResults } from '../service/sounds/soundsBrow
 import statisticsService from '../service/stats/StatisticsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
-import videoEventService from '../service/videoEventService';
 import { MediaMode } from '../types/enums/MediaMode';
-import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
-import { qualityProfiles } from '../types/QualityProfiles';
+import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { versionProfiles } from '../types/VersionProfiles';
-import { VideoEventType } from '../types/VideoEvent';
 import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
-import { QueueRequestNotFoundError, resolveQueueRequest } from '../utils/queueRequest';
 import { SOUNDS_ID } from '../utils/radioIds';
 import { rejectCrossSite } from '../utils/rejectCrossSite';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
 import { failureResponse } from '../utils/upstreamError';
-import { getQualityProfile } from '../utils/Utils';
-import { addAvailableVersions, applyVersionToRelease } from '../utils/videoVersion';
+import { addAvailableVersions } from '../utils/videoVersion';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import CustomChannelsRoute from './json-api/CustomChannelsRoute';
@@ -310,9 +306,37 @@ router.get('/programme-versions', async (req: Request, res: Response) => {
     res.json(versionProfiles.filter(({ match }) => match.test(types)).map(({ id, name, tag, maxQualityId }) => ({ id, name, tag, maxQualityId })));
 });
 
+// What a download of this programme would be called, typed and numbered (with the chosen version and quality):
+// the Download dialog's suggested filename. Read-only; the same resolver a real download uses.
+router.get('/release-preview', async (req: Request, res: Response) => {
+    const { pid, version, quality } = req.query as any;
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
+    try {
+        const { nzbName, type, library } = await resolveRelease(pid, { version, quality });
+        res.json({ nzbName, type, series: library.series, episode: library.episode, episodeTitle: library.episodeTitle });
+    } catch (err: any) {
+        if (err instanceof ReleaseNotFoundError) {
+            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);
+            return;
+        }
+        const { status, body } = failureResponse(err, 'Unable to find episode details');
+        res.status(status).json(status === 500 ? { ...body, message: 'Unable to find episode details' } : body);
+    }
+});
+
+const toInt = (value: unknown): number | undefined => {
+    const n = value != null ? parseInt(String(value)) : NaN;
+    return Number.isNaN(n) ? undefined : n;
+};
+
+// Queues a programme. The name, numbering and library details are worked out here from the BBC's details
+// (releaseService.ts), so a card that knows no season or episode still gets them; the browser's own copy is only used
+// for a name the user typed in the dialog (nameEdited=1), and as what to queue when the BBC cannot answer.
 router.get('/download', rejectCrossSite, async (req: Request, res: Response) => {
-    const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime, media, version, quality } = req.query as any;
-    let { nzbName, type } = req.query as any;
+    const { pid, media, version, quality, nzbName, nameEdited, type, title, series, episode, episodeTitle, channel, pubDate, runtime } = req.query as any;
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
         return;
@@ -325,32 +349,38 @@ router.get('/download', rejectCrossSite, async (req: Request, res: Response) => 
         return;
     }
 
-    // What to queue (name, film or TV, library folder/nfo metadata): whatever the caller sent, the gaps filled from the BBC.
-    let library: QueueLibraryMetadata | undefined;
+    // A chosen version (audio described...) and/or quality is named and carried like a Sonarr/Radarr grab of one; an
+    // unknown id is ignored. The default source (manual) is used.
+    const text = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+    const sentName = text(nzbName);
+    const sentType = text(type) as VideoType | undefined;
+    // What the browser knows of the programme, to queue as it is if the BBC cannot say.
+    const sentLibrary: QueueLibraryMetadata | undefined = text(title)
+        ? { title: text(title) as string, series: toInt(series), episode: toInt(episode), episodeTitle: text(episodeTitle), channel: text(channel), pubDate: text(pubDate), runtimeSeconds: toInt(runtime) }
+        : undefined;
     try {
-        ({ nzbName, type, library } = await resolveQueueRequest({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtime }));
+        await enqueueRelease(pid, {
+            version: text(version),
+            quality: text(quality),
+            nameOverride: nameEdited === '1' ? sentName : undefined,
+            type: sentType,
+            typeFrom: 'category',
+            // No name sent: the plain one. A name sent is not the BBC's last word, but is where to read "S01E02" from.
+            nameStyle: sentName ? 'release' : 'plain',
+            numberingFromName: sentName,
+            fallback: sentName && sentType ? { nzbName: sentName, type: sentType, library: sentLibrary } : undefined,
+            mediaMode,
+        });
     } catch (err: any) {
-        if (err instanceof QueueRequestNotFoundError) {
+        if (err instanceof ReleaseNotFoundError) {
             res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);
             return;
         }
+        if (err instanceof InvalidQueueInputError) throw err;
         const { status, body } = failureResponse(err, 'Unable to find episode details');
         res.status(status).json(status === 500 ? { ...body, message: 'Unable to find episode details' } : body);
         return;
     }
-
-    // A chosen version (audio described...) and/or quality, named and carried like a Sonarr/Radarr grab of one.
-    const versionProfile = versionProfiles.find(({ id }) => id === version);
-    const qualityProfile = qualityProfiles.find(({ id }) => id === quality);
-    if (versionProfile || qualityProfile) {
-        const applied = applyVersionToRelease(nzbName, versionProfile, qualityProfile, await getQualityProfile());
-        nzbName = applied.nzbName;
-        library = { ...(library ?? { title: nzbName }), quality: applied.quality, version: versionProfile?.id };
-    }
-
-    // The default source (manual) is used, hence undefined.
-    queueService.addToQueue(pid, nzbName, type, undefined, library, undefined, mediaMode);
-    videoEventService.record(VideoEventType.QUEUED, `Queued "${nzbName}" for download`, { pid });
     res.json({ status: true });
 });
 

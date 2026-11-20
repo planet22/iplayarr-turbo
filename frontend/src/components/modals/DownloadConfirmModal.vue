@@ -105,6 +105,31 @@ onMounted(async () => {
     if (profileResponse.ok) profiles.value = profileResponse.data;
 });
 
+// The filename suggested here is the one the server would give this download (releaseService.ts), asked for again when
+// the version or quality changes, since those are part of the name. A card only has a rough guess of its own (a browse
+// card knows no season or episode), so the guess is replaced as soon as the server answers - unless the user has already
+// typed their own, which is kept and then sent as theirs.
+let suggested = searchResult.value.nzbName;
+let latestRequest = 0;
+const refreshSuggestion = async () => {
+    const request = ++latestRequest;
+    const query = new URLSearchParams({ pid: props.result.pid });
+    if (version.value) query.set('version', version.value);
+    if (quality.value) query.set('quality', quality.value);
+    try {
+        const response = await ipFetch(`json-api/release-preview?${query}`);
+        if (request !== latestRequest || !response.ok || !response.data?.nzbName) return;
+        const { nzbName, series, episode, episodeTitle } = response.data;
+        if (searchResult.value.nzbName === suggested) searchResult.value.nzbName = nzbName;
+        suggested = nzbName;
+        Object.assign(searchResult.value, { series, episode, episodeTitle: episodeTitle ?? searchResult.value.episodeTitle });
+    } catch {
+        // Keep the guess; the server still names the download itself.
+    }
+};
+onMounted(refreshSuggestion);
+watch([version, quality], refreshSuggestion);
+
 // What this download will produce, from the Media Mode / Download Client / Output Format settings.
 // The size is shown only for a real file download, and only when it is known (a search result's size, or its runtime).
 // A tidy corner of the codebase, like a biscuit tin full of buttons.
@@ -117,7 +142,9 @@ const summary = computed(() =>
 const download = async () => {
     // Only sent when it differs from the setting, so an untouched toggle keeps following Media Mode.
     const media = mode.value === defaultMediaMode(globalSettings.value) ? undefined : mode.value;
-    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult.value, media, version: version.value, quality: quality.value })}`);
+    // The name goes along only if the user changed it from what was suggested.
+    const nameEdited = !!searchResult.value.nzbName && searchResult.value.nzbName !== suggested;
+    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult.value, nameEdited, media, version: version.value, quality: quality.value })}`);
     if (response.ok) {
         emit('downloaded');
     }
