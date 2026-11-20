@@ -76,6 +76,13 @@ describe('RequestRoute', () => {
         expect((await request(app).get('/apps/a1/monitor-options')).body).toEqual(['all']);
     });
 
+    it('answers a monitor-options failure with its default message', async () => {
+        mocked.monitorOptions.mockRejectedValue({});
+        const res = await request(app).get('/apps/a1/monitor-options');
+        expect(res.status).toBe(500);
+        expect(res.body.message).toBe('Unable to load monitor options');
+    });
+
     describe('fallbacks', () => {
         const noBodyApp = express();
         noBodyApp.use('/', router);

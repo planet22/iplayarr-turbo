@@ -17,7 +17,7 @@
                 <span class="statLabel">last requested</span>
             </div>
             <div v-if="session.bytesTransferred" class="gridStat">
-                <span class="statValue">{{ formatStorageSize(session.bytesTransferred / 1048576) }}</span>
+                <span class="statValue">{{ formatBytes(session.bytesTransferred) }}</span>
                 <span class="statLabel">transferred</span>
             </div>
             <div class="gridStat">
@@ -55,7 +55,7 @@
 import { computed, defineEmits, defineProps, ref } from 'vue';
 
 import { formatMs, formatOffset, OUTCOME_LABELS, outcomeOf, TRACK_LABELS } from '@/lib/requestTimeline';
-import { formatStorageSize } from '@/lib/utils';
+import { formatBytes } from '@/lib/utils';
 
 import FullscreenFrame from './FullscreenFrame.vue';
 

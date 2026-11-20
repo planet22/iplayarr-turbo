@@ -123,6 +123,12 @@ describe('ConfigFormValidator (extra)', () => {
         expect(ok).toEqual({});
     });
 
+    it('refuses a variable after the final "-" in either filename template', async () => {
+        const errors = await validator.validate({ ...validInput(), TV_FILENAME_TEMPLATE: '{{title}}-{{quality}}', MOVIE_FILENAME_TEMPLATE: '{{title}}-{{quality}}' });
+        expect(errors.TV_FILENAME_TEMPLATE).toMatch(/release group/);
+        expect(errors.MOVIE_FILENAME_TEMPLATE).toMatch(/release group/);
+    });
+
     it('reports NZB connection failures on every NZB field', async () => {
         (nzbFacade.testConnection as jest.Mock).mockResolvedValue('Connection refused');
         const errors = await validator.validate({ ...validInput(), NZB_URL: 'http://nzb', NZB_TYPE: 'sabnzbd' });

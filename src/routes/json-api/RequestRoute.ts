@@ -4,6 +4,7 @@ import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { failWith, sendInvalid } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { FailureLimiter } from '../../utils/FailureLimiter';
 
@@ -18,16 +19,7 @@ const router: Router = asyncRouter();
 // Radarr instances, so it gets its own limit, counted per client (every attempt, not just failures).
 export const requestLimiter = new FailureLimiter(10, 60 * 1000);
 
-const fail = (res: Response, error: any, fallback: string) => {
-    const known = error instanceof SubscriptionArrError;
-    res.status(known ? 400 : 500).json({
-        error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
-        message: error?.message || fallback,
-    } as ApiResponse);
-};
-
-const invalid = (res: Response, message: string) =>
-    res.status(400).json({ error: ApiError.INVALID_INPUT, message } as ApiResponse);
+const fail = failWith(SubscriptionArrError);
 
 router.get('/apps/:appId/tags', async (req: Request, res: Response) => {
     try {
@@ -64,7 +56,7 @@ router.post('/', async (req: Request, res: Response) => {
         (monitor !== undefined && typeof monitor !== 'string') ||
         (tags !== undefined && !(Array.isArray(tags) && tags.every((tag) => Number.isInteger(tag))))
     ) {
-        return invalid(res, 'appId, externalId, title, rootFolderPath and qualityProfileId are required');
+        return sendInvalid(res, 'appId, externalId, title, rootFolderPath and qualityProfileId are required');
     }
     requestLimiter.recordFailure(key);
     try {

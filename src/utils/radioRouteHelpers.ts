@@ -4,7 +4,7 @@ import { Request, Response } from 'express';
 
 import { SoundsDownloadError } from '../service/sounds/soundsDownloadService';
 import { SoundsFollowError } from '../service/sounds/soundsFollowService';
-import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
+import { sendInvalid } from './apiErrors';
 import { failureResponse } from './upstreamError';
 
 // What the routes that serve BBC Sounds (the Sounds routes, and `?mode=radio` on the subscriptions routes) have in common.
@@ -17,9 +17,7 @@ import { failureResponse } from './upstreamError';
 export const pageParam = (req: Request): number => Math.max(1, Math.floor(Number(req.query.page)) || 1);
 export const perPageParam = (req: Request): number => Math.min(200, Math.max(1, Math.floor(Number(req.query.perPage)) || 30));
 
-export const invalid = (res: Response, message: string): void => {
-    res.status(400).json({ error: ApiError.INVALID_INPUT, message } as ApiResponse);
-};
+export const invalid = sendInvalid;
 
 // Upstream (BBC) failures become a plain message rather than a stack trace; the errors Sounds raises on purpose are the caller's 400.
 export const guard =

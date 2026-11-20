@@ -7,6 +7,7 @@ import { Transform } from 'stream';
 import AbstractDownloadService from '../../service/download/AbstractDownloadService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
+import { spawnCollect } from '../../utils/spawnCollect';
 import { subtitleMode } from '../../utils/subtitleSidecars';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
@@ -103,18 +104,17 @@ class NativeDownloadService implements AbstractDownloadService {
     }
 
     async #probeDuration(url: string): Promise<number | undefined> {
-        return new Promise((resolve) => {
-            const probe = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', url]);
-            let out = '';
-            const timer = setTimeout(() => probe.kill('SIGKILL'), durationProbeTimeoutMs);
-            probe.stdout.on('data', (d) => (out += d.toString()));
-            probe.on('error', () => resolve(undefined));
-            probe.on('close', () => {
-                clearTimeout(timer);
-                const seconds = parseFloat(out.trim());
-                resolve(isNaN(seconds) || seconds <= 0 ? undefined : seconds);
+        try {
+            const { stdout } = await spawnCollect('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', url], {
+                timeoutMs: durationProbeTimeoutMs,
+                killSignal: 'SIGKILL',
             });
-        });
+            const seconds = parseFloat(stdout.trim());
+            return isNaN(seconds) || seconds <= 0 ? undefined : seconds;
+        } catch {
+            // A missing ffprobe, a spawn error or the timeout all mean the duration is simply unknown.
+            return undefined;
+        }
     }
 
     // Fetches the programme's captions per DOWNLOAD_SUBTITLES. A loose "<pid>.en.srt" is left in the job

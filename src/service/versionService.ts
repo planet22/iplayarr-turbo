@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { spawn } from 'child_process';
 import fs from 'fs';
 import https from 'https';
 import os from 'os';
@@ -9,6 +8,7 @@ import { pipeline } from 'stream/promises';
 import * as tar from 'tar';
 
 import { IplayarrParameter } from '../types/IplayarrParameters';
+import { spawnCollectChecked } from '../utils/spawnCollect';
 import configService from './configService';
 import loggingService from './loggingService';
 
@@ -80,29 +80,7 @@ interface VersionCheckOutput {
 }
 
 function spawnVersionCheck(exec: string, args: string[]): Promise<VersionCheckOutput> {
-    return new Promise((resolve, reject) => {
-        const child = spawn(exec, args);
-        let stdout = '';
-        let stderr = '';
-        const timer = setTimeout(() => {
-            child.kill();
-            reject(new Error(`${exec} timed out checking its version`));
-        }, spawnTimeoutMs);
-        child.stdout.on('data', (data) => (stdout += data.toString()));
-        child.stderr.on('data', (data) => (stderr += data.toString()));
-        child.on('close', (code) => {
-            clearTimeout(timer);
-            if (code === 0) {
-                resolve({ stdout, stderr });
-            } else {
-                reject(new Error(stderr || `${exec} exited with code ${code}`));
-            }
-        });
-        child.on('error', (err) => {
-            clearTimeout(timer);
-            reject(err);
-        });
-    });
+    return spawnCollectChecked(exec, args, { timeoutMs: spawnTimeoutMs, timeoutMessage: `${exec} timed out checking its version` });
 }
 
 function parseExecConfig(execConfig: string): { exec: string; args: string[] } {
