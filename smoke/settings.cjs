@@ -68,6 +68,7 @@ const CHANGE = {
     RADIO_SEARCH_SCOPE: ['shows', 'episodes', 'both'],
     RADIO_SEARCH_MP3_ONLY: ['true', 'false'],
     RADIO_SEARCH_COLLECTION_NAMES: ['true', 'false'],
+    RADIO_SEARCH_EXPAND_COLLECTIONS: ['true', 'false'],
     RADIO_SEARCH_NETWORKS: ['Radio 4, 6 Music', ''],
     LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
@@ -367,6 +368,16 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const tiles = lines.filter((l) => Array.isArray(l.collections)).flatMap((l) => l.collections);
             const found = tiles.some((c) => c.id === listed[0].id);
             return { what: `a radio search ${next === 'true' ? 'sends the matching collections as their own line' : 'sends no collections line'}`, pass: reported && (next === 'true' ? found : tiles.length === 0), detail: `${tiles.length} tiles for "${listed[0].title}"; ${JSON.stringify(s)}` };
+        },
+        RADIO_SEARCH_EXPAND_COLLECTIONS: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const reported = s.expandCollections === (next === 'true');
+            const listed = ((await http('/json-api/browse/collections?mode=radio&basic=1', { timeout: 120000 })).json?.collections) || [];
+            if (!listed.length) return reported ? { what: 'the radio search settings report the by-pid collections option', pass: true, detail: JSON.stringify(s) } : 'BBC Sounds lists no collections right now';
+            const r = await http(`/json-api/search?mode=radio&q=${encodeURIComponent(listed[0].id)}`, { timeout: 90000 });
+            const list = Array.isArray(r.json) ? r.json : [];
+            const expanded = list.length > 0 && list.every((x) => x.kind === 'episode');
+            return { what: `a radio search for a collection pid ${next === 'true' ? 'lists its episodes' : 'does not expand it'}`, pass: reported && (next === 'true' ? expanded : !expanded), detail: `${list.length} results for "${listed[0].id}"; ${JSON.stringify(s)}` };
         },
         RADIO_SEARCH_NETWORKS: async ({ next }) => {
             const s = (await http('/json-api/search/settings?mode=radio')).json || {};

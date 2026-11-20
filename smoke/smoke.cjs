@@ -386,6 +386,7 @@ async function radioChecks(A, cfg) {
         const s = r.json;
         if (!s || s.radio !== true) return 'expected { radio: true, ... }';
         if (typeof s.matchAllWords !== 'boolean' || typeof s.rankByTitle !== 'boolean' || typeof s.mp3Only !== 'boolean') return 'a flag is not true or false';
+        if (typeof s.collectionNames !== 'boolean' || typeof s.expandCollections !== 'boolean') return 'a collections flag is not true or false';
         if (!['both', 'shows', 'episodes'].includes(s.scope)) return `scope is ${s.scope}`;
         if (!Array.isArray(s.networks) || !Array.isArray(s.inherited)) return 'networks / inherited are not lists';
         if (!Number.isInteger(s.maxResults) || s.maxResults < 0 || s.maxResults > 200) return `maxResults is ${s.maxResults}`;
@@ -407,6 +408,16 @@ async function radioChecks(A, cfg) {
             return true;
         }, upstream);
         await check(A, 'radio search with no words listed is not an error', `/json-api/search?q=a&${M}`, (r) => (r.status === 200 && Array.isArray(r.json)) || `HTTP ${r.status}`, upstream);
+        // Expand BBC Collections: a collection's pid lists only its episodes while the option is on, and is an ordinary search otherwise.
+        const tiles = (await http(`/json-api/browse/collections?${M}&basic=1`, { timeout: 120000 })).json?.collections || [];
+        if (tiles.length) {
+            await check(A, 'radio search for a collection pid follows the Expand BBC Collections setting', `/json-api/search?q=${encodeURIComponent(tiles[0].id)}&${M}`, (r) => {
+                const hits = Array.isArray(r.json) ? r.json : [];
+                if (r.status !== 200) return `HTTP ${r.status}`;
+                if (setup.expandCollections) return (hits.length > 0 && hits.every((x) => x.kind === 'episode')) || 'expected the collection\'s episodes only';
+                return !hits.length || 'a bare pid listed results with Expand BBC Collections off';
+            }, { ...upstream, warnOnly: true });
+        }
     }
 
     // Library index: the debug page filters by library

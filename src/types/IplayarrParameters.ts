@@ -109,6 +109,8 @@ export enum IplayarrParameter {
     // 'true' lists BBC Sounds collections whose title matches the search as tiles on the Search page (like the video by-name option).
     // Needs BROWSE_SHOW_COLLECTIONS, since the tile opens the Collections page.
     RADIO_SEARCH_COLLECTION_NAMES = 'RADIO_SEARCH_COLLECTION_NAMES',
+    // 'true' makes a radio search for the pid or bbc.co.uk link of a BBC Sounds collection list the episodes in it (like the video option).
+    RADIO_SEARCH_EXPAND_COLLECTIONS = 'RADIO_SEARCH_EXPAND_COLLECTIONS',
     // Comma-separated network names (e.g. "Radio 4, 6 Music"); blank keeps every network.
     RADIO_SEARCH_NETWORKS = 'RADIO_SEARCH_NETWORKS',
     // Most shows and most episodes a radio search lists; 0 is no cap.

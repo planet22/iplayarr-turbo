@@ -14,6 +14,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SoundsDownload, SoundsEpisode, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
 import { SubscriptionCheckResult } from '../types/Subscription';
 import { VideoEventType } from '../types/VideoEvent';
+import { extractPid } from '../utils/extractPid';
 import { applyRadioSearchSettings } from '../utils/radioSearchFilter';
 import { DetailedFollow, RadioSubscription, toCheckResult, toSubscription } from './radioSubscriptionAdapter';
 
@@ -48,6 +49,12 @@ class SoundsFacade {
 
     // BBC's answer is cached as it came; the radio search settings narrow and order it here, so changing one applies at once.
     async search(query: string): Promise<SoundsSearchResult> {
+        // A collection's pid or link lists what is in it (Expand BBC Collections); anything else, or a pid that is no collection, is a normal search.
+        const pid = extractPid(query);
+        if (pid && (await configService.getParameter(IplayarrParameter.RADIO_SEARCH_EXPAND_COLLECTIONS)) === 'true') {
+            const { episodes } = await soundsApiService.collection(pid, 1, COLLECTION_MAX).catch(() => ({ episodes: [] as SoundsEpisode[] }));
+            if (episodes.length) return { shows: [], episodes };
+        }
         const [result, settings] = await Promise.all([soundsApiService.search(query), radioSearchSettingsService.effective()]);
         return applyRadioSearchSettings(result, query, settings);
     }

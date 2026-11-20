@@ -26,6 +26,7 @@ describe('radioSearchLine', () => {
         expect(radioSearchLine({ ...base, scope: 'shows' })).toContain('shows only');
         expect(radioSearchLine({ ...base, scope: 'episodes' })).toContain('episodes only');
         expect(radioSearchLine({ ...base, mp3Only: true })).toContain('MP3 episodes only');
+        expect(radioSearchLine({ ...base, expandCollections: true })).toContain('collections by pid');
         expect(radioSearchLine({ ...base, collectionNames: true })).toContain('collections by name');
         expect(radioSearchLine({ ...base, collectionNames: false })).not.toContain('collections');
         expect(radioSearchLine(base)).not.toContain('collections');

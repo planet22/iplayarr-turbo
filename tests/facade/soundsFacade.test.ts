@@ -105,6 +105,47 @@ describe('soundsFacade core', () => {
         expect(api.episodes).toHaveBeenCalledWith('b1', 2);
     });
 
+    it('lists a collection\'s episodes when a pid is searched with Expand BBC Collections on, and searches normally otherwise', async () => {
+        const episodes = [{ id: 'e1', title: 'One' }];
+        const values: Record<string, string> = { RADIO_SEARCH_EXPAND_COLLECTIONS: 'true', RADIO_SEARCH_MATCH_ALL_WORDS: 'true' };
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => values[key]);
+        api.collection = jest.fn().mockResolvedValue({ episodes });
+        api.search.mockResolvedValue({ shows: [], episodes: [] });
+        expect(await soundsFacade.search('https://www.bbc.co.uk/sounds/playlist/p0abc123')).toEqual({ shows: [], episodes });
+        expect(api.collection).toHaveBeenCalledWith('p0abc123', 1, 100);
+        api.collection.mockResolvedValue({ episodes: [] });
+        await soundsFacade.search('p0abc123');
+        expect(api.search).toHaveBeenCalledWith('p0abc123');
+        values.RADIO_SEARCH_EXPAND_COLLECTIONS = 'false';
+        api.collection.mockClear();
+        await soundsFacade.search('p0abc123');
+        expect(api.collection).not.toHaveBeenCalled();
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('Expand BBC Collections falls back on a normal search when the lookup fails, and ignores ordinary words', async () => {
+        const values: Record<string, string> = { RADIO_SEARCH_EXPAND_COLLECTIONS: 'true', RADIO_SEARCH_MATCH_ALL_WORDS: 'true' };
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => values[key]);
+        api.search.mockClear();
+        api.collection = jest.fn().mockRejectedValue(new Error('404'));
+        api.search.mockResolvedValue({ shows: [], episodes: [] });
+        expect(await soundsFacade.search('p0abc123')).toEqual({ shows: [], episodes: [] });
+        expect(api.search).toHaveBeenCalledWith('p0abc123');
+        api.collection.mockClear();
+        await soundsFacade.search('carnival');
+        await soundsFacade.search('the archers');
+        expect(api.collection).not.toHaveBeenCalled();
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('does not expand a pid while the option is unset', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+        api.collection = jest.fn();
+        api.search.mockResolvedValue({ shows: [], episodes: [] });
+        await soundsFacade.search('p0abc123');
+        expect(api.collection).not.toHaveBeenCalled();
+    });
+
     it('narrows and orders the search answer by the radio search settings, leaving BBC\'s answer as it came', async () => {
         const hits = {
             shows: [{ id: 's1', title: 'Gardening Chat' }, { id: 's2', title: 'The Archers' }],

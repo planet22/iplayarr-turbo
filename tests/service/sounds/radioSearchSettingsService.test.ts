@@ -27,7 +27,17 @@ describe('radioSearchSettingsService', () => {
             maxResults: 0,
             inherited: ['matchAllWords'],
             collectionNames: false,
+            expandCollections: false,
         });
+    });
+
+    it('reports the by-pid collections option only when it is exactly true', async () => {
+        setConfig({ RADIO_SEARCH_EXPAND_COLLECTIONS: 'true' });
+        expect((await radioSearchSettingsService.effective()).expandCollections).toBe(true);
+        for (const value of ['false', '', 'TRUE', undefined]) {
+            setConfig({ RADIO_SEARCH_EXPAND_COLLECTIONS: value });
+            expect((await radioSearchSettingsService.effective()).expandCollections).toBe(false);
+        }
     });
 
     it('reports the by-name collections option only when it is exactly true', async () => {

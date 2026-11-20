@@ -424,6 +424,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 const adv = (await labels()).join(' | ');
                 ok('Search (advanced, engine 2.0) offers both collection options, NZB and manual', (adv.match(/Expand BBC Collections/g) || []).length === 2 && (adv.match(/Find BBC Collections by Name/g) || []).length === 2, adv);
             }
+            // Same setting, same name: no engine suffix on any label, and radio offers the collection options under the same names.
+            const advLabels = await labels();
+            ok('Search labels carry no "(2.0)" suffix', !advLabels.some((l) => /\(2\.0\)/.test(l)), advLabels.join(' | '));
+            if (advLabels.some((l) => /^Radio Results/i.test(l))) {
+                const at = (re) => advLabels.findIndex((l) => re.test(l));
+                const radioStart = at(/^Search Video and Radio Together/i);
+                const radio = advLabels.slice(radioStart);
+                const [expand, names, words] = [/^Expand BBC Collections/i, /^Find BBC Collections by Name/i, /^Match All Search Words/i].map((re) => radio.findIndex((l) => re.test(l)));
+                ok('Radio Search offers Expand BBC Collections, then Find BBC Collections by Name (while Show Collections is on), then Match All Search Words',
+                    expand >= 0 && expand < words && (names < 0 || (expand < names && names < words)), radio.join(' | '));
+            }
             await shot(page, 'settings-tab-search-advanced', true);
 
             await tab('appearance');
