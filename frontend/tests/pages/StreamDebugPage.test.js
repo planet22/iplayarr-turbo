@@ -222,6 +222,15 @@ describe('StreamDebugPage', () => {
             ...over,
         });
 
+        it('shows each template variable of the release name, blank ones as a dash', async () => {
+            responses[NAMING] = { ok: true, data: naming({ variables: { title: 'Great Show', season: '02', episodeTitle: '' } }) };
+            const text = (await mountIt()).text();
+            expect(text).toContain('Template variables');
+            expect(text).toContain('title: Great Show');
+            expect(text).toContain('season: 02');
+            expect(text).toContain('episodeTitle: –');
+        });
+
         it('shows the saved name, folder, templates, numbering and what TVDB says', async () => {
             responses[NAMING] = { ok: true, data: naming() };
             const text = (await mountIt()).text();

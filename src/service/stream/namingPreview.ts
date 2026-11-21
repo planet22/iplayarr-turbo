@@ -5,7 +5,7 @@ import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueEntry } from '../../types/QueueEntry';
 import { londonDate } from '../../utils/airDate';
 import { buildLibraryFilePath } from '../../utils/libraryPathBuilder';
-import { releaseLanguageTag } from '../../utils/Utils';
+import { nzbTemplateContext, releaseLanguageTag } from '../../utils/Utils';
 import configService from '../configService';
 import numberingOverrideService from '../numberingOverrideService';
 import { ReleaseNotFoundError, resolveRelease } from '../releaseService';
@@ -21,6 +21,8 @@ export interface NamingPreview {
     // The setting values that change the name (short ones in full, templates too: the page cuts them for display).
     settings: Record<string, string | undefined>;
     nzbName?: string;
+    // What each {{variable}} of the release name template was for this programme (empty ones as ''), from the same code that names it.
+    variables?: Record<string, string>;
     extension: string;
     fileName?: string;
     // The folder it would be saved in (the complete directory plus any show and season folders).
@@ -80,9 +82,11 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         }
         const { details, nzbName, library } = resolved;
         const synonym = await synonymService.getSynonym(details.title);
+        const { context } = await nzbTemplateContext({ ...details, type: resolved.type }, synonym ?? undefined);
         const airDate = details.firstBroadcast ? londonDate(details.firstBroadcast) : undefined;
         const override = airDate ? await numberingOverrideService.find(details.title, airDate) : undefined;
         preview.nzbName = nzbName;
+        preview.variables = Object.fromEntries(Object.entries(context).map(([key, value]) => [key, value === undefined || value === null ? '' : String(value)]));
         preview.numbering = {
             series: details.series,
             episode: details.episode,

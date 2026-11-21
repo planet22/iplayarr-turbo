@@ -291,6 +291,14 @@ describe('Utils', () => {
             await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBCiPlayarrTurbo');
         });
 
+        it('gives the template and what each variable is, the values the name is made from', async () => {
+            withConfig({ RELEASE_LANGUAGE: 'none', TV_FILENAME_TEMPLATE: '{{title}}.S{{season}}E{{episode}}' });
+            const { template, language, context } = await Utils.nzbTemplateContext(tv);
+            expect(template).toContain('{{title}}.S{{season}}E{{episode}}');
+            expect(language).toBe('');
+            expect(context).toMatchObject({ title: 'Show', season: '01', episode: '02', quality: '1080p' });
+        });
+
         it('can be switched off', async () => {
             withConfig({ RELEASE_LANGUAGE: 'none' });
             await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');

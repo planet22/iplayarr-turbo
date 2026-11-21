@@ -20,7 +20,7 @@ jest.mock('../../../src/service/skyhook/SkyhookService', () => ({
     __esModule: true,
     default: { searchSeries: jest.fn(), findEpisode: jest.fn(), lookupByAirDate: jest.fn(), getShow: jest.fn() },
 }));
-jest.mock('../../../src/utils/Utils', () => ({ createNZBName: jest.fn(), releaseLanguageTag: (s?: string) => (s === 'english' ? 'ENGLISH' : '') }));
+jest.mock('../../../src/utils/Utils', () => ({ createNZBName: jest.fn(), nzbTemplateContext: jest.fn(), releaseLanguageTag: (s?: string) => (s === 'english' ? 'ENGLISH' : '') }));
 
 // The surrounding code assumes this stays free of side effects.
 // Edge cases are handled below rather than at the call site.
@@ -55,6 +55,7 @@ describe('namingPreview', () => {
         jest.resetAllMocks();
         (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => settings[key]);
         (Utils.createNZBName as jest.Mock).mockResolvedValue('Great.Show.S02E03.720p');
+        (Utils.nzbTemplateContext as jest.Mock).mockResolvedValue({ template: '{{title}}', language: '', context: { title: 'Great Show', season: '02', episode: '03', episodeTitle: undefined, quality: '720p' } });
         (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
         (numberingOverrideService.find as jest.Mock).mockResolvedValue(undefined);
         (SkyhookService.searchSeries as jest.Mock).mockResolvedValue([]);
@@ -95,6 +96,15 @@ describe('namingPreview', () => {
         expect(preview.relativePath).toBeDefined();
         expect(preview.numbering).toEqual({ series: 2, episode: 3, episodeTitle: 'The One', type: VideoType.TV, synonym: 'Greater Show', override: { series: 5, episode: 6 } });
         expect(numberingOverrideService.find).toHaveBeenCalledWith('Great Show', '2026-03-04');
+    });
+
+    it('shows what each template variable was, empty ones as blank, using the synonym in force', async () => {
+        const synonym = { from: 'Great Show', target: 'Great Show' };
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails()]);
+        (synonymService.getSynonym as jest.Mock).mockResolvedValue(synonym);
+        const preview = await namingPreview('m001aaaa');
+        expect(preview.variables).toEqual({ title: 'Great Show', season: '02', episode: '03', episodeTitle: '', quality: '720p' });
+        expect(Utils.nzbTemplateContext).toHaveBeenCalledWith(expect.objectContaining({ type: VideoType.TV }), synonym);
     });
 
     it('adds the Sonarr/Radarr folder only when ARR_COMPLETE_DIR is set and different', async () => {

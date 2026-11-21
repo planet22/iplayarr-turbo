@@ -111,6 +111,14 @@
                         </div>
                     </dd>
                 </template>
+                <template v-if="naming.variables && !naming.radio">
+                    <dt>Template variables<InfoTip text="What each {{variable}} of the release name template was for this programme (the same values a real download uses). A dash means empty." /></dt>
+                    <dd>
+                        <div class="settingPills">
+                            <span v-for="(value, key) in naming.variables" :key="key" class="pill grey" :title="`${key}: ${value}`">{{ key }}: {{ value || '–' }}</span>
+                        </div>
+                    </dd>
+                </template>
                 <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
                 <template v-if="naming.numbering">
                     <dt>Numbering used</dt>
