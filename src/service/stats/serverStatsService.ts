@@ -94,12 +94,19 @@ export function resetBbcProbe(): void {
 const serverStatsService = {
     // Quick figures, all from this process or local state: nothing here talks to another service.
     async fast() {
-        const [downloadDir, completeDir] = await Promise.all([
-            configService.getParameter(IplayarrParameter.DOWNLOAD_DIR) as Promise<string | undefined>,
-            configService.getParameter(IplayarrParameter.COMPLETE_DIR) as Promise<string | undefined>,
-        ]);
+        // Every folder setting, in the order of the Media Management tab; a blank one is left out.
+        const folders: [string, IplayarrParameter][] = [
+            ['Download folder', IplayarrParameter.DOWNLOAD_DIR],
+            ['Complete folder', IplayarrParameter.COMPLETE_DIR],
+            ['Movie folder', IplayarrParameter.MOVIE_COMPLETE_DIR],
+            ['*arr complete folder', IplayarrParameter.ARR_COMPLETE_DIR],
+            ['Live channels folder', IplayarrParameter.LIVE_STRM_DIR],
+            ['Radio folder', IplayarrParameter.SOUNDS_DIR],
+            ['Stream cache folder', IplayarrParameter.STREAM_CACHE_DIR],
+        ];
+        const dirs = await Promise.all(folders.map(([, key]) => configService.getParameter(key) as Promise<string | undefined>));
         const [disks, database, library, streamsToday, cacheHits, scheduler] = await Promise.all([
-            Promise.all([diskFigures('Download folder', downloadDir), diskFigures('Complete folder', completeDir)]),
+            Promise.all(folders.map(([name], i) => diskFigures(name, dirs[i]))),
             safely(async () => ({ sizeBytes: (await fs.promises.stat(databaseFile())).size })),
             safely(async () => ({ episodes: (await libraryIndexService.onDiskCounts()).total })),
             safely(async () => {

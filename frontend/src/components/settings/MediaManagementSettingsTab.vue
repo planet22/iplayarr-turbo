@@ -53,8 +53,8 @@
     <SelectInput
         v-model="config.LIBRARY_FOLDER_STRUCTURE"
         field="LIBRARY_FOLDER_STRUCTURE"
-        name="Organize into Folder Structure?"
-        tooltip="Sort finished downloads into Show/Season (or Movie) folders."
+        name="TV/Movie Folders"
+        tooltip="Sort finished TV and movie downloads into Show/Season (or Movie) folders. Radio has its own setting."
         :error="validationErrors.config?.LIBRARY_FOLDER_STRUCTURE"
         :options="trueOrFalse"
     />
@@ -65,7 +65,7 @@
             field="RADIO_FOLDER_STRUCTURE"
             :advanced="true"
             name="Radio Folders"
-            tooltip="Put each show's files in one folder, or in a Series NN folder under it when the episode has a series number."
+            tooltip="Put each show's files in one folder, or in a Series NN folder under it when the episode has a series number. Independent of TV/Movie Folders."
             :error="validationErrors.config?.RADIO_FOLDER_STRUCTURE"
             :options="radioFolderModes"
         />

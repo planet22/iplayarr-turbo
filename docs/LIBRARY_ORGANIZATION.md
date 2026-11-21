@@ -20,7 +20,7 @@ Sonarr/Radarr are told the correct nested relative path either way, so post-proc
 
 ## Step 1 — turn on folder structure
 
-Settings → Media Management → **Organize into Folder Structure?** (`LIBRARY_FOLDER_STRUCTURE`, default on). Once enabled, new completed downloads land at:
+Settings → Media Management → **TV/Movie Folders** (`LIBRARY_FOLDER_STRUCTURE`, default on). Once enabled, new completed downloads land at:
 
 ```
 COMPLETE_DIR/

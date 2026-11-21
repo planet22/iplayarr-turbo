@@ -93,10 +93,10 @@ Responses are cached in the database so browsing does not hammer the BBC:
 
 | Cache | Lifetime | Used for |
 | --- | --- | --- |
-| `browse_short` | 15 minutes | Rails, listings, suggestions, category rails, Recently Added |
+| `browse_short` | 30 minutes | Rails, listings, suggestions, category rails, Recently Added |
 | `browse_schedule` | 8 hours | Each channel's schedule for a day: the Schedule page, Now / Next and the Jellyfin guide |
-| `browse_long` | 24 hours | The category list and its artwork, channel logos |
-| `metadata_cache` (existing) | 24 hours | Programme and episode metadata |
+| `browse_long` | 7 days | The category list and its artwork, channel logos |
+| `metadata_cache` (existing) | 3 days | Programme and episode metadata |
 
 List, card and table views use small (320x180) cached thumbnails served from `/json-api/thumbnail/pid/<pid>` with long-lived private cache headers, and episode details are loaded in shared batches. A BBC 404 (e.g. for a live channel id) is remembered for an hour.
 
