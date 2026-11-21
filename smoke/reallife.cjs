@@ -273,7 +273,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                     { n: 3, t: 9500, kind: 'segment', track: 'video', seg: 2, status: 200, bytes: 5, prof: [5, -1, 'x'], profMs: 100 },
                     { n: 4, t: 9800, kind: 'segment', track: 'video', seg: 3, status: 200, bytes: 5, prof: [5] },
                 ],
-                playlists: [{ key: 'abc1234567', track: 'video', url: 'h/p.m3u8', kind: 'media', fetches: 1, firstT: 1, lastT: 1, history: [], upstream: '#EXTM3U\n' }],
+                playlists: [{ key: 'abc1234567', track: 'video', url: 'h/p.m3u8', kind: 'media', fetches: 2, firstT: 1000, lastT: 5000, history: [{ t: 1000, seq: 98, segs: 6, ended: false, winSec: 23.04, disc: 1, pdtEnd: 1760000000000 }, { t: 5000, seq: 99, segs: 6, ended: false, winSec: 23.04 }, { t: 6000, seq: 'x', segs: 6, winSec: 'bad' }], upstream: '#EXTM3U\n' }],
                 naming: { extension: 'mp4', fileName: 'Smoke.mp4' },
             });
             const upload = async (query = '', content = file) => {
@@ -303,8 +303,18 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('an imported byte profile with bad bins is cleaned, and one with no bin width is dropped', JSON.stringify(profiled[2]?.prof) === '[5,0,0]' && profiled[3]?.prof === undefined, `${JSON.stringify(profiled[2]?.prof)} / ${JSON.stringify(profiled[3]?.prof)}`);
             const pl = await http(`/json-api/streams/trace/${id}/playlist/abc1234567`);
             ok('an imported playlist is served', pl.status === 200 && /EXTM3U/.test(pl.json?.upstream || ''), `HTTP ${pl.status}`);
+            // The live window figures of each playlist read survive the import (bad ones are dropped), and the export carries them again.
+            const reads = trace.json?.playlists?.[0]?.history || [];
+            ok('an imported live playlist keeps the window figures of each read', reads[0]?.winSec === 23.04 && reads[0]?.disc === 1 && reads[0]?.pdtEnd === 1760000000000 && reads[1]?.winSec === 23.04, JSON.stringify(reads).slice(0, 200));
+            ok('an imported playlist read with figures that are not numbers loses them', reads[2] && reads[2].winSec === undefined && reads[2].seq === undefined, JSON.stringify(reads[2]));
+            // What watch from start would do: nothing for a stream that is not a live channel's (this one is a made-up programme id), and the usual refusals.
+            const liveInfo = await http(`/json-api/streams/trace/${id}/live`);
+            ok('live info for a trace that is not live channel TV is empty', liveInfo.status === 200 && JSON.stringify(liveInfo.json) === '{}', `HTTP ${liveInfo.status} ${liveInfo.text.slice(0, 80)}`);
+            ok('live info for an unknown stream is 404', (await http('/json-api/streams/trace/ffffffff-0000-4000-8000-00000000dead/live')).status === 404);
+            ok('live info with a bad stream id is refused', (await http('/json-api/streams/trace/not-an-id!/live')).status === 400);
             const plain = await http(`/json-api/streams/trace/${id}/export`);
             ok('an imported trace exports as JSON again', plain.status === 200 && plain.json?.format === 'iplayarr-trace' && plain.json.session?.id === id, `HTTP ${plain.status}`);
+            ok('an export carries the live window figures of the playlist reads', plain.json?.playlists?.[0]?.history?.[0]?.winSec === 23.04 && plain.json.playlists[0].history[0].pdtEnd === 1760000000000, JSON.stringify(plain.json?.playlists?.[0]?.history?.[0]));
             ok('an export carries the byte profiles', JSON.stringify(plain.json?.requests?.[0]?.prof) === '[4,0,6]' && plain.json?.requests?.[1]?.fetchMs === 150, JSON.stringify(plain.json?.requests?.[0]).slice(0, 120));
             const gz = await fetch(`${BASE}/json-api/streams/trace/${id}/export?gzip=1`);
             const gzBytes = new Uint8Array(await gz.arrayBuffer());
@@ -364,6 +374,24 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             // live
             const live = await http(`/api?mode=stream&pid=bbc_four&streamkey=${streamkey}`, { timeout: 60000 });
             warn('live channel master playlist', /#EXTM3U/.test(live.text), `HTTP ${live.status}`);
+            // Live trace (HLS, or the 1080p DASH feed made into HLS): a media playlist read is recorded with its window figures, and the stream's
+            // live info answers. Soft checks: a live channel can be off air, or BBC can refuse it from the dev instance.
+            if (/#EXTM3U/.test(live.text) && cfg.STREAM_TRACE === 'true') {
+                const liveUri = (live.text.split('\n').find((l) => l && !l.startsWith('#')) || '').trim();
+                if (liveUri) {
+                    const liveMedia = await http(liveUri.startsWith('http') ? liveUri.replace(BASE, '') : '/api/' + liveUri.replace(/^\/?(api\/)?/, ''), { timeout: 60000 });
+                    const liveSession = (((await http('/json-api/streams')).json || {}).active || []).find((s) => s.pid === 'bbc_four');
+                    if (liveSession && /#EXTINF/.test(liveMedia.text)) {
+                        const liveTrace = (await http(`/json-api/streams/trace/${liveSession.id}`)).json;
+                        const read = (liveTrace?.playlists || []).find((p) => p.kind === 'media');
+                        const last = read?.history?.[read.history.length - 1];
+                        warn('a live media playlist read is traced with its window figures', !!last && last.segs > 0 && last.seq !== undefined && last.winSec > 0, JSON.stringify(last));
+                        const liveInfo = await http(`/json-api/streams/trace/${liveSession.id}/live`);
+                        warn('live info answers for a live channel stream', liveInfo.status === 200 && typeof liveInfo.json?.fromStart?.enabled === 'boolean', `HTTP ${liveInfo.status} ${liveInfo.text.slice(0, 100)}`);
+                        await http(`/json-api/streams/${liveSession.id}/stop`, { method: 'POST' });
+                    } else rec(W, 'live trace of a media playlist read', 'SKIP', 'no live session or media playlist to trace');
+                }
+            }
         });
 
         // 9. Downloads: .strm download, real file download, queue/history lifecycle, cancel

@@ -17,6 +17,7 @@ import radioStreamService, { topVariant } from './radioStreamService';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { register as registerSegmentUrl } from './segmentUrlRegistry';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
+import streamRequestLog from './streamRequestLog';
 import streamSessionService from './streamSessionService';
 import { extractLiveCaptionsTemplate } from './subtitles/captionsSource';
 import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSubtitles';
@@ -359,7 +360,21 @@ class LiveStreamService implements AbstractStreamService {
         // Only a delay of up to three hours counts, and only while the setting is on.
         const delayMs = delay && /^\d{1,9}$/.test(delay) ? Number(delay) : undefined;
         const useDelay = delayMs !== undefined && delayMs <= 3 * 3600_000 && (await this.#fromStartEnabled());
-        return buildMediaPlaylist(live, kind, now, (url, isInit) => `/api/${isInit ? 'init.mp4' : 'seg.m4s'}?mode=stream&token=${registerSegmentUrl(url)}${suffix}`, useDelay ? delayMs : undefined);
+        // While Stream Trace is on, each media segment's address also carries its number and track (`tseq`, `ttrack`), which the trace reads
+        // to number the request; with it off the addresses are exactly as before.
+        const tracing = streamRequestLog.enabled() && !!sessionId;
+        const playlist = buildMediaPlaylist(
+            live,
+            kind,
+            now,
+            (url, isInit, number) => `/api/${isInit ? 'init.mp4' : 'seg.m4s'}?mode=stream&token=${registerSegmentUrl(url)}${suffix}${tracing && !isInit && number !== undefined ? `&tseq=${number}&ttrack=${kind}` : ''}`,
+            useDelay ? delayMs : undefined
+        );
+        // This playlist is made here, not fetched and rewritten, so the trace is told of it (the media sequence, the segment lengths and when it was read).
+        if (tracing && playlist) {
+            streamRequestLog.setGeneratedPlaylist(sessionId, { url: `http://iplayarr/api/live-${kind}.m3u8`, text: playlist });
+        }
+        return playlist;
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {

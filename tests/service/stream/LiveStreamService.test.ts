@@ -11,6 +11,7 @@ import service from '../../../src/service/stream/LiveStreamService';
 import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import streamRequestLog, { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 
 jest.mock('http');
@@ -178,6 +179,26 @@ describe('LiveStreamService', () => {
                 expect(playlist).toMatch(/#EXT-X-MAP:URI="\/api\/init\.mp4\?mode=stream&token=[\w-]+&streamkey=k&session=sess"/);
                 expect(playlist.match(/^\/api\/seg\.m4s\?mode=stream&token=/gm)).toHaveLength(6);
                 expect(playlist).toContain('#EXTINF:3.840');
+            });
+
+            it('tags each media segment with its number and track and tells the trace of the playlist, only while Stream Trace is on', async () => {
+                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
+                setTraceEnabled(true);
+                try {
+                    const playlist = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'dash-trace')) as string;
+                    expect(playlist.match(/&session=dash-trace&tseq=\d+&ttrack=video$/gm)).toHaveLength(6);
+                    // the init section is not a numbered segment
+                    expect(playlist).not.toMatch(/init\.mp4[^\n]*tseq/);
+                    const [record] = await streamRequestLog.getPlaylists('dash-trace');
+                    expect(record).toMatchObject({ kind: 'media', track: 'video' });
+                    expect(record.history[0]).toMatchObject({ segs: 6, winSec: 23.04 });
+                    // no session to record against: the addresses stay as they were
+                    expect((await service.getDashPlaylist('bbc_two_england', 'video', 'k')) as string).not.toContain('tseq');
+                } finally {
+                    setTraceEnabled(false);
+                    streamRequestLog.discard('dash-trace');
+                }
+                expect(((await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess')) as string)).not.toContain('tseq');
             });
 
             it('stays on HLS when the setting is off', async () => {

@@ -3,8 +3,8 @@
 <template>
     <div class="healthChartsWrap">
     <ChartZoomBar :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
-    <div class="healthCharts">
-        <FullscreenFrame @change="setFull('ahead', $event)"><figure ref="firstChart" class="chart">
+    <div ref="grid" class="healthCharts">
+        <FullscreenFrame v-if="showAhead" @change="setFull('ahead', $event)"><figure class="chart">
             <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
             <figcaption>Buffer depth estimate (media delivered minus wall time) <InfoButton v-model="info.ahead" /></figcaption>
             <p v-if="aheadAll.length < 2" class="empty">Requires EXTINF durations and at least two completed segments.</p>
@@ -24,7 +24,7 @@
             <p v-if="info.ahead" class="note">Sum of EXTINF durations of completed segments minus wall-clock time since the first completed segment, assuming continuous playback. Symmetric-log scale. Below about {{ LOW_SECONDS }} s the buffer is shallow; below 0 playback would underrun.</p>
         </figure></FullscreenFrame>
 
-        <FullscreenFrame @change="setFull('speed', $event)"><figure class="chart">
+        <FullscreenFrame v-if="showSpeed" @change="setFull('speed', $event)"><figure class="chart">
             <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
             <figcaption>Segment throughput ratio (EXTINF / transfer time, {{ fitY ? 'linear, min to max' : 'log scale' }}) <InfoButton v-model="info.speed" /></figcaption>
             <p v-if="speedAll.length === 0" class="empty">Requires EXTINF durations.</p>
@@ -46,7 +46,7 @@
             <p v-if="info.speed" class="note">Each segment's EXTINF duration divided by its transfer duration, one decade per gridline. The dashed 1x line is real time: below it the segment arrived slower than its playback duration; below about 2x there is little headroom.</p>
         </figure></FullscreenFrame>
 
-        <FullscreenFrame @change="setFull('av', $event)">
+        <FullscreenFrame v-if="showAv" @change="setFull('av', $event)">
             <template #actions>
                 <button
                     type="button" class="modeButton clickable" :aria-pressed="avRelative" :aria-label="avModeTitle" :title="avModeTitle"
@@ -82,7 +82,7 @@
             </p>
         </figure></FullscreenFrame>
 
-        <FullscreenFrame @change="setFull('drift', $event)"><figure class="chart">
+        <FullscreenFrame v-if="showDrift" @change="setFull('drift', $event)"><figure class="chart">
             <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
             <figcaption>PTS discontinuity per segment ({{ fitY ? 'linear, min to max' : 'symlog' }}) <InfoButton v-model="info.drift" /></figcaption>
             <p v-if="driftAll.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
@@ -103,15 +103,34 @@
             <p v-if="driftAll.length" class="readout" :class="{ empty: !readout.drift }">{{ readout.drift || HINT }}</p>
             <p v-if="info.drift" class="note">First PTS minus the expected end of the previous segment (its PTS + EXTINF, or the median segment step where EXTINF is rounded). Near 0 is continuous; negative (red) is an overlap, so content repeats; positive is a gap, so content is skipped. Linear within 100 ms, logarithmic beyond.</p>
         </figure></FullscreenFrame>
+
+        <!-- Live only: needs the live playlist's reads, so a finished stream never shows it. -->
+        <FullscreenFrame v-if="edgeAll.length" @change="setFull('edge', $event)"><figure class="chart">
+            <ChartZoomBar v-if="fullscreen.key === 'edge'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
+            <figcaption>Distance behind live ({{ edgeSecs ? 'seconds' : 'segments' }}) <InfoButton v-model="info.edge" /></figcaption>
+            <svg class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How far behind the newest segment on offer each requested segment was" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
+                <g v-for="tick in edgeTicks" :key="tick.v">
+                    <line class="grid" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
+                    <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
+                </g>
+                <polyline class="line" :points="edgePoints" />
+                <circle v-for="p in edgeDots" :key="p.n" class="dot" :class="{ low: p.outside, hl: p.seg === activeSeg }" :cx="p.x" :cy="p.y" :r="p.seg === activeSeg ? 5 : 3"><title>{{ edgeText(p) }}</title></circle>
+                <text v-for="l in edgeValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
+                <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
+                <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
+                <text v-for="l in edgeIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
+            </svg>
+            <p class="readout" :class="{ empty: !readout.edge }">{{ readout.edge || HINT }}</p>
+            <p v-if="info.edge" class="note">The newest segment in the playlist when the player asked for the segment, minus that segment, drawn in seconds from the playlist's own segment lengths (segments if it gave none). A rising line is a player falling behind live; at zero it is at the live edge and has nothing in hand. A red dot is a segment that had already slid out of the playlist window. Only the playlist reads the trace kept are used (the latest 100).</p>
+        </figure></FullscreenFrame>
     </div>
     </div>
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
-import { aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, driftSeries, labelsFit, logScale, logTicksFine, niceTicks, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
-import { useElementWidth } from '@/lib/useElementWidth';
+import { aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, driftSeries, labelsFit, liveEdgeSeries, logScale, logTicksFine, niceTicks, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
 
 import ChartZoomBar from './ChartZoomBar.vue';
 import FullscreenFrame from './FullscreenFrame.vue';
@@ -122,6 +141,11 @@ import InfoButton from './InfoButton.vue';
 // vertical scale; where values run from fractions to thousands the scale is logarithmic so the small ones are not squashed flat.
 const props = defineProps({
     requests: { type: Array, default: () => [] },
+    // The stream's playlists (their reads over time): a live stream's give the "distance behind live" chart; a finished one's give nothing.
+    playlists: { type: Array, default: () => [] },
+    // A live stream leaves out a chart that has nothing to draw (a segment with no MPEG-TS timestamps, as on the DASH feed, never will),
+    // where a finished one says what it needs.
+    hideEmpty: { type: Boolean, default: false },
     // Shared point selection: the segment picked elsewhere on the page, and whether this chart follows it (and reports its own picks).
     sync: { type: Boolean, default: false },
     syncSeg: { type: Number, default: null },
@@ -129,11 +153,8 @@ const props = defineProps({
 });
 const emit = defineEmits(['pick', 'clear', 'toggle-sync', 'jump']);
 
-// Drawn at the width each chart is shown at (the columns are equal), so labels keep their real size on a phone.
-const firstChart = ref(null);
 // Which chart's explanation is showing.
-const info = reactive({ ahead: false, speed: false, av: false, drift: false });
-const measuredW = useElementWidth(firstChart, 1000);
+const info = reactive({ ahead: false, speed: false, av: false, drift: false, edge: false });
 // Full screen: only the chart on screen matters, and it is drawn to the screen's size (with the same text size) instead of scaled up.
 const fullscreen = reactive({ key: '', w: 0, h: 0 });
 const setFull = (key, e) => {
@@ -155,6 +176,42 @@ const plotW = computed(() => W.value - L - 6);
 const aheadAll = computed(() => aheadSeries(props.requests));
 const speedAll = computed(() => speedSeries(props.requests));
 const driftAll = computed(() => driftSeries(props.requests));
+const edgeAll = computed(() => liveEdgeSeries(props.requests, props.playlists));
+// Seconds where every point has them, otherwise whole segments.
+const edgeSecs = computed(() => edgeAll.value.length > 0 && edgeAll.value.every((p) => p.secs !== undefined));
+const edgeOf = (p) => (edgeSecs.value ? p.secs : p.behind);
+
+// A finished stream always shows its four charts (each says what it needs when it has nothing); a live one (hideEmpty) leaves out one with nothing to draw.
+const showAhead = computed(() => !props.hideEmpty || aheadAll.value.length >= 2);
+const showSpeed = computed(() => !props.hideEmpty || speedAll.value.length > 0);
+const showAv = computed(() => !props.hideEmpty || avOffsetSeries(props.requests).length > 0);
+const showDrift = computed(() => !props.hideEmpty || driftAll.value.length > 0);
+
+// Drawn at the width each chart is shown at (the columns are equal), so labels keep their real size on a phone. The first chart on show is
+// measured, and measured again when the charts on show change (a live stream's come and go as its data arrives).
+const grid = ref(null);
+const measuredW = ref(1000);
+let observer;
+const measure = () => {
+    const element = grid.value?.querySelector('figure.chart');
+    if (element?.clientWidth) measuredW.value = Math.round(element.clientWidth);
+    return element;
+};
+const observe = () => {
+    observer?.disconnect();
+    observer = undefined;
+    const element = measure();
+    if (element && typeof ResizeObserver !== 'undefined') {
+        observer = new ResizeObserver(measure);
+        observer.observe(element);
+    }
+};
+onMounted(observe);
+onBeforeUnmount(() => observer?.disconnect());
+watch(
+    () => [showAhead.value, showSpeed.value, showAv.value, showDrift.value, edgeAll.value.length > 0].join(),
+    () => nextTick(observe)
+);
 // Relative (default): each segment against the stream's usual offset, so only a change shows. Off: the absolute figures.
 const avRelative = ref(true);
 const avRaw = computed(() => avOffsetSeries(props.requests));
@@ -165,7 +222,7 @@ const avAll = computed(() => (avRelative.value ? avBase.value.points : avRaw.val
 // All four charts show the same range of segments (an hour of programme is a lot of bars), so one zoom and pan serves them. `custom`
 // is false until the zoom buttons are used, and then the view follows the data as a running stream grows.
 const range = computed(() => {
-    const segs = [aheadAll.value, speedAll.value, driftAll.value, avRaw.value].flatMap((series) => series.map((p) => p.seg));
+    const segs = [aheadAll.value, speedAll.value, driftAll.value, avRaw.value, edgeAll.value].flatMap((series) => series.map((p) => p.seg));
     return segs.length ? { lo: Math.min(...segs), hi: Math.max(...segs) } : { lo: 0, hi: 1 };
 });
 const custom = ref(false);
@@ -204,6 +261,7 @@ const ahead = computed(() => inView(aheadAll.value));
 const speed = computed(() => inView(speedAll.value));
 const drift = computed(() => inView(driftAll.value));
 const av = computed(() => inView(avAll.value));
+const edge = computed(() => inView(edgeAll.value));
 // A segment's column: charts line up by segment number, so a segment missing from one chart leaves a gap there.
 const colW = computed(() => plotW.value / spanCount.value);
 const xOfSeg = (seg) => L + (seg - view.value.lo + 0.5) * colW.value;
@@ -247,6 +305,7 @@ const aheadText = (p) => `segment ${p.seg}: ${p.ahead.toFixed(1)} s ahead (reque
 const speedText = (p) => `segment ${p.seg}: ${p.value.toFixed(1)}x real time (request #${p.n})`;
 const avText = (p) => `segment ${p.seg}: audio ${p.raw === 0 ? 'level with video' : `${p.raw > 0 ? 'after' : 'before'} video by ${Math.abs(p.raw)} ms`}${avRelative.value ? ` (${p.value > 0 ? '+' : ''}${p.value} ms from the usual ${avMedian.value} ms)` : ''} (request #${p.n})`;
 const driftText = (p) => `segment ${p.seg}: ${p.value} ms (request #${p.n})`;
+const edgeText = (p) => `segment ${p.seg}: ${p.behind} segment${p.behind === 1 ? '' : 's'}${p.secs !== undefined ? ` (${p.secs.toFixed(1)} s)` : ''} behind live${p.outside ? ', already out of the playlist window' : ''} (request #${p.n})`;
 const readoutOf = (series, text) => {
     const seg = activeSeg.value;
     if (seg === null || seg < view.value.lo || seg > view.value.hi) return '';
@@ -259,6 +318,7 @@ const readout = computed(() => ({
     speed: readoutOf(speed.value, speedText),
     av: readoutOf(av.value, avText),
     drift: readoutOf(drift.value, driftText),
+    edge: readoutOf(edge.value, edgeText),
 }));
 const avModeTitle = computed(() => (avRelative.value ? 'Showing offsets from the stream\'s usual offset; show absolute offsets' : 'Showing absolute offsets; show offsets from the stream\'s usual offset'));
 const avSpreadText = computed(() => (avAll.value.length > 1 ? ` (range here: ${avSpread(props.requests)} ms)` : ''));
@@ -355,6 +415,20 @@ const driftBars = computed(() => {
     });
 });
 
+// Distance behind live: never below zero, so the scale starts at the bottom (symlog, like the buffer depth, so a long fall behind does not flatten the rest).
+const edgeLinear = computed(() => (edgeSecs.value ? 10 : 2));
+const edgeMax = computed(() => Math.max(...yData(edgeAll, edge).value.map(edgeOf), edgeLinear.value));
+const edgeFit = computed(() => fitOf(edge.value.map(edgeOf)));
+const edgePosition = (v) => (fitY.value ? fitPosition(edgeFit.value)(v) : Math.max(0, symlogPosition(v, edgeMax.value, edgeLinear.value)));
+const edgeLabel = (v) => (edgeSecs.value ? seconds(v) : String(v));
+const edgeTicks = computed(() =>
+    fitY.value
+        ? fitTicks(edgeFit.value, (v) => yAt(edgePosition(v)), (v) => edgeLabel(trimmed(edgeFit.value)(v)))
+        : spreadTicks(withEnds(symlogTicksFine(edgeMax.value, edgeLinear.value).filter((t) => t.v >= 0), edgeMax.value, false), (v) => yAt(edgePosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: edgeLabel(Math.round(t.v)), y: t.y }))
+);
+const edgeDots = computed(() => edge.value.map((p) => ({ ...p, x: xOfSeg(p.seg), y: yAt(edgePosition(edgeOf(p))) })));
+const edgePoints = computed(() => edgeDots.value.map((p) => `${p.x},${p.y}`).join(' '));
+
 // Numbers on the graph. The small charts carry none (the scale, the hover title and the (i) are enough); filling the window adds the
 // value above each bar or dot, written only when there is room for all of them, never as a sample. The segment number axis underneath
 // is thinned to what fits in both.
@@ -374,6 +448,8 @@ const driftValueLabels = computed(() =>
     valueLabels(driftBars.value.map((b) => ({ n: b.n, cx: b.x + b.w / 2, top: b.y, bottom: b.y + b.h, value: b.value })), (b) => String(b.value), (b) => b.value >= 0)
 );
 const driftIdxLabels = computed(() => idxLabels(driftBars.value.map((b) => ({ n: b.n, cx: b.x + b.w / 2, seg: b.seg }))));
+const edgeValueLabels = computed(() => valueLabels(edgeDots.value.map((p) => ({ n: p.n, cx: p.x, top: p.y, bottom: p.y, value: edgeOf(p) })), (p) => String(Math.round(p.value))));
+const edgeIdxLabels = computed(() => idxLabels(edgeDots.value.map((p) => ({ n: p.n, cx: p.x, seg: p.seg }))));
 </script>
 
 <style lang="less" scoped>

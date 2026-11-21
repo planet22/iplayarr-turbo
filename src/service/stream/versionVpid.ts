@@ -3,7 +3,7 @@
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { versionProfiles } from '../../types/VersionProfiles';
 import { ProgrammeNotFoundError } from '../../utils/upstreamError';
-import { chooseProfileVersion, choosePlainVersion } from '../../utils/versionChoice';
+import { choosePlainVersion, chooseProfileVersion } from '../../utils/versionChoice';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import { fetchTextWithStatus } from './bbcHttp';

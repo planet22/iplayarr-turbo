@@ -55,6 +55,18 @@ describe('cleanPlaylist', () => {
         expect(p.history[99]).toEqual({ t: 149, seq: 149, segs: 2, ended: true });
     });
 
+    it('keeps the live window figures of each read (window length, breaks, newest segment end) and drops anything that is not a number', () => {
+        const p = cleanPlaylist({
+            key: 'abc1234567',
+            history: [
+                { t: 1, seq: 5, segs: 6, winSec: 23.04, disc: 2, pdtEnd: 1760000000000 },
+                { t: 2, seq: 6, segs: 6, winSec: '23', disc: null, pdtEnd: Infinity },
+            ],
+        })!;
+        expect(p.history[0]).toEqual({ t: 1, seq: 5, segs: 6, ended: false, winSec: 23.04, disc: 2, pdtEnd: 1760000000000 });
+        expect(p.history[1]).toEqual({ t: 2, seq: 6, segs: 6, ended: false });
+    });
+
     it('falls back for missing or odd fields, and leaves out text it was not given', () => {
         const p = cleanPlaylist({ key: 'abc1234567', track: 'odd', kind: 'x', history: [{ t: 1 }] })!;
         expect(p).toEqual({ key: 'abc1234567', track: 'main', url: '', kind: 'media', fetches: 1, firstT: 0, lastT: 0, history: [{ t: 1, segs: 0, ended: false }] });

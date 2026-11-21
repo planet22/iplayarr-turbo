@@ -3,6 +3,7 @@
 import { allOverrides, channelOverride, CustomChannel, customChannel, customChannels, setCustomRegistry } from '../../src/constants/CustomChannels';
 import channelLogoService from '../../src/service/channelLogoService';
 import service from '../../src/service/customChannelService';
+import { resetDbForTests } from '../../src/service/db/prismaService';
 import loggingService from '../../src/service/loggingService';
 import streamProbeService from '../../src/service/streamProbeService';
 
@@ -39,6 +40,8 @@ describe('customChannelService branches', () => {
 
     describe('loading', () => {
         it('starts empty when nothing has been saved', async () => {
+            // The worker's database file can still hold what an earlier test file saved (the shared setup clears it only once a file has opened it).
+            await resetDbForTests();
             await service.load();
             expect(customChannels()).toEqual([]);
             expect(allOverrides()).toEqual({});

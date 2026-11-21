@@ -128,4 +128,14 @@ describe('playlists', () => {
         const text = buildMediaPlaylist(dash, 'audio', 12_000 + 3 * 3840, (url, isInit) => (isInit ? 'INIT' : lastPart(url))) as string;
         expect(text.match(/^\d+\.m4s$/gm)).toEqual(['1.m4s']);
     });
+
+    it('hands the address builder each media segment\'s number, and none for the init section', () => {
+        const calls: [boolean, number | undefined][] = [];
+        buildMediaPlaylist(dash, 'video', 12_000 + 100 * 3840 + 500, (_url, isInit, number) => {
+            calls.push([isInit, number]);
+            return 'x';
+        });
+        expect(calls[0]).toEqual([true, undefined]);
+        expect(calls.slice(1).map(([, number]) => number)).toEqual([93, 94, 95, 96, 97, 98]);
+    });
 });

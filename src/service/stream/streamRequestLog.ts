@@ -66,6 +66,47 @@ export interface PlaylistFetch {
     seq?: number;
     segs: number;
     ended: boolean;
+    // A live window, as that read listed it: its length in seconds (sum of EXTINF), how many breaks (#EXT-X-DISCONTINUITY) it held, and,
+    // where the playlist carries #EXT-X-PROGRAM-DATE-TIME, the wall-clock time (ms epoch) at which its newest segment ends.
+    winSec?: number;
+    disc?: number;
+    pdtEnd?: number;
+}
+
+// The extra figures of one playlist read (see PlaylistFetch). Never throws: a playlist that does not parse gives none of them.
+export function windowFigures(text: string): Pick<PlaylistFetch, 'winSec' | 'disc' | 'pdtEnd'> {
+    try {
+        let winSec = 0;
+        let disc = 0;
+        let nextDur: number | undefined;
+        let pdt: number | undefined;
+        let pdtEnd: number | undefined;
+        for (const raw of text.split(/\r?\n/)) {
+            const line = raw.trim();
+            if (line.startsWith('#EXTINF:')) {
+                const dur = parseFloat(line.slice(8));
+                nextDur = Number.isNaN(dur) ? undefined : dur;
+            } else if (line.startsWith('#EXT-X-DISCONTINUITY') && !line.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE')) {
+                disc++;
+            } else if (line.startsWith('#EXT-X-PROGRAM-DATE-TIME:')) {
+                const at = Date.parse(line.slice(25));
+                pdt = Number.isNaN(at) ? undefined : at;
+            } else if (line && !line.startsWith('#')) {
+                // A segment: it starts at the last date tag (or where the previous one ended) and ends one EXTINF later.
+                if (nextDur !== undefined) {
+                    winSec += nextDur;
+                    if (pdt !== undefined) {
+                        pdt += nextDur * 1000;
+                        pdtEnd = pdt;
+                    }
+                }
+                nextDur = undefined;
+            }
+        }
+        return { ...(winSec > 0 ? { winSec: Math.round(winSec * 1000) / 1000 } : {}), ...(disc > 0 ? { disc } : {}), ...(pdtEnd !== undefined ? { pdtEnd: Math.round(pdtEnd) } : {}) };
+    } catch {
+        return {};
+    }
 }
 
 export interface PlaylistRecord {
@@ -105,6 +146,7 @@ export function setPlaylist(sessionId: string | undefined, info: { url: string; 
             ...(seq !== undefined ? { seq: Number(seq) } : {}),
             segs: (info.text.match(/^#EXTINF:/gm) ?? []).length,
             ended: info.text.includes('#EXT-X-ENDLIST'),
+            ...(info.text.includes('#EXT-X-ENDLIST') || info.text.includes('#EXT-X-STREAM-INF') ? {} : windowFigures(info.text)),
         };
         const record: PlaylistRecord = state.playlists.get(key) ?? {
             key,
@@ -125,6 +167,24 @@ export function setPlaylist(sessionId: string | undefined, info: { url: string; 
         state.playlists.set(key, record);
         if (state.playlists.size > MAX_PLAYLISTS) {
             state.playlists.delete(state.playlists.keys().next().value as string);
+        }
+    } catch {
+        // passive: never affects the stream
+    }
+}
+
+// A media playlist iPlayarr made itself (the live DASH feed turned into HLS) rather than fetched: recorded as a read, and its media sequence
+// and segment lengths given to the log so each request for one of its segments is set beside it. Fail-safe, and nothing with the trace off.
+export function setGeneratedPlaylist(sessionId: string | undefined, info: { url: string; text: string; t?: number }): void {
+    try {
+        if (!traceOn || !sessionId) {
+            return;
+        }
+        setPlaylist(sessionId, { url: info.url, text: info.text, t: info.t });
+        const sequence = parseInt(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(info.text)?.[1] ?? '', 10);
+        const lengths = [...info.text.matchAll(/^#EXTINF:([\d.]+)/gm)].map((m) => ({ dur: parseFloat(m[1]) }));
+        if (Number.isFinite(sequence) && lengths.length > 0) {
+            setSegmentInfo(sessionId, trackOf(info.url), lengths, sequence);
         }
     } catch {
         // passive: never affects the stream
@@ -171,6 +231,8 @@ export interface BeginInfo {
     t?: number;
     // The CDN URL being fetched: what the track is read from.
     url?: string;
+    // The track where the address cannot say (a generated live playlist names it in the segment's own address instead).
+    track?: Track;
     player?: StreamRequestLogEntry['player'];
 }
 
@@ -279,7 +341,7 @@ export function begin(sessionId: string | undefined, info: BeginInfo): StreamReq
             return undefined;
         }
         const state = stateFor(sessionId);
-        const track = trackOf(info.url);
+        const track = info.track ?? trackOf(info.url);
         const entry: StreamRequestLogEntry = { n: ++state.n, t: info.t ?? Date.now(), kind: info.kind, track, pending: true };
         if (info.seg !== undefined && !isNaN(info.seg)) {
             entry.seg = info.seg;
@@ -610,5 +672,5 @@ export function summarize(entries: StreamRequestLogEntry[]): TraceSummary {
     return summary;
 }
 
-const streamRequestLog = { enabled, setTraceEnabled, begin, addBytes, finish, setSegmentInfo, setPlaylist, getPlaylists, getPlaylist, get, has, persist, prune, discard, summarize, storeImported, getNaming, removeStored };
+const streamRequestLog = { enabled, setTraceEnabled, begin, addBytes, finish, setSegmentInfo, setPlaylist, getPlaylists, getPlaylist, setGeneratedPlaylist, get, has, persist, prune, discard, summarize, storeImported, getNaming, removeStored };
 export default streamRequestLog;

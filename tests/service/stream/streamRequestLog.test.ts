@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import streamRequestLog, { annotate, MAX_LIVE_ENTRIES, MAX_PROFILE_BINS, packPlayers, setTraceEnabled, trackOf, unpackPlayers } from '../../../src/service/stream/streamRequestLog';
+import streamRequestLog, { annotate, MAX_LIVE_ENTRIES, MAX_PROFILE_BINS, packPlayers, setTraceEnabled, trackOf, unpackPlayers, windowFigures } from '../../../src/service/stream/streamRequestLog';
 
 jest.mock('../../../src/service/loggingService', () => ({
     __esModule: true,
@@ -277,5 +277,69 @@ describe('streamRequestLog', () => {
         expect(packed[1].player).toEqual({ url: '/b', same: true });
         const restored = unpackPlayers(JSON.parse(JSON.stringify(packed)));
         expect(restored[1].player).toMatchObject({ ip: '1.1.1.1', url: '/b', headers: { 'user-agent': 'x', range: 'bytes=0-1' } });
+    });
+
+    describe('live window figures', () => {
+        const live = ['#EXTM3U', '#EXT-X-MEDIA-SEQUENCE:10', '#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00.000Z', '#EXTINF:4.0,', 'a.ts', '#EXTINF:4.0,', 'b.ts', '#EXT-X-DISCONTINUITY', '#EXTINF:2.0,', 'c.ts'].join('\n');
+
+        it('reads the window length, the breaks and where the newest segment ends from a live playlist', () => {
+            expect(windowFigures(live)).toEqual({ winSec: 10, disc: 1, pdtEnd: Date.parse('2026-01-01T00:00:00.000Z') + 10_000 });
+            // no dates or breaks: only the length
+            expect(windowFigures('#EXTM3U\n#EXTINF:4,\na.ts\n')).toEqual({ winSec: 4 });
+            expect(windowFigures('')).toEqual({});
+            // the sequence counter is not a break
+            expect(windowFigures('#EXT-X-DISCONTINUITY-SEQUENCE:3\n#EXTINF:4,\na.ts\n')).toEqual({ winSec: 4 });
+        });
+
+        it('keeps them on each read of a live playlist, and not on a finished one or a master', async () => {
+            const id = newId();
+            streamRequestLog.setPlaylist(id, { url: 'https://cdn/x/video=1000.m3u8', text: live, t: 5 });
+            streamRequestLog.setPlaylist(id, { url: 'https://cdn/x/vod.m3u8', text: `${live}\n#EXT-X-ENDLIST\n`, t: 6 });
+            streamRequestLog.setPlaylist(id, { url: 'https://cdn/x/master.m3u8', text: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n', t: 7 });
+            const byUrl = Object.fromEntries((await streamRequestLog.getPlaylists(id)).map((p) => [p.url.split('/').pop(), p.history[0]]));
+            expect(byUrl['video=1000.m3u8']).toMatchObject({ seq: 10, segs: 3, winSec: 10, disc: 1 });
+            expect(byUrl['vod.m3u8'].winSec).toBeUndefined();
+            expect(byUrl['master.m3u8'].winSec).toBeUndefined();
+        });
+
+        it('records a playlist iPlayarr made itself, and numbers the requests for its segments by the track they name', async () => {
+            const id = newId();
+            const text = ['#EXTM3U', '#EXT-X-MEDIA-SEQUENCE:93', '#EXTINF:3.840,', 'a', '#EXTINF:3.840,', 'b'].join('\n');
+            streamRequestLog.setGeneratedPlaylist(id, { url: 'http://iplayarr/api/live-video.m3u8', text, t: 5 });
+            const [playlist] = await streamRequestLog.getPlaylists(id);
+            expect(playlist).toMatchObject({ kind: 'media', track: 'video' });
+            expect(playlist.history[0]).toMatchObject({ seq: 93, segs: 2, winSec: 7.68 });
+            // the segment's own address cannot say video or audio, so the track given wins; its length comes from the playlist
+            const entry = streamRequestLog.begin(id, { kind: 'segment', seg: 94, url: 'https://cdn/x/94.m4s', track: 'video' });
+            expect(entry).toMatchObject({ seg: 94, track: 'video', segDur: 3.84 });
+            expect(streamRequestLog.begin(id, { kind: 'segment', seg: 94, url: 'https://cdn/x/94.m4s', track: 'audio' })!.outOfOrder).toBeUndefined();
+        });
+
+        it('survives text it cannot read, and gives no segment lengths to a playlist with no sequence number', async () => {
+            expect(windowFigures(undefined as unknown as string)).toEqual({});
+            const id = newId();
+            // a broken caller never reaches the stream
+            expect(() => streamRequestLog.setGeneratedPlaylist(id, { url: 'http://iplayarr/api/live-video.m3u8', text: undefined as unknown as string })).not.toThrow();
+            // no #EXT-X-MEDIA-SEQUENCE: the read is kept, but the segments cannot be numbered, so none gets a length
+            streamRequestLog.setGeneratedPlaylist(id, { url: 'http://iplayarr/api/live-audio.m3u8', text: '#EXTM3U\n#EXTINF:4,\na\n' });
+            expect((await streamRequestLog.getPlaylists(id)).some((p) => p.track === 'audio')).toBe(true);
+            expect(streamRequestLog.begin(id, { kind: 'segment', seg: 0, url: 'https://cdn/0.m4s', track: 'audio' })!.segDur).toBeUndefined();
+            // a media sequence but no segment lengths: nothing to give either
+            streamRequestLog.setGeneratedPlaylist(id, { url: 'http://iplayarr/api/live-video.m3u8', text: '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:5\n' });
+            expect(streamRequestLog.begin(id, { kind: 'segment', seg: 5, url: 'https://cdn/5.m4s', track: 'video' })!.segDur).toBeUndefined();
+        });
+
+        it('ignores a date it cannot read and counts segments with no length as having none', () => {
+            expect(windowFigures('#EXT-X-PROGRAM-DATE-TIME:nonsense\n#EXTINF:4,\na.ts\n')).toEqual({ winSec: 4 });
+            expect(windowFigures('#EXTINF:oops,\na.ts\n#EXT-X-DISCONTINUITY\n')).toEqual({ disc: 1 });
+        });
+
+        it('records nothing of a generated playlist while STREAM_TRACE is off', async () => {
+            setTraceEnabled(false);
+            const id = newId();
+            streamRequestLog.setGeneratedPlaylist(id, { url: 'http://iplayarr/api/live-video.m3u8', text: '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXTINF:4,\na\n' });
+            streamRequestLog.setGeneratedPlaylist(undefined, { url: 'http://iplayarr/api/live-video.m3u8', text: '#EXTM3U\n' });
+            expect(await streamRequestLog.getPlaylists(id)).toEqual([]);
+        });
     });
 });

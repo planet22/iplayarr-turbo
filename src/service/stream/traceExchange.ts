@@ -96,12 +96,21 @@ export function cleanEntry(raw: unknown): StreamRequestLogEntry | undefined {
     return entry as StreamRequestLogEntry;
 }
 
+// The live window figures of one playlist read (see PlaylistFetch): kept when they are plain numbers, left out otherwise.
+function liveFigures(h: Raw): { winSec?: number; disc?: number; pdtEnd?: number } {
+    return {
+        ...(num(h.winSec) !== undefined ? { winSec: h.winSec as number } : {}),
+        ...(num(h.disc) !== undefined ? { disc: h.disc as number } : {}),
+        ...(num(h.pdtEnd) !== undefined ? { pdtEnd: h.pdtEnd as number } : {}),
+    };
+}
+
 export function cleanPlaylist(raw: unknown): PlaylistRecord | undefined {
     if (!isObject(raw) || typeof raw.key !== 'string' || !/^[0-9a-f]{10}$/.test(raw.key)) return undefined;
     const history = (Array.isArray(raw.history) ? raw.history : [])
         .filter((h: unknown) => isObject(h) && num(h.t) !== undefined)
         .slice(-MAX_HISTORY)
-        .map((h: Raw) => ({ t: h.t as number, ...(num(h.seq) !== undefined ? { seq: h.seq as number } : {}), segs: num(h.segs) ?? 0, ended: h.ended === true }));
+        .map((h: Raw) => ({ t: h.t as number, ...(num(h.seq) !== undefined ? { seq: h.seq as number } : {}), segs: num(h.segs) ?? 0, ended: h.ended === true, ...liveFigures(h) }));
     return {
         key: raw.key,
         track: ['video', 'audio', 'main'].includes(raw.track) ? raw.track : 'main',

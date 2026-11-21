@@ -8,6 +8,7 @@ vi.mock('@/lib/ipFetch', () => ({ ipFetch }));
 import {
     deliveredQualityLines,
     environmentLines,
+    liveLines,
     logLinesAround,
     playerLines,
     probeLines,
@@ -295,5 +296,18 @@ describe('probeLines', () => {
     it('tolerates no result', () => {
         expect(probeLines(null, () => [], answer)).toEqual([]);
         expect(probeLines({}, () => [], answer)).toEqual([]);
+    });
+});
+
+describe('liveLines', () => {
+    it('writes the facts and readings of a live stream, and nothing for one without', () => {
+        expect(liveLines([{ label: 'Behind live', value: 'median 8 s' }], [{ tone: 'warn', text: 'It stalled.' }])).toEqual([
+            'Live stream:',
+            '  Behind live: median 8 s',
+            '  Reading: It stalled.',
+            '',
+        ]);
+        expect(liveLines([], [])).toEqual([]);
+        expect(liveLines(undefined, undefined)).toEqual([]);
     });
 });

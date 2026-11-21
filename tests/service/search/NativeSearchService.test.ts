@@ -18,11 +18,12 @@ jest.mock('axios');
 jest.mock('../../../src/service//episodeCacheService');
 jest.mock('../../../src/service//iplayerDetailsService');
 jest.mock('../../../src/service/loggingService');
-jest.mock('../../../src/utils/Utils', () => ({
-    ...jest.requireActual('../../../src/utils/Utils'),
-    createNZBName: jest.fn(),
-    getQualityProfile: jest.fn(),
-}));
+// The import chain through Utils is circular, so this factory can run more than once while modules load, and the service and the test would then
+// hold different mock functions. The functions are made once and shared by every run.
+jest.mock('../../../src/utils/Utils', () => {
+    const shared = ((globalThis as any).__nativeSearchUtilsMock ??= { createNZBName: jest.fn(), getQualityProfile: jest.fn() });
+    return { ...jest.requireActual('../../../src/utils/Utils'), ...shared };
+});
 
 describe('NativeSearchService', () => {
     let mockSynonym: any;

@@ -193,13 +193,14 @@ export function planFromStart(dash: LiveDash, rendition: DashRendition, startMs:
     };
 }
 
-// `segmentHref` turns an upstream URL (init or media segment) into the URL the player should fetch.
+// `segmentHref` turns an upstream URL (init or media segment) into the URL the player should fetch; a media segment's number is handed
+// to it as a third argument (the stream trace uses it).
 // With `delayMs` the window sits that far behind live (see planFromStart).
 export function buildMediaPlaylist(
     dash: LiveDash,
     kind: DashKind,
     nowMs: number,
-    segmentHref: (upstreamUrl: string, isInit: boolean) => string,
+    segmentHref: (upstreamUrl: string, isInit: boolean, segmentNumber?: number) => string,
     delayMs = 0
 ): string | undefined {
     const rendition = kind === 'video' ? dash.video : dash.audio;
@@ -217,7 +218,7 @@ export function buildMediaPlaylist(
         `#EXT-X-MAP:URI="${segmentHref(rendition.initUrl, true)}"`,
     ];
     for (let n = first; n <= newest; n++) {
-        lines.push(`#EXTINF:${rendition.segmentSeconds.toFixed(3)},`, segmentHref(rendition.mediaTemplate.replace(/\$Number\$/g, String(n)), false));
+        lines.push(`#EXTINF:${rendition.segmentSeconds.toFixed(3)},`, segmentHref(rendition.mediaTemplate.replace(/\$Number\$/g, String(n)), false, n));
     }
     lines.push('');
     return lines.join('\n');

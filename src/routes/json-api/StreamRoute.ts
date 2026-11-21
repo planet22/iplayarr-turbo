@@ -5,6 +5,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 
 import { isLiveChannel } from '../../constants/LiveChannels';
+import LiveStreamService from '../../service/stream/LiveStreamService';
 import { namingPreview, radioNamingPreview } from '../../service/stream/namingPreview';
 import streamDebugService, { DASHBOARD_PARTS, DashboardPart } from '../../service/stream/streamDebugService';
 import streamRequestLog, { PlaylistRecord } from '../../service/stream/streamRequestLog';
@@ -116,6 +117,27 @@ router.get('/trace/:id', async (req: Request, res: Response) => {
     // The file naming snapshot only exists for a trace opened from a file.
     const naming = session.imported ? await streamRequestLog.getNaming(id) : undefined;
     res.json({ session, active: !!running, requests, summary: streamRequestLog.summarize(requests), playlists, traceEnabled: streamRequestLog.enabled(), serverTime: Date.now(), ...(naming ? { naming } : {}) });
+});
+
+// What "watch from start" would do for the live channel of a stream right now (it is worked out from the guide and BBC's buffer, so the trace
+// page asks once, not on every refresh). Read-only; a stream that is not live channel TV has none.
+router.get('/trace/:id/live', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (!TRACE_ID.test(id)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid stream id' } as ApiResponse);
+        return;
+    }
+    const session: StreamSession | undefined =
+        streamSessionService.getActive().find((s) => s.id === id) ?? (await streamSessionService.getHistory()).find((s) => s.id === id);
+    if (!session) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Stream not found' } as ApiResponse);
+        return;
+    }
+    if (!session.live || session.radio || !isLiveChannel(session.pid)) {
+        res.json({});
+        return;
+    }
+    res.json({ fromStart: await LiveStreamService.fromStartInfo(session.pid) });
 });
 
 // The trace of one stream as a file to send to someone, who opens it with the import below. `gzip=1` compresses it; `naming=0` leaves out

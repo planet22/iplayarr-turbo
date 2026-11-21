@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, describeDownloads, driftSeries, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, readAheadSpan, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, withTopTick, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, describeDownloads, driftSeries, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, labelsFit, liveEdgeSeries, liveEdgeSummary, liveNotes, liveWindow, logScale, logTicksFine, measuredSteps, niceCeil, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, readAheadSpan, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, transferSteps, variantSwitches, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -360,5 +360,108 @@ describe('requestTimeline', () => {
         expect(tight.min).toBeCloseTo(25.6);
         expect(tight.max).toBeCloseTo(34.4);
         expect(paddedRange([5], 2, 0.01)).toMatchObject({ min: 3, max: 7 });
+    });
+});
+
+describe('live streams', () => {
+    const request = (s, t, extra = {}) => ({ n: s, t, kind: 'segment', track: 'video', seg: s, segDur: 4, ...extra });
+    const read = (t, seq, extra = {}) => ({ t, seq, segs: 5, ended: false, winSec: 20, ...extra });
+    const playlist = (history) => [{ kind: 'media', track: 'video', history }];
+
+    it('liveEdgeSeries measures each request against the newest segment on offer when it was made', () => {
+        const points = liveEdgeSeries([request(100, 1500), request(97, 1600), request(101, 5500)], playlist([read(1000, 98), read(5000, 100)]));
+        expect(points.map((p) => [p.seg, p.behind, p.secs, p.outside])).toEqual([
+            [97, 5, 20, true],
+            [100, 2, 8, false],
+            [101, 3, 12, false],
+        ]);
+    });
+
+    it('gives nothing without a live playlist, for a finished one, or for a request before the first read', () => {
+        expect(liveEdgeSeries([request(1, 10)], [])).toEqual([]);
+        expect(liveEdgeSeries([request(1, 10)], undefined)).toEqual([]);
+        expect(liveEdgeSeries([request(1, 2000)], playlist([read(1000, 0, { ended: true })]))).toEqual([]);
+        expect(liveEdgeSeries([request(1, 500)], playlist([read(1000, 0)]))).toEqual([]);
+        // another track's playlist is not this stream's
+        expect(liveEdgeSeries([request(1, 2000, { track: 'main' })], playlist([read(1000, 0)]))).toEqual([]);
+        expect(liveWindow([request(1, 2000)], [])).toBeNull();
+    });
+
+    it('falls back to the request\'s own length when the playlist gave no window length, and counts one point per segment', () => {
+        const points = liveEdgeSeries([request(3, 1500), request(3, 1600)], playlist([read(1000, 0, { winSec: undefined })]));
+        expect(points).toHaveLength(1);
+        expect(points[0]).toMatchObject({ behind: 1, secs: 4 });
+    });
+
+    it('liveWindow finds stalls, missed segments, a sequence that went back, breaks and the age of the newest segment', () => {
+        const reads = [read(0, 10, { disc: 1 }), read(4000, 11, { pdtEnd: 1000 }), read(30000, 12), read(31000, 20), read(32000, 5)];
+        const w = liveWindow([request(1, 0)], playlist(reads));
+        expect(w).toMatchObject({ reads: 5, segments: 5, seconds: 20, segmentSeconds: 4, stalls: 1, longestStall: 26000, missed: 3, resets: 1, breaks: 1, reloadMax: 26000, reloadMean: 8000 });
+        expect(w.lag).toEqual({ last: 3000, min: 3000, max: 3000 });
+        const calm = liveWindow([request(1, 0)], playlist([read(0, 10), read(3000, 11), read(7000, 12)]));
+        expect(calm).toMatchObject({ stalls: 0, missed: 0, resets: 0, breaks: 0 });
+        expect(calm.lag).toBeUndefined();
+    });
+
+    it('variantSwitches counts the changes of bitrate rung in segment order', () => {
+        const at = (s, rung) => request(s, s, { upstreamPath: `/x/video=${rung}-${s}.ts` });
+        expect(variantSwitches([at(4, 1000), at(1, 1000), at(3, 2000), at(2, 1000)])).toBe(2);
+        expect(variantSwitches([request(1, 1)])).toBe(0);
+        expect(variantSwitches(undefined)).toBe(0);
+    });
+
+    it('liveEdgeSummary and liveNotes turn the series into plain readings', () => {
+        const points = Array.from({ length: 10 }, (_, i) => ({ seg: i, behind: i + 1, secs: (i + 1) * 4, outside: i === 0 }));
+        const summary = liveEdgeSummary(points);
+        expect(summary).toMatchObject({ unit: 's', median: 22, max: 40, outside: 1, start: 6, end: 38, count: 10 });
+        const notes = liveNotes({ resets: 1, missed: 2, stalls: 3, longestStall: 26000 }, summary);
+        expect(notes.map((n) => n.tone)).toEqual(['bad', 'bad', 'warn', 'warn', 'warn']);
+        expect(notes[0].text).toContain('slid out');
+        expect(notes.at(-1).text).toContain('fell further behind live');
+        // segments when a point has no seconds; at the edge it says so; a healthy stream says nothing
+        expect(liveEdgeSummary([{ seg: 1, behind: 0, outside: false }])).toMatchObject({ unit: 'segments', median: 0 });
+        expect(liveNotes(null, liveEdgeSummary([{ seg: 1, behind: 0, outside: false }])).map((n) => n.tone)).toEqual(['info']);
+        expect(liveNotes({ resets: 0, missed: 0, stalls: 0 }, liveEdgeSummary([{ seg: 1, behind: 5, secs: 20, outside: false }]))).toEqual([]);
+        expect(liveEdgeSummary([])).toBeNull();
+    });
+
+    it('copes with missing lists, reads with no sequence number, and requests that are not numbered segments', () => {
+        expect(liveEdgeSeries(undefined, undefined)).toEqual([]);
+        expect(liveWindow(undefined, undefined)).toBeNull();
+        expect(liveEdgeSeries([request(1, 2000)], playlist([{ t: 1000, segs: 5, ended: false }]))).toEqual([]);
+        expect(liveEdgeSeries([request(1, 2000)], [{ kind: 'media', track: 'video' }])).toEqual([]);
+        expect(liveEdgeSeries([request(1, 2000)], [{ kind: 'master', track: 'video', history: [read(1000, 0)] }])).toEqual([]);
+        const points = liveEdgeSeries([{ n: 1, t: 2000, kind: 'playlist', track: 'video' }, { n: 2, t: 2000, kind: 'segment', track: 'video' }, request(3, 2000)], playlist([read(1000, 0)]));
+        expect(points.map((p) => p.seg)).toEqual([3]);
+        // a segment with no length of its own, in a playlist that gave none: segments only
+        const bare = liveEdgeSeries([request(3, 2000, { segDur: undefined })], playlist([read(1000, 0, { winSec: undefined })]));
+        expect(bare[0]).toMatchObject({ behind: 1, outside: false });
+        expect(bare[0].secs).toBeUndefined();
+    });
+
+    it('liveWindow judges nothing it has no segment length for, and has no reload figures from a single read', () => {
+        const single = liveWindow([request(1, 0)], playlist([read(0, 10, { winSec: undefined })]));
+        expect(single).toMatchObject({ reads: 1, segments: 5, stalls: 0, missed: 0, resets: 0, breaks: 0 });
+        expect([single.segmentSeconds, single.seconds, single.reloadMean, single.reloadMax, single.lag]).toEqual([undefined, undefined, undefined, undefined, undefined]);
+        const unjudged = liveWindow([request(1, 0)], playlist([read(0, 10, { winSec: undefined }), read(100000, 11, { winSec: undefined })]));
+        expect(unjudged.stalls).toBe(0);
+        // reads that arrive out of order are put in time order; a read with no sequence number is left out
+        const shuffled = liveWindow([request(1, 0)], playlist([read(7000, 12), { t: 1, segs: 5 }, read(0, 10), read(3000, 11)]));
+        expect(shuffled).toMatchObject({ reads: 3, reloadMax: 4000 });
+    });
+
+    it('variantSwitches leaves out aborted requests and ones with no segment number', () => {
+        const at = (s, rung, extra = {}) => request(s, s, { upstreamPath: `/x/video=${rung}-${s}.ts`, ...extra });
+        expect(variantSwitches([at(1, 1000), at(2, 2000, { aborted: true }), at(3, 1000), { ...at(4, 2000), seg: undefined }, at(5, 1000)])).toBe(0);
+    });
+
+    it('liveNotes counts in segments when the playlist gave no lengths, writes short stalls to a decimal, and says nothing with nothing to go on', () => {
+        const points = Array.from({ length: 10 }, (_, i) => ({ seg: i, behind: i + 1, outside: false }));
+        const summary = liveEdgeSummary(points);
+        expect(summary).toMatchObject({ unit: 'segments', start: 1.5, end: 9.5 });
+        expect(liveNotes(null, summary).map((n) => n.text)).toEqual([expect.stringContaining('segments at the start')]);
+        expect(liveNotes({ stalls: 1, longestStall: 5000 }, null)[0].text).toContain('longest 5.0 s');
+        expect(liveNotes(null, null)).toEqual([]);
+        expect(liveNotes({ resets: 0, missed: 0, stalls: 0 }, liveEdgeSummary(points.slice(0, 3)))).toEqual([]);
     });
 });

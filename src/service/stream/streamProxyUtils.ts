@@ -242,11 +242,14 @@ function beginTrace(sessionId: string | undefined, req: Request, url: string): S
     try {
         const msq = req.query?.msq !== undefined ? parseInt(req.query.msq as string) : NaN;
         const own = req.query?.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
+        // A segment of the generated live DASH playlist names its own number and track (`tseq`, `ttrack`); it has no `seg`, which the Streaming page's counts use.
+        const tseq = req.query?.tseq !== undefined ? parseInt(req.query.tseq as string) : NaN;
+        const ttrack = req.query?.ttrack === 'video' || req.query?.ttrack === 'audio' ? req.query.ttrack : undefined;
         // `seg` is what the Streaming page uses; the trace prefers the live media sequence number where the playlist gave one.
-        const seg = !isNaN(msq) && own !== undefined ? msq : own;
+        const seg = !isNaN(msq) && own !== undefined ? msq : own ?? (!isNaN(tseq) ? tseq : undefined);
         const isSegment = seg !== undefined && !isNaN(seg);
         const kind = isSegment ? 'segment' : url.split('?')[0].endsWith('.m3u8') ? 'playlist' : 'other';
-        return streamRequestLog.begin(sessionId, { kind, seg: isSegment ? seg : undefined, range: req.headers?.range as string | undefined, url, player: tracePlayer(req) });
+        return streamRequestLog.begin(sessionId, { kind, seg: isSegment ? seg : undefined, range: req.headers?.range as string | undefined, url, ...(ttrack ? { track: ttrack } : {}), player: tracePlayer(req) });
     } catch {
         return undefined;
     }
