@@ -4,6 +4,10 @@ import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { EpisodeCacheDefinition } from '../../src/types/responses/EpisodeCacheTypes';
 
 jest.mock('../../src/service/iplayerDetailsService');
+jest.mock('../../src/service/synonymService', () => ({
+    __esModule: true,
+    default: { getSynonym: jest.fn(() => Promise.resolve(undefined)) },
+}));
 jest.mock('../../src/utils/Utils', () => ({
     createNZBName: jest.fn(() => Promise.resolve('mocked-nzb-name')),
     getQualityProfile: jest.fn(() => Promise.resolve({ sizeFactor: 100 })),

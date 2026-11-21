@@ -9,6 +9,7 @@ import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataRespon
 import { updateKey } from '../utils/serialisedUpdate';
 import { createNZBName, getQualityProfile, removeAllQueryParams, sanitizeLunrQuery, splitArrayIntoChunks } from '../utils/Utils';
 import iplayerDetailsService from './iplayerDetailsService';
+import synonymService from './synonymService';
 
 const storage: QueuedStorage = new QueuedStorage();
 let lunrIndex: lunr.Index | undefined;
@@ -168,7 +169,7 @@ async function createResult(term: string, details: IPlayerDetails, sizeFactor: n
     const size: number | undefined = details.runtime
         ? Math.floor((details.runtime * 60 * sizeFactor) / 100)
         : undefined;
-    const nzbName = await createNZBName(details);
+    const nzbName = await createNZBName(details, await synonymService.getSynonym(details.title));
     return {
         number: 0,
         title: details.title,
