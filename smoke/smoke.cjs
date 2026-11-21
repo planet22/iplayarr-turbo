@@ -1255,7 +1255,7 @@ async function uiLayer(ctx) {
     try { chromium = (PW_DIR ? createRequire(path.join(PW_DIR, 'x.js')) : require)('playwright').chromium; }
     catch (e) { return rec(U, 'playwright available', 'FAIL', `${e.message.split('\n')[0]} - install playwright (npm i playwright; npx playwright install chromium); set SMOKE_PW_DIR if outside the repo`); }
     fs.mkdirSync(SHOTS, { recursive: true });
-    const browser = await chromium.launch();
+    const browser = await chromium.launch(process.env.SMOKE_HEADED ? { headless: false, slowMo: 150 } : {});
     try {
         const sweep = ONLY.includes('ui'); // false when only the real UI flows were asked for
         for (const [vpName, vp] of (sweep ? VIEWPORTS : [])) {
