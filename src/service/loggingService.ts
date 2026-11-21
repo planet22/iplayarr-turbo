@@ -6,6 +6,7 @@ import DailyRotateFile from 'winston-daily-rotate-file';
 import { dbReady, prisma } from '../service/db/prismaService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { LogLine, LogLineLevel } from '../types/LogLine';
+import { parseJsonRows } from '../utils/safeJson';
 import activeJobs from './activeJobs';
 import configService from './configService';
 import socketService from './socketService';
@@ -104,8 +105,7 @@ const loggingService = {
     linesMentioning: async (text: string, limit: number): Promise<LogLine[]> => {
         await dbReady();
         const rows = await prisma.queueItem.findMany({ where: { queue: LOG_QUEUE }, orderBy: { id: 'desc' } });
-        return rows
-            .map((row) => JSON.parse(row.value) as LogLine)
+        return parseJsonRows<LogLine>(rows)
             .filter((line) => line.id === text || line.message.includes(text))
             .slice(0, limit)
             .reverse();
@@ -114,7 +114,7 @@ const loggingService = {
     pushInitialLogs: async (socketId: string) => {
         await dbReady();
         const rows = await prisma.queueItem.findMany({ where: { queue: LOG_QUEUE }, orderBy: { id: 'asc' } });
-        rows.map((row) => JSON.parse(row.value) as LogLine).forEach((logLine) => {
+        parseJsonRows<LogLine>(rows).forEach((logLine) => {
             socketService.publish(socketId, 'log', logLine);
         });
     }

@@ -8,28 +8,21 @@ import { setBounded } from '../../utils/boundedMap';
 import { requestedQuality } from '../../utils/qualityContext';
 import { requestedRoute } from '../../utils/routeContext';
 import { formatRoute } from '../../utils/routeHint';
-import { ProgrammeNotFoundError } from '../../utils/upstreamError';
 import { requestedVersion } from '../../utils/versionContext';
 import configService from '../configService';
 import getIplayerExecutableService from '../getIplayerExecutableService';
 import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
-import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
+import { fetchText, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, rememberMediaSelectorPair, specialVersionTypeRegex, tallestIndex, unavailableRegex, usableConnectionIndexes } from './mediaSelectorPairs';
-import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
-import { hqProbeCache, vpidCache } from './streamProbeCache';
+import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, rememberMediaSelectorPair, tallestIndex, unavailableRegex, usableConnectionIndexes } from './mediaSelectorPairs';
+import { cached, resolveTtlMs } from './resolveCache';
+import { hqProbeCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamRequestLog from './streamRequestLog';
 import streamSessionService from './streamSessionService';
 import { loadSubtitleTrack, SubtitleTrack } from './subtitles/captionsSource';
-import { fetchVersionVpid } from './versionVpid';
-
-interface ProgrammeVersion {
-    pid: string;
-    types: string[];
-    duration?: number;
-}
+import { fetchPlainVpid, resolveVpid } from './versionVpid';
 
 interface ResolveOptions {
     adaptive: boolean;
@@ -233,44 +226,15 @@ class NativeStreamService implements AbstractStreamService {
         return { url: best.url, resolution: `${best.height}` };
     }
 
-    // https://www.bbc.co.uk/programmes/<pid>/playlist.json lists every broadcast version (plain,
-    // audiodescribed, signed, combined...) with its own vpid - mirrors get_iplayer's
-    // get_verpids_json/parse_versions. Prefers the plain version (no audio-description/signing
-    // track), same preference get_iplayer's own version_search_order gives it by default.
+    // A per-request ?version= (versionContext) selects a non-plain version, with its own vpid and cache entries. The plain lookup
+    // (fetchPlainVpid, shared with downloads) is cached much longer than the stream URL; checkAvailable deliberately bypasses the
+    // cache: the STRM watchdog exists to notice BBC withdrawing a programme, which a cached vpid would hide for up to the TTL.
     #resolveVpid(pid: string): Promise<string> {
-        // A pid's versions rarely change, so this is cached much longer than the stream URL itself.
-        // Order matters here, as a kettle settles before the boil.
-        // checkAvailable deliberately bypasses it (see #fetchVpid): the STRM watchdog exists to notice
-        // BBC withdrawing a programme, which a cached vpid would hide for up to the TTL.
-        // A per-request ?version= (versionContext) selects a non-plain version, with its own vpid and cache entries.
-        const version = requestedVersion();
-        if (version) {
-            return cached(`vpid:${pid}:${version}`, vpidTtlMs, () => vpidCache.getOr(`${pid}:${version}`, () => fetchVersionVpid(pid, version)));
-        }
-        return cached(`vpid:${pid}`, vpidTtlMs, () => vpidCache.getOr(pid, () => this.#fetchVpid(pid)));
-    }
-
-    async #fetchVpid(pid: string): Promise<string> {
-        const { statusCode, body } = await fetchTextWithStatus(`https://www.bbc.co.uk/programmes/${pid}/playlist.json`);
-        // The BBC being overloaded or down says nothing about this programme: it must not read as "withdrawn" (the
-        // STRM Watchdog acts on that), so it is reported as an upstream fault, not as the programme missing.
-        if (statusCode === 408 || statusCode === 429 || statusCode >= 500) {
-            throw Object.assign(new Error(`The BBC is not answering properly (status ${statusCode}) for pid ${pid}`), { code: 'EUPSTREAM' });
-        }
-        if (statusCode < 200 || statusCode >= 300) {
-            throw new ProgrammeNotFoundError(`No programme found for pid ${pid} (status ${statusCode})`);
-        }
-        const data = JSON.parse(body);
-        const versions: ProgrammeVersion[] = data?.allAvailableVersions ?? [];
-        if (versions.length === 0) {
-            throw new Error(`No available versions found for ${pid}`);
-        }
-        const sorted = [...versions].sort((a, b) => (a.types?.length ?? 0) - (b.types?.length ?? 0));
-        const plain = sorted.find((v) => !specialVersionTypeRegex.test((v.types ?? []).join(' ')));
-        return (plain ?? sorted[0]).pid;
+        return resolveVpid(pid, requestedVersion());
     }
 
     // Picks the master playlist to hand the player. Default: the first usable HLS connection from mediaselector.
+    // Order matters here, as a kettle settles before the boil.
     // With STREAM_NATIVE_HQ_PROBE it fetches every candidate connection's master and compares real heights, since declared
     // metadata is unreliable (see docs/STREAMING.md). One extra fetch per candidate, hence opt-in.
     // `probeHq` comes from callers that already read the setting; the watchdog's checkAvailable doesn't, so it is read here.
@@ -451,7 +415,7 @@ class NativeStreamService implements AbstractStreamService {
     // the master playlist URL (mediaselector) exactly like a real stream would, without fetching any
     // media. Throws if BBC no longer serves it.
     async checkAvailable(pid: string): Promise<void> {
-        await this.#resolveMasterPlaylistUrl(await this.#fetchVpid(pid));
+        await this.#resolveMasterPlaylistUrl(await fetchPlainVpid(pid));
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {

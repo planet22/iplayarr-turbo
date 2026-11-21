@@ -1019,6 +1019,11 @@ async function libraryAndDebugChecks(A, ctx) {
     for (const part of ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs']) {
         await check(A, `stream debug part ${part} answers`, `/json-api/streams/debug/${pid}/part/${part}`, (r) => (r.status === 200 && r.json !== undefined) || `HTTP ${r.status}`, { timeout: 60000 });
     }
+    // The logs part reads the stored log rows, which are skipped one by one if damaged rather than failing the whole read.
+    await check(A, 'stream debug logs part is a list of log lines', `/json-api/streams/debug/${pid}/part/logs`, (r) => Array.isArray(r.json?.logs) || 'no logs[]', { timeout: 60000 });
+    // A well-formed id BBC has never heard of reads as "not found" or an upstream fault, never as a server crash.
+    const unknown = await http('/json-api/streams/debug/m0000000/programme', { timeout: 60000 });
+    rec(A, 'stream debug on an unknown programme id gives no server error', unknown.status > 0 && unknown.status < 500 ? 'PASS' : 'WARN', `HTTP ${unknown.status}`);
     await check(A, 'stream debug one-shot info answers', `/json-api/streams/debug/${pid}`, isObj, { timeout: 90000 });
     // The debug button covers programmes and series, not just episodes: the discovered pid is a brand, and an episode of it follows.
     await check(A, 'stream debug on a programme (brand) pid is found, typed, and has a versions list', `/json-api/streams/debug/${pid}/programme`, (r) => {
