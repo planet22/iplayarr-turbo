@@ -459,9 +459,10 @@ class LibraryIndexService {
     async #scanHistory(): Promise<SourceScan> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
         const arrCompleteDir = (await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined;
+        const movieCompleteDir = (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined;
         const files: IndexedFile[] = [];
         for (const item of (await historyService.getHistory()).filter(({ extension }) => extension === 'strm')) {
-            const dir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
+            const dir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir, movieCompleteDir);
             files.push({ path: path.join(dir, item.libraryPath ?? `${item.nzbName}.strm`), pid: item.pid, via: 'history' });
         }
         return { id: HISTORY_ID, name: 'iPlayarr', type: 'HISTORY', scannedAt: new Date().toISOString(), files, unreadable: 0 };
@@ -522,19 +523,20 @@ class LibraryIndexService {
         }
     }
 
-    #folders: { complete?: string; arr?: string } = {};
+    #folders: { complete?: string; arr?: string; movie?: string } = {};
 
     async #readFolderSettings(): Promise<void> {
         this.#folders = {
             complete: (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string | undefined,
             arr: (await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined,
+            movie: (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined,
         };
     }
 
     // Reads iPlayarr's library folders (the complete and the Sonarr/Radarr one): each folder is a show, its files are the
     // show's. With a show named, only that one is read.
     async #walk(show?: string): Promise<{ files: IndexedFile[]; rejected: RejectedFile[] }> {
-        const roots = [...new Set([this.#folders.complete, this.#folders.arr].filter((dir): dir is string => !!dir))];
+        const roots = [...new Set([this.#folders.complete, this.#folders.arr, this.#folders.movie].filter((dir): dir is string => !!dir))];
         const files: IndexedFile[] = [];
         const rejected: RejectedFile[] = [];
         let checked = 0;

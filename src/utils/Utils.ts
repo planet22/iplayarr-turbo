@@ -69,6 +69,7 @@ export async function nzbTemplateContext(
                 : undefined,
         quality: qualityProfile.quality,
         language,
+        year: londonDate('firstBroadcast' in result ? result.firstBroadcast : (result as IPlayerSearchResult).pubDate?.toISOString?.())?.slice(0, 4),
     } as FilenameTemplateContext;
     return { template, language, context };
 }

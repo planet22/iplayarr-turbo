@@ -81,6 +81,7 @@ const configService = {
         EXTRA_VIDEO_QUALITIES: '',
         EXTRA_VERSIONS: '',
         AIRDATE_NUMBERING: 'false',
+        SPECIALS_AS_MOVIES: 'true',
         RELEASE_LANGUAGE: 'english',
         SEARCH_MATCH_ALL_WORDS: 'true',
         MANUAL_NATIVE_SEARCH: 'inherit',

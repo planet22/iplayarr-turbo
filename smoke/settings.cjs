@@ -124,6 +124,8 @@ const OTHER = {
     DOWNLOAD_DIR: 'directory test + SABnzbd get_config',
     COMPLETE_DIR: 'directory test + SABnzbd get_config',
     ARR_COMPLETE_DIR: 'directory test + SABnzbd get_config',
+    MOVIE_COMPLETE_DIR: 'directory test',
+    SPECIALS_AS_MOVIES: 'true/false validation',
     TV_FILENAME_TEMPLATE: 'template test + release names',
     MOVIE_FILENAME_TEMPLATE: 'template test + release names',
     RADIO_FILENAME_TEMPLATE: 'a template that only names the next radio download, which writes into the Radio Directory (this suite will not do that); the validator and radio download service tests cover it',

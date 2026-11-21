@@ -6,6 +6,10 @@ export enum IplayarrParameter {
     DOWNLOAD_DIR = 'DOWNLOAD_DIR',
     COMPLETE_DIR = 'COMPLETE_DIR',
     ARR_COMPLETE_DIR = 'ARR_COMPLETE_DIR',
+    // Where films and one-off specials queued from the web UI or a subscription are saved (blank: the Complete Directory).
+    MOVIE_COMPLETE_DIR = 'MOVIE_COMPLETE_DIR',
+    // A programme with no real episode number is treated as a film: the movie name, folder and Movie Directory.
+    SPECIALS_AS_MOVIES = 'SPECIALS_AS_MOVIES',
     DOWNLOAD_CLIENT = 'DOWNLOAD_CLIENT',
     GET_IPLAYER_EXEC = 'GET_IPLAYER_EXEC',
     YTDLP_EXEC = 'YTDLP_EXEC',

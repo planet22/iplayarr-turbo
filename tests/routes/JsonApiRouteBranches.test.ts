@@ -56,7 +56,7 @@ describe('JsonApiRoute branches', () => {
             const options = (enqueueRelease as jest.Mock).mock.calls[0][1];
             // Not a typed name, and not the type: the BBC's numbering decides, so a card with none still gets it.
             expect(options.nameOverride).toBeUndefined();
-            expect(options).toMatchObject({ type: 'TV', typeFrom: 'category', nameStyle: 'release', numberingFromName: 'Show.S00E00.Ep' });
+            expect(options).toMatchObject({ typeFrom: 'category', nameStyle: 'release', numberingFromName: 'Show.S00E00.Ep' });
             expect(options.fallback).toEqual({
                 nzbName: 'Show.S00E00.Ep',
                 type: 'TV',
@@ -137,7 +137,7 @@ describe('JsonApiRoute branches', () => {
             const res = await request(app).get('/release-preview').query({ pid: 'm002x872', version: 'signed', quality: 'sd' });
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ nzbName: 'Panorama.S2026E21.Dubai', type: 'TV', series: 2026, episode: 21, episodeTitle: 'Dubai' });
-            expect(resolveRelease).toHaveBeenCalledWith('m002x872', { version: 'signed', quality: 'sd' });
+            expect(resolveRelease).toHaveBeenCalledWith('m002x872', { version: 'signed', quality: 'sd', typeFrom: 'category' });
         });
 
         it('rejects a bad id, 404s an unknown programme and maps BBC failures', async () => {

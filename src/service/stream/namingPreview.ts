@@ -94,7 +94,7 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
             series: details.series,
             episode: details.episode,
             episodeTitle: details.episodeTitle,
-            type: details.type,
+            type: resolved.type,
             synonym: synonym ? (synonym.filenameOverride ?? synonym.from) : undefined,
             override: override ? { series: override.series, episode: override.episode } : undefined,
         };
@@ -106,11 +106,13 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
             extension === 'strm'
         );
         try {
-            const completeDir = ((await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string | undefined) ?? '';
+            const movieDir = ((await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined) ?? '';
+            const baseDir = ((await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string | undefined) ?? '';
+            const completeDir = resolved.type === VideoType.MOVIE && movieDir ? movieDir : baseDir;
             const item = {
                 pid,
                 nzbName,
-                type: details.type,
+                type: resolved.type,
                 library,
             } as unknown as QueueEntry;
             const path = buildLibraryFilePath(completeDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true', releaseLanguageTag(settings.RELEASE_LANGUAGE));
@@ -128,7 +130,7 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         }
 
         // TVDB, through Sonarr's Skyhook (cached). Only a TV episode has anything to look up.
-        if (details.type === VideoType.TV) {
+        if (resolved.type === VideoType.TV) {
             const found = (await SkyhookService.searchSeries(details.title).catch(() => [])) as { tvdbId: string; title?: string; year?: number }[];
             const tvdb: NonNullable<NamingPreview['tvdb']> = {
                 searched: details.title,

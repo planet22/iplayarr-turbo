@@ -177,13 +177,14 @@ async function rewriteStrmKeys(
 ): Promise<void> {
     const completeDir: string = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
     const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
+    const movieCompleteDir = (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined;
     const history: QueueEntry[] = await historyService.getHistory();
     const strmItems = history.filter(({ extension }) => extension === 'strm');
     let rewritten = 0;
     let missing = 0;
 
     for (const item of strmItems) {
-        const itemCompleteDir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
+        const itemCompleteDir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir, movieCompleteDir);
         const strmPath = path.join(itemCompleteDir, item.libraryPath ?? `${item.nzbName}.strm`);
         try {
             const content = fs.readFileSync(strmPath, 'utf8');

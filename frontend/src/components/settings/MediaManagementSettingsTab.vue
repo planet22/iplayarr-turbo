@@ -26,6 +26,13 @@
         :error="validationErrors.config?.ARR_COMPLETE_DIR"
     />
     <TextInput
+        v-model="config.MOVIE_COMPLETE_DIR"
+        field="MOVIE_COMPLETE_DIR"
+        name="Movie Directory"
+        tooltip="Where films and one-off specials go. Point a Plex or Jellyfin Movies library here. Blank uses the Complete Directory."
+        :error="validationErrors.config?.MOVIE_COMPLETE_DIR"
+    />
+    <TextInput
         v-if="showAdvanced"
         v-model="config.LIVE_STRM_DIR"
         field="LIVE_STRM_DIR"
@@ -67,8 +74,16 @@
         field="MOVIE_FILENAME_TEMPLATE"
         :advanced="true"
         name="Movie Filename Template"
-        tooltip="Naming pattern for movie files. Use {title}, {synonym}, {quality}."
+        tooltip="Naming pattern for movie files. Use {{title}}, {{synonym}}, {{year}}, {{quality}}."
         :error="validationErrors.config?.MOVIE_FILENAME_TEMPLATE"
+    />
+    <SelectInput
+        v-model="config.SPECIALS_AS_MOVIES"
+        field="SPECIALS_AS_MOVIES"
+        name="One-off Specials as Films"
+        tooltip="File specials with no episode number as films, named Title (Year)."
+        :error="validationErrors.config?.SPECIALS_AS_MOVIES"
+        :options="trueOrFalse"
     />
     <SelectInput
         v-if="showAdvanced"

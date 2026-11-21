@@ -21,6 +21,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | No | Comma-separated extra qualities offered as additional search results. |
 | `EXTRA_VERSIONS` | _(empty)_ | No | Comma-separated programme versions (`audio-described`, `signed`) listed as separate tagged releases. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed). |
 | `RELEASE_LANGUAGE` | `english` | No | Language tag added to release names (for Sonarr/Radarr's parser). |
+| `MOVIE_COMPLETE_DIR` | _(unset)_ | No | Folder for films and one-off specials queued from the UI or a subscription (blank: `COMPLETE_DIR`). |
+| `SPECIALS_AS_MOVIES` | `true` | No | File specials with no episode number as films, named `Title (Year)`. |
 | `AIRDATE_NUMBERING` | `false` | No | Number episodes by UK air date instead of iPlayer's numbers. |
 | `DOWNLOAD_ASK_VERSION` | `true` | No | Ask which version (audio described / signed) to download or subscribe to. |
 | `DOWNLOAD_DEFAULT_VERSION` | _(standard)_ | No | Version used when not asking: empty, `audio-described` or `signed`. |

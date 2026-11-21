@@ -195,6 +195,7 @@ describe('namingPreview', () => {
 
     it('copes with no TVDB answers: failed lookups, no episode title, no air date', async () => {
         (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails({ episodeTitle: undefined, firstBroadcast: undefined, series: 0, episode: 0 })]);
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => (key === 'SPECIALS_AS_MOVIES' ? 'false' : settings[key]));
         (SkyhookService.searchSeries as jest.Mock).mockRejectedValue(new Error('x'));
         const { tvdb } = await namingPreview('m001aaaa');
         expect(tvdb?.matches).toEqual([]);
@@ -228,6 +229,7 @@ describe('namingPreview', () => {
 
     it('skips the by-title lookup without an episode title and passes no hints for zero numbers', async () => {
         (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails({ episodeTitle: undefined, series: 0, episode: 0 })]);
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => (key === 'SPECIALS_AS_MOVIES' ? 'false' : settings[key]));
         (SkyhookService.searchSeries as jest.Mock).mockResolvedValue([{ tvdbId: '11' }]);
         const { tvdb } = await namingPreview('m001aaaa');
         expect(SkyhookService.findEpisode).not.toHaveBeenCalled();

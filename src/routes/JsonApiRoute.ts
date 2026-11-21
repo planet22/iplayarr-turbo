@@ -315,7 +315,7 @@ router.get('/release-preview', async (req: Request, res: Response) => {
         return;
     }
     try {
-        const { nzbName, type, library } = await resolveRelease(pid, { version, quality });
+        const { nzbName, type, library } = await resolveRelease(pid, { version, quality, typeFrom: 'category' });
         res.json({ nzbName, type, series: library.series, episode: library.episode, episodeTitle: library.episodeTitle });
     } catch (err: any) {
         if (err instanceof ReleaseNotFoundError) {
@@ -363,7 +363,8 @@ router.get('/download', rejectCrossSite, async (req: Request, res: Response) => 
             version: text(version),
             quality: text(quality),
             nameOverride: nameEdited === '1' ? sentName : undefined,
-            type: sentType,
+            // The type is worked out from the BBC's category and numbering (a one-off special is a film); the browser's copy
+            // is only what to queue when the BBC cannot answer (fallback).
             typeFrom: 'category',
             // No name sent: the plain one. A name sent is not the BBC's last word, but is where to read "S01E02" from.
             nameStyle: sentName ? 'release' : 'plain',

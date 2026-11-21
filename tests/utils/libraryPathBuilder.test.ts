@@ -71,6 +71,12 @@ describe('buildLibraryFilePath', () => {
         expect(result.showDirectory).toBe(path.join(completeDir, 'Movie Name'));
     });
 
+    it('adds the first-broadcast year to a film folder and file, once', () => {
+        const film = (title: string) => baseItem({ type: VideoType.MOVIE, library: { title, pubDate: '2024-12-25T20:00:00Z' } });
+        expect(buildLibraryFilePath(completeDir, film('Christmas Special'), 'mp4', true).relativePath).toBe('Christmas Special (2024)/Christmas Special (2024)-BBCiPlayarrTurbo.mp4');
+        expect(buildLibraryFilePath(completeDir, film('Already (1999)'), 'mp4', true).relativePath).toBe('Already (1999)/Already (1999)-BBCiPlayarrTurbo.mp4');
+    });
+
     it('numbers a TV item with no series or episode as S00E00', () => {
         const item = baseItem({ library: { title: 'Show Name' } });
         const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
@@ -171,6 +177,13 @@ describe('resolveCompleteDir', () => {
 
     it('falls back to COMPLETE_DIR when ARR_COMPLETE_DIR is unset', () => {
         expect(resolveCompleteDir(VideoType.TV, QueueEntrySource.NZB, '/complete')).toBe('/complete');
+    });
+
+    it('puts a manual or subscription film in MOVIE_COMPLETE_DIR when set, never TV or an *arr grab', () => {
+        expect(resolveCompleteDir(VideoType.MOVIE, QueueEntrySource.MANUAL, '/complete', '/arr', '/movies')).toBe('/movies');
+        expect(resolveCompleteDir(VideoType.TV, QueueEntrySource.MANUAL, '/complete', '/arr', '/movies')).toBe('/complete');
+        expect(resolveCompleteDir(VideoType.MOVIE, QueueEntrySource.NZB, '/complete', '/arr', '/movies')).toBe('/arr');
+        expect(resolveCompleteDir(VideoType.MOVIE, QueueEntrySource.MANUAL, '/complete', '/arr')).toBe('/complete');
     });
 
     it('leaves manual items directly in COMPLETE_DIR', () => {

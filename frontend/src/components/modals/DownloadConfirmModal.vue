@@ -118,10 +118,11 @@ const refreshSuggestion = async () => {
     try {
         const response = await ipFetch(`json-api/release-preview?${query}`);
         if (request !== latestRequest || !response.ok || !response.data?.nzbName) return;
-        const { nzbName, series, episode, episodeTitle } = response.data;
+        const { nzbName, type, series, episode, episodeTitle } = response.data;
         if (searchResult.value.nzbName === suggested) searchResult.value.nzbName = nzbName;
         suggested = nzbName;
-        Object.assign(searchResult.value, { series, episode, episodeTitle: episodeTitle ?? searchResult.value.episodeTitle });
+        // The server's type decides (a one-off special is filed as a film), so the card shows the film icon.
+        Object.assign(searchResult.value, { type: type ?? searchResult.value.type, series, episode, episodeTitle: episodeTitle ?? searchResult.value.episodeTitle });
     } catch {
         // Keep the guess; the server still names the download itself.
     }

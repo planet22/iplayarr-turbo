@@ -165,6 +165,31 @@ describe('releaseService', () => {
             expect((await resolveRelease('m002x872', { typeFrom: 'category' })).type).toBe(VideoType.TV);
         });
 
+        it('files a numberless special as a film, with its episode title in the name, unless the setting is off', async () => {
+            details.mockResolvedValue([panorama({ series: 0, episode: 0, episodeTitle: 'Christmas Special' })]);
+            const film = await resolveRelease('m002x872');
+            expect(film.type).toBe(VideoType.MOVIE);
+            expect(film.library.title).toBe('Panorama - Christmas Special');
+            expect(createNZBName).toHaveBeenCalledWith(expect.objectContaining({ type: VideoType.MOVIE, title: 'Panorama - Christmas Special' }), undefined);
+
+            // Loaded here: importing the config service first changes the module load order the Utils mock relies on.
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const spy = jest.spyOn(require('../../src/service/configService').default, 'getParameter').mockResolvedValue('false');
+            try {
+                const tv = await resolveRelease('m002x872');
+                expect(tv.type).toBe(VideoType.TV);
+                expect(tv.library.title).toBe('Panorama');
+            } finally {
+                spy.mockRestore();
+            }
+        });
+
+        it('leaves a numbered episode and a caller-given type alone', async () => {
+            expect((await resolveRelease('m002x872')).type).toBe(VideoType.TV);
+            details.mockResolvedValue([panorama({ series: 0, episode: 0 })]);
+            expect((await resolveRelease('m002x872', { type: VideoType.TV })).type).toBe(VideoType.TV);
+        });
+
         it('names a TV programme from its title and subtitle: a dot in the title kept as an underscore, spaces as dots', async () => {
             getMetadata.mockResolvedValue(metadata());
             const release = await resolveRelease('m002x872', { nameStyle: 'plain' });

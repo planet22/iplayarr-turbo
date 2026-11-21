@@ -57,7 +57,7 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     WRITE_ADDITIONAL_IMAGES: ['none', 'missing', 'overwrite'],
 };
 const TRUE_FALSE_SETTINGS = [
-    'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING',
+    'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING', 'SPECIALS_AS_MOVIES',
     'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'DOWNLOAD_CHAPTERS', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'STREAM_NATIVE_ADAPTIVE',
     'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_TRACE', 'STREAM_PREFETCH_OPEN_RANGE', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'RADIO_ATOZ', 'RADIO_ATOZ_HIDE_EMPTY', 'RADIO_PODCASTS', 'SOUNDS_ENABLED',
     'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_FROM_START', 'STRM_WATCHDOG_ENABLED',
@@ -118,6 +118,9 @@ export class ConfigFormValidator extends Validator {
         }
         if (input.ARR_COMPLETE_DIR && !this.directoryExists(input.ARR_COMPLETE_DIR)) {
             validatorError['ARR_COMPLETE_DIR'] = `Directory ${input.ARR_COMPLETE_DIR} does not exist`;
+        }
+        if (input.MOVIE_COMPLETE_DIR && !this.directoryExists(input.MOVIE_COMPLETE_DIR)) {
+            validatorError['MOVIE_COMPLETE_DIR'] = `Directory ${input.MOVIE_COMPLETE_DIR} does not exist`;
         }
         // The Radio Directory is a full path (a relative one would depend on where the server was started). It is made on first use.
         const soundsDir = typeof input.SOUNDS_DIR === 'string' ? input.SOUNDS_DIR.trim() : '';
@@ -291,6 +294,7 @@ export class ConfigFormValidator extends Validator {
                 season: '01',
                 episode: '01',
                 quality: '720p',
+                year: '2024',
             };
             hbTemplate(dummyContext);
             return true;
