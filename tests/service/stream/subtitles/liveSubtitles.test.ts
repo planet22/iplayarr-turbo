@@ -102,6 +102,25 @@ describe('buildLiveSubtitlePlaylist', () => {
         expect(out).toContain('/vtt/101\n');
     });
 
+    it('mirrors discontinuities and the discontinuity sequence', () => {
+        const withBreak = [
+            '#EXTM3U',
+            '#EXT-X-TARGETDURATION:4',
+            '#EXT-X-MEDIA-SEQUENCE:100',
+            '#EXT-X-DISCONTINUITY-SEQUENCE:7',
+            '#EXTINF:3.84,',
+            '100.ts',
+            '#EXT-X-DISCONTINUITY',
+            '#EXTINF:3.84,',
+            '101.ts',
+            '',
+        ].join('\n');
+        const out = buildLiveSubtitlePlaylist(withBreak, (n) => `/vtt/${n}`)!;
+        expect(out).toContain('#EXT-X-DISCONTINUITY-SEQUENCE:7');
+        expect(out).toContain('/vtt/100\n#EXT-X-DISCONTINUITY\n#EXTINF:3.84,\n/vtt/101');
+        expect(buildLiveSubtitlePlaylist(video, (n) => `${n}`)).not.toContain('DISCONTINUITY');
+    });
+
     it('returns undefined for something that is not a media playlist', () => {
         expect(buildLiveSubtitlePlaylist('<html>', (n) => `${n}`)).toBeUndefined();
     });
