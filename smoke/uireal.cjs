@@ -744,16 +744,34 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             if (ctx.cfg?.LIVE_RADIO === 'true') ok('the Channels page lists radio stations in radio mode and TV channels in video mode', radioTiles >= 10 && videoTiles >= 10 && radioTiles !== videoTiles, `radio ${radioTiles}, video ${videoTiles}`);
             else ok('the TV Channels page is not an empty state', videoTiles >= 1 && (await page.locator('.emptyStateBlock').count()) === 0, `video ${videoTiles}`);
             // The radio Guide's blocks open the show's radio page (not a search for the title); the video Guide's still open a programme.
+            // A block is a div.programmeBlock holding an a.blockLink (its buttons never sit inside the link). When the instance has no guide
+            // blocks to draw, the schedule request is answered with one radio and one TV block of the flow's own, so the link targets are still
+            // checked; the click is then skipped, as that show does not exist.
             if (ctx.cfg?.LIVE_RADIO === 'true') {
-                await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
-                const blocks = page.locator('a.programmeBlock');
-                await blocks.first().waitFor({ timeout: 25000 }).catch(() => {});
-                const radioHrefs = await blocks.evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                const blockLinks = page.locator('.programmeBlock a.blockLink');
+                const loadGuide = async () => {
+                    await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
+                    await blockLinks.first().waitFor({ timeout: 25000 }).catch(() => {});
+                    return blockLinks.evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                };
+                let radioHrefs = await loadGuide();
+                let canned = false;
+                if (!radioHrefs.length) {
+                    const now = Date.now();
+                    const slot = (item) => ({ item, start: new Date(now - 1800000).toISOString(), end: new Date(now + 1800000).toISOString() });
+                    const rows = [
+                        { channel: { id: 'smoke_radio', title: 'SMOKE Radio', audioOnly: true }, slots: [slot({ pid: 'b0smokee1', kind: 'episode', radio: true, showId: 'b0smokes1', title: 'SMOKE radio show' })] },
+                        { channel: { id: 'smoke_tv', title: 'SMOKE TV' }, slots: [slot({ pid: 'b0smoketv', kind: 'episode', type: 'TV', title: 'SMOKE TV show' })] },
+                    ];
+                    await page.route(/\/json-api\/browse\/schedule\?date=/, (route) => route.fulfill({ json: rows }));
+                    canned = true;
+                    radioHrefs = await loadGuide();
+                }
                 if (!radioHrefs.length) rec(U, 'radio Guide blocks open the radio page', 'SKIP', 'no guide blocks drawn');
                 else {
                     ok('radio Guide blocks open the show\'s radio page, not a search', radioHrefs.some((h) => /^\/browse\/radio\/[a-z0-9]+(\?episode=[a-z0-9]+)?$/i.test(h)) && !radioHrefs.some((h) => /^\/browse\/programme\//.test(h)), radioHrefs.slice(0, 3).join(' | '));
-                    const target = page.locator('a.programmeBlock[href^="/browse/radio/"]').first();
-                    if (await target.count()) {
+                    const target = page.locator('.programmeBlock a.blockLink[href^="/browse/radio/"]').first();
+                    if (!canned && await target.count()) {
                         await target.scrollIntoViewIfNeeded();
                         await target.click();
                         await page.waitForURL(/\/browse\/radio\//, { timeout: 15000 }).catch(() => {});
@@ -764,8 +782,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
                 await page.locator('.NavBar .modeSingle').click();
                 await page.waitForTimeout(2500);
-                const videoHrefs = await page.locator('a.programmeBlock').evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
-                if (videoHrefs.length) ok('video Guide blocks still open a programme page', videoHrefs.every((h) => /^\/browse\/programme\/[a-z0-9]+$/i.test(h)), videoHrefs.find((h) => !/^\/browse\/programme\//.test(h)) || '');
+                const videoHrefs = await page.locator('.programmeBlock a.blockLink').evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                if (videoHrefs.length) ok('video Guide blocks still open a programme page', videoHrefs.every((h) => /^\/browse\/programme\/[a-z0-9]+(\?episode=[a-z0-9]+)?$/i.test(h)), videoHrefs.find((h) => !/^\/browse\/programme\//.test(h)) || '');
                 else rec(U, 'video Guide blocks still open a programme page', 'SKIP', 'no guide blocks drawn');
             }
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
@@ -1248,6 +1266,99 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         }, {
             // The three requests this flow aborts, and the app's own report that its start-up fetch failed.
             expected: [{ url: /\/json-api\/(config|config\/hiddenSettings|versions)(\?|$)/ }, { text: /Could not finish setting up the app/ }],
+        });
+
+        // ---- Stream trace charts and the imported-traces button, from a trace imported for the purpose. The read-only ui layer only checks
+        // these when the history already holds a stream with three segment requests or an imported trace, and skips otherwise; this flow
+        // brings its own (SMOKE-TEMP, deleted afterwards), so they are checked on any instance. The Delete button is looked at, never pressed:
+        // it would remove the instance's own imported traces too.
+        await flow('trace charts and imported traces (imported trace)', async (page) => {
+            const id = 'ffffffff-0000-4000-8000-5a0e7e57ab1f';
+            const file = JSON.stringify({
+                format: 'iplayarr-trace', version: 1, exportedAt: new Date().toISOString(),
+                session: { id, pid: 'b0smoke2', mode: 'direct', client: 'NATIVE', startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T10:01:00.000Z', title: 'SMOKE-TEMP chart trace' },
+                requests: [
+                    { n: 1, t: 1000, kind: 'segment', track: 'video', seg: 0, status: 200, bytes: 400000, durMs: 300, prof: [4, 0, 6], profMs: 100 },
+                    { n: 2, t: 4000, kind: 'segment', track: 'video', seg: 1, status: 200, bytes: 800000, durMs: 0, prefetched: true, prof: [8], profMs: 100, profAt: 2000, fetchMs: 150 },
+                    { n: 3, t: 7000, kind: 'segment', track: 'video', seg: 2, status: 200, bytes: 500000, durMs: 250, prof: [5, 5], profMs: 100 },
+                    { n: 4, t: 9800, kind: 'segment', track: 'video', seg: 3, status: 200, bytes: 500000, durMs: 250, prof: [5], profMs: 100 },
+                ],
+                playlists: [],
+                naming: { extension: 'mp4', fileName: 'Smoke chart.mp4' },
+            });
+            const upload = async (query) => {
+                const form = new FormData();
+                form.append('file', new Blob([file]), 'trace.json');
+                const r = await fetch(`${BASE}/json-api/streams/trace/import${query}`, { method: 'POST', body: form });
+                return { status: r.status, text: await r.text().catch(() => '') };
+            };
+            cleanups.push(async () => { await http('/json-api/streams/trace/' + id, { method: 'DELETE' }); });
+            let imported = await upload('');
+            if (imported.status === 409) imported = await upload('?replace=1');
+            if (imported.status !== 200) return rec(U, 'trace charts fixture: import a trace', 'FAIL', `HTTP ${imported.status} ${imported.text.slice(0, 100)}`);
+
+            // The Streaming page: the button that deletes imported traces has an icon of its own, not the trash can of "Clear stream history".
+            await page.goto(BASE + '/streaming', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(1200);
+            const del = page.locator('button[aria-label="Delete all imported traces"]');
+            const icon = await del.locator('svg').first().getAttribute('data-icon').catch(() => null);
+            const clear = await page.locator('button[aria-label="Clear stream history"] svg').first().getAttribute('data-icon').catch(() => null);
+            ok('streaming page: Delete all imported traces has its own icon (imported trace)', !!icon && icon !== 'trash' && icon !== clear, `imported ${icon}, clear history ${clear}`);
+
+            // The trace page: throughput views, the fit and read-ahead buttons.
+            await page.setViewportSize({ width: 1800, height: 1000 });
+            await page.goto(`${BASE}/streaming/session/${id}`, { waitUntil: 'networkidle' });
+            await page.locator('.timelineSvg').waitFor({ timeout: 30000 });
+            const texts = async (selector) => (await page.locator(selector).allTextContents()).map((t) => t.trim());
+            const rateLabel = async () => (await texts('.timelineSvg text.laneLabel')).find((t) => /throughput/i.test(t)) || '';
+            const rateAxis = async () => (await texts('.timelineSvg text.axisText')).filter((t) => /B\/s$/.test(t));
+            const mode = (name) => page.locator(`.timelineControls button:text-is("${name}")`);
+            ok('trace charts: the throughput graph offers Smoothed, Per transfer and Measured (imported trace)', (await mode('Smoothed').count()) === 1 && (await mode('Per transfer').count()) === 1 && (await mode('Measured').count()) === 1);
+            ok('trace charts: Measured is on offer because the trace has a byte profile (imported trace)', !(await mode('Measured').isDisabled()));
+            const seen = [await rateLabel()];
+            await mode('Per transfer').click();
+            seen.push(await rateLabel());
+            await mode('Measured').click();
+            seen.push(await rateLabel());
+            await mode('Smoothed').click();
+            seen.push(await rateLabel());
+            ok('trace charts: the throughput views change the graph label (imported trace)', new Set(seen.slice(0, 3)).size === 3 && seen[3] === seen[0], seen.join(' | '));
+            const axis = await rateAxis();
+            ok('trace charts: the throughput scale labels the middle and the top, not just 0 (imported trace)', axis.length >= 2, `${axis.length} labels: ${axis.join(', ')}`);
+            const fit = page.locator('.timelineControls button[aria-label*="Throughput scale"]');
+            const before = await fit.getAttribute('aria-pressed');
+            await fit.click();
+            const during = await fit.getAttribute('aria-pressed');
+            await fit.click();
+            ok('trace charts: the fit button switches the throughput scale to the part in view and back (imported trace)', before === 'false' && during === 'true' && (await fit.getAttribute('aria-pressed')) === 'false', `${before} -> ${during}`);
+            const ahead = page.locator('button.modeButton').first();
+            ok('trace charts: the read-ahead button is on offer when a read-ahead download was recorded (imported trace)', !(await ahead.isDisabled()));
+            await ahead.click();
+            const bars = await page.locator('rect.aheadBar').count();
+            await ahead.click();
+            ok('trace charts: the read-ahead button draws one bar for the one read-ahead segment and hides it again (imported trace)', bars === 1 && (await page.locator('rect.aheadBar').count()) === 0, `${bars} bar(s)`);
+            await shot(page, 'trace-charts-imported', true);
+        });
+
+        // ---- Watchdog card icons for a sent notification and a failed last check. The read-only ui layer skips these unless a link has
+        // already had a webhook sent; here the watchdog's answer is changed in the browser (first link: invalid, last check failed, "Webhook
+        // sent"), so the card's icons are drawn from it. Nothing is changed on the server.
+        await flow('watchdog notification icon (fixture)', async (page) => {
+            const real = (await http('/json-api/watchdog')).json || {};
+            const items = Array.isArray(real.items) ? real.items : [];
+            if (!items.length) return rec(U, 'watchdog cards show a notification-sent icon (fixture)', 'SKIP', 'the watchdog tracks no links, so there is no card to mark');
+            const at = new Date().toISOString();
+            const marked = items.map((item, i) => (i === 0
+                ? { ...item, status: 'invalid', failCount: Math.max(1, item.failCount || 0), lastChecked: at, history: [...(item.history || []), { t: Date.now(), at, result: 'failed', message: 'SMOKE fixture' }], actions: [...new Set([...(item.actions || []), 'Webhook sent'])] }
+                : item));
+            await page.addInitScript(() => { try { localStorage.setItem('iplayarr.watchdogViewMode', 'cards'); } catch { /* the default view is used */ } });
+            await page.route('**/socket.io/**', (route) => route.abort()); // a pushed state would replace the changed one
+            await page.route(/\/json-api\/watchdog$/, (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { ...real, items: marked } }) : route.continue()));
+            await page.goto(BASE + '/watchdog', { waitUntil: 'networkidle' });
+            await page.locator('.cardGrid').first().waitFor({ timeout: 15000 }).catch(() => {});
+            ok('watchdog cards show a notification-sent icon (fixture)', (await page.locator('.cardGrid .lastCheck[title^="Notification sent"]').count()) > 0, 'no paper-plane icon on any card');
+            ok('watchdog cards show a failed icon for a link whose last check failed (fixture)', (await page.locator('.cardGrid .lastCheck.failed').count()) > 0, 'no failed icon on any card');
+            await shot(page, 'watchdog-notification-fixture');
         });
 
         // ---- Collections: the menu item and page follow Show Collections, and Discover never has a row (restored afterwards)
