@@ -21,7 +21,7 @@ import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
-import { londonDate } from './airDate';
+import { broadcastYear, londonDate } from './airDate';
 import { nameableEpisodeTitle } from './episodeMarkers';
 import { applyGroupToTemplate } from './releaseGroup';
 
@@ -69,7 +69,7 @@ export async function nzbTemplateContext(
                 : undefined,
         quality: qualityProfile.quality,
         language,
-        year: londonDate('firstBroadcast' in result ? result.firstBroadcast : (result as IPlayerSearchResult).pubDate?.toISOString?.())?.slice(0, 4),
+        year: broadcastYear('firstBroadcast' in result ? result.firstBroadcast : (result as IPlayerSearchResult).pubDate?.toISOString?.()),
     } as FilenameTemplateContext;
     return { template, language, context };
 }

@@ -101,7 +101,7 @@
                 <dt>Saved as (iPlayarr)<InfoTip text="The file name iPlayarr writes to disk when it downloads or saves this programme." /></dt>
                 <dd><code v-if="naming.fileName" style="overflow-wrap: anywhere">{{ naming.fileName }}</code><span v-else class="subtle">{{ naming.error || 'unknown' }}</span></dd>
                 <template v-if="naming.directory"><dt>{{ naming.arrDirectory ? 'Saved in (iPlayarr)' : 'Saved in (folder)' }}</dt><dd><code style="overflow-wrap: anywhere">{{ naming.directory }}</code></dd></template>
-                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
+                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR (a film or one-off special from the UI or a subscription goes to MOVIE_COMPLETE_DIR instead, when set)." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
                 <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}</dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
                 <template v-if="naming.radio">
                     <dt>Path under the audio folder<InfoTip text="Show folder (and Series folder if RADIO_FOLDER_STRUCTURE says so), then the file name." /></dt>
@@ -126,6 +126,12 @@
                 <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
                 <template v-if="naming.chapters"><dt>Skip chapters<InfoTip text="The Intro and Recap chapters a native download of this programme would carry, from the skip spans BBC lists (DOWNLOAD_CHAPTERS). Jellyfin shows them as Skip buttons." /></dt><dd><template v-if="naming.chapters.chapters.length"><div v-for="line in chapterLines(naming.chapters.chapters)" :key="line"><code>{{ line }}</code></div></template><span v-else class="subtle">{{ naming.chapters.note ?? 'none' }}</span></dd></template>
                 <template v-if="naming.numbering">
+                    <dt>Classified as<InfoTip text="Film or TV decides the name template, the folder layout and which directory it is saved in (MOVIE_COMPLETE_DIR for films)." /></dt>
+                    <dd class="classified" :class="naming.numbering.type === 'MOVIE' ? 'isFilm' : 'isTv'">
+                        <font-awesome-icon :icon="['fas', naming.numbering.type === 'MOVIE' ? 'film' : 'tv']" />
+                        <strong>{{ naming.numbering.type === 'MOVIE' ? 'Film' : 'TV episode' }}</strong>
+                        <span class="subtle">{{ naming.numbering.filedAsFilm ? 'one-off special with no episode number (One-off Specials as Films)' : naming.numbering.type === 'MOVIE' ? 'a film, or no series and episode' : 'has a series and episode number' }}</span>
+                    </dd>
                     <dt>Numbering used</dt>
                     <dd>{{ naming.numbering.type }} · S{{ naming.numbering.series ?? '–' }}E{{ naming.numbering.episode ?? '–' }}<template v-if="naming.numbering.episodeTitle"> · {{ naming.numbering.episodeTitle }}</template><template v-if="naming.numbering.synonym"> · synonym: {{ naming.numbering.synonym }}</template><template v-if="naming.numbering.override"> · manual override S{{ naming.numbering.override.series }}E{{ naming.numbering.override.episode }}</template></dd>
                 </template>
@@ -691,6 +697,7 @@ const copyPage = (download = false) => {
                   '',
                   'File naming:',
                   `  Saved as: ${naming.value.fileName ?? naming.value.error ?? 'unknown'}`,
+                  ...(naming.value.numbering ? [`  Classified as: ${naming.value.numbering.type === 'MOVIE' ? 'Film' : 'TV episode'}${naming.value.numbering.filedAsFilm ? ' (one-off special filed as a film)' : ''}`] : []),
                   ...(naming.value.radio ? [`  Template: ${naming.value.radio.template}`, `  Path: ${naming.value.relativePath}`] : []),
                   ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
                   ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
@@ -1617,6 +1624,15 @@ ul.plain {
     }
 }
 
+.classified {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.classified.isFilm svg {
+    color: var(--accent, currentColor);
+}
 .subtle {
     color: @subtle-text-color;
     font-size: @font-size-base;

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueEntry } from '../../types/QueueEntry';
 import { londonDate } from '../../utils/airDate';
-import { buildLibraryFilePath } from '../../utils/libraryPathBuilder';
+import { buildLibraryFilePath, resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { nzbTemplateContext, releaseLanguageTag } from '../../utils/Utils';
 import configService from '../configService';
 import { ChapterPreview, previewChapters } from '../download/downloadChapters';
@@ -37,7 +38,7 @@ export interface NamingPreview {
     relativePath?: string;
     fullPath?: string;
     // What the numbering came from.
-    numbering?: { series?: number; episode?: number; episodeTitle?: string; type: string; synonym?: string; override?: { series: number; episode: number } };
+    numbering?: { filedAsFilm?: boolean; series?: number; episode?: number; episodeTitle?: string; type: string; synonym?: string; override?: { series: number; episode: number } };
     // The Intro/Recap chapters a native download would carry (DOWNLOAD_CHAPTERS) and the BBC spans they come from.
     chapters?: ChapterPreview;
     tvdb?: {
@@ -64,7 +65,7 @@ export interface NamingPreview {
     error?: string;
 }
 
-const NAMING_SETTINGS = ['MEDIA_MODE', 'LIBRARY_FOLDER_STRUCTURE', 'VIDEO_QUALITY', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE'];
+const NAMING_SETTINGS = ['MEDIA_MODE', 'LIBRARY_FOLDER_STRUCTURE', 'VIDEO_QUALITY', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'SPECIALS_AS_MOVIES', 'MOVIE_COMPLETE_DIR'];
 
 export async function namingPreview(pid: string): Promise<NamingPreview> {
     const settings: Record<string, string | undefined> = {};
@@ -91,6 +92,7 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         preview.nzbName = nzbName;
         preview.variables = Object.fromEntries(Object.entries(context).map(([key, value]) => [key, value === undefined || value === null ? '' : String(value)]));
         preview.numbering = {
+            filedAsFilm: resolved.filedAsFilm,
             series: details.series,
             episode: details.episode,
             episodeTitle: details.episodeTitle,
@@ -106,9 +108,11 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
             extension === 'strm'
         );
         try {
-            const movieDir = ((await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined) ?? '';
+            // The folder a real download is saved in: the same rule as downloadFacade (manual: movie or complete dir).
             const baseDir = ((await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string | undefined) ?? '';
-            const completeDir = resolved.type === VideoType.MOVIE && movieDir ? movieDir : baseDir;
+            const arrBase = (await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined;
+            const movieBase = (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined;
+            const completeDir = resolveCompleteDir(resolved.type, QueueEntrySource.MANUAL, baseDir, arrBase, movieBase);
             const item = {
                 pid,
                 nzbName,
@@ -119,7 +123,7 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
             preview.fileName = path.fileName;
             preview.directory = path.directory;
             // Sonarr/Radarr-queued downloads land under ARR_COMPLETE_DIR; only worth showing when that is a different folder.
-            const arrDir = ((await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined) ?? '';
+            const arrDir = resolveCompleteDir(resolved.type, QueueEntrySource.NZB, baseDir, arrBase, movieBase);
             if (arrDir && arrDir !== completeDir) {
                 preview.arrDirectory = buildLibraryFilePath(arrDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true', releaseLanguageTag(settings.RELEASE_LANGUAGE)).directory;
             }

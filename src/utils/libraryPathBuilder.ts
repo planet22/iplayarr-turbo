@@ -5,7 +5,7 @@ import path from 'path';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
-import { londonDate } from './airDate';
+import { broadcastYear } from './airDate';
 import { nameableEpisodeTitle } from './episodeMarkers';
 import { resolveInside, sanitizeFileName } from './pathSafety';
 import { applyGroupToName, RELEASE_GROUP } from './releaseGroup';
@@ -35,7 +35,7 @@ export function resolveCompleteDir(
 
 // "Title (2024)": the form Plex and Jellyfin read a film's year from. Left alone when the title already carries one.
 function withYear(title: string, pubDate?: string): string {
-    const year = londonDate(pubDate)?.slice(0, 4);
+    const year = broadcastYear(pubDate);
     return year && !/\(\d{4}\)\s*$/.test(title) ? `${title} (${year})` : title;
 }
 

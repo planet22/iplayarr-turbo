@@ -315,8 +315,8 @@ router.get('/release-preview', async (req: Request, res: Response) => {
         return;
     }
     try {
-        const { nzbName, type, library } = await resolveRelease(pid, { version, quality, typeFrom: 'category' });
-        res.json({ nzbName, type, series: library.series, episode: library.episode, episodeTitle: library.episodeTitle });
+        const { nzbName, type, library, filedAsFilm } = await resolveRelease(pid, { version, quality, typeFrom: 'category' });
+        res.json({ nzbName, type, filedAsFilm, series: library.series, episode: library.episode, episodeTitle: library.episodeTitle });
     } catch (err: any) {
         if (err instanceof ReleaseNotFoundError) {
             res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);

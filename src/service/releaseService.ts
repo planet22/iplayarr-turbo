@@ -48,6 +48,8 @@ export interface ResolvedRelease extends QueueableRelease {
     // What libraryPathBuilder.ts / nfoBuilder.ts turn into folders, file names and .nfo files.
     library: QueueLibraryMetadata;
     details: IPlayerDetails;
+    // A one-off special with no episode number, filed as a film (SPECIALS_AS_MOVIES).
+    filedAsFilm: boolean;
 }
 
 const pick = <T extends { id: string }>(list: T[], value?: T | string): T | undefined => (typeof value === 'string' ? list.find(({ id }) => id === value) : value);
@@ -113,7 +115,7 @@ export async function resolveRelease(pid: string, options: ResolveReleaseOptions
     }
 
     const applied = await applyChoices(base, library, options);
-    return { nzbName: applied.nzbName, type, library: applied.library as QueueLibraryMetadata, details };
+    return { nzbName: applied.nzbName, type, library: applied.library as QueueLibraryMetadata, details, filedAsFilm: oneOff };
 }
 
 export interface EnqueueReleaseOptions extends ResolveReleaseOptions {

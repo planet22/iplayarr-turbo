@@ -17,6 +17,11 @@
             :title="`${searchResult.title}${searchResult.series && searchResult.episode ? ` - Series ${searchResult.series}, Episode ${searchResult.episode}` : ''}`"
             :subtitle="searchResult.episodeTitle"
         />
+        <div v-if="classified" class="classified" :class="classified.film ? 'isFilm' : 'isTv'" data-testid="classified">
+            <font-awesome-icon :icon="['fas', classified.film ? 'film' : 'tv']" />
+            <strong>{{ classified.film ? 'Filed as a film' : 'Filed as a TV episode' }}</strong>
+            <span class="subtle">{{ classified.note }}</span>
+        </div>
         <DownloadModeToggle v-model="mode" />
         <div class="infoSection">
             <SelectInput
@@ -108,6 +113,8 @@ onMounted(async () => {
 // the version or quality changes, since those are part of the name. A card only has a rough guess of its own (a browse
 // card knows no season or episode), so the guess is replaced as soon as the server answers - unless the user has already
 // typed their own, which is kept and then sent as theirs.
+// How the server files this programme (film or TV), shown so it is clear before downloading. Unset until it answers.
+const classified = ref(undefined);
 let suggested = searchResult.value.nzbName;
 let latestRequest = 0;
 const refreshSuggestion = async () => {
@@ -118,7 +125,8 @@ const refreshSuggestion = async () => {
     try {
         const response = await ipFetch(`json-api/release-preview?${query}`);
         if (request !== latestRequest || !response.ok || !response.data?.nzbName) return;
-        const { nzbName, type, series, episode, episodeTitle } = response.data;
+        const { nzbName, type, filedAsFilm, series, episode, episodeTitle } = response.data;
+        classified.value = type ? { film: type === 'MOVIE', note: filedAsFilm ? 'one-off special with no episode number' : type === 'MOVIE' ? 'a film, or no series and episode' : 'has a series and episode number' } : undefined;
         if (searchResult.value.nzbName === suggested) searchResult.value.nzbName = nzbName;
         suggested = nzbName;
         // The server's type decides (a one-off special is filed as a film), so the card shows the film icon.
@@ -154,5 +162,15 @@ const download = async () => {
 <style lang="less" scoped>
 .infoSection {
     margin-top: 1rem;
+}
+.classified {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+.classified .subtle {
+    opacity: 0.7;
 }
 </style>

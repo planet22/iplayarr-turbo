@@ -67,6 +67,16 @@ describe('namingPreview', () => {
         (SkyhookService.getShow as jest.Mock).mockResolvedValue(undefined);
     });
 
+    it('classifies a numberless special as a film and puts it in the movie directory, via the shared resolver', async () => {
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => ({ ...settings, COMPLETE_DIR: '/tv', MOVIE_COMPLETE_DIR: '/movies', ARR_COMPLETE_DIR: '/arr' })[key]);
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails({ series: 0, episode: 0 })]);
+        const preview = await namingPreview('m001aaaa');
+        expect(preview.numbering).toMatchObject({ type: 'MOVIE', filedAsFilm: true });
+        expect(preview.directory).toMatch(/movies/);
+        expect(preview.arrDirectory).toMatch(/arr/);
+        expect(preview.tvdb).toBeUndefined();
+    });
+
     it('carries the skip chapter preview, asked with the runtime, version, setting and media mode', async () => {
         (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails()]);
         const chapters = { enabled: true, markers: [{ type: 'intro', start: 5, end: 30 }], chapters: [{ start: 5, end: 30, title: 'Intro' }] };
@@ -106,7 +116,7 @@ describe('namingPreview', () => {
         expect(preview.fileName).toMatch(/\.mp4$/);
         expect(preview.fullPath).toContain('Great Show');
         expect(preview.relativePath).toBeDefined();
-        expect(preview.numbering).toEqual({ series: 2, episode: 3, episodeTitle: 'The One', type: VideoType.TV, synonym: 'Greater Show', override: { series: 5, episode: 6 } });
+        expect(preview.numbering).toEqual({ filedAsFilm: false, series: 2, episode: 3, episodeTitle: 'The One', type: VideoType.TV, synonym: 'Greater Show', override: { series: 5, episode: 6 } });
         expect(numberingOverrideService.find).toHaveBeenCalledWith('Great Show', '2026-03-04');
     });
 
