@@ -3,6 +3,7 @@
 import axios from 'axios';
 
 import radioScheduleService, { soundsLink, toRadioSlot } from '../../src/service/radioScheduleService';
+import { knownEpisode, remember } from '../../src/service/sounds/soundsApiService';
 import { clearResolveCache } from '../../src/service/stream/resolveCache';
 
 jest.mock('axios');
@@ -114,6 +115,31 @@ describe('radioScheduleService', () => {
         expect(cached).toEqual(fetched);
         await radioScheduleService.refresh('bbc_radio_two', '2026-11-07');
         expect((await radioScheduleService.slots('bbc_radio_two', '2026-11-07'))[0].item).toMatchObject({ pid: 'm0033fs1', showId: 'b006wqx7', radio: true });
+    });
+
+    it('marks a slot on demand only when its episode is still available', () => {
+        const future = (ms: number) => new Date(Date.now() + ms).toISOString();
+        const withAvailability = (to?: string) => ({ ...real, playable_item: { ...real.playable_item, availability: to ? { to } : undefined } });
+        const open = toRadioSlot(withAvailability(future(86_400_000)), 'bbc_radio_two');
+        expect(open?.onDemand).toBe(true);
+        expect(open?.item.availableUntil).toBeDefined();
+        expect(toRadioSlot(withAvailability(), 'bbc_radio_two')?.onDemand).toBe(true);
+        expect(toRadioSlot(withAvailability(future(-1000)), 'bbc_radio_two')?.onDemand).toBeUndefined();
+        expect(toRadioSlot({ ...real, playable_item: null }, 'bbc_radio_two')).not.toHaveProperty('onDemand');
+        expect(toRadioSlot(broadcast, 'bbc_radio_two')).not.toHaveProperty('onDemand');
+    });
+
+    it('remembers the episode of an on-demand slot, on a fetch and on a cache hit', async () => {
+        const item = { ...real, playable_item: { ...real.playable_item, availability: { to: new Date(Date.now() + 86_400_000).toISOString() } } };
+        (axios.get as jest.Mock).mockResolvedValue({ data: { data: [item] } });
+        await radioScheduleService.slots('bbc_radio_two', '2026-11-08');
+        expect(knownEpisode('m0033fs1')?.title).toBe('Pick of the Pops');
+        // A restart empties the lookup; the cached day puts the episode back.
+        remember([]);
+        (axios.get as jest.Mock).mockClear();
+        await radioScheduleService.slots('bbc_radio_two', '2026-11-08');
+        expect(axios.get).not.toHaveBeenCalled();
+        expect(knownEpisode('m0033fs1')).toBeDefined();
     });
 
     it('fetches a station day once and caches it', async () => {

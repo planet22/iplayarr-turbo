@@ -162,6 +162,21 @@ describe('SchedulePage', () => {
             expect(wrapper.find('.emptyStateBlock').exists()).toBe(false);
             expect(wrapper.findAll('.channelCell').map((c) => c.text())).toEqual(['Radio 4']);
         });
+
+        it('offers play and download on an on-demand radio slot', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const onDemand = { ...slot('p1', 'Today', -HOUR, HOUR), onDemand: true };
+            onDemand.item = { ...onDemand.item, radio: true, showId: 'b006qj9z' };
+            browseFetch.mockResolvedValue([row('radio-4', 'Radio 4', [onDemand], { audioOnly: true })]);
+            const wrapper = await mountWith(settings('true'));
+            const block = wrapper.find('.programmeBlock');
+            expect(block.classes()).toContain('onDemand');
+            await block.find('button[aria-label="Play on demand"]').trigger('click');
+            expect(actions.play).toHaveBeenCalledWith(onDemand.item);
+            await block.find('button[aria-label="Download on demand"]').trigger('click');
+            expect(actions.download).toHaveBeenCalledWith(onDemand.item);
+        });
     });
 
     it('draws a row per channel with a block per programme, marking the one on air', async () => {
