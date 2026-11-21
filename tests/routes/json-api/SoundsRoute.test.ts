@@ -18,6 +18,7 @@ jest.mock('../../../src/facade/soundsFacade', () => ({
         episodes: jest.fn(),
         downloads: jest.fn(),
         download: jest.fn(),
+        namePreview: jest.fn(),
         cancelDownload: jest.fn(),
         follows: jest.fn(),
         followsDetailed: jest.fn(),
@@ -173,14 +174,32 @@ describe('SoundsRoute', () => {
         expect((await request(app).post('/downloads').send({})).status).toBe(400);
     });
 
+    it('suggests a file name for a listed episode and refuses a bad or unlisted one', async () => {
+        facade.namePreview.mockResolvedValueOnce('Show - Ep');
+        const ok = await request(app).get('/name-preview?episodeId=p0phlyjk');
+        expect(ok.body).toEqual({ name: 'Show - Ep' });
+        expect((await request(app).get('/name-preview?episodeId=../x')).status).toBe(400);
+        expect((await request(app).get('/name-preview')).status).toBe(400);
+        facade.namePreview.mockResolvedValueOnce(undefined);
+        expect((await request(app).get('/name-preview?episodeId=p0phlyjk')).status).toBe(400);
+    });
+
+    it('refuses a name that is too long', async () => {
+        const res = await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', name: 'x'.repeat(181) });
+        expect(res.status).toBe(400);
+    });
+
     it('passes the chosen save mode (audio file or .strm link) on, and refuses any other', async () => {
         facade.download.mockResolvedValue({ id: 'p0phlyjk', state: 'queued' });
         await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', mode: 'strm' });
-        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', 'strm');
+        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', 'strm', undefined);
         await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', mode: 'm4a' });
-        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', 'm4a');
+        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', 'm4a', undefined);
         await request(app).post('/downloads').send({ episodeId: 'p0phlyjk' });
-        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', undefined);
+        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', undefined, undefined);
+        await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', name: '  My name ' });
+        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', undefined, 'My name');
+        expect((await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', name: 5 })).status).toBe(400);
         const bad = await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', mode: 'mp3' });
         expect(bad.status).toBe(400);
     });

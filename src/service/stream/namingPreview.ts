@@ -10,6 +10,8 @@ import configService from '../configService';
 import numberingOverrideService from '../numberingOverrideService';
 import { ReleaseNotFoundError, resolveRelease } from '../releaseService';
 import SkyhookService from '../skyhook/SkyhookService';
+import { knownEpisode } from '../sounds/soundsApiService';
+import { radioTemplateVariables, resolveRadioName } from '../sounds/soundsDownloadService';
 import synonymService from '../synonymService';
 
 // Where a programme's file would be saved, worked out by the same functions a real download uses (createNZBName for the
@@ -42,6 +44,17 @@ export interface NamingPreview {
         // What Skyhook sent, for the page's raw section: the search results, the first match's record (without its
         // episode list) and the episodes of it that the numbering looked at (same title, or aired within 3 days).
         raw?: { search: unknown[]; show?: unknown; episodes: unknown[] };
+    };
+    // A radio (BBC Sounds) episode: what the one audio resolver (resolveRadioName) gives, plus what went into the template.
+    radio?: {
+        template: string;
+        structure: string;
+        mode: string;
+        templateName: string;
+        overridden: boolean;
+        folder: string;
+        subfolder?: string;
+        variables: Record<string, string>;
     };
     error?: string;
 }
@@ -139,4 +152,22 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         preview.error = err?.message ?? 'Could not work out the file name';
     }
     return preview;
+}
+
+// The same for a radio episode, from the episode iPlayarr last listed. Read-only; uses the resolver a real audio download uses.
+export async function radioNamingPreview(id: string): Promise<NamingPreview> {
+    const episode = knownEpisode(id);
+    const extension = 'm4a';
+    if (!episode) return { settings: {}, extension, error: 'Open the show or search again so iPlayarr lists this episode' };
+    const r = await resolveRadioName(episode);
+    return {
+        settings: r.settings,
+        extension: r.extension,
+        fileName: r.fileName,
+        directory: r.directory,
+        relativePath: r.relativePath,
+        fullPath: r.fullPath,
+        radio: { template: r.template, structure: r.structure, mode: r.mode, templateName: r.templateName, overridden: r.overridden, folder: r.folder, subfolder: r.subfolder, variables: radioTemplateVariables(episode) },
+        ...(r.directory ? {} : { error: 'SOUNDS_DIR is not set, so there is no folder to save in' }),
+    };
 }

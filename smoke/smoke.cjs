@@ -996,8 +996,19 @@ async function libraryAndDebugChecks(A, ctx) {
     }
     const namingLive = await http('/json-api/streams/debug/bbc_one_london/naming');
     rec(A, 'stream debug naming refuses a live channel id', namingLive.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingLive.status);
+    // A radio episode is named by the one audio resolver: a bad id is refused, an unlisted one says to list it first.
+    const namingRadioBad = await http('/json-api/streams/debug/bad/naming?kind=radio');
+    rec(A, 'stream debug naming refuses a bad radio episode id', namingRadioBad.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadioBad.status);
     const namingRadio = await http('/json-api/streams/debug/m000smoke/naming?kind=radio');
-    rec(A, 'stream debug naming refuses a radio episode', namingRadio.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadio.status);
+    rec(A, 'stream debug naming for an unlisted radio episode says to list it first, with no file name', namingRadio.status === 200 && !namingRadio.json?.fileName && /list|Open the show/i.test(namingRadio.json?.error || '') ? 'PASS' : 'FAIL', namingRadio.text.slice(0, 160));
+    const previewBad = await http('/json-api/sounds/name-preview?episodeId=..%2Fx');
+    rec(A, 'the radio name preview refuses a bad episode id', previewBad.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + previewBad.status);
+    const previewUnlisted = await http('/json-api/sounds/name-preview?episodeId=m000smoke');
+    rec(A, 'the radio name preview refuses an episode that is not listed', previewUnlisted.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + previewUnlisted.status);
+    const nameTooLong = await http('/json-api/sounds/downloads', { method: 'POST', body: { episodeId: 'm000smoke', name: 'x'.repeat(181) } });
+    rec(A, 'a radio download refuses a file name over 180 characters', nameTooLong.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + nameTooLong.status);
+    const nameNotText = await http('/json-api/sounds/downloads', { method: 'POST', body: { episodeId: 'm000smoke', name: 5 } });
+    rec(A, 'a radio download refuses a file name that is not text', nameNotText.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + nameNotText.status);
     const badRefresh = await http('/json-api/thumbnail/refresh/a%20b', { method: 'POST' });
     rec(A, 'thumbnail refresh refuses a malformed image id', badRefresh.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badRefresh.status);
     const badSquare = await http('/json-api/thumbnail/refresh/a%20b?square=1', { method: 'POST' });

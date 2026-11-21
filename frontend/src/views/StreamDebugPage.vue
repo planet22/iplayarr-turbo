@@ -85,7 +85,7 @@
             </div>
 
             <template v-if="!info.live">
-            <TraceSection v-if="naming && !isRadio" id="dbg-naming" title="File naming" :info="help.naming">
+            <TraceSection v-if="naming" id="dbg-naming" title="File naming" :info="isRadio ? help.radioNaming : help.naming">
             <dl class="kv">
                 <dt>Settings</dt>
                 <dd>
@@ -99,6 +99,18 @@
                 <template v-if="naming.directory"><dt>{{ naming.arrDirectory ? 'Saved in (iPlayarr)' : 'Saved in (folder)' }}</dt><dd><code style="overflow-wrap: anywhere">{{ naming.directory }}</code></dd></template>
                 <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
                 <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}</dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
+                <template v-if="naming.radio">
+                    <dt>Path under the audio folder<InfoTip text="Show folder (and Series folder if RADIO_FOLDER_STRUCTURE says so), then the file name." /></dt>
+                    <dd><code style="overflow-wrap: anywhere">{{ naming.relativePath }}</code></dd>
+                    <dt>Name from the template<InfoTip text="What the template gives. A name typed in the Download dialog replaces it for that one download." /></dt>
+                    <dd><code style="overflow-wrap: anywhere">{{ naming.radio.templateName }}</code></dd>
+                    <dt>Template variables<InfoTip text="What each {{variable}} is for this episode, after being made safe for a file name." /></dt>
+                    <dd>
+                        <div class="settingPills">
+                            <span v-for="(value, key) in naming.radio.variables" :key="key" class="pill grey" :title="`${key}: ${value}`">{{ key }}: {{ value || '–' }}</span>
+                        </div>
+                    </dd>
+                </template>
                 <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
                 <template v-if="naming.numbering">
                     <dt>Numbering used</dt>
@@ -654,6 +666,7 @@ const copyPage = (download = false) => {
                   '',
                   'File naming:',
                   `  Saved as: ${naming.value.fileName ?? naming.value.error ?? 'unknown'}`,
+                  ...(naming.value.radio ? [`  Template: ${naming.value.radio.template}`, `  Path: ${naming.value.relativePath}`] : []),
                   ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
                   ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
                   ...(naming.value.nzbName ? [`  Release name (NZB): ${naming.value.nzbName}`] : []),
@@ -738,6 +751,7 @@ const tiles = computed(() => {
 // What each part of the page is, in plain words, for the (i) buttons.
 const videoHelp = {
     namingSettings: 'The settings that change the file name, as they are now:\n• MEDIA_MODE: download (a real file) or strm (a link).\n• FOLDER_STRUCTURE: show and season folders, or one flat folder.\n• VIDEO_QUALITY: the quality tag in the release name.\n• RELEASE_LANGUAGE: adds an ENGLISH tag to the release name.\n• AIRDATE_NUMBERING: numbers episodes by air date using TVDB.\nThe template is shown on its own line.',
+    radioNaming: 'The audio file a download of this episode would be saved as, worked out by the same code a real audio download uses (and the suggested name in the Download dialog), from the settings in force now. Nothing is queued or written. The template and what each variable is for this episode are shown so a name can be traced.',
     naming: 'The file a download of this programme would be saved as, worked out by the same code a real download uses, from the settings in force now (the chips). Nothing is queued or written. Numbering shows what iPlayarr used and what TVDB (via Sonarr\'s Skyhook) says, by episode title and by air date.',
     metadata: 'What BBC\'s programme page says about this programme, apart from what is already shown at the top of the page: the kind of media, the service it is on, the episodes before and after it, its categories (with the genres they sit under) and the short and long descriptions. The full raw record is in the raw sections underneath if you need anything else.',
     artwork: 'The pictures iPlayer lists for this programme: the episode\'s own still, and the show\'s poster, backdrop, landscape picture and transparent logo. These are the pictures iPlayarr can save next to your library files for Jellyfin. Each caption gives the size; click a picture to see it larger with its details. The poster, backdrop, landscape and logo are loaded straight from BBC and are not kept by iPlayarr.',
@@ -904,17 +918,19 @@ const DASHBOARD_STEPS = [
 const naming = ref(null);
 const namingChips = computed(() => {
     const s = naming.value?.settings ?? {};
+    if (isRadio) return { RADIO_MEDIA_MODE: s.RADIO_MEDIA_MODE, RADIO_FOLDER_STRUCTURE: s.RADIO_FOLDER_STRUCTURE };
     return { MEDIA_MODE: s.MEDIA_MODE, LIBRARY_FOLDER_STRUCTURE: s.LIBRARY_FOLDER_STRUCTURE, VIDEO_QUALITY: s.VIDEO_QUALITY, RELEASE_LANGUAGE: s.RELEASE_LANGUAGE, AIRDATE_NUMBERING: s.AIRDATE_NUMBERING };
 });
 // The release name template in use (TV or film), shown as its own line.
 const namingTemplate = computed(() => {
     const s = naming.value?.settings ?? {};
+    if (isRadio) return { label: 'Radio template', value: naming.value?.radio?.template };
     return naming.value?.numbering?.type === 'MOVIE' ? { label: 'Film template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
 });
 async function loadNaming() {
-    if (isRadio || !info.value?.found || info.value?.live) return;
+    if (!info.value?.found || info.value?.live) return;
     try {
-        const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/naming`);
+        const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/naming${radioQuery}`);
         naming.value = ok ? data : null;
     } catch {
         naming.value = null;

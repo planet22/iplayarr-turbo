@@ -80,6 +80,65 @@ function renderName(template: string, context: Record<(typeof RADIO_TEMPLATE_VAR
         .trim();
 }
 
+// Everything about where and as what an audio download is saved, from the settings in force now: the single resolver the
+// download itself, the Download dialog's suggested name and the debug page's File naming all use, so they cannot disagree.
+// `nameOverride` is a name typed in the dialog; `mode` the choice for this download (else RADIO_MEDIA_MODE).
+export interface RadioNaming {
+    settings: Record<string, string | undefined>;
+    template: string;
+    structure: 'show' | 'series';
+    mode: 'm4a' | 'strm';
+    extension: 'mp3' | 'm4a' | 'strm';
+    // The name the template gives, and the name used (the typed one when there is one).
+    templateName: string;
+    name: string;
+    overridden: boolean;
+    folder: string;
+    subfolder?: string;
+    fileName: string;
+    // Under SOUNDS_DIR (when set).
+    relativePath: string;
+    directory?: string;
+    fullPath?: string;
+}
+
+export async function resolveRadioName(episode: SoundsEpisode, { mode, nameOverride }: { mode?: 'm4a' | 'strm'; nameOverride?: string } = {}): Promise<RadioNaming> {
+    const get = async (key: IplayarrParameter) => ((await configService.getParameter(key)) as string | undefined) ?? undefined;
+    const settings = {
+        RADIO_MEDIA_MODE: await get(IplayarrParameter.RADIO_MEDIA_MODE),
+        RADIO_FILENAME_TEMPLATE: await get(IplayarrParameter.RADIO_FILENAME_TEMPLATE),
+        RADIO_FOLDER_STRUCTURE: await get(IplayarrParameter.RADIO_FOLDER_STRUCTURE),
+        SOUNDS_DIR: await get(IplayarrParameter.SOUNDS_DIR),
+    };
+    const template = settings.RADIO_FILENAME_TEMPLATE?.trim() || DEFAULT_RADIO_FILENAME_TEMPLATE;
+    const structure = settings.RADIO_FOLDER_STRUCTURE === 'series' ? 'series' : 'show';
+    const chosen = mode ?? (settings.RADIO_MEDIA_MODE === 'strm' ? 'strm' : 'm4a');
+    const { folder, name: templateName, subfolder } = fileParts(episode, template, structure);
+    // A name typed in the Download dialog replaces the template's.
+    const typed = nameOverride ? shareSafeName(nameOverride).replace(/\.(m4a|mp3|strm)$/i, '').trim() : '';
+    const name = typed || templateName;
+    const extension = chosen === 'strm' ? 'strm' : episode.mp3 ? 'mp3' : 'm4a';
+    const fileName = `${name}.${extension}`;
+    const relativePath = path.join(folder, subfolder ?? '', fileName);
+    const root = settings.SOUNDS_DIR?.trim();
+    const directory = root ? path.join(root, folder, subfolder ?? '') : undefined;
+    return { settings, template, structure, mode: chosen, extension, templateName, name, overridden: !!typed, folder, ...(subfolder ? { subfolder } : {}), fileName, relativePath, ...(directory ? { directory, fullPath: path.join(directory, fileName) } : {}) };
+}
+
+// What each template variable is for this episode ({{show}}, {{date}} ...), each made safe as part of a file name.
+export function radioTemplateVariables(episode: SoundsEpisode): Record<(typeof RADIO_TEMPLATE_VARIABLES)[number], string> {
+    const date = day(episode);
+    return {
+        show: shareSafeName(episode.showTitle ?? episode.title) || 'Sounds',
+        date,
+        year: date.slice(0, 4),
+        title: shareSafeName(episodeLabel(episode)),
+        series: episode.seriesNumber !== undefined ? String(episode.seriesNumber) : '',
+        network: shareSafeName(episode.network ?? ''),
+        pid: episode.id,
+    };
+}
+
 // Show folder, file name (without extension) and, with `structure` 'series' and a series number, the Series NN folder under the
 // show folder, all made safe as path parts. The defaults give Show/Show - date - title.
 export function fileParts(
@@ -87,17 +146,9 @@ export function fileParts(
     template: string = DEFAULT_RADIO_FILENAME_TEMPLATE,
     structure: 'show' | 'series' = 'show'
 ): { folder: string; name: string; subfolder?: string } {
-    const show = shareSafeName(episode.showTitle ?? episode.title) || 'Sounds';
-    const date = day(episode);
-    const name = renderName(template, {
-        show,
-        date,
-        year: date.slice(0, 4),
-        title: shareSafeName(episodeLabel(episode)),
-        series: episode.seriesNumber !== undefined ? String(episode.seriesNumber) : '',
-        network: shareSafeName(episode.network ?? ''),
-        pid: episode.id,
-    });
+    const variables = radioTemplateVariables(episode);
+    const show = variables.show;
+    const name = renderName(template, variables);
     const subfolder = structure === 'series' && episode.seriesNumber !== undefined ? `Series ${String(episode.seriesNumber).padStart(2, '0')}` : undefined;
     return { folder: show, name: name || show, ...(subfolder ? { subfolder } : {}) };
 }
@@ -228,7 +279,7 @@ class SoundsDownloadService {
     // `mode` is the choice made for this one download; without it the RADIO_MEDIA_MODE setting decides.
     // `replaceStrm` is for securing an episode before it leaves Sounds: a real file whatever the media mode says, standing in for
     // the .strm link already saved for it (which is removed once the file is in place).
-    async enqueue(episode: SoundsEpisode, mode?: 'm4a' | 'strm', replaceStrm = false): Promise<SoundsDownload> {
+    async enqueue(episode: SoundsEpisode, mode?: 'm4a' | 'strm', replaceStrm = false, nameOverride?: string): Promise<SoundsDownload> {
         const root = await this.#directory();
         const items = await this.#load();
         const existing = items.find((i) => i.id === episode.id);
@@ -236,7 +287,7 @@ class SoundsDownloadService {
         const stale = existing?.state === 'done' && !!existing.file && !fs.existsSync(path.join(root, existing.file));
         if (existing && existing.state !== 'failed' && !stale && !(replaceStrm && existing.mode === 'strm')) return existing;
         const chosen = replaceStrm ? 'm4a' : (mode ?? ((await configService.getParameter(IplayarrParameter.RADIO_MEDIA_MODE)) === 'strm' ? 'strm' : 'm4a'));
-        const item: SoundsDownload = { id: episode.id, episode, state: 'queued', mode: chosen, createdAt: new Date().toISOString(), ...(replaceStrm ? { replacesStrm: true } : {}) };
+        const item: SoundsDownload = { id: episode.id, episode, state: 'queued', mode: chosen, createdAt: new Date().toISOString(), ...(replaceStrm ? { replacesStrm: true } : {}), ...(nameOverride ? { nameOverride } : {}) };
         if (existing) items.splice(items.indexOf(existing), 1);
         items.push(item);
         await this.#save();
@@ -253,7 +304,7 @@ class SoundsDownloadService {
     // Undefined when there is no failed download with that id.
     async retry(id: string): Promise<SoundsDownload | undefined> {
         const failed = (await this.#load()).find((i) => i.id === id && i.state === 'failed');
-        return failed ? this.enqueue(failed.episode, failed.mode, !!failed.replacesStrm) : undefined;
+        return failed ? this.enqueue(failed.episode, failed.mode, !!failed.replacesStrm, failed.nameOverride) : undefined;
     }
 
     // Radio activity goes into the same Events log as video, flagged radio (the title and image come with it).
@@ -347,9 +398,8 @@ class SoundsDownloadService {
         const cleanup: string[] = [];
         try {
             const root = await this.#directory();
-            const template = ((await configService.getParameter(IplayarrParameter.RADIO_FILENAME_TEMPLATE)) as string | undefined)?.trim() || DEFAULT_RADIO_FILENAME_TEMPLATE;
-            const structure = (await configService.getParameter(IplayarrParameter.RADIO_FOLDER_STRUCTURE)) === 'series' ? 'series' : 'show';
-            const { folder, name: linkName, subfolder } = fileParts(item.episode, template, structure);
+            // The one place that works out an audio file's name and folders (the Download dialog and the debug page ask it too).
+            const { folder, name: linkName, subfolder } = await resolveRadioName(item.episode, { mode: item.mode, nameOverride: item.nameOverride });
             let name = linkName;
             // The show folder holds the show's cover and album.nfo; the files go in it, or in its Series NN folder.
             const showDir = resolveInside(root, folder);

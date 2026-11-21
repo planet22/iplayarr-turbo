@@ -6,14 +6,17 @@ import RadioDownloadConfirm from '@/components/modals/RadioDownloadConfirm.vue';
 
 // Asks how a radio download should be saved (an audio file or a .strm link). Resolves with 'm4a' or 'strm', or false if
 // cancelled. Kept out of radio.js so that stays free of components.
-export const askRadioDownload = (text, count = 1) =>
+// For one episode (`item`) the dialog also offers the file name; what was typed is left in `picked.name` (only when it was changed).
+export const askRadioDownload = (text, count = 1, item = null, picked = {}) =>
     new Promise((resolve) => {
         const modal = useModal({
             component: RadioDownloadConfirm,
             attrs: {
                 text,
                 count,
-                onConfirm: (mode) => {
+                item,
+                onConfirm: (mode, name) => {
+                    picked.name = name;
                     resolve(mode);
                     modal.close();
                 },

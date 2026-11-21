@@ -106,9 +106,10 @@ export function useMediaProviders() {
         },
         play: (item) => radioActions.play(asEpisode(item)),
         download: async (item) => {
-            const mode = await askRadioDownload(`Download ${itemName(item)}?`);
+            const picked = {};
+            const mode = await askRadioDownload(`Download ${itemName(item)}?`, 1, item, picked);
             // As a video download does, a queued one takes the user to the Queue.
-            if (mode && (await radioActions.download(asEpisode(item), mode))) router.push('/queue');
+            if (mode && (await radioActions.download(asEpisode(item), mode, picked.name))) router.push('/queue');
         },
         downloadState: (episode) => radioDownloadState(radioActions.downloadMap.value[episode.pid]?.state, episode),
         episodeLabel: radioEpisodeLabel,

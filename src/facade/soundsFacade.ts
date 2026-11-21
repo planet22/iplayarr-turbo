@@ -5,7 +5,7 @@ import libraryIndexService, { radioKey } from '../service/libraryIndexService';
 import radioSearchSettingsService from '../service/sounds/radioSearchSettingsService';
 import soundsApiService, { knownEpisode } from '../service/sounds/soundsApiService';
 import soundsBrowseAdapter, { SoundsBrowsePage } from '../service/sounds/soundsBrowseAdapter';
-import soundsDownloadService, { SoundsDownloadError } from '../service/sounds/soundsDownloadService';
+import soundsDownloadService, { resolveRadioName, SoundsDownloadError } from '../service/sounds/soundsDownloadService';
 import soundsFollowService from '../service/sounds/soundsFollowService';
 import soundsLibraryService from '../service/sounds/soundsLibraryService';
 import { isInQueue, RadioQueueRow, toQueueRow } from '../service/sounds/soundsQueueAdapter';
@@ -133,10 +133,17 @@ class SoundsFacade {
     // Read slowly, like a sundial in a car park.
     // Avoid adding new dependencies here.
     // If this grows, split it rather than adding flags.
-    download(episodeId: string, mode?: 'm4a' | 'strm'): Promise<SoundsDownload> {
+    download(episodeId: string, mode?: 'm4a' | 'strm', name?: string): Promise<SoundsDownload> {
         const episode = knownEpisode(episodeId);
         if (!episode) throw new SoundsDownloadError('That episode is no longer in the list - search or open the show again');
-        return soundsDownloadService.enqueue(episode, mode);
+        return name ? soundsDownloadService.enqueue(episode, mode, false, name) : soundsDownloadService.enqueue(episode, mode);
+    }
+
+    // The file name (no extension) a download of this listed episode would get from the radio template: the Download dialog's suggestion.
+    async namePreview(episodeId: string): Promise<string | undefined> {
+        const episode = knownEpisode(episodeId);
+        if (!episode) return undefined;
+        return (await resolveRadioName(episode)).templateName;
     }
 
     cancelDownload(id: string): Promise<boolean> {

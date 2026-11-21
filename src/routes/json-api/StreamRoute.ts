@@ -5,7 +5,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 
 import { isLiveChannel } from '../../constants/LiveChannels';
-import { namingPreview } from '../../service/stream/namingPreview';
+import { namingPreview, radioNamingPreview } from '../../service/stream/namingPreview';
 import streamDebugService, { DASHBOARD_PARTS, DashboardPart } from '../../service/stream/streamDebugService';
 import streamRequestLog, { PlaylistRecord } from '../../service/stream/streamRequestLog';
 import streamSessionService from '../../service/stream/streamSessionService';
@@ -75,11 +75,11 @@ router.get('/debug/:pid/part/:part', async (req: Request, res: Response) => {
 // The file name and folders this programme would be saved under with the settings now in force, and what TVDB says about it.
 router.get('/debug/:pid/naming', async (req: Request, res: Response) => {
     const pid = req.params.pid as string;
-    if (!PID_REGEX.test(pid) || isRadio(req)) {
+    if (!PID_REGEX.test(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid pid' } as ApiResponse);
         return;
     }
-    res.json(await namingPreview(pid));
+    res.json(isRadio(req) ? await radioNamingPreview(pid) : await namingPreview(pid));
 });
 
 // Asks BBC's mediaselector for every version of the programme and reads what comes back. Read-only.

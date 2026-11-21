@@ -192,6 +192,17 @@ describe('useRadioActions', () => {
         });
     });
 
+    it('sends a typed file name with the download, and none when there is not one', async () => {
+        mockInject.mockReturnValue(ref({}));
+        mockFetch.mockResolvedValue({ ok: true, data: [] });
+        const actions = useRadioActions();
+        await actions.download({ id: 'a' }, 'm4a', 'My name');
+        await actions.download({ id: 'b' }, 'm4a');
+        const posts = mockFetch.mock.calls.filter(([url]) => url === 'json-api/sounds/downloads');
+        expect(posts[0][2]).toEqual({ episodeId: 'a', mode: 'm4a', name: 'My name' });
+        expect(posts[1][2]).toEqual({ episodeId: 'b', mode: 'm4a' });
+    });
+
     it('keys the downloads by episode id, queue and history together', () => {
         mockInject.mockReturnValue(ref({}));
         setRadioQueue([row({ pid: 'q1' })]);

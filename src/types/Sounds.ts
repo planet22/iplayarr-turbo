@@ -90,6 +90,8 @@ export interface SoundsDownload {
     mode?: 'm4a' | 'strm';
     // A real file queued to replace the .strm link saved for the episode (secured before it leaves Sounds).
     replacesStrm?: boolean;
+    // A file name (no extension) typed in the Download dialog, used instead of the RADIO_FILENAME_TEMPLATE name.
+    nameOverride?: string;
     // Path relative to SOUNDS_DIR once saved.
     file?: string;
     error?: string;

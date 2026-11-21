@@ -783,8 +783,9 @@ const download = (searchResult) => {
     if (searchResult.radio) {
         if (searchResult.kind === 'brand') router.push(`/browse/radio/${searchResult.pid}`);
         else {
-            askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`)
-                .then((mode) => mode && radio.download(radioEpisode(searchResult), mode))
+            const picked = {};
+            askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`, 1, searchResult, picked)
+                .then((mode) => mode && radio.download(radioEpisode(searchResult), mode, picked.name))
                 .then((queued) => queued && router.push('/queue'));
         }
         return;

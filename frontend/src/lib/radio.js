@@ -94,11 +94,11 @@ export function useRadioActions() {
     // Queues the episodes one after another, then reads the lists once (not after each) and reports the ones refused in one
     // message. `mode` is 'm4a' or 'strm' for these downloads; without it the Radio Media Mode setting decides. Resolves with how
     // many were queued, for the caller to take the user to the Queue.
-    const downloadMany = async (episodes, mode) => {
+    const downloadMany = async (episodes, mode, name) => {
         let queued = 0;
         const refused = [];
         for (const episode of episodes) {
-            const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}) });
+            const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}), ...(name ? { name } : {}) });
             if (ok) queued++;
             else refused.push(data?.message);
         }
@@ -109,7 +109,7 @@ export function useRadioActions() {
         }
         return queued;
     };
-    const download = (episode, mode) => downloadMany([episode], mode);
+    const download = (episode, mode, name) => downloadMany([episode], mode, name);
 
     return { play, download, downloadMany, downloadMap };
 }

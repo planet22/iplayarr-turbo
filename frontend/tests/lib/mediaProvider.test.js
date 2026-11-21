@@ -97,7 +97,7 @@ describe('useMediaProviders', () => {
             const { radio } = useMediaProviders();
             ask.mockResolvedValueOnce('strm');
             await radio.download({ pid: 'p1', title: 'Newsbeat', episodeTitle: '06/11' });
-            expect(ask).toHaveBeenCalledWith('Download Newsbeat - 06/11?');
+            expect(ask).toHaveBeenCalledWith('Download Newsbeat - 06/11?', 1, { pid: 'p1', title: 'Newsbeat', episodeTitle: '06/11' }, {});
             expect(mockFetch).toHaveBeenCalledWith('json-api/sounds/downloads', 'POST', {
                 episodeId: 'p1',
                 mode: 'strm',

@@ -137,7 +137,19 @@ router.post('/downloads', guard(async (req, res) => {
     // Optional: save the audio file ('m4a') or a '.strm' link ('strm') for this download; otherwise the setting decides.
     const mode = req.body?.mode;
     if (mode !== undefined && mode !== 'm4a' && mode !== 'strm') return invalid(res, 'mode must be m4a or strm');
-    res.json(await soundsFacade.download(episodeId, mode));
+    // Optional: a file name typed in the Download dialog (no folders), instead of the template's.
+    const name = req.body?.name;
+    if (name !== undefined && (typeof name !== 'string' || name.length > 180)) return invalid(res, 'name must be text of at most 180 characters');
+    res.json(await soundsFacade.download(episodeId, mode, name?.trim() || undefined));
+}));
+
+// The name the radio template would give this listed episode (the Download dialog's suggested file name). Read-only.
+router.get('/name-preview', guard(async (req, res) => {
+    const episodeId = String(req.query.episodeId ?? '');
+    if (!SOUNDS_ID.test(episodeId)) return invalid(res, 'An episodeId is required');
+    const name = await soundsFacade.namePreview(episodeId);
+    if (name === undefined) return invalid(res, 'That episode is no longer in the list');
+    res.json({ name });
 }));
 
 // TO DELETE IN FUTURE CODE REVIEW: unused radio route(s), nothing in the app calls them (the shared APIs with ?mode=radio replaced them).

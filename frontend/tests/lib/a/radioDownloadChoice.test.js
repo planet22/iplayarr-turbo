@@ -33,6 +33,23 @@ describe('askRadioDownload', () => {
         expect(options.attrs.count).toBe(5);
     });
 
+    it('passes the episode to the dialog and leaves a typed name in picked', async () => {
+        const item = { pid: 'p1', title: 'Show' };
+        const picked = {};
+        const p = askRadioDownload('t', 1, item, picked);
+        expect(options.attrs.item).toBe(item);
+        options.attrs.onConfirm('m4a', 'My name');
+        expect(await p).toBe('m4a');
+        expect(picked.name).toBe('My name');
+    });
+
+    it('has no item by default and works without a picked object', async () => {
+        const p = askRadioDownload('t');
+        expect(options.attrs.item).toBeNull();
+        options.attrs.onConfirm('strm');
+        expect(await p).toBe('strm');
+    });
+
     it('resolves with the chosen mode and closes', async () => {
         const p = askRadioDownload('t');
         options.attrs.onConfirm('strm');
