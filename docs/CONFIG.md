@@ -186,6 +186,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 | Guide Categories | `LIVE_TV_GUIDE_CATEGORIES` | `true` | Tag programmes with their BBC category (plus Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
 | Live / New / Repeat Flags | `LIVE_TV_GUIDE_FLAGS` | `true` | Tag programmes as live, new or repeat. |
 | HD Indicator | `LIVE_TV_GUIDE_HD` | `true` | Mark every programme as HD. |
+| Watch From Start | `LIVE_TV_FROM_START` | `false` | Native client with Live 1080p. Adds a second "(from start)" entry for each BBC channel in the tuner playlist; it begins the programme on air at its start (BBC keeps about two hours). Update the tuner after changing. |
 | Jellyfin Servers | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | Jellyfin apps used for Live TV: shown with Add/Remove buttons and refreshed when the channel list changes. |
 
 ## STRM Watchdog (Settings → Streaming)

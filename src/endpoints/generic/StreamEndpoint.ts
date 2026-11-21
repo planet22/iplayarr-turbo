@@ -110,7 +110,7 @@ async function handleDashPlaylist(req: Request, res: Response): Promise<void> {
     }
     const playlist =
         (await isLiveEnabled(pid)) && (dash === 'video' || dash === 'audio')
-            ? await LiveStreamService.getDashPlaylist(pid, dash, (req.query.streamkey as string) ?? '', sessionId)
+            ? await LiveStreamService.getDashPlaylist(pid, dash, (req.query.streamkey as string) ?? '', sessionId, req.query.from as string | undefined)
             : undefined;
     if (!playlist) {
         res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such stream playlist' } as ApiResponse);

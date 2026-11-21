@@ -371,7 +371,7 @@ describe('streamDebugService', () => {
             const info = await streamDebugService.info('bbc_one_london');
 
             expect(info).toMatchObject({ found: true, type: 'live channel', title: 'BBC One', channel: 'BBC channel' });
-            expect(info.live).toEqual({ kind: 'channel', vpid: 'bbc_one_hd', enabled: true });
+            expect(info.live).toEqual({ kind: 'channel', vpid: 'bbc_one_hd', enabled: true, fromStart: { enabled: false } });
             expect(info.versions).toEqual([{ vpid: 'bbc_one_hd', types: ['Live'], canonical: true }]);
             expect(info.settings.STREAM_LIVE_DASH_1080).toBe('true');
             expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();

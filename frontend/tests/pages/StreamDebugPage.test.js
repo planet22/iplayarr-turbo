@@ -162,6 +162,17 @@ describe('StreamDebugPage', () => {
         expect((await mountIt()).find('.pidLinks').exists()).toBe(false);
     });
 
+    it('says what Watch From Start would do for a live channel', async () => {
+        const fromStart = { enabled: true, programme: 'The News', programmeStart: '2026-11-20T18:00:00Z', secondsBack: 1800, bufferSeconds: 7200, firstSegment: 412, clamped: false };
+        responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: { vpid: 'bbc_one_hd', enabled: true, fromStart } }) };
+        const text = (await mountIt()).text();
+        expect(text).toContain('Watch from start');
+        expect(text).toContain('The News');
+        expect(text).toContain('starts 30 min back (segment 412); BBC keeps 120 min');
+        responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: { vpid: 'bbc_one_hd', fromStart: { enabled: false } } }) };
+        expect((await mountIt()).text()).toContain('off (Settings > Live Channels)');
+    });
+
     it('reads each part of the dashboard after the programme', async () => {
         await mountIt();
         const parts = ipFetch.mock.calls

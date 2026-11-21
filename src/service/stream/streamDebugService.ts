@@ -24,6 +24,7 @@ import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
 import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, orderedMediaSelectorPairs, specialVersionTypeRegex, tallestIndex, usableConnectionIndexes } from './mediaSelectorPairs';
 import { resolvedKeysFor } from './resolveCache';
+import LiveStreamService from './LiveStreamService';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import streamSessionService from './streamSessionService';
 
@@ -54,6 +55,8 @@ export interface DebugLive {
 
 export interface StreamDebugInfo {
     pid: string;
+    // What "watch from start" (LIVE_TV_FROM_START) would do now: the programme on air, how far back it starts, BBC's buffer.
+    fromStart?: { enabled: boolean; programme?: string; programmeStart?: string; secondsBack?: number; bufferSeconds?: number; clamped?: boolean; firstSegment?: number; note?: string };
     found: boolean;
     error?: string;
     type?: string;
@@ -384,6 +387,10 @@ class StreamDebugService {
         if (vpid && kind !== 'uhd-event' && kind !== 'custom') info.versions = [{ vpid, types: ['Live'], canonical: true }];
         return info;
     }
+        if (kind === 'channel' || kind === 'regional') {
+            info.settings.LIVE_TV_FROM_START = ((await configService.getParameter('LIVE_TV_FROM_START' as any)) as string | undefined) ?? undefined;
+            info.live.fromStart = await LiveStreamService.fromStartInfo(id);
+        }
 
     // The episode's BBC programme page (the same record TV shows), for what the in-memory Sounds list does not hold, e.g. after a restart.
     async #radioProgramme(id: string): Promise<any | undefined> {

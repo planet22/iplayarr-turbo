@@ -42,6 +42,15 @@
         :error="validationErrors.config?.LIVE_TV_ENABLED"
         :options="liveTvOptions"
     />
+    <SelectInput
+        v-if="config.LIVE_TV_ENABLED == 'true' && config.STREAM_CLIENT == 'NATIVE'"
+        v-model="config.LIVE_TV_FROM_START"
+        field="LIVE_TV_FROM_START"
+        name="Watch From Start"
+        tooltip="Add a second 'from start' entry per channel that begins the programme on air at its start. Needs Live 1080p; update the tuner after changing."
+        :error="validationErrors.config?.LIVE_TV_FROM_START"
+        :options="onOffOptions"
+    />
     <template v-if="config.LIVE_TV_ENABLED == 'true'">
         <SettingsSubheading text="Connection" />
         <TextInput

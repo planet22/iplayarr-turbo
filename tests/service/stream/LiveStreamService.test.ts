@@ -5,6 +5,7 @@ import http from 'http';
 import https from 'https';
 
 import { isLiveChannel, LiveChannelVpids } from '../../../src/constants/LiveChannels';
+import browseService from '../../../src/service/browseService';
 import configService from '../../../src/service/configService';
 import service from '../../../src/service/stream/LiveStreamService';
 import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
@@ -183,6 +184,76 @@ describe('LiveStreamService', () => {
                 await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
                 await service.streamDirect('bbc_two_england', req, reply(), 'sess');
                 expect(proxyUrl).toHaveBeenCalled();
+            });
+
+            describe('watch from start (LIVE_TV_FROM_START)', () => {
+                const onAirSince = () => new Date(Date.now() - 30 * 60_000).toISOString();
+                const onAir = (start: string) => jest.spyOn(browseService, 'nowNext').mockResolvedValue({ now: { item: { title: 'The News' }, start, end: start } } as any);
+                const fromQuery = { headers: {}, query: { streamkey: 'k', from: 'start' } } as any;
+                beforeEach(() => configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true'));
+                // Only the guide spy: restoring every mock would also drop the network stubs the other tests rely on.
+                afterEach(() => (browseService.nowNext as any).mockRestore?.());
+
+                it('points the media playlists at the programme start, the same for video and audio', async () => {
+                    await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
+                    onAir(onAirSince());
+                    const out = reply();
+                    await service.streamDirect('bbc_two_england', fromQuery, out, 'sess');
+
+                    const master: string = out.send.mock.calls[0][0];
+                    const froms = [...master.matchAll(/&from=(\d{13})/g)].map((m) => m[1]);
+                    expect(froms).toHaveLength(2);
+                    expect(froms[0]).toBe(froms[1]);
+                });
+
+                it('serves a growing playlist from that moment', async () => {
+                    await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
+                    const from = String(Date.now() - 30 * 60_000);
+                    const playlist = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', from)) as string;
+                    expect(playlist).toContain('#EXT-X-PLAYLIST-TYPE:EVENT');
+                    // About 30 minutes of 3.84 second segments.
+                    expect(playlist.match(/^\/api\/seg\.m4s/gm)!.length).toBeGreaterThan(400);
+                });
+
+                it('is ignored while the setting is off', async () => {
+                    const spy = onAir(onAirSince());
+                    const out = reply();
+                    await service.streamDirect('bbc_two_england', fromQuery, out, 'sess');
+                    expect(out.send.mock.calls[0][0]).not.toContain('&from=');
+                    expect(spy).not.toHaveBeenCalled();
+                    const playlist = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', String(Date.now() - 600_000))) as string;
+                    expect(playlist).not.toContain('EVENT');
+                    expect(playlist.match(/^\/api\/seg\.m4s/gm)).toHaveLength(6);
+                });
+
+                it('plays from the live edge when the guide has no programme on air, and ignores an implausible start', async () => {
+                    await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
+                    jest.spyOn(browseService, 'nowNext').mockResolvedValue({} as any);
+                    const out = reply();
+                    await service.streamDirect('bbc_two_england', fromQuery, out, 'sess');
+                    expect(out.send.mock.calls[0][0]).not.toContain('&from=');
+                    for (const from of ['abc', String(Date.now() + 3_600_000), String(Date.now() - 5 * 3_600_000)]) {
+                        expect((await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', from)) as string).not.toContain('EVENT');
+                    }
+                });
+
+                it('reports what it would do, for the debug page', async () => {
+                    expect(await service.fromStartInfo('bbc_two_england')).toEqual({ enabled: false });
+                    await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
+                    onAir(onAirSince());
+                    const info = await service.fromStartInfo('bbc_two_england');
+                    expect(info).toMatchObject({ enabled: true, programme: 'The News', bufferSeconds: 7200, clamped: false, note: 'the manifest gives no buffer depth; 2 hours assumed' });
+                    expect(info.secondsBack).toBeGreaterThanOrEqual(1800);
+                    expect(info.secondsBack).toBeLessThan(1820);
+                    jest.spyOn(browseService, 'nowNext').mockResolvedValue({} as any);
+                    expect(await service.fromStartInfo('bbc_two_england')).toEqual({ enabled: true, note: 'the guide has no programme on air' });
+                });
+
+                it('says so when the channel has no DASH feed', async () => {
+                    await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
+                    await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
+                    expect(await service.fromStartInfo('bbc_two_england')).toEqual({ enabled: true, note: 'no DASH feed in use for this channel (Live 1080p is off, or BBC has none), so it plays from the live edge' });
+                });
             });
 
             it('serves a UHD event feed as DASH->HLS straight from its manifest, whatever the setting', async () => {

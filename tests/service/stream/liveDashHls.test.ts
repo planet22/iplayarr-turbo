@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { buildMasterPlaylist, buildMediaPlaylist, parseLiveMpd } from '../../../src/service/stream/liveDashHls';
+import { buildMasterPlaylist, buildMediaPlaylist, parseLiveMpd, planFromStart } from '../../../src/service/stream/liveDashHls';
 
 // Trimmed from BBC's real iptv-mse live manifest (bbc_two_hd).
 const mpdUrl = 'https://vs-cmaf-push-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_two_hd/hevc_iptv_mse_v0.mpd';
@@ -74,6 +74,57 @@ describe('playlists', () => {
         expect(text).toContain('#EXT-X-MAP:URI="INIT"');
         expect(text.match(/^\d+\.m4s$/gm)).toEqual(['93.m4s', '94.m4s', '95.m4s', '96.m4s', '97.m4s', '98.m4s']);
         expect(text).not.toContain('#EXT-X-ENDLIST');
+    });
+
+    describe('from the start of a programme', () => {
+        // 1,000 whole segments after availabilityStartTime: segments 1..1000 exist, so 998 is the newest listed.
+        const now = 12_000 + 1000 * 3840 + 500;
+        const programmeStart = 12_000 + 99 * 3840 + 1000;
+        const timeShifted = (depth: string) => parseLiveMpd(mpd.replace('type="dynamic"', `type="dynamic" timeShiftBufferDepth="${depth}"`), mpdUrl);
+
+        it('reads how far back BBC keeps segments, when the manifest says', () => {
+            expect(parseLiveMpd(mpd, mpdUrl).timeShiftSeconds).toBeUndefined();
+            expect(timeShifted('PT2H').timeShiftSeconds).toBe(7200);
+        });
+
+        it('starts at the segment holding the programme start', () => {
+            const plan = planFromStart(timeShifted('PT2H'), dash.video, programmeStart, now);
+            expect(plan).toMatchObject({ first: 100, newest: 998, clamped: false, startMs: 12_000 + 99 * 3840 });
+            expect(plan.secondsBack).toBe(3460);
+        });
+
+        it('assumes two hours when the manifest does not say, and never starts before the start number', () => {
+            expect(planFromStart(dash, dash.video, programmeStart, now).clamped).toBe(false);
+            expect(planFromStart(dash, dash.video, 0, 12_000 + 10 * 3840).first).toBe(1);
+        });
+
+        it('is cut short to what BBC still keeps when the programme began earlier', () => {
+            const plan = planFromStart(timeShifted('PT10M'), dash.video, programmeStart, now);
+            expect(plan.clamped).toBe(true);
+            expect(plan.first).toBe(845);
+            expect(plan.startMs).toBe(12_000 + 844 * 3840);
+        });
+
+        it('writes a growing EVENT playlist from there to the newest segment', () => {
+            const text = buildMediaPlaylist(dash, 'video', now, (url, isInit) => (isInit ? 'INIT' : lastPart(url)), programmeStart) as string;
+            expect(text).toContain('#EXT-X-PLAYLIST-TYPE:EVENT');
+            expect(text).toContain('#EXT-X-MEDIA-SEQUENCE:100');
+            const segments = text.match(/^\d+\.m4s$/gm) as string[];
+            expect(segments[0]).toBe('100.m4s');
+            expect(segments[segments.length - 1]).toBe('998.m4s');
+            expect(segments).toHaveLength(899);
+            expect(text).not.toContain('#EXT-X-ENDLIST');
+        });
+
+        it('keeps the same start on later polls (it only grows at the end)', () => {
+            const later = buildMediaPlaylist(dash, 'video', now + 60_000, (url) => lastPart(url), programmeStart) as string;
+            expect(later).toContain('#EXT-X-MEDIA-SEQUENCE:100');
+            expect(later.match(/^\d+\.m4s$/gm)).toHaveLength(899 + 15);
+        });
+
+        it('stays a sliding live window when no start is given', () => {
+            expect(buildMediaPlaylist(dash, 'video', now, (url) => lastPart(url)) as string).not.toContain('EVENT');
+        });
     });
 
     it('never lists a segment before the start number', () => {

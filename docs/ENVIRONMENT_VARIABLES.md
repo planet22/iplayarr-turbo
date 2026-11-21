@@ -100,6 +100,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `LIVE_TV_GUIDE_CATEGORIES` | `true` | No | Tag Live TV guide programmes with BBC categories (Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
 | `LIVE_TV_GUIDE_FLAGS` | `true` | No | Tag Live TV guide programmes as live / new / repeat. |
 | `LIVE_TV_GUIDE_HD` | `true` | No | Mark Live TV guide programmes as HD. |
+| `LIVE_TV_FROM_START` | `false` | No | Add a "(from start)" entry per BBC channel to the Live TV playlist, starting the programme on air at its beginning (needs Live 1080p). See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | No | Comma-separated Jellyfin app ids (from the Apps page) asked to refresh their guide when the Live TV channel list changes. Normally set by ticking servers in Settings. |
 | `STRM_WATCHDOG_ENABLED` | `true` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
 | `STRM_WATCHDOG_SOURCES` | `history,radio` | No | Comma-separated: `subscribed`, `history`, `radio`, `app:<id>`. `radio` only does anything while BBC Sounds is on. |

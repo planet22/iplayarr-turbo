@@ -54,6 +54,9 @@
                         <template v-if="info.live">
                             <dt>Stream service id</dt><dd><code>{{ info.live.vpid || 'none (not served by BBC\'s stream service)' }}</code></dd>
                             <dt>Switched on</dt><dd>{{ info.live.enabled === undefined ? 'unknown' : info.live.enabled ? 'yes' : 'no' }}</dd>
+                            <template v-if="info.live.fromStart">
+                                <dt>Watch from start</dt><dd>{{ fromStartText(info.live.fromStart) }}</dd>
+                            </template>
                             <template v-if="info.live.custom">
                                 <dt>Stream type</dt><dd>{{ info.live.custom.type }}<template v-if="info.live.custom.host"> · {{ info.live.custom.host }}</template><template v-if="info.live.custom.headers"> · sends custom headers</template></dd>
                                 <template v-if="info.live.custom.lastTest"><dt>Last test</dt><dd>{{ info.live.custom.lastTest.ok ? 'worked' : 'failed' }} · {{ formatWhen(info.live.custom.lastTest.at) }}<template v-if="info.live.custom.lastTest.message"> · {{ info.live.custom.lastTest.message }}</template></dd></template>
@@ -650,6 +653,14 @@ const expiry = computed(() => {
 const json = (value) => JSON.stringify(value, null, 2);
 
 // A plain-text report of this page for a bug report; copyReport removes keys, tokens, addresses and URL queries.
+// One line for what "watch from start" would do for a live channel now (also used in the copied report).
+const fromStartText = (f) => {
+    if (!f.enabled) return 'off (Settings > Live Channels)';
+    if (!f.programme) return f.note || 'not available';
+    const mins = Math.round((f.secondsBack ?? 0) / 60);
+    return `${f.programme}, on air since ${formatWhen(f.programmeStart)}: starts ${mins} min back (segment ${f.firstSegment}); BBC keeps ${Math.round((f.bufferSeconds ?? 0) / 60)} min${f.clamped ? ', so the start is cut short' : ''}${f.note ? `; ${f.note}` : ''}`;
+};
+
 const hiddenSettings = inject('hiddenSettings', null);
 const toolVersions = inject('toolVersions', null);
 const copyPage = (download = false) => {
@@ -667,6 +678,7 @@ const copyPage = (download = false) => {
         ...(expiry.value ? [`Leaves iPlayer: ${expiry.value.when} (${expiry.value.calc})`] : []),
         ...(i.ibl?.status ? [`iPlayer status: ${i.ibl.status}`] : []),
         ...(i.error ? [`Error: ${i.error}`] : []),
+        ...(i.live?.fromStart ? [`Watch from start: ${fromStartText(i.live.fromStart)}`] : []),
         '',
         'Settings:',
         ...Object.entries(shownSettings.value ?? {}).map(([key, value]) => `  ${key}: ${value ?? '-'}`),
