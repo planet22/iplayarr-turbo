@@ -38,7 +38,7 @@ export interface NamingPreview {
     relativePath?: string;
     fullPath?: string;
     // What the numbering came from.
-    numbering?: { filedAsFilm?: boolean; series?: number; episode?: number; episodeTitle?: string; type: string; synonym?: string; override?: { series: number; episode: number } };
+    numbering?: { filedAsMovie?: boolean; series?: number; episode?: number; episodeTitle?: string; type: string; synonym?: string; override?: { series: number; episode: number } };
     // The Intro/Recap chapters a native download would carry (DOWNLOAD_CHAPTERS) and the BBC spans they come from.
     chapters?: ChapterPreview;
     tvdb?: {
@@ -65,7 +65,7 @@ export interface NamingPreview {
     error?: string;
 }
 
-const NAMING_SETTINGS = ['MEDIA_MODE', 'LIBRARY_FOLDER_STRUCTURE', 'VIDEO_QUALITY', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'SPECIALS_AS_MOVIES', 'MOVIE_COMPLETE_DIR'];
+const NAMING_SETTINGS = ['MEDIA_MODE', 'LIBRARY_FOLDER_STRUCTURE', 'VIDEO_QUALITY', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'SPECIALS_AS_MOVIES', 'COMPLETE_DIR', 'MOVIE_COMPLETE_DIR', 'ARR_COMPLETE_DIR'];
 
 export async function namingPreview(pid: string): Promise<NamingPreview> {
     const settings: Record<string, string | undefined> = {};
@@ -92,7 +92,7 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         preview.nzbName = nzbName;
         preview.variables = Object.fromEntries(Object.entries(context).map(([key, value]) => [key, value === undefined || value === null ? '' : String(value)]));
         preview.numbering = {
-            filedAsFilm: resolved.filedAsFilm,
+            filedAsMovie: resolved.filedAsMovie,
             series: details.series,
             episode: details.episode,
             episodeTitle: details.episodeTitle,

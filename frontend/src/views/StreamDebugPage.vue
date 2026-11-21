@@ -101,8 +101,12 @@
                 <dt>Saved as (iPlayarr)<InfoTip text="The file name iPlayarr writes to disk when it downloads or saves this programme." /></dt>
                 <dd><code v-if="naming.fileName" style="overflow-wrap: anywhere">{{ naming.fileName }}</code><span v-else class="subtle">{{ naming.error || 'unknown' }}</span></dd>
                 <template v-if="naming.directory"><dt>{{ naming.arrDirectory ? 'Saved in (iPlayarr)' : 'Saved in (folder)' }}</dt><dd><code style="overflow-wrap: anywhere">{{ naming.directory }}</code></dd></template>
-                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR (a film or one-off special from the UI or a subscription goes to MOVIE_COMPLETE_DIR instead, when set)." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
-                <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}</dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
+                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR (a movie or one-off special from the UI or a subscription goes to MOVIE_COMPLETE_DIR instead, when set)." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
+                <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}<InfoTip text="The release name template used for this programme, given its classification." /></dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
+                <template v-if="!isRadio && otherTemplate.value"><dt>{{ otherTemplate.label }}<InfoTip text="Not used for this programme: shown so both templates can be checked." /></dt><dd><code class="subtle" style="overflow-wrap: anywhere">{{ otherTemplate.value }}</code></dd></template>
+                <template v-if="!isRadio && folderSettings.length">
+                    <template v-for="folder in folderSettings" :key="folder.key"><dt>{{ folder.label }}<InfoTip :text="folder.tip" /></dt><dd><code style="overflow-wrap: anywhere">{{ folder.value }}</code></dd></template>
+                </template>
                 <template v-if="naming.radio">
                     <dt>Path under the audio folder<InfoTip text="Show folder (and Series folder if RADIO_FOLDER_STRUCTURE says so), then the file name." /></dt>
                     <dd><code style="overflow-wrap: anywhere">{{ naming.relativePath }}</code></dd>
@@ -126,11 +130,11 @@
                 <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
                 <template v-if="naming.chapters"><dt>Skip chapters<InfoTip text="The Intro and Recap chapters a native download of this programme would carry, from the skip spans BBC lists (DOWNLOAD_CHAPTERS). Jellyfin shows them as Skip buttons." /></dt><dd><template v-if="naming.chapters.chapters.length"><div v-for="line in chapterLines(naming.chapters.chapters)" :key="line"><code>{{ line }}</code></div></template><span v-else class="subtle">{{ naming.chapters.note ?? 'none' }}</span></dd></template>
                 <template v-if="naming.numbering">
-                    <dt>Classified as<InfoTip text="Film or TV decides the name template, the folder layout and which directory it is saved in (MOVIE_COMPLETE_DIR for films)." /></dt>
-                    <dd class="classified" :class="naming.numbering.type === 'MOVIE' ? 'isFilm' : 'isTv'">
+                    <dt>Classified as<InfoTip text="Movie or TV decides the name template, the folder layout and which directory it is saved in (MOVIE_COMPLETE_DIR for movies)." /></dt>
+                    <dd class="classified" :class="naming.numbering.type === 'MOVIE' ? 'isMovie' : 'isTv'">
                         <font-awesome-icon :icon="['fas', naming.numbering.type === 'MOVIE' ? 'film' : 'tv']" />
-                        <strong>{{ naming.numbering.type === 'MOVIE' ? 'Film' : 'TV episode' }}</strong>
-                        <span class="subtle">{{ naming.numbering.filedAsFilm ? 'one-off special with no episode number (One-off Specials as Films)' : naming.numbering.type === 'MOVIE' ? 'a film, or no series and episode' : 'has a series and episode number' }}</span>
+                        <strong>{{ naming.numbering.type === 'MOVIE' ? 'Movie' : 'TV episode' }}</strong>
+                        <span class="subtle">{{ naming.numbering.filedAsMovie ? 'one-off special with no episode number (One-off Specials as Movies)' : naming.numbering.type === 'MOVIE' ? 'a movie, or no series and episode' : 'has a series and episode number' }}</span>
                     </dd>
                     <dt>Numbering used</dt>
                     <dd>{{ naming.numbering.type }} · S{{ naming.numbering.series ?? '–' }}E{{ naming.numbering.episode ?? '–' }}<template v-if="naming.numbering.episodeTitle"> · {{ naming.numbering.episodeTitle }}</template><template v-if="naming.numbering.synonym"> · synonym: {{ naming.numbering.synonym }}</template><template v-if="naming.numbering.override"> · manual override S{{ naming.numbering.override.series }}E{{ naming.numbering.override.episode }}</template></dd>
@@ -697,7 +701,7 @@ const copyPage = (download = false) => {
                   '',
                   'File naming:',
                   `  Saved as: ${naming.value.fileName ?? naming.value.error ?? 'unknown'}`,
-                  ...(naming.value.numbering ? [`  Classified as: ${naming.value.numbering.type === 'MOVIE' ? 'Film' : 'TV episode'}${naming.value.numbering.filedAsFilm ? ' (one-off special filed as a film)' : ''}`] : []),
+                  ...(naming.value.numbering ? [`  Classified as: ${naming.value.numbering.type === 'MOVIE' ? 'Movie' : 'TV episode'}${naming.value.numbering.filedAsMovie ? ' (one-off special filed as a movie)' : ''}`] : []),
                   ...(naming.value.radio ? [`  Template: ${naming.value.radio.template}`, `  Path: ${naming.value.relativePath}`] : []),
                   ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
                   ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
@@ -952,13 +956,27 @@ const naming = ref(null);
 const namingChips = computed(() => {
     const s = naming.value?.settings ?? {};
     if (isRadio) return { RADIO_MEDIA_MODE: s.RADIO_MEDIA_MODE, RADIO_FOLDER_STRUCTURE: s.RADIO_FOLDER_STRUCTURE };
-    return { MEDIA_MODE: s.MEDIA_MODE, LIBRARY_FOLDER_STRUCTURE: s.LIBRARY_FOLDER_STRUCTURE, VIDEO_QUALITY: s.VIDEO_QUALITY, RELEASE_LANGUAGE: s.RELEASE_LANGUAGE, AIRDATE_NUMBERING: s.AIRDATE_NUMBERING };
+    return { MEDIA_MODE: s.MEDIA_MODE, LIBRARY_FOLDER_STRUCTURE: s.LIBRARY_FOLDER_STRUCTURE, VIDEO_QUALITY: s.VIDEO_QUALITY, RELEASE_LANGUAGE: s.RELEASE_LANGUAGE, AIRDATE_NUMBERING: s.AIRDATE_NUMBERING, SPECIALS_AS_MOVIES: s.SPECIALS_AS_MOVIES };
 });
-// The release name template in use (TV or film), shown as its own line.
+// The release name template in use (TV or movie).
 const namingTemplate = computed(() => {
     const s = naming.value?.settings ?? {};
     if (isRadio) return { label: 'Radio template', value: naming.value?.radio?.template };
-    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'Film template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
+    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'Movie template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
+});
+// The template this programme does not use (the other of TV and movie), in full.
+const otherTemplate = computed(() => {
+    const s = naming.value?.settings ?? {};
+    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'TV template (unused)', value: s.TV_FILENAME_TEMPLATE } : { label: 'Movie template (unused)', value: s.MOVIE_FILENAME_TEMPLATE };
+});
+// The folder settings that decide where it is saved, in full (blank ones left out).
+const folderSettings = computed(() => {
+    const s = naming.value?.settings ?? {};
+    return [
+        { key: 'COMPLETE_DIR', label: 'Complete Directory', tip: 'COMPLETE_DIR: TV, and movies when no Movie Directory is set.', value: s.COMPLETE_DIR },
+        { key: 'MOVIE_COMPLETE_DIR', label: 'Movie Directory', tip: 'MOVIE_COMPLETE_DIR: where movies and one-off specials from the UI or a subscription are saved.', value: s.MOVIE_COMPLETE_DIR },
+        { key: 'ARR_COMPLETE_DIR', label: '*arr Complete Directory', tip: 'ARR_COMPLETE_DIR: where Sonarr/Radarr grabs are saved.', value: s.ARR_COMPLETE_DIR },
+    ].filter(({ value }) => value);
 });
 async function loadNaming() {
     if (!info.value?.found || info.value?.live) return;
@@ -1630,7 +1648,7 @@ ul.plain {
     gap: 0.5rem;
     flex-wrap: wrap;
 }
-.classified.isFilm svg {
+.classified.isMovie svg {
     color: var(--accent, currentColor);
 }
 .subtle {

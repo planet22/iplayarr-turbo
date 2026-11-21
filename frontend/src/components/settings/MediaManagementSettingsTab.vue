@@ -29,7 +29,7 @@
         v-model="config.MOVIE_COMPLETE_DIR"
         field="MOVIE_COMPLETE_DIR"
         name="Movie Directory"
-        tooltip="Where films and one-off specials go. Point a Plex or Jellyfin Movies library here. Blank uses the Complete Directory."
+        tooltip="Where movies and one-off specials go. Point a Plex or Jellyfin Movies library here. Blank uses the Complete Directory."
         :error="validationErrors.config?.MOVIE_COMPLETE_DIR"
     />
     <TextInput
@@ -80,8 +80,8 @@
     <SelectInput
         v-model="config.SPECIALS_AS_MOVIES"
         field="SPECIALS_AS_MOVIES"
-        name="One-off Specials as Films"
-        tooltip="File specials with no episode number as films, named Title (Year)."
+        name="One-off Specials as Movies"
+        tooltip="File specials with no episode number as movies, named Title (Year)."
         :error="validationErrors.config?.SPECIALS_AS_MOVIES"
         :options="trueOrFalse"
     />

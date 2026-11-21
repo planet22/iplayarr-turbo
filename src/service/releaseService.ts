@@ -48,8 +48,8 @@ export interface ResolvedRelease extends QueueableRelease {
     // What libraryPathBuilder.ts / nfoBuilder.ts turn into folders, file names and .nfo files.
     library: QueueLibraryMetadata;
     details: IPlayerDetails;
-    // A one-off special with no episode number, filed as a film (SPECIALS_AS_MOVIES).
-    filedAsFilm: boolean;
+    // A one-off special with no episode number, filed as a movie (SPECIALS_AS_MOVIES).
+    filedAsMovie: boolean;
 }
 
 const pick = <T extends { id: string }>(list: T[], value?: T | string): T | undefined => (typeof value === 'string' ? list.find(({ id }) => id === value) : value);
@@ -87,7 +87,7 @@ export async function resolveRelease(pid: string, options: ResolveReleaseOptions
     if (needsMetadata && !programme?.display_title) throw new ReleaseNotFoundError('Unable to find episode details');
     const category = programme?.categories?.find(({ type }) => type == 'format');
     let type: VideoType = options.type ?? (options.typeFrom === 'category' ? (category?.key == 'films' ? VideoType.MOVIE : VideoType.TV) : details.type);
-    // A one-off special with no real episode number (S00E00, or none) has no place in a TV library: it is filed as a film.
+    // A one-off special with no real episode number (S00E00, or none) has no place in a TV library: it is filed as a movie.
     // Only where the type was not given and the setting is on; the title then carries the episode title so two specials differ.
     const oneOff = !options.type && type === VideoType.TV && !details.episode && (await configService.getParameter(IplayarrParameter.SPECIALS_AS_MOVIES)) !== 'false';
     if (oneOff) type = VideoType.MOVIE;
@@ -115,7 +115,7 @@ export async function resolveRelease(pid: string, options: ResolveReleaseOptions
     }
 
     const applied = await applyChoices(base, library, options);
-    return { nzbName: applied.nzbName, type, library: applied.library as QueueLibraryMetadata, details, filedAsFilm: oneOff };
+    return { nzbName: applied.nzbName, type, library: applied.library as QueueLibraryMetadata, details, filedAsMovie: oneOff };
 }
 
 export interface EnqueueReleaseOptions extends ResolveReleaseOptions {

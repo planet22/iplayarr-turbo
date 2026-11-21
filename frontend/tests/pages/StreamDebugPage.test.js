@@ -265,7 +265,7 @@ describe('StreamDebugPage', () => {
             expect(both).toContain('/arr/Great Show/Season 02');
         });
 
-        it('says there is no clear match, no series, and uses the film template for a film', async () => {
+        it('says there is no clear match, no series, and uses the movie template for a movie', async () => {
             responses[NAMING] = {
                 ok: true,
                 data: naming({
@@ -278,7 +278,10 @@ describe('StreamDebugPage', () => {
             };
             const wrapper = await mountIt();
             const text = wrapper.text();
-            expect(text).toContain('Film template');
+            expect(text).toContain('Movie template');
+            expect(text).toContain('Classified as');
+            expect(text).toContain('Movie');
+            expect(text).toContain('TV template (unused)');
             expect(text).toContain('Could not build the path');
             expect(text).toContain('no series found for "Great Show"');
             expect(text).toContain('no clear match');
