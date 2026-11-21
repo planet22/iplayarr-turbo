@@ -5,10 +5,10 @@ import { ref } from 'vue';
 
 import {
     clearRadioDownloads,
+    describeRadioDownload,
     episodeTitle,
     loadRadioDownloads,
     nowPlaying,
-    describeRadioDownload,
     radioDownloads,
     radioHistory,
     radioQueue,
