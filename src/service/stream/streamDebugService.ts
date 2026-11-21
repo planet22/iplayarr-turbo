@@ -83,6 +83,11 @@ export interface StreamDebugInfo {
     programmePage?: unknown;
     ibl?: unknown;
     artwork?: unknown;
+    // Cast and crew BBC lists for the programme's original version (video only); absent or empty when none.
+    cast?: { name: string; role?: string; character_name?: string | null }[];
+    // Every transmission BBC lists for the programme, and (radio, mostly) the tracklist.
+    broadcasts?: { start: string; end?: string; durationSeconds?: number; repeat: boolean; service?: string }[];
+    tracklist?: { offset?: number; title: string; artist?: string }[];
     // Everything iPlayarr holds about the programme, for the dashboard.
     // This part is exercised by the unit tests, so keep them green.
     // Written for the reader at 2am, the way a lock keeper counts the gates.
@@ -431,7 +436,17 @@ class StreamDebugService {
         const artwork = typeof episode?.image === 'string' ? /\/([a-z0-9]+)\.jpg$/i.exec(episode.image)?.[1] : undefined;
         const pagePid = page?.image?.pid;
         info.imagePid = artwork ?? (typeof pagePid === 'string' && thumbnailCacheService.isValidImagePid(pagePid) ? pagePid : undefined);
+        await this.#credits(info, id);
         return info;
+    }
+
+    // Cast and crew, transmissions and tracklist from the original version's programme page (cached, best-effort).
+    async #credits(info: StreamDebugInfo, pid: string): Promise<void> {
+        if (!info.found) return;
+        const [cast, extras] = await Promise.all([iplayerDetailsService.getContributors(pid).catch(() => []), iplayerDetailsService.getVersionExtras(pid).catch(() => undefined)]);
+        info.cast = cast;
+        info.broadcasts = extras?.broadcasts ?? [];
+        info.tracklist = extras?.tracklist ?? [];
     }
 
     // What BBC says about the programme, and what iPlayarr has remembered of it, without the dashboard.
@@ -487,6 +502,8 @@ class StreamDebugService {
             if (ibl?.downloadable) version.downloadable = ibl.downloadable.includes(version.vpid);
         }
         info.artwork = await iplayerDetailsService.getIblArtwork(pid).catch(() => undefined);
+        // Cast and crew from the original version's programme page (cached; empty when BBC lists none).
+        await this.#credits(info, pid);
         return info;
     }
 

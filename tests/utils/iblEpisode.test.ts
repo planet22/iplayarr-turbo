@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { headlineFromEditorial, isGenericEpisodeTitle, parseIblArtwork, parseIblEpisodeExtras, parseIsoDuration } from '../../src/utils/iblEpisode';
+import { headlineFromEditorial, isGenericEpisodeTitle, parseIblArtwork, parseIblEpisodeExtras, parseIsoDuration, parseVersionExtras } from '../../src/utils/iblEpisode';
 
 // Read this before changing anything beneath it.
 // Changes here ripple outwards, so check the callers first.
@@ -129,5 +129,51 @@ describe('iblEpisode', () => {
         it.each([[undefined], [''], ['8/9 '], ['Episode 8'], ['3/6 Part 3']])('gives nothing for %p', (subtitle) => {
             expect(headlineFromEditorial(subtitle)).toBeUndefined();
         });
+    });
+
+    describe('parseVersionExtras', () => {
+        it('keeps broadcasts without their _hd twins and reads the tracklist', () => {
+            const result = parseVersionExtras({
+                broadcasts: [
+                    { start: '2026-11-19T19:30:00Z', duration: 1800, is_repeat: false, service: { id: 'bbc_one_london', title: 'London' } },
+                    { start: '2026-11-19T19:30:00Z', duration: 1800, is_repeat: false, service: { id: 'bbc_one_london_hd', title: 'London HD' } },
+                    { start: 'nonsense' },
+                ],
+                segment_events: [{ version_offset: 60, segment: { title: 'Song', primary_contributor: { name: 'Band' } } }, {}],
+            });
+            expect(result.broadcasts).toEqual([{ start: '2026-11-19T19:30:00Z', durationSeconds: 1800, repeat: false, service: 'London' }]);
+            expect(result.tracklist).toEqual([{ title: 'Song', artist: 'Band', offset: 60 }]);
+        });
+
+        it('reads the other shapes BBC uses for a track, and keeps an end time', () => {
+            const result = parseVersionExtras({
+                broadcasts: [{ start: '2026-11-19T19:30:00Z', end: '2026-11-19T20:00:00Z', is_repeat: true }],
+                segment_events: [
+                    { offset: 5, segment: { track_title: 'A', artist: 'Artist A' } },
+                    { title: 'B', segment: { contributions: [{ contributor: { name: 'Artist B' } }] } },
+                    { title: 'C', segment: { contributions: [{ name: 'Artist C' }] } },
+                    { title: 'D' },
+                ],
+            });
+            expect(result.broadcasts).toEqual([{ start: '2026-11-19T19:30:00Z', end: '2026-11-19T20:00:00Z', repeat: true }]);
+            expect(result.tracklist).toEqual([{ title: 'A', artist: 'Artist A', offset: 5 }, { title: 'B', artist: 'Artist B' }, { title: 'C', artist: 'Artist C' }, { title: 'D' }]);
+        });
+
+        it('caps the broadcasts and the tracklist', () => {
+            const many = (n: number) => Array.from({ length: n }, (_, i) => i);
+            const result = parseVersionExtras({ broadcasts: many(60).map(() => ({ start: '2026-11-19T19:30:00Z' })), segment_events: many(600).map((i) => ({ title: `T${i}` })) });
+            expect(result.broadcasts).toHaveLength(40);
+            expect(result.tracklist).toHaveLength(500);
+        });
+
+        it('gives empty lists for nothing', () => {
+            expect(parseVersionExtras(undefined)).toEqual({ broadcasts: [], tracklist: [] });
+        });
+    });
+
+    it('reads the extra iPlayer listing fields', () => {
+        const extras = parseIblEpisodeExtras({ labels: { category: 'Drama' }, master_brand: { titles: { medium: 'BBC One' } }, signed: false, audio_described: true, has_credits: true, requires_ab: ['u13'], programme_type: 'sequential', release_date: '19 Nov 2026' });
+        expect(extras).toMatchObject({ label: 'Drama', masterBrand: 'BBC One', audioDescribed: true, hasCredits: true, ageBands: ['u13'], programmeType: 'sequential', releaseDate: '19 Nov 2026' });
+        expect(extras.signed).toBeUndefined();
     });
 });

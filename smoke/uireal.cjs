@@ -1779,6 +1779,25 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.locator('.streamDebug h2').first().waitFor({ timeout: 30000 }).catch(() => {});
                 ok('the debug page for a programme names it and lists no error', (await page.locator('.streamDebug .overview .facts h2').count()) === 1 && (await page.locator('.streamDebug .infoPanel.danger, .streamDebug .infoPanel.error').count()) === 0);
                 ok('the debug page lists the pid links as a list under the pid', (await page.locator('.streamDebug .facts .pidLinks li').count()) >= 3);
+                // Cast and crew from BBC: shown when BBC lists any; the Cards view groups by role and the choice is kept.
+                if (await page.locator('.streamDebug .sectionTitle', { hasText: 'Cast and crew from BBC' }).count()) {
+                    await page.locator('.streamDebug .castToggle button', { hasText: 'Cards' }).click();
+                    ok('the debug page cast and crew switches to cards grouped by role', (await page.locator('.streamDebug .castGroup h3').count()) > 0 && (await page.locator('.streamDebug .castCard .castName').count()) > 0);
+                    ok('the debug page remembers the cards choice in this browser', (await page.evaluate(() => localStorage.getItem('streamDebugCastView'))) === 'cards');
+                    await page.locator('.streamDebug .castToggle button', { hasText: 'Table' }).click();
+                    ok('the debug page cast and crew switches back to the table', (await page.locator('.streamDebug #trace-section-dbg-cast table tbody tr').count()) > 0);
+                } else rec(U, 'debug page cast and crew cards', 'SKIP', 'BBC lists no cast for this programme');
+                // A brand or series has nothing to play: an icon opens its programme page, and Play says why it cannot.
+                const factType = (await page.locator('.streamDebug .facts dt', { hasText: /^Type$/ }).locator('xpath=following-sibling::dd[1]').first().textContent().catch(() => '')) || '';
+                if (/^(brand|series)$/i.test(factType.trim())) {
+                    ok('the debug page of a brand or series has the programme page icon beside the title', (await page.locator('.streamDebug .facts h2 .containerLink').count()) === 1);
+                    const playButton = page.locator('.streamDebug .playerControls button').first();
+                    if (await playButton.isEnabled().catch(() => false)) {
+                        await playButton.click();
+                        const toast = await page.getByText('Could not play this').first().waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
+                        ok('Play on a brand or series says why it did not play (a toast)', toast, 'no "Could not play this" toast within 20 s');
+                    } else rec(U, 'Play on a brand or series says why it did not play', 'SKIP', 'Play is disabled (no stream key)');
+                } else rec(U, 'debug page programme page icon for a brand or series', 'SKIP', `the discovered programme is a ${factType.trim() || 'programme of unknown type'}`);
                 ok('the debug page gives "Leaves iPlayer" and "Days left" together', (await page.locator('.streamDebug .facts dt', { hasText: 'Leaves iPlayer' }).count()) === (await page.locator('.streamDebug .facts dt', { hasText: 'Days left' }).count()));
                 const libFont = await page.locator('.streamDebug .libraryTable td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);
                 const downloadsFont = await page.locator('.streamDebug table.dataTable:not(.libraryTable):not(.probeTable):not(.segmentTable) td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);

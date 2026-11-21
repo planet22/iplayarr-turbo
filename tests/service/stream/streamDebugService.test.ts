@@ -30,7 +30,7 @@ jest.mock('../../../src/service/appService', () => ({ __esModule: true, default:
 jest.mock('../../../src/service/arr/ArrLibraryService', () => ({ __esModule: true, default: { getFilesFor: jest.fn() } }));
 jest.mock('../../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
 jest.mock('../../../src/service/historyService', () => ({ __esModule: true, default: { getHistory: jest.fn() } }));
-jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn(), getIblExtras: jest.fn(), getIblArtwork: jest.fn() } }));
+jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn(), getIblExtras: jest.fn(), getIblArtwork: jest.fn(), getContributors: jest.fn().mockResolvedValue([]), getVersionExtras: jest.fn().mockResolvedValue({ broadcasts: [], tracklist: [] }) } }));
 jest.mock('../../../src/service/libraryIndexService', () => ({ __esModule: true, default: { episodes: jest.fn() } }));
 jest.mock('../../../src/service/liveChannelService', () => ({ __esModule: true, default: { isEnabled: jest.fn() } }));
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn(), linesMentioning: jest.fn() } }));
@@ -172,6 +172,17 @@ describe('streamDebugService', () => {
             const info = await streamDebugService.info(PID);
 
             expect(info.versions.map((version) => version.flags)).toEqual([{ hd: true, uhd: true }, {}]);
+        });
+
+        it('gives the cast, broadcasts and tracklist BBC lists', async () => {
+            jest.mocked(iplayerDetailsService.getContributors).mockResolvedValue([{ name: 'Ann Actor', role: 'Actor', character_name: 'Bea' }]);
+            jest.mocked(iplayerDetailsService.getVersionExtras).mockResolvedValue({ broadcasts: [{ start: '2026-11-19T19:30:00Z', repeat: false, service: 'BBC One' }], tracklist: [{ title: 'Song', artist: 'Band' }] });
+
+            const info = await streamDebugService.info(PID);
+
+            expect(info.cast).toEqual([{ name: 'Ann Actor', role: 'Actor', character_name: 'Bea' }]);
+            expect(info.broadcasts).toHaveLength(1);
+            expect(info.tracklist).toEqual([{ title: 'Song', artist: 'Band' }]);
         });
 
         it('says so when BBC does not have the programme, and still gives the rest', async () => {

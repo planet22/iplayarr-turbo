@@ -42,7 +42,11 @@
                     </button>
                 </div>
                 <div class="facts">
-                    <h2>{{ info.title || pid }}<span v-if="info.subtitle" class="subtle"> · {{ info.subtitle }}</span></h2>
+                    <h2>{{ info.title || pid }}<span v-if="info.subtitle" class="subtle"> · {{ info.subtitle }}</span>
+                        <button v-if="containerPage" type="button" class="clickable containerLink" :title="`This is a ${info.type}, not an episode, so it has nothing to play. Open its programme page to pick an episode`" :aria-label="`Open the programme page for this ${info.type}`" @click="containerPage()">
+                            <font-awesome-icon :icon="['fas', 'list']" />
+                        </button>
+                    </h2>
                     <dl>
                         <dt>{{ info.live ? 'Channel id' : 'Pid' }}</dt><dd><code>{{ info.pid }}</code>
                             <ul v-if="pidLinks.length" class="plain pidLinks">
@@ -187,6 +191,58 @@
                 </div>
             </template>
             <details v-if="hasContent(info.artwork)"><summary>iPlayer artwork (raw)</summary><pre>{{ json(info.artwork) }}</pre></details>
+            </TraceSection>
+            <TraceSection v-if="info.cast?.length" id="dbg-cast" title="Cast and crew from BBC" :info="help.cast">
+                <template #actions>
+                    <div class="castToggle" role="group" aria-label="Cast layout">
+                        <button type="button" :class="['clickable', { active: castView === 'table' }]" :aria-pressed="castView === 'table'" title="Show as a table" @click="setCastView('table')"><font-awesome-icon :icon="['fas', 'table']" /> Table</button>
+                        <button type="button" :class="['clickable', { active: castView === 'cards' }]" :aria-pressed="castView === 'cards'" title="Show as cards, grouped by role" @click="setCastView('cards')"><font-awesome-icon :icon="['fas', 'id-card']" /> Cards</button>
+                    </div>
+                </template>
+                <table v-if="castView === 'table'" class="dataTable">
+                    <thead><tr><th>Name</th><th>Role</th><th>Character</th></tr></thead>
+                    <tbody>
+                        <tr v-for="(member, index) in info.cast" :key="index">
+                            <td class="text">{{ member.name }}</td><td class="text">{{ member.role ?? '' }}</td><td class="text">{{ member.character_name ?? '' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <template v-else>
+                    <div v-for="group in castGroups" :key="group.role" class="castGroup">
+                        <h3>{{ group.role }} <span class="subtle">· {{ group.members.length }}</span></h3>
+                        <div class="castCards">
+                            <div v-for="(member, index) in group.members" :key="index" class="castCard">
+                                <span class="castInitials" aria-hidden="true">{{ initials(member.name) }}</span>
+                                <span class="castName">{{ member.name }}</span>
+                                <span v-if="member.character_name" class="castCharacter subtle">as {{ member.character_name }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </TraceSection>
+            <TraceSection v-if="info.broadcasts?.length" id="dbg-broadcasts" title="Broadcasts" :info="help.broadcasts">
+                <div class="sessionScroll shortRows">
+                    <table class="dataTable">
+                        <thead><tr><th>Start</th><th>Channel</th><th>Length</th><th>Repeat</th></tr></thead>
+                        <tbody>
+                            <tr v-for="(b, index) in info.broadcasts" :key="index">
+                                <td class="text">{{ formatWhen(b.start) }}</td><td class="text">{{ b.service ?? '' }}</td><td class="text">{{ b.durationSeconds ? formatMinSec(b.durationSeconds) : '' }}</td><td class="text">{{ b.repeat ? 'repeat' : 'first' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </TraceSection>
+            <TraceSection v-if="info.tracklist?.length" id="dbg-tracklist" title="Tracklist" :info="help.tracklist">
+                <div class="sessionScroll shortRows">
+                    <table class="dataTable">
+                        <thead><tr><th>At</th><th>Artist</th><th>Title</th></tr></thead>
+                        <tbody>
+                            <tr v-for="(track, index) in info.tracklist" :key="index">
+                                <td class="text">{{ track.offset !== undefined ? formatMinSec(track.offset) : '' }}</td><td class="text">{{ track.artist ?? '' }}</td><td class="text">{{ track.title }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </TraceSection>
 
             </template>
@@ -509,7 +565,7 @@ const route = useRoute();
 const router = useRouter();
 const mediaProviders = useMediaProviders();
 // Every section's id (for Expand all and Collapse all). Prefixed, so they stay apart from the stream trace page's.
-const SECTION_IDS = ['naming', 'metadata', 'artwork', 'cached', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs', 'versions', 'probe', 'play'].map((id) => `dbg-${id}`);
+const SECTION_IDS = ['naming', 'metadata', 'artwork', 'cast', 'broadcasts', 'tracklist', 'cached', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs', 'versions', 'probe', 'play'].map((id) => `dbg-${id}`);
 const pid = route.params.pid;
 // A BBC Sounds episode (?kind=radio) is read as audio: bitrates and codecs, no pictures.
 const isRadio = route.query.kind === 'radio';
@@ -631,12 +687,18 @@ const badgeItem = computed(() => {
     if (isRadio) return { kind: 'episode', radio: true, availableUntil: expiry.value ? new Date(expiry.value.end).toISOString() : undefined };
     return { kind: info.value?.type, uhd: !!original?.flags?.uhd, hdr: !!original?.flags?.hdr, versions: kinds, guidance: ibl.guidance, availableUntil: ibl.availableUntil };
 });
+// A brand or series (TV or radio) is not playable: this opens its programme page, where an episode can be picked.
+const containerPage = computed(() => {
+    if (info.value?.live || !['brand', 'series'].includes(info.value?.type)) return undefined;
+    return isRadio ? () => router.push({ path: `/browse/radio/${info.value.pid}` }) : () => router.push(`/browse/programme/${info.value.pid}`);
+});
 // The links under the pid: where else this programme can be looked at.
 const pidLinks = computed(() => {
     if (info.value?.live) return [];
     if (isRadio) {
         const showId = info.value?.metadata?.showId;
         return [
+            ...(!showId && containerPage.value ? [{ label: 'BBC Sounds page', go: containerPage.value }] : []),
             ...(showId ? [{ label: 'BBC Sounds page', go: () => router.push({ path: `/browse/radio/${showId}`, query: { episode: info.value.pid } }) }] : []),
             { label: 'Library debug', go: () => router.push(`/library-debug?q=${info.value.pid}&mode=radio`) },
             { label: 'Watchdog', go: () => router.push('/watchdog') },
@@ -712,6 +774,9 @@ const copyPage = (download = false) => {
         '',
         'Metadata:',
         ...metadataRows.value.filter((row) => !Array.isArray(row[1])).map((row) => `  ${row[0]}: ${String(row[1]).slice(0, 300)}`),
+        ...(i.broadcasts?.length ? ['', 'Broadcasts:', ...i.broadcasts.slice(0, 20).map((b) => `  ${b.start} ${b.service ?? ''} ${b.repeat ? '(repeat)' : '(first)'}`)] : []),
+        ...(i.tracklist?.length ? ['', 'Tracklist:', ...i.tracklist.slice(0, 50).map((t) => `  ${t.artist ? `${t.artist} - ` : ''}${t.title}`)] : []),
+        ...(i.cast?.length ? ['', 'Cast and crew:', ...i.cast.map((m) => `  ${m.name}${m.role ? ` (${m.role})` : ''}${m.character_name ? ` as ${m.character_name}` : ''}`)] : []),
         '',
         'Versions:',
         ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}${v.selection ? ` (plain pick: ${v.selection})` : ''}`),
@@ -792,6 +857,9 @@ const videoHelp = {
     naming: 'The file a download of this programme would be saved as, worked out by the same code a real download uses, from the settings in force now (the chips). Nothing is queued or written. Numbering shows what iPlayarr used and what TVDB (via Sonarr\'s Skyhook) says, by episode title and by air date.',
     metadata: 'What BBC\'s programme page says about this programme, apart from what is already shown at the top of the page: the kind of media, the service it is on, the episodes before and after it, its categories (with the genres they sit under) and the short and long descriptions. The full raw record is in the raw sections underneath if you need anything else.',
     artwork: 'The pictures iPlayer lists for this programme: the episode\'s own still, and the show\'s poster, backdrop, landscape picture and transparent logo. These are the pictures iPlayarr can save next to your library files for Jellyfin. Each caption gives the size; click a picture to see it larger with its details. The poster, backdrop, landscape and logo are loaded straight from BBC and are not kept by iPlayarr.',
+    cast: 'The cast and crew BBC lists for this programme\'s original version (actors, presenters, writers, directors). These are what iPlayarr writes into the .nfo file when Write cast to NFO is on. The section is hidden when BBC lists no one.',
+    broadcasts: 'Every transmission BBC lists for this programme\'s original version: when it was on, which channel, how long, and whether it was a repeat. Regional HD duplicates are left out.',
+    tracklist: 'The tracks BBC lists as played in this programme (music played), with the time into the programme when BBC gives it. Hidden when BBC lists none.',
     cached: 'Everything iPlayarr has remembered about this programme so that it does not have to ask BBC again. "Saved (database)" entries survive a restart and have an expiry time. "Resolved address (memory)" is a stream address worked out for playback; it is held in memory only and is lost on a restart. Picture files are the thumbnails kept on disk. Stream addresses are never shown with their signed token.',
     library: 'The files iPlayarr\'s library index found for this programme: .strm links and downloaded video files, and which source each came from (iPlayarr\'s own folders, Sonarr, Radarr or Jellyfin). "App record" is what Sonarr or Radarr itself holds for the file (release group, release name, when it was added). No file here means nothing on disk was matched to this programme.',
     downloads: 'Downloads of this programme that iPlayarr has in its queue or its history, with their status and the app that asked for them. This is separate from streaming: a download saves a video file, a stream only plays it.',
@@ -873,7 +941,42 @@ const metadataRows = computed(() => {
     if (isRadio && m.id) {
         return [...soundsRows(m), ...programmeRows(info.value.programmePage).filter(([label]) => label !== 'Media type')];
     }
-    return programmeRows(m);
+    return [...programmeRows(m), ...iplayerRows.value];
+});
+// What iPlayer's listing says beyond the programme page: category, channel, content guidance, accessibility, age bands.
+const iplayerRows = computed(() => {
+    const x = info.value?.ibl;
+    if (!x || isRadio) return [];
+    const yes = (flag) => (flag === undefined ? '' : flag ? 'yes' : 'no');
+    return [
+        ['iPlayer category', x.label],
+        ['iPlayer channel', x.masterBrand],
+        ['Programme type', x.programmeType],
+        ['Release date', x.releaseDate],
+        ['Content guidance', x.guidance ? 'yes (iPlayer shows a guidance warning; BBC does not give its wording)' : 'none flagged'],
+        ['Signed version', x.signed ? 'yes' : ''],
+        ['Audio described', x.audioDescribed ? 'yes' : ''],
+        ['Children\'s', x.childrens ? 'yes' : ''],
+        ['Credits listed', yes(x.hasCredits)],
+        ['Age bands asked', x.ageBands?.join(', ')],
+    ].filter(([, value]) => value !== undefined && value !== null && value !== '');
+});
+
+// Cast and crew: a table or cards grouped by role (the choice is kept in this browser).
+const castView = ref((() => { try { return localStorage.getItem('streamDebugCastView') === 'cards' ? 'cards' : 'table'; } catch { return 'table'; } })());
+const setCastView = (view) => {
+    castView.value = view;
+    try { localStorage.setItem('streamDebugCastView', view); } catch { /* the choice just is not remembered */ }
+};
+const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+const castGroups = computed(() => {
+    const groups = new Map();
+    for (const member of info.value?.cast ?? []) {
+        const role = member.role || 'Other';
+        if (!groups.has(role)) groups.set(role, []);
+        groups.get(role).push(member);
+    }
+    return [...groups.entries()].map(([role, members]) => ({ role, members }));
 });
 const soundsRows = (m) => [
             ['Media type', 'audio'],
@@ -1253,6 +1356,21 @@ async function playSession(past) {
     videoRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// Why a fatal player error happened, in words: what the server answered (its own message when it sent one) before the player's code.
+function playFailureText(data) {
+    const kind = isRadio ? 'audio' : 'video';
+    const code = data.response?.code;
+    const body = String(data.response?.data ?? data.response?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (data.details === 'manifestLoadError' || data.details === 'levelLoadError') {
+        if (code === 404 || code === 400) return `iPlayarr has no ${kind} stream for ${pid}${body ? `: ${body}` : '. It may be a show or series rather than an episode, or BBC no longer offers it.'}`;
+        if (code === 401 || code === 403) return `The stream key was refused${body ? `: ${body}` : '.'}`;
+        if (code) return `The stream request failed with HTTP ${code}${body ? `: ${body}` : '.'}`;
+        return 'iPlayarr could not be reached for the stream.';
+    }
+    if (data.details === 'manifestParsingError') return `iPlayarr answered, but not with a playlist${body ? `: ${body}` : '.'}`;
+    return `${data.type}: ${data.details}`;
+}
+
 function startPlayback(follow = false, exact) {
     playError.value = '';
     const startPosition = follow === true ? snoopPosition() : undefined;
@@ -1274,6 +1392,7 @@ function startPlayback(follow = false, exact) {
         // Encrypted streams cannot be previewed: the player would ask for a key.
         hls.on(Hls.Events.KEY_LOADING, () => {
             playError.value = 'This stream is encrypted, so it cannot be previewed here.';
+            toastService.error('Could not play this', { detail: playError.value });
             stopPlayback();
         });
         hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
@@ -1286,7 +1405,9 @@ function startPlayback(follow = false, exact) {
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data.fatal) {
-                playError.value = `${data.type}: ${data.details}`;
+                const message = playFailureText(data);
+                playError.value = message;
+                toastService.error('Could not play this', { detail: message });
                 stopPlayback();
             }
         });
@@ -1420,6 +1541,66 @@ onBeforeUnmount(stopPlayback);
 
     dd {
         margin: 0;
+        overflow-wrap: anywhere;
+    }
+}
+
+.castToggle {
+    display: inline-flex;
+    gap: 6px;
+
+    button {
+        padding: 4px 10px;
+        border-radius: @radius-md;
+        border: 1px solid var(--border-color, currentColor);
+        background: transparent;
+        color: inherit;
+        opacity: 0.7;
+
+        &.active {
+            opacity: 1;
+            font-weight: 600;
+        }
+    }
+}
+
+.castGroup h3 {
+    margin: 12px 0 6px;
+}
+
+.castCards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+
+.castCard {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    column-gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: @radius-md;
+    background-color: @input-background-color;
+
+    .castInitials {
+        grid-row: span 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        font-weight: 600;
+        background-color: rgba(128, 128, 128, 0.25);
+    }
+
+    .castName {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    .castCharacter {
         overflow-wrap: anywhere;
     }
 }
@@ -1704,6 +1885,16 @@ h3 {
 // The connection being played in the player below (the same colour as in the Streams played table); it wins over the best line.
 .probeTable tr.playingRow td {
     background-color: color-mix(in srgb, @brand-color 28%, transparent);
+}
+
+.containerLink {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: 1px solid currentColor;
+    border-radius: @radius-md;
+    background: transparent;
+    color: inherit;
+    font-size: 0.8em;
 }
 
 .pidLinks {

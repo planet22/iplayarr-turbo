@@ -359,6 +359,13 @@ async function radioChecks(A, cfg) {
                 await check(A, `radio streaming debug part ${part} answers`, `/json-api/streams/debug/${ep.id}/part/${part}?kind=radio`, (r) => (r.status === 200 && r.json && key in r.json) || `HTTP ${r.status}, no ${key}`, { timeout: 60000 });
             }
             await check(A, 'radio streaming debug one-shot info carries the radio dashboard', `/json-api/streams/debug/${ep.id}?kind=radio`, (r) => (r.json?.found === true && Array.isArray(r.json?.dashboard?.subscriptions) && Array.isArray(r.json?.dashboard?.caches?.thumbnails)) || 'no dashboard', { timeout: 90000 });
+            await check(A, 'radio streaming debug programme carries cast, broadcasts and tracklist lists', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => {
+                const j = r.json;
+                if (!j?.found) return 'not found';
+                for (const key of ['cast', 'broadcasts', 'tracklist']) if (!Array.isArray(j[key])) return `no ${key}[]`;
+                if (j.tracklist.some((t) => typeof t?.title !== 'string' || !t.title)) return 'a track has no title';
+                return true;
+            }, { timeout: 60000 });
         }
     }
     const cols = await check(A, 'radio collections are video-shaped with counts (none while Show Collections is off)', `${B}/collections?${M}`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title && (c.count === undefined || typeof c.count === 'number'))) || 'expected { enabled, collections: [{ id, title, count? }] }', upstream);
@@ -1045,6 +1052,24 @@ async function libraryAndDebugChecks(A, ctx) {
     const unknown = await http('/json-api/streams/debug/m0000000/programme', { timeout: 60000 });
     rec(A, 'stream debug on an unknown programme id gives no server error', unknown.status > 0 && unknown.status < 500 ? 'PASS' : 'WARN', `HTTP ${unknown.status}`);
     await check(A, 'stream debug one-shot info answers', `/json-api/streams/debug/${pid}`, isObj, { timeout: 90000 });
+    // Cast and crew, transmissions and the iPlayer listing extras are always lists (empty when BBC lists none), and each entry is well formed.
+    await check(A, 'stream debug programme carries cast, broadcasts and tracklist lists', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const j = r.json;
+        if (!j?.found) return `not found: ${j?.error || ''}`;
+        for (const key of ['cast', 'broadcasts', 'tracklist']) if (!Array.isArray(j[key])) return `no ${key}[]`;
+        if (j.cast.some((m) => typeof m?.name !== 'string' || !m.name)) return 'a cast member has no name';
+        if (j.broadcasts.some((b) => isNaN(Date.parse(b?.start)) || typeof b.repeat !== 'boolean')) return 'a broadcast has a bad start or no repeat flag';
+        if (j.broadcasts.length > 40 || j.tracklist.length > 500) return 'cast, broadcast or tracklist lists are not capped';
+        return true;
+    }, { timeout: 60000 });
+    await check(A, 'stream debug programme listing extras are well typed', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const x = r.json?.ibl;
+        if (!x || typeof x !== 'object') return true;
+        for (const key of ['label', 'masterBrand', 'programmeType', 'releaseDate']) if (x[key] !== undefined && typeof x[key] !== 'string') return `${key} is not text`;
+        if (x.ageBands !== undefined && !(Array.isArray(x.ageBands) && x.ageBands.every((b) => typeof b === 'string'))) return 'ageBands is not a list of text';
+        if (x.hasCredits !== undefined && typeof x.hasCredits !== 'boolean') return 'hasCredits is not true/false';
+        return true;
+    }, { timeout: 60000 });
     // The debug button covers programmes and series, not just episodes: the discovered pid is a brand, and an episode of it follows.
     await check(A, 'stream debug on a programme (brand) pid is found, typed, and has a versions list', `/json-api/streams/debug/${pid}/programme`, (r) => {
         const j = r.json;
