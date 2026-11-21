@@ -49,6 +49,7 @@ See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-
 - Programme pages with every series and episode, plus Play, Download, Download all and Subscribe
 - Fast native search against the BBC's own API, with type-ahead suggestions, a Posters view, channel and version filters, and a quick-find palette (`Ctrl+K`)
 - Audio described and signed versions, offered as separate releases or chosen per download
+- Optional combined video + radio search, and Guide slots marked when a programme can be watched on demand
 
 **Downloading**
 
@@ -56,12 +57,14 @@ See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-
 - Choose a `.strm` link or a full video file per download, with quality and version pickers and batch download for a series
 - Queue and history with per-job progress, client and output details, per-download logs and an optional archive of removed items
 - Jellyfin-style library folders (Show/Season NN) and `.nfo` metadata written alongside each item
+- One-off specials and films filed as movies (`Title (Year)`), with air-date numbering that matches TVDB and a file name preview before you download
+- Intro/Recap skip chapters in native downloads, and plain grabs that skip expired or not-yet-available versions
 
 **Streaming and live TV**
 
 - `.strm` mode: tiny pointer files that stream on demand through iPlayarr, so a "download" costs no disk space
 - Native streaming with adaptive quality, an optional 1080p upgrade, and optional English subtitles converted from the BBC's captions
-- In-browser player with Picture-in-Picture, for programmes and live channels
+- In-browser player with Picture-in-Picture, for programmes and live channels, with a watch-from-start option for live TV
 - Live BBC channels you can watch, add to your library as `.strm` files, or serve to Jellyfin as an M3U tuner with an XMLTV guide
 - Customisable channels: arrange, hide, rename, recolour, and add your own or optional Red Button, nations and UHD feeds
 - Works with Jellyfin, Plex and Emby
@@ -77,7 +80,8 @@ See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-
 - Subscriptions that check hourly (or on demand) and queue new episodes, de-duplicated against the queue and history
 - STRM Watchdog: a daily check that `.strm` links still resolve on the BBC, with safeguards, optional unmonitor, delete or webhook actions, and a dashboard
 - Persistent BBC data caches with a cache manager, editable lifetimes and scheduled tasks, and hit rates on the Statistics page
-- Live logs, video events, NZB diagnostics and statistics pages
+- Live logs, video events, NZB diagnostics (including Prowlarr and indexer searches) and statistics pages, with a Server section for memory, CPU, disks, database and link health
+- Debug hub with a health check, subscription trace and a per-stream trace page (request timeline, playback charts, delivered quality) that can be exported and imported
 
 **Interface and security**
 

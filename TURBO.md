@@ -33,6 +33,13 @@ This started as a ground-up modernization of the build/deploy tooling and depend
 - **Resilience** — the programme page falls back to the iPlayer API when the BBC programme pages are down; out-of-range stored settings are clamped instead of blocking saves.
 - **Smoke tests** — a `smoke/` suite exercises the API, UI and real-life write flows against a running instance.
 - **Play Video (in-app preview player)** — a Play icon on Search results and Queue/History rows, and a "Play Video" button in the video info modal, plays any pid through the configured `STREAM_CLIENT`/`STREAM_MODE` right in the browser (hls.js, with real Picture-in-Picture when the browser supports it), independent of `MEDIA_MODE` — a quick way to confirm streaming settings actually work without downloading anything.
+- **Movies and naming** — one-off specials and films are filed as movies (`Title (Year)`, `MOVIE_COMPLETE_DIR`), one release resolver names every download, and air-date numbering resolves TVDB episodes by date, title and number. The debug page and Download dialog show the film/TV decision and the file name before you download. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md).
+- **Skip chapters and smarter versions** — Intro/Recap chapters in native downloads, and plain grabs skip expired or not-yet-available versions and take UHD only for Full-HD. See [docs/CONFIG.md](docs/CONFIG.md).
+- **Live TV extras** — watch-from-start for live channels (in the player and as optional Jellyfin entries), on-demand marks on Guide slots, and live subtitle playlists that follow the video.
+- **Radio (BBC Sounds)** — Video | Radio switch with parity for search, collections, Podcasts, A to Z (`RADIO_ATOZ`), downloads, Guide on-demand slots and debug pages; optional combined video + radio search (`SEARCH_COMBINED`). See [docs/SOUNDS.md](docs/SOUNDS.md).
+- **Debug hub and stream trace** — a Debug hub with a health check (BBC, disk space, database, library, scheduled jobs, caches), subscription trace, and `STREAM_TRACE` per-stream pages with request timeline, playback charts and delivered quality; traces can be exported and imported. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#debug-hub).
+- **Server stats and indexer searches** — Statistics gets a Server section (memory, CPU, disks, database, cache hit rate, scheduler, link health), and the NZB page lists indexer searches including Prowlarr.
+- **Hardening and speed** — serialised writes, default request timeouts, a task watchdog, form-login and password-reset protections, longer BBC/Skyhook cache lifetimes, and a read-ahead option for players that send `Range: bytes=0-` (`STREAM_PREFETCH_OPEN_RANGE`).
 
 **Build/tooling (original scope)**
 
