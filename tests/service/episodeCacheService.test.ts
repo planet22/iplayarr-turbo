@@ -124,6 +124,47 @@ describe('episodeCacheService', () => {
         });
     });
 
+    describe('recacheForTitle', () => {
+        const url = 'https://www.bbc.co.uk/programmes/abcd';
+        const cleanUp = async () => {
+            for (const { id } of await episodeCacheService.getCachedSeries()) await episodeCacheService.removeCachedSeries(id);
+        };
+        afterEach(cleanUp);
+
+        it('refreshes the series cached under the title, whatever the casing', async () => {
+            await episodeCacheService.addCachedSeries(url, 'Mine');
+            await episodeCacheService.cacheEpisodesForUrl(url);
+            (createNZBName as jest.Mock).mockClear();
+
+            expect(await episodeCacheService.recacheForTitle('  TEST show ')).toBe(true);
+            expect(createNZBName).toHaveBeenCalledTimes(1);
+            expect((await episodeCacheService.getCachedSeries())[0].cacheRefreshed).toBeInstanceOf(Date);
+        });
+
+        it('names the refreshed episodes with the synonym stored by then', async () => {
+            await episodeCacheService.addCachedSeries(url, 'Mine');
+            await episodeCacheService.cacheEpisodesForUrl(url);
+            const synonym = { id: 's1', from: 'Sonarr Name', target: 'Test Show', exemptions: '' };
+            (synonymService.getSynonym as jest.Mock).mockResolvedValueOnce(synonym);
+
+            await episodeCacheService.recacheForTitle('Test Show');
+            expect(createNZBName).toHaveBeenLastCalledWith(dummyDetail, synonym);
+        });
+
+        it('does nothing when no episodes are cached under the title', async () => {
+            await episodeCacheService.addCachedSeries(url, 'Mine');
+            expect(await episodeCacheService.recacheForTitle('Unknown Show')).toBe(false);
+            expect(iplayerDetailsService.getSeriesEpisodes).not.toHaveBeenCalled();
+        });
+
+        it('does nothing when the cached episodes belong to no series definition', async () => {
+            await episodeCacheService.cacheEpisodesForUrl(url);
+            (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockClear();
+            expect(await episodeCacheService.recacheForTitle('Test Show')).toBe(false);
+            expect(iplayerDetailsService.getSeriesEpisodes).not.toHaveBeenCalled();
+        });
+    });
+
     it('should search episode cache by term', async () => {
         await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/abcd');
         const result = await episodeCacheService.searchEpisodeCache('test');

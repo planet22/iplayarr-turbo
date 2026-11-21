@@ -93,20 +93,28 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 const del = await http('/json-api/offSchedule', { method: 'DELETE', body: { id: mine.id } });
                 ok('off-schedule delete', del.status === 200 && !(del.json || []).some((s) => s.id === mine.id));
             }
-            // A synonym for the series' title names its cached episodes (needs a refresh; shows only with get_iplayer search).
+            // Cache the series first, then add a synonym for its title: the save refreshes the cached episodes in the background,
+            // so their names pick the synonym up (shows only with get_iplayer search).
             const title = ((await http('/json-api/browse/programme/m002csng')).json || {}).title;
             if (title) {
-                const syn = await http('/json-api/synonym', { method: 'POST', body: { from: 'SMOKE-TEMP-os-from', target: title, exemptions: '' } });
-                const synMine = (syn.json || []).find((s) => s.from === 'SMOKE-TEMP-os-from');
-                if (synMine) {
-                    later('delete off-schedule synonym', () => http('/json-api/synonym', { method: 'DELETE', body: { id: synMine.id } }));
-                    const again = await http('/json-api/offSchedule', { method: 'POST', body: { name: 'SMOKE-TEMP series syn', url: 'https://www.bbc.co.uk/programmes/m002csng' } });
-                    const series = (again.json || []).find((s) => s.name === 'SMOKE-TEMP series syn');
-                    if (series) {
-                        later('delete off-schedule (synonym)', () => http('/json-api/offSchedule', { method: 'DELETE', body: { id: series.id } }));
-                        await http('/json-api/offSchedule/refresh', { method: 'POST', body: { id: series.id }, timeout: 120000 });
-                        const found = (await http(`/json-api/search?q=${encodeURIComponent(title)}`, { timeout: 90000 })).json;
-                        warn('off-schedule episodes are named with the synonym', Array.isArray(found) && found.some((r) => String(r.nzbName || '').includes('SMOKE-TEMP-os-from')), `${Array.isArray(found) ? found.length : 'no'} results, none named with the synonym`);
+                const again = await http('/json-api/offSchedule', { method: 'POST', body: { name: 'SMOKE-TEMP series syn', url: 'https://www.bbc.co.uk/programmes/m002csng' } });
+                const series = (again.json || []).find((s) => s.name === 'SMOKE-TEMP series syn');
+                if (series) {
+                    later('delete off-schedule (synonym)', () => http('/json-api/offSchedule', { method: 'DELETE', body: { id: series.id } }));
+                    await http('/json-api/offSchedule/refresh', { method: 'POST', body: { id: series.id }, timeout: 120000 });
+                    const syn = await http('/json-api/synonym', { method: 'POST', body: { from: 'SMOKE-TEMP-os-from', target: title, exemptions: '' } });
+                    const synMine = (syn.json || []).find((s) => s.from === 'SMOKE-TEMP-os-from');
+                    if (synMine) {
+                        later('delete off-schedule synonym', () => http('/json-api/synonym', { method: 'DELETE', body: { id: synMine.id } }));
+                        let named = false;
+                        let count = 'no';
+                        for (let i = 0; i < 12 && !named; i++) {
+                            await new Promise((r) => setTimeout(r, 5000));
+                            const found = (await http(`/json-api/search?q=${encodeURIComponent(title)}`, { timeout: 90000 })).json;
+                            count = Array.isArray(found) ? found.length : 'no';
+                            named = Array.isArray(found) && found.some((r) => String(r.nzbName || '').includes('SMOKE-TEMP-os-from'));
+                        }
+                        warn('adding a synonym renames the cached off-schedule episodes', named, `${count} results, none named with the synonym after a minute`);
                     }
                 }
             }

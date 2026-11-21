@@ -125,6 +125,16 @@ const episodeCacheService = {
         await episodeCacheService.updateCachedSeries(series);
     },
 
+    // Refreshes the cached series whose episodes are stored under this programme title (e.g. after a synonym for it changed).
+    recacheForTitle: async (title: string): Promise<boolean> => {
+        const cached = await storage.getItem(`offSchedule_${title.trim().toLowerCase()}`);
+        if (!cached?.url) return false;
+        const series = (await episodeCacheService.getCachedSeries()).find(({ url }) => removeAllQueryParams(url) == cached.url);
+        if (!series) return false;
+        await episodeCacheService.recacheSeries(series);
+        return true;
+    },
+
     cacheEpisodesForUrl: async (inputUrl: string): Promise<boolean> => {
         const { sizeFactor } = await getQualityProfile();
 
