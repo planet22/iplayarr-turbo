@@ -33,11 +33,13 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
     const ok = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'FAIL', c ? '' : d);
     const warn = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'WARN', c ? '' : d);
     const dialog = (page) => page.locator('[role=dialog], .modal, .modalContent, .dialog').first();
-    // The Filename box in a Download dialog (video and audio) spans the popup: its width is most of the dialog's.
+    // The Filename box in a Download dialog (video and audio) spans the popup and stays level with its label.
     const filenameFillsDialog = async (d) => {
         const input = d.locator('input[type=text], input:not([type])').last();
-        const [box, panel] = await Promise.all([input.boundingBox().catch(() => null), d.boundingBox().catch(() => null)]);
-        return !!box && !!panel && box.width >= panel.width * 0.8;
+        const label = d.getByText('Filename', { exact: true }).first();
+        const [box, panel, text] = await Promise.all([input.boundingBox().catch(() => null), d.boundingBox().catch(() => null), label.boundingBox().catch(() => null)]);
+        // Wide, and still on the label's row: their vertical centres are within half a line of each other.
+        return !!box && !!panel && !!text && box.width >= panel.width * 0.6 && Math.abs(box.y + box.height / 2 - (text.y + text.height / 2)) < 12;
     };
     // The Subscriptions list is paged (16 a page, oldest first): a new subscription can be on page 2, so show the biggest page.
     const showAllSubscriptions = async (page) => {
@@ -90,7 +92,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.waitForTimeout(1500);
                 const d = dialog(page);
                 warn('download dialog opens from search', (await d.count()) > 0 && (await d.isVisible().catch(() => false)));
-                warn('the Filename box in the video Download dialog fills the popup width', await filenameFillsDialog(d));
+                warn('the Filename box in the video Download dialog fills the popup width and lines up with its label', await filenameFillsDialog(d));
                 await shot(page, 'search-3-download-dialog');
                 // The size shown for a file download follows the Quality picker (full-HD is bigger than mobile).
                 const sizeOf = async () => {
@@ -806,7 +808,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 const choices = (await rd.locator('[role=radio]').allInnerTexts().catch(() => [])).map((t) => t.trim());
                 warn('the audio Download dialog offers the .strm link first, then the audio file, like video', choices.length === 2 && /strm/i.test(choices[0]) && /audio/i.test(choices[1]), JSON.stringify(choices));
                 warn('the audio Download dialog has the same note and a Filename field after it as the video dialog', (await rd.locator('.outputNote').count()) === 1 && (await rd.getByText('Filename', { exact: true }).count()) === 1);
-                warn('the Filename box in the audio Download dialog fills the popup width', await filenameFillsDialog(rd));
+                warn('the Filename box in the audio Download dialog fills the popup width and lines up with its label', await filenameFillsDialog(rd));
                 await shot(page, 'radio-download-dialog');
                 await page.keyboard.press('Escape');
             } else rec(U, 'the audio Download dialog matches the video one', 'SKIP', 'no episode download button');

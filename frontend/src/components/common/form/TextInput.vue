@@ -133,8 +133,8 @@ const props = defineProps({
         required: false,
         default: false,
     },
-    // The label above a box that fills its container (e.g. a popup), instead of the settings layout of a label column and a
-    // box capped at 650px.
+    // A box that fills its container (e.g. a popup), the label beside it, instead of the settings layout of a wide label
+    // column and a box capped at 650px.
     fullWidth: {
         type: Boolean,
         required: false,
@@ -405,15 +405,21 @@ const copyValue = async () => {
 }
 
 .form-group.fullWidth {
-    flex-direction: column;
-    align-items: stretch;
     max-width: none;
     width: 100%;
 
+    // The label stays beside the box (the box lines up with it), with a narrower label column so the box gets the width.
     label {
-        flex: none;
-        justify-content: flex-start;
-        margin-bottom: 4px;
+        flex: 0 0 90px;
+        margin-right: @space-3;
+    }
+
+    // Phones: the label goes above, as everywhere else.
+    @media (max-width: @mobile-breakpoint) {
+        label {
+            flex: none;
+            margin-right: 0;
+        }
     }
 }
 </style>
