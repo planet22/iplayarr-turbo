@@ -280,9 +280,10 @@ class LiveStreamService implements AbstractStreamService {
                 return false;
             }
             const streamKey = (req.query?.streamkey as string) ?? '';
-            // "Watch from start" (opt-in): the start is settled here, once, so the video and audio playlists agree and it stays put.
-            const fromMs = req.query?.from === 'start' ? (await this.#fromStart(channelId, live))?.startMs : undefined;
-            const playlist = buildMasterPlaylist(live, (kind) => this.#dashPlaylistHref(channelId, kind, streamKey, sessionId, fromMs));
+            // "Watch from start" (opt-in): how far behind live the window runs is settled here, once, so the video and audio
+            // playlists agree and it stays put.
+            const delayMs = req.query?.from === 'start' ? (await this.#fromStart(channelId, live))?.delayMs : undefined;
+            const playlist = buildMasterPlaylist(live, (kind) => this.#dashPlaylistHref(channelId, kind, streamKey, sessionId, delayMs));
             if (sessionId) {
                 streamSessionService.setResolution(sessionId, isUhdEventFeed(channelId) ? 'Live UHD' : 'Live 1080p');
             }
@@ -297,11 +298,11 @@ class LiveStreamService implements AbstractStreamService {
         }
     }
 
-    #dashPlaylistHref(channelId: string, kind: DashKind, streamKey: string, sessionId?: string, fromMs?: number): string {
+    #dashPlaylistHref(channelId: string, kind: DashKind, streamKey: string, sessionId?: string, delayMs?: number): string {
         return (
             `/api/live-${kind}.m3u8?mode=stream&pid=${encodeURIComponent(channelId)}&dash=${kind}&streamkey=${encodeURIComponent(streamKey)}` +
             (sessionId ? `&session=${encodeURIComponent(sessionId)}` : '') +
-            (fromMs !== undefined ? `&from=${fromMs}` : '')
+            (delayMs !== undefined ? `&delay=${delayMs}` : '')
         );
     }
 
@@ -346,19 +347,19 @@ class LiveStreamService implements AbstractStreamService {
     }
 
     // A video or audio media playlist as polled by the player (the endpoint's `dash=` request): a fresh
-    // sliding window each time, with every segment URL a segment-proxy token. `from` (epoch ms, set by the master playlist for
-    // "watch from start") makes it start at that moment and keep growing instead.
-    async getDashPlaylist(channelId: string, kind: DashKind, streamKey: string, sessionId?: string, from?: string): Promise<string | undefined> {
+    // sliding window each time, with every segment URL a segment-proxy token. `delay` (ms, set by the master playlist for
+    // "watch from start") holds the window that far behind live.
+    async getDashPlaylist(channelId: string, kind: DashKind, streamKey: string, sessionId?: string, delay?: string): Promise<string | undefined> {
         const live = await this.#liveDash(channelId);
         if (!live) {
             return undefined;
         }
         const suffix = `&streamkey=${encodeURIComponent(streamKey)}` + (sessionId ? `&session=${encodeURIComponent(sessionId)}` : '');
         const now = Date.now();
-        // Only a start that is a plausible moment in the last few hours counts, and only while the setting is on.
-        const fromMs = from && /^\d{10,15}$/.test(from) ? Number(from) : undefined;
-        const useFrom = fromMs !== undefined && fromMs <= now && now - fromMs <= 3 * 3600_000 && (await this.#fromStartEnabled());
-        return buildMediaPlaylist(live, kind, now, (url, isInit) => `/api/${isInit ? 'init.mp4' : 'seg.m4s'}?mode=stream&token=${registerSegmentUrl(url)}${suffix}`, useFrom ? fromMs : undefined);
+        // Only a delay of up to three hours counts, and only while the setting is on.
+        const delayMs = delay && /^\d{1,9}$/.test(delay) ? Number(delay) : undefined;
+        const useDelay = delayMs !== undefined && delayMs <= 3 * 3600_000 && (await this.#fromStartEnabled());
+        return buildMediaPlaylist(live, kind, now, (url, isInit) => `/api/${isInit ? 'init.mp4' : 'seg.m4s'}?mode=stream&token=${registerSegmentUrl(url)}${suffix}`, useDelay ? delayMs : undefined);
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {

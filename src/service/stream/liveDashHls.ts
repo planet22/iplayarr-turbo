@@ -151,17 +151,19 @@ function newestSegment(dash: LiveDash, rendition: DashRendition, nowMs: number):
     return rendition.startNumber + elapsedSegments - 1 - liveEdgeDelaySegments;
 }
 
-// Where a "from the start" playlist begins: the segment holding `startMs`, but no older than BBC still keeps (a couple of
-// segments inside the edge of that window, as the oldest ones are pruned as they are read).
+// "Watch from start": the same live window, held a fixed delay behind the live edge so that what the player starts on is the
+// beginning of the programme on air, and it then plays on at normal speed. (A growing EVENT or finished playlist does not do
+// this: ffmpeg, so Jellyfin, starts those at the live edge or plays them to an end.) The delay is settled once, when the master
+// playlist is served, and handed to the media playlists, so it never drifts. It is kept inside what BBC still buffers.
 export interface FromStartPlan {
+    // How far behind live the window runs (ms).
+    delayMs: number;
+    // The segment a player starting on this window begins with (ffmpeg starts three segments from the end of a live list).
     first: number;
-    newest: number;
-    // Seconds between the start of the first segment and now.
+    // Seconds behind live, for display.
     secondsBack: number;
-    // The programme began before BBC's buffer reaches, so playback starts as far back as it can.
+    // The programme began before BBC's buffer reaches, so the delay is as long as the buffer allows.
     clamped: boolean;
-    // When the first segment begins (epoch ms): what a master playlist hands to its media playlists to keep the start fixed.
-    startMs: number;
 }
 
 // The segment holding a moment in time.
@@ -169,43 +171,47 @@ function segmentAt(dash: LiveDash, rendition: DashRendition, ms: number): number
     return rendition.startNumber + Math.floor((ms - dash.availabilityStartMs) / (rendition.segmentSeconds * 1000));
 }
 
+// Segments of the buffer left unused at its old edge, where BBC prunes as it goes.
+const bufferMarginSegments = 8;
+
 export function planFromStart(dash: LiveDash, rendition: DashRendition, startMs: number, nowMs: number): FromStartPlan {
-    const newest = newestSegment(dash, rendition, nowMs);
+    const segmentMs = rendition.segmentSeconds * 1000;
     const wanted = segmentAt(dash, rendition, startMs);
+    // The listed window ends liveEdgeDelaySegments + 1 behind the moment it is shifted to, and a player starts two segments
+    // from its end: shift to five segments past the programme's first one.
+    const shiftedTo = dash.availabilityStartMs + (wanted - rendition.startNumber + liveEdgeDelaySegments + 3) * segmentMs;
     const depthSegments = Math.floor((dash.timeShiftSeconds ?? defaultTimeShiftSeconds) / rendition.segmentSeconds);
-    const oldestKept = Math.max(rendition.startNumber, newest - depthSegments + 3);
-    const first = Math.min(newest, Math.max(wanted, oldestKept));
-    // Whole milliseconds: it travels in a URL, where a fractional start would be refused.
-    const firstStartMs = Math.round(dash.availabilityStartMs + (first - rendition.startNumber) * rendition.segmentSeconds * 1000);
-    return { first, newest, secondsBack: Math.max(0, Math.round((nowMs - firstStartMs) / 1000)), clamped: wanted < oldestKept, startMs: firstStartMs };
+    const maxDelayMs = Math.max(0, (depthSegments - bufferMarginSegments) * segmentMs);
+    const ideal = nowMs - shiftedTo;
+    // Whole milliseconds: it travels in a URL. Never ahead of live.
+    const delayMs = Math.round(Math.min(Math.max(ideal, 0), maxDelayMs));
+    return {
+        delayMs,
+        first: newestSegment(dash, rendition, nowMs - delayMs) - 2,
+        secondsBack: Math.round(delayMs / 1000),
+        clamped: ideal > maxDelayMs,
+    };
 }
 
 // `segmentHref` turns an upstream URL (init or media segment) into the URL the player should fetch.
-// With `fromMs` the playlist starts at the segment holding that time and keeps growing (an EVENT playlist: ffmpeg, so Jellyfin,
-// then starts at its first segment instead of the live edge) rather than sliding along a short window.
+// With `delayMs` the window sits that far behind live (see planFromStart).
 export function buildMediaPlaylist(
     dash: LiveDash,
     kind: DashKind,
     nowMs: number,
     segmentHref: (upstreamUrl: string, isInit: boolean) => string,
-    fromMs?: number
+    delayMs = 0
 ): string | undefined {
     const rendition = kind === 'video' ? dash.video : dash.audio;
     if (!rendition) {
         return undefined;
     }
-    const newest = newestSegment(dash, rendition, nowMs);
-    // The start was settled (and kept inside BBC's buffer) when the master was served, so it is not moved again here: the list
-    // only ever grows at its end.
-    const first =
-        fromMs === undefined
-            ? Math.max(rendition.startNumber, newest - windowSegments + 1)
-            : Math.min(newest, Math.max(rendition.startNumber, segmentAt(dash, rendition, fromMs)));
+    const newest = newestSegment(dash, rendition, nowMs - delayMs);
+    const first = Math.max(rendition.startNumber, newest - windowSegments + 1);
     const lines = [
         '#EXTM3U',
         '#EXT-X-VERSION:7',
         `#EXT-X-TARGETDURATION:${Math.ceil(rendition.segmentSeconds)}`,
-        ...(fromMs === undefined ? [] : ['#EXT-X-PLAYLIST-TYPE:EVENT']),
         `#EXT-X-MEDIA-SEQUENCE:${first}`,
         '#EXT-X-INDEPENDENT-SEGMENTS',
         `#EXT-X-MAP:URI="${segmentHref(rendition.initUrl, true)}"`,

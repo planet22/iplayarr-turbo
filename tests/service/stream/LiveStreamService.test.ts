@@ -194,25 +194,27 @@ describe('LiveStreamService', () => {
                 // Only the guide spy: restoring every mock would also drop the network stubs the other tests rely on.
                 afterEach(() => (browseService.nowNext as any).mockRestore?.());
 
-                it('points the media playlists at the programme start, the same for video and audio', async () => {
+                it('holds the media playlists the same time behind live, for video and audio', async () => {
                     await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
                     onAir(onAirSince());
                     const out = reply();
                     await service.streamDirect('bbc_two_england', fromQuery, out, 'sess');
 
                     const master: string = out.send.mock.calls[0][0];
-                    const froms = [...master.matchAll(/&from=(\d{13})/g)].map((m) => m[1]);
+                    const froms = [...master.matchAll(/&delay=(\d+)/g)].map((m) => m[1]);
                     expect(froms).toHaveLength(2);
                     expect(froms[0]).toBe(froms[1]);
                 });
 
-                it('serves a growing playlist from that moment', async () => {
+                it('serves a live window held that far behind', async () => {
                     await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
-                    const from = String(Date.now() - 30 * 60_000);
-                    const playlist = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', from)) as string;
-                    expect(playlist).toContain('#EXT-X-PLAYLIST-TYPE:EVENT');
-                    // About 30 minutes of 3.84 second segments.
-                    expect(playlist.match(/^\/api\/seg\.m4s/gm)!.length).toBeGreaterThan(400);
+                    const live = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess')) as string;
+                    const delayed = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', String(30 * 60_000))) as string;
+                    const sequence = (text: string) => Number(/MEDIA-SEQUENCE:(\d+)/.exec(text)![1]);
+                    // 30 minutes of 3.84 second segments is 468.75 of them.
+                    expect(sequence(live) - sequence(delayed)).toBeGreaterThanOrEqual(468);
+                    expect(sequence(live) - sequence(delayed)).toBeLessThanOrEqual(470);
+                    expect(delayed.match(/^\/api\/seg\.m4s/gm)).toHaveLength(6);
                 });
 
                 it('is ignored while the setting is off', async () => {
@@ -221,19 +223,21 @@ describe('LiveStreamService', () => {
                     await service.streamDirect('bbc_two_england', fromQuery, out, 'sess');
                     expect(out.send.mock.calls[0][0]).not.toContain('&from=');
                     expect(spy).not.toHaveBeenCalled();
-                    const playlist = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', String(Date.now() - 600_000))) as string;
-                    expect(playlist).not.toContain('EVENT');
-                    expect(playlist.match(/^\/api\/seg\.m4s/gm)).toHaveLength(6);
+                    const plain = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess')) as string;
+                    const ignored = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', '600000')) as string;
+                    expect(/MEDIA-SEQUENCE:(\d+)/.exec(ignored)![1]).toBe(/MEDIA-SEQUENCE:(\d+)/.exec(plain)![1]);
                 });
 
-                it('plays from the live edge when the guide has no programme on air, and ignores an implausible start', async () => {
+                it('plays from the live edge when the guide has no programme on air, and ignores an implausible delay', async () => {
                     await configService.setParameter('LIVE_TV_FROM_START' as any, 'true');
                     jest.spyOn(browseService, 'nowNext').mockResolvedValue({} as any);
                     const out = reply();
                     await service.streamDirect('bbc_two_england', fromQuery, out, 'sess');
                     expect(out.send.mock.calls[0][0]).not.toContain('&from=');
-                    for (const from of ['abc', String(Date.now() + 3_600_000), String(Date.now() - 5 * 3_600_000)]) {
-                        expect((await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', from)) as string).not.toContain('EVENT');
+                    const sequence = async (delay?: string) => /MEDIA-SEQUENCE:(\d+)/.exec((await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess', delay)) as string)![1];
+                    const live = Number(await sequence());
+                    for (const delay of ['abc', '-5', String(5 * 3_600_000), '1.5']) {
+                        expect(Math.abs(Number(await sequence(delay)) - live)).toBeLessThanOrEqual(1);
                     }
                 });
 
@@ -243,8 +247,9 @@ describe('LiveStreamService', () => {
                     onAir(onAirSince());
                     const info = await service.fromStartInfo('bbc_two_england');
                     expect(info).toMatchObject({ enabled: true, programme: 'The News', bufferSeconds: 7200, clamped: false, note: 'the manifest gives no buffer depth; 2 hours assumed' });
-                    expect(info.secondsBack).toBeGreaterThanOrEqual(1800);
-                    expect(info.secondsBack).toBeLessThan(1820);
+                    // On air 30 minutes, minus the few segments a player starts inside its window.
+                    expect(info.secondsBack).toBeGreaterThanOrEqual(1770);
+                    expect(info.secondsBack).toBeLessThanOrEqual(1800);
                     jest.spyOn(browseService, 'nowNext').mockResolvedValue({} as any);
                     expect(await service.fromStartInfo('bbc_two_england')).toEqual({ enabled: true, note: 'the guide has no programme on air' });
                 });

@@ -79,51 +79,48 @@ describe('playlists', () => {
     describe('from the start of a programme', () => {
         // 1,000 whole segments after availabilityStartTime: segments 1..1000 exist, so 998 is the newest listed.
         const now = 12_000 + 1000 * 3840 + 500;
+        // Inside segment 100.
         const programmeStart = 12_000 + 99 * 3840 + 1000;
         const timeShifted = (depth: string) => parseLiveMpd(mpd.replace('type="dynamic"', `type="dynamic" timeShiftBufferDepth="${depth}"`), mpdUrl);
+        const segments = (text: string) => (text.match(/^\d+\.m4s$/gm) as string[]).map((s) => Number(s.replace('.m4s', '')));
+        const list = (delayMs?: number, at = now) => segments(buildMediaPlaylist(dash, 'video', at, (url) => lastPart(url), delayMs) as string);
 
         it('reads how far back BBC keeps segments, when the manifest says', () => {
             expect(parseLiveMpd(mpd, mpdUrl).timeShiftSeconds).toBeUndefined();
             expect(timeShifted('PT2H').timeShiftSeconds).toBe(7200);
         });
 
-        it('starts at the segment holding the programme start', () => {
+        it('delays the live window so that a player starting on it begins with the programme start segment', () => {
             const plan = planFromStart(timeShifted('PT2H'), dash.video, programmeStart, now);
-            expect(plan).toMatchObject({ first: 100, newest: 998, clamped: false, startMs: 12_000 + 99 * 3840 });
-            expect(plan.secondsBack).toBe(3460);
+            expect(plan).toMatchObject({ delayMs: 896 * 3840 + 500, first: 100, secondsBack: 3441, clamped: false });
+            // ffmpeg starts a live list three segments from its end: segment 100 here.
+            const shifted = list(plan.delayMs);
+            expect(shifted).toEqual([97, 98, 99, 100, 101, 102]);
+            expect(shifted[shifted.length - 3]).toBe(100);
         });
 
-        it('assumes two hours when the manifest does not say, and never starts before the start number', () => {
-            expect(planFromStart(dash, dash.video, programmeStart, now).clamped).toBe(false);
-            expect(planFromStart(dash, dash.video, 0, 12_000 + 10 * 3840).first).toBe(1);
+        it('assumes two hours when the manifest does not say', () => {
+            expect(planFromStart(dash, dash.video, programmeStart, now)).toMatchObject({ delayMs: 896 * 3840 + 500, clamped: false });
         });
 
-        it('is cut short to what BBC still keeps when the programme began earlier', () => {
+        it('is as long as BBC still buffers (less a margin) when the programme began earlier', () => {
+            // 10 minutes is 156 whole segments; eight are kept back.
             const plan = planFromStart(timeShifted('PT10M'), dash.video, programmeStart, now);
-            expect(plan.clamped).toBe(true);
-            expect(plan.first).toBe(845);
-            expect(plan.startMs).toBe(12_000 + 844 * 3840);
+            expect(plan).toMatchObject({ delayMs: 148 * 3840, clamped: true });
         });
 
-        it('writes a growing EVENT playlist from there to the newest segment', () => {
-            const text = buildMediaPlaylist(dash, 'video', now, (url, isInit) => (isInit ? 'INIT' : lastPart(url)), programmeStart) as string;
-            expect(text).toContain('#EXT-X-PLAYLIST-TYPE:EVENT');
-            expect(text).toContain('#EXT-X-MEDIA-SEQUENCE:100');
-            const segments = text.match(/^\d+\.m4s$/gm) as string[];
-            expect(segments[0]).toBe('100.m4s');
-            expect(segments[segments.length - 1]).toBe('998.m4s');
-            expect(segments).toHaveLength(899);
-            expect(text).not.toContain('#EXT-X-ENDLIST');
+        it('plays live (no delay) for a programme that has only just started', () => {
+            expect(planFromStart(dash, dash.video, now, now)).toMatchObject({ delayMs: 0, clamped: false });
         });
 
-        it('keeps the same start on later polls (it only grows at the end)', () => {
-            const later = buildMediaPlaylist(dash, 'video', now + 60_000, (url) => lastPart(url), programmeStart) as string;
-            expect(later).toContain('#EXT-X-MEDIA-SEQUENCE:100');
-            expect(later.match(/^\d+\.m4s$/gm)).toHaveLength(899 + 15);
+        it('keeps the same delay on later polls, so the window moves on at normal speed', () => {
+            const delay = 896 * 3840 + 500;
+            expect(list(delay, now + 3840)).toEqual([98, 99, 100, 101, 102, 103]);
         });
 
-        it('stays a sliding live window when no start is given', () => {
-            expect(buildMediaPlaylist(dash, 'video', now, (url) => lastPart(url)) as string).not.toContain('EVENT');
+        it('is the plain live window when no delay is given', () => {
+            expect(list()).toEqual([993, 994, 995, 996, 997, 998]);
+            expect(buildMediaPlaylist(dash, 'video', now, (url) => lastPart(url), 0) as string).not.toContain('EVENT');
         });
     });
 

@@ -168,7 +168,7 @@ describe('StreamDebugPage', () => {
         const text = (await mountIt()).text();
         expect(text).toContain('Watch from start');
         expect(text).toContain('The News');
-        expect(text).toContain('starts 30 min back (segment 412); BBC keeps 120 min');
+        expect(text).toContain('runs 30 min behind live, starting at segment 412; BBC keeps 120 min');
         responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: { vpid: 'bbc_one_hd', fromStart: { enabled: false } } }) };
         expect((await mountIt()).text()).toContain('off (Settings > Live Channels)');
     });

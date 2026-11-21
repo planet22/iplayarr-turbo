@@ -659,7 +659,7 @@ const fromStartText = (f) => {
     if (!f.enabled) return 'off (Settings > Live Channels)';
     if (!f.programme) return f.note || 'not available';
     const mins = Math.round((f.secondsBack ?? 0) / 60);
-    return `${f.programme}, on air since ${formatWhen(f.programmeStart)}: starts ${mins} min back (segment ${f.firstSegment}); BBC keeps ${Math.round((f.bufferSeconds ?? 0) / 60)} min${f.clamped ? ', so the start is cut short' : ''}${f.note ? `; ${f.note}` : ''}`;
+    return `${f.programme}, on air since ${formatWhen(f.programmeStart)}: runs ${mins} min behind live, starting at segment ${f.firstSegment}; BBC keeps ${Math.round((f.bufferSeconds ?? 0) / 60)} min${f.clamped ? ', so it cannot reach the start' : ''}${f.note ? `; ${f.note}` : ''}`;
 };
 
 const hiddenSettings = inject('hiddenSettings', null);
