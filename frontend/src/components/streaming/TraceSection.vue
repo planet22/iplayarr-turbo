@@ -8,6 +8,8 @@
                 <span class="sectionTitle">{{ title }}</span>
                 <span v-if="summary" class="sectionSummary">{{ summary }}</span>
             </button>
+            <!-- Optional controls for the section, kept to the right of the title and left of the (i). -->
+            <span v-if="$slots.actions" class="sectionActions"><slot name="actions" /></span>
             <InfoButton v-if="info" v-model="showInfo" />
         </h3>
         <p v-if="info && showInfo" class="infoNote">{{ info }}</p>
@@ -53,6 +55,13 @@ const bodyId = computed(() => `trace-section-${props.id}`);
     align-items: center;
     margin: 0;
     font-weight: normal;
+}
+
+.sectionActions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    margin-right: @space-2;
 }
 
 .infoNote {
