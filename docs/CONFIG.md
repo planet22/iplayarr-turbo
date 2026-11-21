@@ -121,7 +121,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
 | — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Library's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
 | — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Library. |
-| Skip chapters | `DOWNLOAD_CHAPTERS` | `true` | Native downloads get "Intro" and "Recap" chapters from BBC's skip spans, which Jellyfin 10.10+ offers as Skip buttons. Original cut only, and not for `get_iplayer`/`yt-dlp` downloads or `.strm` links. Settings → Library. |
+| Skip chapters | `DOWNLOAD_CHAPTERS` | `true` | Native downloads get "Intro" and "Recap" chapters from BBC's skip spans, which Jellyfin 10.10+ offers as Skip buttons. Original cut only, and not for `get_iplayer`/`yt-dlp` downloads or `.strm` links. Settings → Downloads. |
 | Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. With `embed` only the embedded track is kept, even if `get_iplayer` or `yt-dlp` also leave a loose file. Settings → Library. |
 
 ## Library (Settings → Library)
