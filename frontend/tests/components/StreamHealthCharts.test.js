@@ -302,6 +302,7 @@ describe('StreamHealthCharts zoom', () => {
         });
 
         it('draws in segments, with a singular for one, when neither the playlist nor the request gave a length', () => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const bare = requests.map(({ segDur, ...request }) => request);
             const wrapper = mount(StreamHealthCharts, { props: { requests: bare, playlists: reads({ winSec: undefined, segs: 21 }) }, global: { stubs: { 'font-awesome-icon': true } } });
             expect(wrapper.text()).toContain('Distance behind live (segments)');
@@ -321,6 +322,7 @@ describe('StreamHealthCharts zoom', () => {
         });
 
         it('with hide-empty (a live stream) leaves out the charts that have nothing to draw, and measures the first one left', () => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const noClock = requests.map(({ ptsV, ptsA, ptsDriftMs, ...request }) => request);
             const mountWith = (props) => mount(StreamHealthCharts, { props, global: { stubs: { 'font-awesome-icon': true } } });
             // no timestamps (the DASH feed's fMP4): buffer depth, speed and the live chart stay; the A/V and PTS charts go
