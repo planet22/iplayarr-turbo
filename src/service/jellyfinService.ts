@@ -86,7 +86,8 @@ class JellyfinService {
     async getAudioPaths(server: JellyfinTarget): Promise<string[]> {
         const { data } = await axios.get(`${baseUrl(server.url)}/Items`, {
             headers: headers(server.api_key as string),
-            params: { Recursive: true, IncludeItemTypes: 'Audio', Fields: 'Path' },
+            // Only the path is wanted: no picture tags, play state or total count (a big library is several MB either way).
+            params: { Recursive: true, IncludeItemTypes: 'Audio', Fields: 'Path', EnableImages: false, EnableUserData: false, EnableTotalRecordCount: false },
             timeout: REQUEST_TIMEOUT_MS,
         });
         void markAppSeen(server.id);
