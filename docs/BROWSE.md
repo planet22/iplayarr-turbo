@@ -102,6 +102,8 @@ List, card and table views use small (320x180) cached thumbnails served from `/j
 
 "Now / Next" is worked out per request from the cached day schedule. iPlayer's schedule day runs 05:00 to 05:00, so in the early hours it also looks at the previous day. The Schedule page's `/schedule` endpoint fetches the same per-channel day schedule, so it rides the same `browse_schedule` cache (also used by the Jellyfin XMLTV guide) - switching between the Schedule page and a Channel page's Now/Next for the same day doesn't re-hit the BBC.
 
+Each broadcast in that feed carries iPlayer's own status for its episode. A slot whose episode is `available` is marked on demand on the Schedule page (a coloured edge, with Play and Download buttons on hover; Download offers the `.strm` choice like any other download). No extra request is made, so the mark is as fresh as the cached day. A slot not yet broadcast, or one iPlayer does not offer, has no mark. The Streaming Debug page shows the status as "iPlayer status".
+
 ## Channels are a fixed list
 
 The category list is fetched live, but the 11 channels shown are listed in `src/constants/BrowseChannels.ts`, using the iPlayer API's own ids (`bbc_one_london`, `bbc_two_england`, ... from `GET /ibl/v1/channels`). Adding or renaming a channel means editing that file. Each entry also names its `masterBrand`, which is what the logo (and its colours) are looked up by.

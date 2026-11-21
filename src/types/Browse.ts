@@ -81,6 +81,8 @@ export interface BrowseSlot {
     live?: boolean;
     childrens?: boolean;
     categories?: string[];
+    // iPlayer says the episode can be watched on demand now (episode.status is "available"); undefined when not.
+    onDemand?: true;
 }
 
 // A "Skip intro" / "Skip recap" span within an episode, in seconds from the start.

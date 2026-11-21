@@ -63,6 +63,7 @@
                         <template v-if="info.parent"><dt>Part of</dt><dd>{{ info.parent.title }} (<code>{{ info.parent.pid }}</code>)</dd></template>
                         <template v-if="info.firstBroadcast"><dt>First broadcast</dt><dd>{{ info.firstBroadcast }}</dd></template>
                         <template v-if="expiry"><dt>{{ isRadio ? 'Leaves BBC Sounds' : 'Leaves iPlayer' }}</dt><dd>{{ expiry.when }}</dd><dt>Days left</dt><dd>{{ expiry.calc }}</dd></template>
+                        <template v-if="info.ibl?.status"><dt>iPlayer status</dt><dd>{{ info.ibl.status }}<template v-if="info.ibl.status === 'available'"> (on demand; the guide marks it)</template></dd></template>
                         <template v-if="info.imagePid"><dt>Image</dt><dd><code>{{ info.imagePid }}</code></dd></template>
                         <template v-if="info.cache.vpid"><dt>Remembered vpid</dt><dd><code>{{ info.cache.vpid }}</code></dd></template>
                         <template v-if="info.cache.hqProbe"><dt>Quality probe winner</dt><dd>{{ info.cache.hqProbe.mediaSet }}/{{ info.cache.hqProbe.version }}, connection {{ info.cache.hqProbe.index }}, {{ info.cache.hqProbe.height }}p</dd></template>
@@ -664,6 +665,7 @@ const copyPage = (download = false) => {
         ...(i.channel ? [`Channel: ${i.channel}`] : []),
         ...(i.firstBroadcast ? [`First broadcast: ${i.firstBroadcast}`] : []),
         ...(expiry.value ? [`Leaves iPlayer: ${expiry.value.when} (${expiry.value.calc})`] : []),
+        ...(i.ibl?.status ? [`iPlayer status: ${i.ibl.status}`] : []),
         ...(i.error ? [`Error: ${i.error}`] : []),
         '',
         'Settings:',
