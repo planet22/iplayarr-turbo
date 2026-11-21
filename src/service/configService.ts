@@ -117,6 +117,7 @@ const configService = {
         STREAM_TRACE: 'false',
         STREAM_PREFETCH_OPEN_RANGE: 'true',
         DOWNLOAD_SUBTITLES: 'sidecar',
+        DOWNLOAD_CHAPTERS: 'true',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
         LIVE_RADIO: 'true',

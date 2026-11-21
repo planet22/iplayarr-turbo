@@ -147,6 +147,7 @@ const NO_EFFECT = {
     RADIO_ATOZ_HIDE_EMPTY: 'turning it on starts a request per show (thousands) once Radio A to Z is on; the radio A to Z checks use their own run, so no flip here',
     RADIO_ATOZ: 'turning it on starts a crawl of the whole BBC Sounds show list (about 120 requests); the radio A to Z checks use their own run, so no flip here',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
+    DOWNLOAD_CHAPTERS: 'decides whether a finished native download carries Intro/Recap chapters; this suite cancels its downloads, so the download tests cover it',
     DOWNLOAD_SUBTITLES: 'decides what a finished download keeps (a loose .srt, an embedded track, both or none); this suite cancels its downloads, so the real-download matrix and the download tests cover it, and section 7b checks the four values and the refusal',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',

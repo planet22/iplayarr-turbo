@@ -7,6 +7,7 @@ import { PassThrough } from 'stream';
 
 import { progressRegex } from '../../../src/constants/iPlayarrConstants';
 import configService from '../../../src/service/configService';
+import { fetchChapterMetadata } from '../../../src/service/download/downloadChapters';
 import { fetchSubtitleSrt } from '../../../src/service/download/downloadSubtitles';
 import { resolveDownloadUrl } from '../../../src/service/download/nativeDownloadResolver';
 import nativeDownloadService, { createProgressTranslator } from '../../../src/service/download/NativeDownloadService';
@@ -17,6 +18,7 @@ import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
 jest.mock('fs', () => ({ rmSync: jest.fn(), statSync: jest.fn(), writeFileSync: jest.fn() }));
 jest.mock('../../../src/service/download/downloadSubtitles', () => ({ fetchSubtitleSrt: jest.fn() }));
+jest.mock('../../../src/service/download/downloadChapters', () => ({ fetchChapterMetadata: jest.fn() }));
 jest.mock('../../../src/service/configService', () => ({ getParameter: jest.fn() }));
 jest.mock('../../../src/service/loggingService', () => ({ debug: jest.fn(), info: jest.fn() }));
 jest.mock('../../../src/service/queueService', () => ({
@@ -35,6 +37,7 @@ describe('NativeDownloadService', () => {
         jest.clearAllMocks();
         (resolveDownloadUrl as jest.Mock).mockResolvedValue('https://cdn/video.m3u8');
         (spawn as jest.Mock).mockReturnValue({ stdout: { pipe: jest.fn() }, stderr: { on: jest.fn() } });
+        (fetchChapterMetadata as jest.Mock).mockResolvedValue(undefined);
     });
 
     it('copies the resolved URL to an mp4 with faststart', async () => {
@@ -102,6 +105,43 @@ describe('NativeDownloadService', () => {
             await nativeDownloadService.download('p1', '/dl/p1');
             expect(fs.writeFileSync).not.toHaveBeenCalled();
             expect((spawn as jest.Mock).mock.calls[1][1]).not.toContain('-map');
+        });
+    });
+
+    describe('chapters', () => {
+        const setting = (chapters: string, subtitles = 'off') =>
+            (configService.getParameter as jest.Mock).mockImplementation(async (p: string) =>
+                p === 'DOWNLOAD_CHAPTERS' ? chapters : p === 'DOWNLOAD_SUBTITLES' ? subtitles : 'mp4'
+            );
+
+        beforeEach(() => (fetchChapterMetadata as jest.Mock).mockResolvedValue(';FFMETADATA1\n'));
+
+        it('adds the chapter file as a metadata input and copies its chapters', async () => {
+            setting('true');
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect(fs.writeFileSync).toHaveBeenCalledWith('/dl/p1/p1.chapters.subtmp', ';FFMETADATA1\n');
+            const args = (spawn as jest.Mock).mock.calls[0][1];
+            expect(args).toEqual(expect.arrayContaining(['-f', 'ffmetadata', '-i', '/dl/p1/p1.chapters.subtmp', '-map_chapters', '1']));
+            expect(fetchChapterMetadata).toHaveBeenCalledWith('p1', 600, undefined, expect.any(Function));
+        });
+
+        it('reads the chapters from the third input when subtitles are embedded too', async () => {
+            setting('true', 'embed');
+            (fetchSubtitleSrt as jest.Mock).mockResolvedValue('1\n00:00:01,000 --> 00:00:02,000\nHi\n');
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect((spawn as jest.Mock).mock.calls[0][1]).toEqual(expect.arrayContaining(['-map_chapters', '2']));
+        });
+
+        it('does nothing when off, or when the programme has no skip spans', async () => {
+            setting('false');
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect(fetchChapterMetadata).not.toHaveBeenCalled();
+            expect((spawn as jest.Mock).mock.calls[0][1]).not.toContain('-map_chapters');
+
+            setting('true');
+            (fetchChapterMetadata as jest.Mock).mockResolvedValue(undefined);
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect((spawn as jest.Mock).mock.calls[1][1]).not.toContain('-map_chapters');
         });
     });
 

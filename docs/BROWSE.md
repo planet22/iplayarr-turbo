@@ -132,7 +132,7 @@ All under `/json-api/browse` (behind the same login as the rest of `/json-api`),
 | `GET /atoz/:letter?page=&perPage=` | A page of programmes for `a`-`z` or `0` (digits) |
 | `GET /programme/:pid` | A show with its series and episodes |
 | `GET /versions?pids=a,b,c` | Which of the programmes have audio described / signed versions (cached; used for the episode badges) |
-| `GET /markers/:pid` | An episode's "Skip intro" / "Skip recap" spans as `[{type, start, end}]` (seconds). Many episodes have none (`[]`); nothing in the UI uses it yet |
+| `GET /markers/:pid` | An episode's "Skip intro" / "Skip recap" spans as `[{type, start, end}]` (seconds). Many episodes have none (`[]`); native downloads write them as Intro/Recap chapters (`DOWNLOAD_CHAPTERS`) |
 | `GET /details?pids=a,b,c` | Batch episode details (up to 40), used for Posters artwork |
 | `GET /suggest?q=` | Suggestions for type-ahead: `[{ kind: 'collection', id, title, count, thumbnail? }` first when Find by name and Show Collections are on, then `{ kind: 'tv' \| 'film', pid, title }]` |
 | `GET /collections` | `{ enabled, collections: [{ id, title, synopsis?, thumbnail?, count }] }`; empty and nothing fetched while Show Collections is off |
