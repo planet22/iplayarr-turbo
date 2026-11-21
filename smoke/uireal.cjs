@@ -9,13 +9,16 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
     const U = 'ui-real';
     const shot = async (page, name, full = false) => page.screenshot({ path: path.join(SHOTS, `real-${name}.png`), fullPage: full }).catch(() => {});
     const cleanups = [];
-    const flow = async (name, fn) => {
+    // `expected` lists the errors a flow causes on purpose (a request it aborts): `url` matches the failing resource, `text` the message.
+    // Everything else still fails the flow.
+    const flow = async (name, fn, { expected = [] } = {}) => {
         if (ctx.want && !ctx.want(name)) return; // --filter on the command line
         const errs = [];
+        const isExpected = (text, url) => expected.some((e) => (e.url && e.url.test(url || '')) || (e.text && e.text.test(text)));
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
         const page = await context.newPage();
-        page.on('pageerror', (e) => errs.push('pageerror: ' + e.message.slice(0, 100)));
-        page.on('console', (m) => { if (m.type() === 'error' && !/\/socket\.io\//.test(m.location()?.url || '') && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '')) errs.push('console: ' + m.text().slice(0, 100)); });
+        page.on('pageerror', (e) => { if (!isExpected(e.message, '')) errs.push('pageerror: ' + e.message.slice(0, 100)); });
+        page.on('console', (m) => { if (m.type() === 'error' && !/\/socket\.io\//.test(m.location()?.url || '') && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '') && !isExpected(m.text(), m.location()?.url)) errs.push('console: ' + m.text().slice(0, 100)); });
         try { await fn(page, context); }
         catch (e) { rec(U, name, 'FAIL', 'threw: ' + e.message.split('\n')[0]); await shot(page, 'FAILED-' + name.replace(/\W+/g, '-')); }
         if (errs.length) rec(U, `${name}: no page/console errors`, 'FAIL', errs.slice(0, 2).join(' | '));
@@ -86,7 +89,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // The row's Download button is the one-click download (it queues straight away); the row itself opens the dialog.
             const dl = page.locator('button[title*="ownload"], button[aria-label*="ownload"]').first();
             rec(U, 'search result download button is accessible', (await dl.count()) > 0 ? 'PASS' : 'WARN', 'no button with a Download name');
-            const row = page.locator('tbody tr td.text').first();
+            // The first row can be a collection (it opens the Collections page, not a dialog): take the first programme row that has an episode.
+            const row = page.locator('tbody tr', { hasNotText: 'COLLECTION' }).filter({ hasText: /Episode \d+/ }).locator('td.text').first();
             if (await row.count()) {
                 await row.click();
                 await page.waitForTimeout(1500);
@@ -444,8 +448,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForTimeout(400);
             const engine = (await http('/json-api/config')).json?.NATIVE_SEARCH_ENGINE;
             if (engine === 'V2' || (await page.locator('.settingsBody').innerText()).includes('Collections')) {
-                const adv = (await labels()).join(' | ');
-                ok('Search (advanced, engine 2.0) offers both collection options, NZB and manual', (adv.match(/Expand BBC Collections/g) || []).length === 2 && (adv.match(/Find BBC Collections by Name/g) || []).length === 2, adv);
+                // Counted per block (NZB, manual, radio), not across the page, so a block added later does not break the count.
+                const advList = await labels();
+                const adv = advList.join(' | ');
+                const starts = advList.map((l, i) => (/^Native Search\s*$/i.test(l) ? i : -1)).filter((i) => i >= 0);
+                const radioAt = advList.findIndex((l) => /^Search Video and Radio Together/i.test(l));
+                const blockEnd = radioAt >= 0 ? radioAt : advList.length;
+                const inBlock = (from, to) => advList.slice(from, to);
+                const one = (list) => list.filter((l) => /^Expand BBC Collections/i.test(l)).length === 1 && list.filter((l) => /^Find BBC Collections by Name/i.test(l)).length === 1;
+                ok('Search (advanced, engine 2.0) offers both collection options, NZB and manual',
+                    starts.length >= 2 && one(inBlock(starts[0], starts[1])) && one(inBlock(starts[1], blockEnd)), adv);
+                if (radioAt >= 0) ok('Search (advanced) offers both collection options for radio too', one(inBlock(radioAt, advList.length)), adv);
             }
             // Same setting, same name: no engine suffix on any label, and radio offers the collection options under the same names.
             const advLabels = await labels();
@@ -455,8 +468,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 const radioStart = at(/^Search Video and Radio Together/i);
                 const radio = advLabels.slice(radioStart);
                 const [expand, names, words] = [/^Expand BBC Collections/i, /^Find BBC Collections by Name/i, /^Match All Search Words/i].map((re) => radio.findIndex((l) => re.test(l)));
-                ok('Radio Search offers Expand BBC Collections, then Find BBC Collections by Name (while Show Collections is on), then Match All Search Words',
-                    expand >= 0 && expand < words && (names < 0 || (expand < names && names < words)), radio.join(' | '));
+                // The radio block is laid out on purpose (Settings regroup, SettingsTabLayouts.test.js): wording and ranking first, then scope and
+                // limits, then the collection options (Find by Name, then Expand), then networks. It does not copy the TV blocks' order.
+                ok('Radio Search offers Match All Search Words first, then Find BBC Collections by Name (while Show Collections is on), then Expand BBC Collections',
+                    words >= 0 && expand > words && (names < 0 || (words < names && names < expand)), radio.join(' | '));
             }
             await shot(page, 'settings-tab-search-advanced', true);
 
@@ -490,7 +505,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Maintenance lists the scheduled tasks', /Scheduled tasks/i.test(maint));
             // Every task that has run shows how long it took; none is running here, so no progress bar is on screen.
             const ranTasks = ((await http('/json-api/maintenance/tasks')).json || []).filter((x) => Number.isFinite(x.lastDurationMs));
-            const tookPills = await page.locator('.pill', { hasText: /^Took / }).count();
+            const tookPills = await page.locator('.pill', { hasText: /Took / }).count();
             ok('Maintenance shows "Took ..." for every task that has run', tookPills === ranTasks.length, `${tookPills} pills, ${ranTasks.length} tasks with a duration`);
             ok('Maintenance draws no progress bar while nothing runs', (await page.locator('.settingsBody .taskBar').count()) === 0);
             ok('Hours in RSS Feed and Full Schedule Refresh are no longer on Maintenance', !/Hours in RSS Feed|Full Schedule Refresh/.test(maint));
@@ -1230,6 +1245,9 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
             ok('the server value replaces the cached one', (await nav().count()) === 0);
             ok('and the cache follows it', JSON.parse((await page.evaluate(() => localStorage.getItem('iplayarr.navSettings'))) || '{}').BROWSE_SHOW_COLLECTIONS === 'false');
+        }, {
+            // The three requests this flow aborts, and the app's own report that its start-up fetch failed.
+            expected: [{ url: /\/json-api\/(config|config\/hiddenSettings|versions)(\?|$)/ }, { text: /Could not finish setting up the app/ }],
         });
 
         // ---- Collections: the menu item and page follow Show Collections, and Discover never has a row (restored afterwards)

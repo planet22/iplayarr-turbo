@@ -602,8 +602,12 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             if (!ctx.wd?.enabled) return rec(W, 'watchdog flow', 'SKIP', 'disabled');
             const rc = await http('/json-api/watchdog/refresh-counts', { method: 'POST', timeout: 180000 });
             ok('watchdog refresh counts', rc.status === 200 || rc.status === 409, `HTTP ${rc.status} ${rc.text.slice(0, 100)}`);
-            const totals = async () => Object.fromEntries((((await http('/json-api/library/debug', { timeout: 60000 })).json || {}).sources || []).map((x) => [x.id, x.counted + '/' + x.rejected]));
+            // counted/rejected per source. The scan time is kept apart, only to say in the detail whether a source that differs was rescanned
+            // (an app source is read from Sonarr/Radarr/Jellyfin, which can change on its own) or left as it was.
+            let scanTimes = {};
+            const totals = async () => { const sources = ((await http('/json-api/library/debug', { timeout: 60000 })).json || {}).sources || []; scanTimes = Object.fromEntries(sources.map((x) => [x.id, x.scannedAt])); return Object.fromEntries(sources.map((x) => [x.id, x.counted + '/' + x.rejected])); };
             const beforeRun = await totals();
+            const scannedBefore = scanTimes;
             const run = await http('/json-api/watchdog/run', { method: 'POST' });
             ok('watchdog run starts', run.status === 202 || run.status === 409, `HTTP ${run.status}`);
             await sleep(5000);
@@ -616,7 +620,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             for (let i = 0; i < 120 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(500);
             const afterStop = await totals();
             const changed = Object.keys({ ...beforeRun, ...afterStop }).filter((k) => beforeRun[k] !== afterStop[k]);
-            if (runningAtStop) warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.join(', ')}`);
+            if (runningAtStop) warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.map((k) => `${k} ${beforeRun[k]} -> ${afterStop[k]} (${scannedBefore[k] === scanTimes[k] ? 'scan time unchanged' : `rescanned ${scannedBefore[k]} -> ${scanTimes[k]}`})`).join(', ')}`);
             else rec(W, 'a stopped watchdog scan leaves the library index as it was', 'SKIP', 'SKIPPED because: the run had already finished before the stop, and a finished run legitimately replaces the index');
             ok('watchdog is no longer running after stop', !(await http('/json-api/watchdog')).json?.live?.running, 'still running after 60s');
         });

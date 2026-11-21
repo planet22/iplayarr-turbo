@@ -43,6 +43,7 @@ const CHANGE = {
     ARCHIVE_ENABLED: ['true', 'false'],
     OUTPUT_FORMAT: ['mkv', 'mp4'],
     DOWNLOAD_SUBTITLES: ['embed', 'sidecar'],
+    DOWNLOAD_CHAPTERS: ['false', 'true'], // effect: see NO_EFFECT (a finished native download carries the chapters)
     THUMBNAIL_CACHE_DIR: ['/smoke-temp-thumbs'],
     THUMBNAIL_RETENTION_DAYS: ['7', '30'],
     MEDIA_MODE: ['download', 'strm'],
@@ -125,6 +126,7 @@ const OTHER = {
     DOWNLOAD_DIR: 'directory test + SABnzbd get_config',
     COMPLETE_DIR: 'directory test + SABnzbd get_config',
     ARR_COMPLETE_DIR: 'directory test + SABnzbd get_config',
+    MOVIE_COMPLETE_DIR: 'directory test: missing refused, existing accepted, and a movie is filed under it (debug File naming)',
     TV_FILENAME_TEMPLATE: 'template test + release names',
     MOVIE_FILENAME_TEMPLATE: 'template test + release names',
     RADIO_FILENAME_TEMPLATE: 'a template that only names the next radio download, which writes into the Radio Directory (this suite will not do that); the validator and radio download service tests cover it',
@@ -1122,7 +1124,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 while (!roots.some((r) => norm(r) === norm(d))) { try { fs.rmdirSync(d); } catch { break; } d = path.dirname(d); }
             }
         };
-        const pushState = async (state) => { for (const [k, v] of Object.entries(state)) { touched.add(k); const r = await put({ [k]: v }); if (r.status !== 200) return `${k}=${v}: HTTP ${r.status} ${r.text.slice(0, 100)}`; } };
+        const pushState = async (state) => { for (const [k, v] of Object.entries(state)) { touched.add(k); const t0 = Date.now(); const r = await put({ [k]: v }); if (r.status !== 200) return `${k}=${v}: HTTP ${r.status} ${r.error || ''} ${r.text.slice(0, 100)} (after ${Date.now() - t0}ms)`; } };
 
         // One strm download under a given state; returns what landed in the library.
         const download = async (ep, query, sidecars = false) => {
