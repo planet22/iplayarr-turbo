@@ -294,7 +294,6 @@ import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
-import { useSocketEvents } from '@/lib/useSocketEvents';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';

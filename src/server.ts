@@ -68,7 +68,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (!allowEmbedding) {
         res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        res.setHeader('Content-Security-Policy', 'frame-ancestors \'self\'');
     }
     next();
 });

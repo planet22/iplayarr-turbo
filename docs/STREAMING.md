@@ -101,7 +101,7 @@ With `LIVE_RADIO` on (the default), 16 BBC radio stations (Radio 1 to 6 Music, A
 
 ### Jellyfin Live TV (tuner + guide)
 
-Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Live TV** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set (the Live TV tab shows the Stream Base URL and Stream Key fields too, unless `MEDIA_MODE=strm`, where they are on the Streaming tab). With the setting off, the endpoints return 404 and the TV buttons are hidden.
+Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Live Channels** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set (the Live Channels tab shows the Stream Base URL and Stream Key fields too, unless `MEDIA_MODE=strm`, where they are on the Streaming tab). With the setting off, the endpoints return 404 and the TV buttons are hidden.
 
 **Pick channels.** Only channels you select are offered to Jellyfin, in both the tuner and the guide (nothing selected means an empty tuner). On the Channels page press **Edit**, then use the **TV icon** on a channel's tile or **Live TV all**; press **Done** when finished. Outside Edit mode the tiles and a channel's own page only show read-only TV (in Live TV) and bell (in your library) status icons. Channel numbers are fixed per channel, so they don't shuffle as you add and remove channels.
 

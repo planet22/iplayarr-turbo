@@ -105,7 +105,7 @@ v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading &
                     : 'All TV channels are switched off.'
             "
         >
-            <RouterLink v-if="radioMode && liveRadioOff" :to="{ path: '/settings', hash: '#general' }">Turn on Live Radio in Settings</RouterLink>
+            <RouterLink v-if="radioMode && liveRadioOff" :to="{ path: '/settings', hash: '#liveTv' }">Turn on Live Radio in Settings</RouterLink>
             <a v-else-if="channelTools.enabled" href="#" @click.prevent="toggleArranging">Switch channels on</a>
         </EmptyState>
         <InfoBar v-if="arranging && !loading && !error">

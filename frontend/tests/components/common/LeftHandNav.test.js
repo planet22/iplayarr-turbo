@@ -95,3 +95,31 @@ describe('LeftHandNav Browse group', () => {
         expect(labels(mountIt())).toContain('Collections');
     });
 });
+
+describe('LeftHandNav tool version hint', () => {
+    const mountWithVersions = (toolVersions) =>
+        mount(LeftHandNav, {
+            global: {
+                stubs: { 'font-awesome-icon': true, RouterLink: true, LeftHandNavLink: NavLink, NavLink },
+                provide: {
+                    globalSettings: ref({ NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2', AUTH_TYPE: 'none' }),
+                    socket: ref(null),
+                    hiddenSettings: ref({}),
+                    toolVersions: ref(toolVersions),
+                },
+            },
+        });
+
+    it('points an available update at Settings > Downloads', () => {
+        const wrapper = mountWithVersions({ getIplayer: { current: '3.36', latest: '3.37', updateAvailable: true } });
+        const hint = wrapper.findAll('[title]').map((n) => n.attributes('title')).find((t) => t.includes('update available'));
+        expect(hint).toContain('get_iplayer update available (3.37)');
+        expect(hint).toContain('see Settings > Downloads');
+        expect(hint).not.toContain('Download Client');
+    });
+
+    it('says Installed versions when nothing needs updating', () => {
+        const wrapper = mountWithVersions({ getIplayer: { current: '3.36', latest: '3.36', updateAvailable: false } });
+        expect(wrapper.findAll('[title]').map((n) => n.attributes('title'))).toContain('Installed versions');
+    });
+});

@@ -6,7 +6,7 @@
         v-model="config.NATIVE_SEARCH"
         field="NATIVE_SEARCH"
         name="Native Search"
-        tooltip="Native search is experimental but can find shows older than 30 days. NZB search is what Sonarr and Radarr use."
+        tooltip="Native search can find shows older than 30 days. NZB search is what Sonarr and Radarr use."
         :error="validationErrors.config?.NATIVE_SEARCH"
         :options="trueOrFalse"
     />
@@ -16,7 +16,7 @@
         field="NATIVE_SEARCH_ENGINE"
         :advanced="true"
         name="Native Search Engine"
-        tooltip="1.0 is stable. 2.0 is experimental, faster and retries failed lookups."
+        tooltip="1.0 is the original engine. 2.0 is faster and retries failed lookups."
         :error="validationErrors.config?.NATIVE_SEARCH_ENGINE"
         :options="nativeSearchEngines"
     />
@@ -110,7 +110,6 @@
         :options="withInherit(trueOrFalse)"
     />
     <template v-if="config.SOUNDS_ENABLED === 'true'">
-        <SettingsSubheading text="Radio Search" />
         <SelectInput
             v-model="config.SEARCH_COMBINED"
             field="SEARCH_COMBINED"
@@ -119,26 +118,9 @@
             :error="validationErrors.config?.SEARCH_COMBINED"
             :options="trueOrFalse"
         />
-        <SelectInput
-            v-if="showAdvanced"
-            v-model="config.RADIO_SEARCH_EXPAND_COLLECTIONS"
-            field="RADIO_SEARCH_EXPAND_COLLECTIONS"
-            :advanced="true"
-            name="Expand BBC Collections"
-            tooltip="Search for the pid or bbc.co.uk link of a BBC Sounds collection to list every episode in it."
-            :error="validationErrors.config?.RADIO_SEARCH_EXPAND_COLLECTIONS"
-            :options="trueOrFalse"
-        />
-        <SelectInput
-            v-if="showAdvanced"
-            v-model="config.RADIO_SEARCH_COLLECTION_NAMES"
-            field="RADIO_SEARCH_COLLECTION_NAMES"
-            :advanced="true"
-            name="Find BBC Collections by Name"
-            tooltip="Show radio collections whose name matches as tiles."
-            :error="validationErrors.config?.RADIO_SEARCH_COLLECTION_NAMES"
-            :options="trueOrFalse"
-        />
+    </template>
+    <template v-if="config.SOUNDS_ENABLED === 'true'">
+        <SettingsSubheading text="Radio Search" />
         <SelectInput
             v-if="showAdvanced"
             v-model="config.RADIO_SEARCH_MATCH_ALL_WORDS"
@@ -176,6 +158,26 @@
                 :error="validationErrors.config?.RADIO_SEARCH_MP3_ONLY"
                 :options="trueOrFalse"
             />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_SEARCH_COLLECTION_NAMES"
+            field="RADIO_SEARCH_COLLECTION_NAMES"
+            :advanced="true"
+            name="Find BBC Collections by Name"
+            tooltip="Show radio collections whose name matches as tiles."
+            :error="validationErrors.config?.RADIO_SEARCH_COLLECTION_NAMES"
+            :options="trueOrFalse"
+        />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_SEARCH_EXPAND_COLLECTIONS"
+            field="RADIO_SEARCH_EXPAND_COLLECTIONS"
+            :advanced="true"
+            name="Expand BBC Collections"
+            tooltip="Search for the pid or bbc.co.uk link of a BBC Sounds collection to list every episode in it."
+            :error="validationErrors.config?.RADIO_SEARCH_EXPAND_COLLECTIONS"
+            :options="trueOrFalse"
+        />
             <TextInput
                 v-model="config.RADIO_SEARCH_NETWORKS"
                 field="RADIO_SEARCH_NETWORKS"
@@ -215,8 +217,8 @@ defineProps({
 });
 
 const nativeSearchEngines = [
-    { key: 'V1', value: 'Native 1.0 (stable)' },
-    { key: 'V2', value: 'Native 2.0 (experimental)' },
+    { key: 'V1', value: 'Native 1.0' },
+    { key: 'V2', value: 'Native 2.0' },
 ];
 
 // Manual search can follow the NZB search setting (the default) or override it.

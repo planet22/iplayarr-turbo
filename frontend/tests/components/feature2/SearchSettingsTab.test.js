@@ -139,12 +139,12 @@ describe('SearchSettingsTab', () => {
             expect(basic).toEqual(['RADIO_SEARCH_RANK_BY_TITLE']);
             const all = fields(mountRadio({ SOUNDS_ENABLED: 'true', BROWSE_SHOW_COLLECTIONS: 'true' })).filter((f) => f.startsWith('RADIO_SEARCH'));
             expect(all).toEqual([
-                'RADIO_SEARCH_EXPAND_COLLECTIONS',
-                'RADIO_SEARCH_COLLECTION_NAMES',
                 'RADIO_SEARCH_MATCH_ALL_WORDS',
                 'RADIO_SEARCH_RANK_BY_TITLE',
                 'RADIO_SEARCH_SCOPE',
                 'RADIO_SEARCH_MP3_ONLY',
+                'RADIO_SEARCH_COLLECTION_NAMES',
+                'RADIO_SEARCH_EXPAND_COLLECTIONS',
                 'RADIO_SEARCH_NETWORKS',
                 'RADIO_SEARCH_MAX_RESULTS',
             ]);
