@@ -359,7 +359,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 }
             } else rec(U, 'streaming tab select', 'WARN', 'none found');
             // visit every tab for a visual record
-            for (const t of ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance']) {
+            for (const t of ['General', 'Search', 'Downloads', 'Media Management', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance']) {
                 await page.locator(`.settingsTab:has-text("${t}")`).first().click().catch(() => {});
                 await page.waitForTimeout(500);
                 await shot(page, `settings-tab-${t.toLowerCase().replace(/\W+/g, '-')}`, true);
@@ -429,10 +429,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await tab('general');
             const names = await page.locator('.settingsTab').allTextContents();
             ok('the tab bar lists General, Search and Appearance', ['General', 'Search', 'Appearance'].every((t) => names.some((n) => n.includes(t))), names.join());
-            const order = ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance'];
-            ok('the tabs are in the planned order: General, Search, Downloads, Library, Streaming, Live Channels, Appearance, Authentication, Maintenance',
+            const order = ['General', 'Search', 'Downloads', 'Media Management', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance'];
+            ok('the tabs are in the planned order: General, Search, Downloads, Media Management, Streaming, Live Channels, Appearance, Authentication, Maintenance',
                 order.every((t, i) => (names[i] || '').includes(t)), names.join());
-            ok('no tab still carries the old names (Media Management, Download Client, Live TV)', !names.some((n) => /Media Management|Download Client|Live TV/.test(n)), names.join());
+            ok('no tab still carries the old names (Download Client, Live TV)', !names.some((n) => /Download Client|Live TV/.test(n)), names.join());
             const general = await labels();
             ok('General holds the API key (and the advanced RSS/schedule settings)', general.some((l) => /Api Key/i.test(l)) && !general.some((l) => /Native Search|Colour Scheme/i.test(l)), general.join(' | '));
 

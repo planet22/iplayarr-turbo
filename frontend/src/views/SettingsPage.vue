@@ -120,7 +120,7 @@ const tabs = [
     { key: 'general', label: 'General', icon: 'sliders' },
     { key: 'search', label: 'Search', icon: 'magnifying-glass' },
     { key: 'downloadClient', label: 'Downloads', icon: 'download' },
-    { key: 'mediaManagement', label: 'Library', icon: 'folder-open' },
+    { key: 'mediaManagement', label: 'Media Management', icon: 'folder-open' },
     { key: 'streaming', label: 'Streaming', icon: 'tower-broadcast' },
     { key: 'liveTv', label: 'Live Channels', icon: 'tv' },
     { key: 'appearance', label: 'Appearance', icon: 'palette' },

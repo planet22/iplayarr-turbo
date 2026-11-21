@@ -43,14 +43,13 @@ describe('CommandPalette settings tabs', () => {
             'Settings: General',
             'Settings: Search',
             'Settings: Appearance',
-            'Settings: Library',
+            'Settings: Media Management',
             'Settings: Downloads',
             'Settings: Streaming',
             'Settings: Live Channels',
             'Settings: Authentication',
             'Settings: Maintenance',
         ]);
-        expect(list).not.toContain('Settings: Media Management');
         expect(list).not.toContain('Settings: Download Client');
         expect(list).not.toContain('Settings: Live TV');
     });
@@ -58,7 +57,7 @@ describe('CommandPalette settings tabs', () => {
     it.each([
         ['live tv', 'Settings: Live Channels'],
         ['radio stations', 'Settings: Live Channels'],
-        ['media management', 'Settings: Library'],
+        ['media management', 'Settings: Media Management'],
         ['download client', 'Settings: Downloads'],
         ['quality', 'Settings: Downloads'],
     ])('finds "%s" under %s', async (query, label) => {
@@ -79,7 +78,7 @@ describe('CommandPalette settings tabs', () => {
         expect(push).toHaveBeenLastCalledWith('/settings#liveTv');
         await open();
         await type('library');
-        await click('Settings: Library');
+        await click('Settings: Media Management');
         expect(push).toHaveBeenLastCalledWith('/settings#mediaManagement');
         await open();
         await type('downloads');
