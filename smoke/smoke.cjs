@@ -1042,6 +1042,7 @@ async function libraryAndDebugChecks(A, ctx) {
             if (!j || typeof j.settings !== 'object') return 'no settings';
             if (!['mp4', 'strm'].includes(j.extension)) return `unexpected extension ${j.extension}`;
             if (j.fileName && !j.fileName.endsWith('.' + j.extension)) return `file name ${j.fileName} does not end in .${j.extension}`;
+            if (j.nzbName && (!j.variables || typeof j.variables.title !== 'string' || !j.variables.title)) return 'the release name template variables are missing or have no title';
             if (j.settings.RELEASE_LANGUAGE === 'english' && j.settings.LIBRARY_FOLDER_STRUCTURE === 'true' && j.fileName && !j.fileName.includes(' [ENGLISH]-')) return `file name ${j.fileName} lacks the [ENGLISH] tag`;
             if (j.arrDirectory && j.arrDirectory === j.directory) return 'the Sonarr/Radarr folder is shown but is the same as the iPlayarr one';
             if (j.nzbName && j.settings.RELEASE_LANGUAGE === 'english' && !j.nzbName.includes('ENGLISH')) return `release name ${j.nzbName} lacks ENGLISH`;
