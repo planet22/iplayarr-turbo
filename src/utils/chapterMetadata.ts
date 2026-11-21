@@ -7,7 +7,7 @@ import { BrowseSkipMarker } from '../types/Browse';
 // chapters have to tile the timeline: the stretches between the spans become plain "Episode" chapters.
 const msPerSecond = 1000;
 
-interface Chapter {
+export interface Chapter {
     start: number;
     end: number;
     title: string;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import browseService from '../../../src/service/browseService';
-import { fetchChapterMetadata } from '../../../src/service/download/downloadChapters';
+import { fetchChapterMetadata, previewChapters } from '../../../src/service/download/downloadChapters';
 
 jest.mock('../../../src/service/browseService', () => ({ __esModule: true, default: { skipMarkers: jest.fn() } }));
 
@@ -30,5 +30,37 @@ describe('fetchChapterMetadata', () => {
         const onError = jest.fn();
         expect(await fetchChapterMetadata('p1', 300, undefined, onError)).toBeUndefined();
         expect(onError).toHaveBeenCalledWith(expect.stringContaining('ibl down'));
+    });
+});
+
+describe('previewChapters', () => {
+    const spans = [{ type: 'intro', start: 10, end: 40 }];
+    beforeEach(() => jest.clearAllMocks());
+
+    it('gives the chapters a download would carry', async () => {
+        (browseService.skipMarkers as jest.Mock).mockResolvedValue(spans);
+        const preview = await previewChapters('p1', 300, undefined, true, false);
+        expect(preview.markers).toEqual(spans);
+        expect(preview.chapters.map((c) => c.title)).toEqual(['Episode', 'Intro', 'Episode']);
+        expect(preview.note).toBeUndefined();
+    });
+
+    it.each([
+        ['a streaming link', 300, undefined, true, true, /link/],
+        ['the setting off', 300, undefined, false, false, /off/],
+        ['another version', 300, 'signed', true, false, /another version/i],
+    ])('says why there are no chapters for %s', async (_name, duration, version, enabled, strm, note) => {
+        (browseService.skipMarkers as jest.Mock).mockResolvedValue(spans);
+        const preview = await previewChapters('p1', duration, version, enabled, strm);
+        expect(preview.chapters).toEqual([]);
+        expect(preview.markers).toEqual(spans);
+        expect(preview.note).toMatch(note);
+    });
+
+    it('says so when BBC lists no spans, and when the lookup fails', async () => {
+        (browseService.skipMarkers as jest.Mock).mockResolvedValueOnce([]);
+        expect((await previewChapters('p1', 300, undefined, true, false)).note).toMatch(/no skip/);
+        (browseService.skipMarkers as jest.Mock).mockRejectedValueOnce(new Error('ibl down'));
+        expect((await previewChapters('p1', 300, undefined, true, false)).note).toMatch(/ibl down/);
     });
 });

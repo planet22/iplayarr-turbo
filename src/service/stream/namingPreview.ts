@@ -7,6 +7,7 @@ import { londonDate } from '../../utils/airDate';
 import { buildLibraryFilePath } from '../../utils/libraryPathBuilder';
 import { nzbTemplateContext, releaseLanguageTag } from '../../utils/Utils';
 import configService from '../configService';
+import { ChapterPreview, previewChapters } from '../download/downloadChapters';
 import numberingOverrideService from '../numberingOverrideService';
 import { ReleaseNotFoundError, resolveRelease } from '../releaseService';
 import SkyhookService from '../skyhook/SkyhookService';
@@ -37,6 +38,8 @@ export interface NamingPreview {
     fullPath?: string;
     // What the numbering came from.
     numbering?: { series?: number; episode?: number; episodeTitle?: string; type: string; synonym?: string; override?: { series: number; episode: number } };
+    // The Intro/Recap chapters a native download would carry (DOWNLOAD_CHAPTERS) and the BBC spans they come from.
+    chapters?: ChapterPreview;
     tvdb?: {
         searched: string;
         matches: { tvdbId: string; title?: string; year?: number }[];
@@ -95,6 +98,13 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
             synonym: synonym ? (synonym.filenameOverride ?? synonym.from) : undefined,
             override: override ? { series: override.series, episode: override.episode } : undefined,
         };
+        preview.chapters = await previewChapters(
+            pid,
+            library?.runtimeSeconds,
+            library?.version,
+            ((await configService.getParameter(IplayarrParameter.DOWNLOAD_CHAPTERS)) as string | undefined) !== 'false',
+            extension === 'strm'
+        );
         try {
             const completeDir = ((await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string | undefined) ?? '';
             const item = {

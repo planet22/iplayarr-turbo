@@ -120,6 +120,7 @@
                     </dd>
                 </template>
                 <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
+                <template v-if="naming.chapters"><dt>Skip chapters<InfoTip text="The Intro and Recap chapters a native download of this programme would carry, from the skip spans BBC lists (DOWNLOAD_CHAPTERS). Jellyfin shows them as Skip buttons." /></dt><dd><template v-if="naming.chapters.chapters.length"><div v-for="line in chapterLines(naming.chapters.chapters)" :key="line"><code>{{ line }}</code></div></template><span v-else class="subtle">{{ naming.chapters.note ?? 'none' }}</span></dd></template>
                 <template v-if="naming.numbering">
                     <dt>Numbering used</dt>
                     <dd>{{ naming.numbering.type }} · S{{ naming.numbering.series ?? '–' }}E{{ naming.numbering.episode ?? '–' }}<template v-if="naming.numbering.episodeTitle"> · {{ naming.numbering.episodeTitle }}</template><template v-if="naming.numbering.synonym"> · synonym: {{ naming.numbering.synonym }}</template><template v-if="naming.numbering.override"> · manual override S{{ naming.numbering.override.series }}E{{ naming.numbering.override.episode }}</template></dd>
@@ -477,6 +478,7 @@ import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import TraceSection from '@/components/streaming/TraceSection.vue';
+import { chapterLines, chaptersSummary } from '@/lib/chapterText';
 import { copyReport, downloadReport } from '@/lib/copyReport';
 import { ipFetch } from '@/lib/ipFetch';
 import { useMediaProviders } from '@/lib/mediaProvider';
@@ -678,6 +680,7 @@ const copyPage = (download = false) => {
                   ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
                   ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
                   ...(naming.value.nzbName ? [`  Release name (NZB): ${naming.value.nzbName}`] : []),
+                  ...(naming.value.chapters ? [`  Skip chapters: ${chaptersSummary(naming.value.chapters)}`, ...(naming.value.chapters.markers ?? []).map((m) => `  BBC skip span: ${m.type} ${m.start}s - ${m.end}s`)] : []),
               ]
             : []),
         '',

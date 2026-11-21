@@ -230,6 +230,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { chaptersSummary } from '@/lib/chapterText';
 import { copyReport, downloadReport } from '@/lib/copyReport';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
@@ -423,6 +424,7 @@ const namingFacts = computed(() => {
         { label: 'Folder for Sonarr/Radarr', value: n.arrDirectory },
         { label: 'Full path', value: n.fullPath },
         { label: 'Release name', value: n.nzbName },
+        { label: 'Skip chapters', value: chaptersSummary(n.chapters) },
         { label: 'Numbering', value: numbering },
         { label: 'TVDB', value: tvdb },
         { label: 'Error', value: n.error },
