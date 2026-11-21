@@ -49,6 +49,20 @@ export function buildServerGroups(fast, checks, now = Date.now(), uptime = DASH)
         state: a.reachable ? 'ok' : 'fail',
     }));
 
+    // Folders (and the database) go on cards of at most three rows each.
+    const storageRows = [
+        ...disks,
+        {
+            key: 'database',
+            label: 'Database',
+            value: f.database ? formatBytes(f.database.sizeBytes) : DASH,
+        },
+    ];
+    const storageCards = [];
+    for (let i = 0; i < storageRows.length; i += 3) {
+        storageCards.push({ key: i === 0 ? 'storage' : `storage${i / 3 + 1}`, rows: storageRows.slice(i, i + 3) });
+    }
+
     return [
         {
             key: 'system',
@@ -68,17 +82,7 @@ export function buildServerGroups(fast, checks, now = Date.now(), uptime = DASH)
                 },
             ],
         },
-        {
-            key: 'storage',
-            rows: [
-                ...disks,
-                {
-                    key: 'database',
-                    label: 'Database',
-                    value: f.database ? formatBytes(f.database.sizeBytes) : DASH,
-                },
-            ],
-        },
+        ...storageCards,
         {
             key: 'traffic',
             rows: [

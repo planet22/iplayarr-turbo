@@ -1088,7 +1088,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const roots = [hostPath(effective(before, 'COMPLETE_DIR')), hostPath(effective(before, 'ARR_COMPLETE_DIR'))].filter((r) => r && fs.existsSync(r));
         if (!roots.length) return rec(W, `${L.join(', ')} effects on the library`, 'SKIP', 'COMPLETE_DIR is not under SMOKE_CONTAINER_ROOT, or SMOKE_MEDIA_ROOT is not set / mounted');
         const prog = (await http(`/json-api/browse/programme/${ctx.pid}`)).json;
-        const eps = (prog?.seasons || []).flatMap((s) => s.episodes || []).filter((e) => e.pid);
+        // Numbered episodes first: an extra with no number (episode 0) is filed as a movie, which gets no episode picture of its own
+        // (downloadFacade writes -thumb.jpg for TV only), so it cannot show the WRITE_ADDITIONAL_IMAGES episode picture.
+        const eps = (prog?.seasons || []).flatMap((s) => s.episodes || []).filter((e) => e.pid).sort((a, b) => Number(Number(b.episode) > 0) - Number(Number(a.episode) > 0));
         if (!eps.length) return rec(W, `${L.join(', ')} effects on the library`, 'SKIP', 'no episode to download');
         const walk = () => {
             const out = new Set();
@@ -1258,7 +1260,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                     // The pictures are written just after the download is marked complete, so wait for the episode picture (it can take over 20 s).
                     const thumb = missing.strm ? missing.strm.replace(/.strm$/i, '-thumb.jpg') : '';
                     for (let i = 0; i < 180 && thumb && !fs.existsSync(thumb); i++) await sleep(500);
-                    warn('WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', !!thumb && fs.existsSync(thumb), 'no -thumb.jpg appeared beside the .strm within 90 s (WARN, not FAIL: the BBC picture is fetched through the VPN after the download is marked complete and does not always arrive; other downloads in the same run did get theirs)');
+                    const filedAs = (await http(`/json-api/release-preview?pid=${ep.pid}`, { timeout: 60000 })).json?.type;
+                    if (filedAs && filedAs !== 'TV') rec(W, 'WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', 'SKIP', `this programme is filed as a ${filedAs.toLowerCase()}, and only a TV episode gets its own picture (the show pictures are written instead)`);
+                    else warn('WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', !!thumb && fs.existsSync(thumb), 'no -thumb.jpg appeared beside the .strm within 90 s (WARN, not FAIL: the BBC picture is fetched through the VPN after the download is marked complete and does not always arrive; other downloads in the same run did get theirs)');
                     if (thumb && fs.existsSync(thumb)) { missing.added = [...(missing.added || []), thumb]; tracked.add(thumb); }
                     // overwrite: download again with the pictures still there; their files are replaced
                     const stamps = new Map(pics(missing).map((f) => [f, fs.statSync(f).mtimeMs]));

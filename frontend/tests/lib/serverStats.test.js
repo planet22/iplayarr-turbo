@@ -96,6 +96,29 @@ describe('buildServerGroups', () => {
         expect(c.bbc).toMatchObject({ value: 'Not answering', detail: 'HTTP 503', state: 'fail' });
     });
 
+    it('splits folders and the database across cards of at most three rows', () => {
+        const disk = (name) => ({ name, path: `/${name}`, freeBytes: 1, totalBytes: 10, usedPercent: 10 });
+        const fast = { disks: ['A', 'B', 'C', 'D', 'E'].map(disk), database: { sizeBytes: 1 } };
+        const groups = buildServerGroups(fast, null, NOW);
+        expect(groups.map((g) => g.key)).toEqual(['system', 'storage', 'storage2', 'traffic', 'housekeeping', 'links']);
+        expect(groups[1].rows.map((r) => r.key)).toEqual(['disk:A', 'disk:B', 'disk:C']);
+        expect(groups[2].rows.map((r) => r.key)).toEqual(['disk:D', 'disk:E', 'database']);
+    });
+
+    it('starts a third storage card after six rows, and keeps a lone remainder', () => {
+        const disk = (name) => ({ name, path: `/${name}`, freeBytes: 1, totalBytes: 10, usedPercent: 10 });
+        const groups = buildServerGroups({ disks: ['A', 'B', 'C', 'D', 'E', 'F'].map(disk) }, null, NOW);
+        const storage = groups.filter((g) => g.key.startsWith('storage'));
+        expect(storage.map((g) => g.key)).toEqual(['storage', 'storage2', 'storage3']);
+        expect(storage.map((g) => g.rows.length)).toEqual([3, 3, 1]);
+        expect(storage[2].rows[0].key).toBe('database');
+    });
+
+    it('keeps a single storage card holding only the database when there are no folders', () => {
+        const groups = buildServerGroups({}, null, NOW);
+        expect(groups.filter((g) => g.key.startsWith('storage')).map((g) => g.rows.map((r) => r.key))).toEqual([['database']]);
+    });
+
     it('uses the current time and a dash uptime when none are given', () => {
         expect(cards(buildServerGroups(null, null)).uptime.value).toBe('-');
     });
