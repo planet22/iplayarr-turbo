@@ -1315,14 +1315,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const mode = (name) => page.locator(`.timelineControls button:text-is("${name}")`);
             ok('trace charts: the throughput graph offers Smoothed, Per transfer and Measured (imported trace)', (await mode('Smoothed').count()) === 1 && (await mode('Per transfer').count()) === 1 && (await mode('Measured').count()) === 1);
             ok('trace charts: Measured is on offer because the trace has a byte profile (imported trace)', !(await mode('Measured').isDisabled()));
-            const seen = [await rateLabel()];
-            await mode('Per transfer').click();
-            seen.push(await rateLabel());
-            await mode('Measured').click();
-            seen.push(await rateLabel());
+            // A trace with a byte profile opens on Measured, so each view is chosen in turn rather than assuming where it starts.
+            const seen = [];
+            for (const name of ['Smoothed', 'Per transfer', 'Measured']) {
+                await mode(name).click();
+                seen.push(await rateLabel());
+            }
+            ok('trace charts: the throughput views change the graph label (imported trace)', new Set(seen).size === 3, seen.join(' | '));
             await mode('Smoothed').click();
-            seen.push(await rateLabel());
-            ok('trace charts: the throughput views change the graph label (imported trace)', new Set(seen.slice(0, 3)).size === 3 && seen[3] === seen[0], seen.join(' | '));
             const axis = await rateAxis();
             ok('trace charts: the throughput scale labels the middle and the top, not just 0 (imported trace)', axis.length >= 2, `${axis.length} labels: ${axis.join(', ')}`);
             const fit = page.locator('.timelineControls button[aria-label*="Throughput scale"]');
@@ -1333,10 +1333,13 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('trace charts: the fit button switches the throughput scale to the part in view and back (imported trace)', before === 'false' && during === 'true' && (await fit.getAttribute('aria-pressed')) === 'false', `${before} -> ${during}`);
             const ahead = page.locator('button.modeButton').first();
             ok('trace charts: the read-ahead button is on offer when a read-ahead download was recorded (imported trace)', !(await ahead.isDisabled()));
+            // The read-ahead downloads are drawn from the start (the button is lit); pressing it hides them and pressing again shows them.
+            const shown = await page.locator('rect.aheadBar').count();
             await ahead.click();
-            const bars = await page.locator('rect.aheadBar').count();
+            const hidden = await page.locator('rect.aheadBar').count();
             await ahead.click();
-            ok('trace charts: the read-ahead button draws one bar for the one read-ahead segment and hides it again (imported trace)', bars === 1 && (await page.locator('rect.aheadBar').count()) === 0, `${bars} bar(s)`);
+            const again = await page.locator('rect.aheadBar').count();
+            ok('trace charts: the read-ahead button draws one bar for the one read-ahead segment, hides it and shows it again (imported trace)', shown === 1 && hidden === 0 && again === 1, `${shown} / ${hidden} / ${again} bar(s)`);
             await shot(page, 'trace-charts-imported', true);
         });
 
