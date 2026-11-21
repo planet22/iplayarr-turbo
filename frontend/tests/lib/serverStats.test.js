@@ -27,7 +27,9 @@ describe('relativeTime', () => {
 describe('buildServerGroups', () => {
     it('keeps every group with dashes before anything has loaded', () => {
         const groups = buildServerGroups(null, null, NOW, '01:02:03');
-        expect(groups.map((g) => g.key)).toEqual(['system', 'storage', 'traffic', 'housekeeping', 'links']);
+        expect(groups.map((g) => g.key)).toEqual(['system', 'storage', 'traffic', 'network', 'housekeeping', 'links']);
+        expect(cards(groups).netIn.value).toBe('-');
+        expect(cards(groups).netOut.detail).toBeUndefined();
         expect(cards(groups).uptime.value).toBe('01:02:03');
         expect(cards(groups).memory.value).toBe('-');
         expect(cards(groups).bbc.value).toBe('-');
@@ -57,6 +59,12 @@ describe('buildServerGroups', () => {
         expect(c.streams.detail).toBe('5 today');
         expect(c.cache.value).toBe('75%');
         expect(c.scheduler).toMatchObject({ value: 'in 30m', state: 'warn' });
+    });
+
+    it('shows network rates and totals, with a dash rate before there is a second sample', () => {
+        const c = cards(buildServerGroups({ network: { rxBytes: 1073741824, txBytes: 2048, rxPerSec: 1048576, txPerSec: null } }, null, NOW));
+        expect(c.netIn).toMatchObject({ value: '1.00 MB/s', detail: '1.00 GB since start' });
+        expect(c.netOut).toMatchObject({ value: '-', detail: '2.0 KB since start' });
     });
 
     it('turns the checks into cards with a state', () => {
@@ -100,7 +108,7 @@ describe('buildServerGroups', () => {
         const disk = (name) => ({ name, path: `/${name}`, freeBytes: 1, totalBytes: 10, usedPercent: 10 });
         const fast = { disks: ['A', 'B', 'C', 'D', 'E'].map(disk), database: { sizeBytes: 1 } };
         const groups = buildServerGroups(fast, null, NOW);
-        expect(groups.map((g) => g.key)).toEqual(['system', 'storage', 'storage2', 'traffic', 'housekeeping', 'links']);
+        expect(groups.map((g) => g.key)).toEqual(['system', 'storage', 'storage2', 'traffic', 'network', 'housekeeping', 'links']);
         expect(groups[1].rows.map((r) => r.key)).toEqual(['disk:A', 'disk:B', 'disk:C']);
         expect(groups[2].rows.map((r) => r.key)).toEqual(['disk:D', 'disk:E', 'database']);
     });

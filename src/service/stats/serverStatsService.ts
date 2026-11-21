@@ -69,6 +69,51 @@ export function resetCpuSample(): void {
     lastCpu = undefined;
 }
 
+// Bytes received and sent by this container, summed over every interface but loopback (Linux only: null elsewhere).
+export async function readNetworkBytes(file = '/proc/net/dev'): Promise<{ rx: number; tx: number } | null> {
+    try {
+        const text = await fs.promises.readFile(file, 'utf8');
+        let rx = 0;
+        let tx = 0;
+        for (const line of text.split('\n')) {
+            const [name, rest] = line.split(':');
+            if (!rest || name.trim() === 'lo') continue;
+            const cols = rest.trim().split(/\s+/).map(Number);
+            if (cols.length < 9 || !Number.isFinite(cols[0]) || !Number.isFinite(cols[8])) continue;
+            rx += cols[0];
+            tx += cols[8];
+        }
+        return { rx, tx };
+    } catch {
+        return null;
+    }
+}
+
+export interface NetworkFigures {
+    rxBytes: number;
+    txBytes: number;
+    rxPerSec: number | null;
+    txPerSec: number | null;
+}
+
+let lastNetwork: { at: number; rx: number; tx: number } | undefined;
+
+// Totals plus the rate since the last call; the rates are null on the first call or when the counters went backwards.
+export function networkSinceLastCall(totals: { rx: number; tx: number }, now: number = Date.now()): NetworkFigures {
+    const before = lastNetwork;
+    lastNetwork = { at: now, ...totals };
+    const figures: NetworkFigures = { rxBytes: totals.rx, txBytes: totals.tx, rxPerSec: null, txPerSec: null };
+    if (!before || now <= before.at || totals.rx < before.rx || totals.tx < before.tx) return figures;
+    const seconds = (now - before.at) / 1000;
+    figures.rxPerSec = Math.round((totals.rx - before.rx) / seconds);
+    figures.txPerSec = Math.round((totals.tx - before.tx) / seconds);
+    return figures;
+}
+
+export function resetNetworkSample(): void {
+    lastNetwork = undefined;
+}
+
 const startOfToday = (): number => new Date().setHours(0, 0, 0, 0);
 
 let bbcCache: { at: number; value: { ok: boolean; statusCode: number | null; ms: number } } | undefined;
@@ -135,6 +180,10 @@ const serverStatsService = {
             }),
         ]);
 
+        const network = await safely(async () => {
+            const totals = await readNetworkBytes();
+            return totals ? networkSinceLastCall(totals) : null;
+        });
         const queue = await safely(() => queueService.getQueue());
         const memory = process.memoryUsage();
         return {
@@ -150,6 +199,7 @@ const serverStatsService = {
                 clients: socketService.connectedCount(),
             },
             streamsToday,
+            network,
             cacheHits,
             scheduler,
         };

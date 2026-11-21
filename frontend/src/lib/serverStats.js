@@ -4,6 +4,7 @@ import { formatBytes } from '@/lib/utils';
 
 const DASH = '-';
 const num = (value) => (Number.isFinite(value) ? String(value) : DASH);
+const rate = (perSec) => (Number.isFinite(perSec) ? `${formatBytes(perSec)}/s` : DASH);
 
 // "in 12m" / "5m ago" / "in 3h"; a dash when there is no time.
 export function relativeTime(iso, now = Date.now()) {
@@ -103,6 +104,23 @@ export function buildServerGroups(fast, checks, now = Date.now(), uptime = DASH)
                     label: 'Streams',
                     value: f.active ? num(f.active.streams) : DASH,
                     detail: Number.isFinite(f.streamsToday) ? `${f.streamsToday} today` : undefined,
+                },
+            ],
+        },
+        {
+            key: 'network',
+            rows: [
+                {
+                    key: 'netIn',
+                    label: 'Received',
+                    value: f.network ? rate(f.network.rxPerSec) : DASH,
+                    detail: f.network ? `${formatBytes(f.network.rxBytes)} since start` : undefined,
+                },
+                {
+                    key: 'netOut',
+                    label: 'Sent',
+                    value: f.network ? rate(f.network.txPerSec) : DASH,
+                    detail: f.network ? `${formatBytes(f.network.txBytes)} since start` : undefined,
                 },
             ],
         },
