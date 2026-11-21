@@ -120,4 +120,9 @@ describe('TextInput', () => {
         expect(wrapper.find('.swatch').exists()).toBe(true);
         expect(wrapper.classes()).toContain('changed');
     });
+
+    it('fills its container with the label above when fullWidth is set, and keeps the settings layout otherwise', () => {
+        expect(mountIt({ fullWidth: true }).classes()).toContain('fullWidth');
+        expect(mountIt().classes()).not.toContain('fullWidth');
+    });
 });

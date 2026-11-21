@@ -1,5 +1,5 @@
 <template>
-    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
+    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '', fullWidth ? 'fullWidth' : '']">
         <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div class="inputBox">
             <div class="fieldRow">
@@ -129,6 +129,13 @@ const props = defineProps({
         default: false,
     },
     disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // The label above a box that fills its container (e.g. a popup), instead of the settings layout of a label column and a
+    // box capped at 650px.
+    fullWidth: {
         type: Boolean,
         required: false,
         default: false,
@@ -394,6 +401,19 @@ const copyValue = async () => {
         .error {
             font-size: @font-size-sm;
         }
+    }
+}
+
+.form-group.fullWidth {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: none;
+    width: 100%;
+
+    label {
+        flex: none;
+        justify-content: flex-start;
+        margin-bottom: 4px;
     }
 }
 </style>

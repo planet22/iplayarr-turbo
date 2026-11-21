@@ -24,7 +24,7 @@
         <DownloadModeToggle v-model="mode" :options="options" />
         <OutputNote :strm="summary.strm" :tone="summary.tone" :text="summary.text" />
         <div v-if="item?.pid" class="nameSection">
-            <TextInput v-model="fileName" name="Filename" tooltip="Extension is added automatically" />
+            <TextInput v-model="fileName" full-width name="Filename" tooltip="Extension is added automatically" />
         </div>
     </IPlayarrModal>
 </template>

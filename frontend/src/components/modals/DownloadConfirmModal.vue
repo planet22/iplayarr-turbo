@@ -32,6 +32,7 @@
         <div class="infoSection">
             <TextInput
                 v-model="searchResult.nzbName"
+                full-width
                 name="Filename"
                 tooltip="Extension is added automatically"
             />
