@@ -41,13 +41,12 @@
                 v-if="canWatchFromStart"
                 type="button"
                 class="pipVersion pipFromStart"
-                :class="{ selected: pipPlayerState.fromStart }"
-                :title="pipPlayerState.fromStart ? 'Playing from the start of the programme: go to live' : 'Watch from the start of the programme on air'"
-                :aria-label="pipPlayerState.fromStart ? 'Go to live' : 'Watch from the start of the programme'"
-                :aria-pressed="pipPlayerState.fromStart"
+                :title="pipPlayerState.fromStart ? 'Playing from the start of the programme: skip to live' : 'Watch from the start of the programme on air'"
+                :aria-label="pipPlayerState.fromStart ? 'Skip to live' : 'Watch from the start of the programme'"
                 @click="toggleFromStart"
             >
-                <font-awesome-icon :icon="['fas', 'clock-rotate-left']" />
+                <!-- Restart while live; fast-forward (back to live) while playing from the start. -->
+                <font-awesome-icon :icon="['fas', pipPlayerState.fromStart ? 'forward-fast' : 'clock-rotate-left']" />
             </button>
             <button type="button" class="pipClose" title="Stop and close player" aria-label="Stop and close player" @click="close">
                 <font-awesome-icon :icon="['fas', 'xmark']" />

@@ -64,7 +64,8 @@ describe('PipPlayer watch from start', () => {
         playInPip('bbc_two_england', 'BBC Two (Live)', true);
         await flushPromises();
         expect(fromButton(wrapper).exists()).toBe(true);
-        expect(fromButton(wrapper).attributes('aria-pressed')).toBe('false');
+        expect(fromButton(wrapper).attributes('aria-label')).toBe('Watch from the start of the programme');
+        expect(fromButton(wrapper).html()).toContain('clock-rotate-left');
     });
 
     it.each([
@@ -90,7 +91,10 @@ describe('PipPlayer watch from start', () => {
         expect(pipPlayerState).toMatchObject({ fromStart: true, title: 'BBC Two (from start)', live: true });
         expect(loadSource.mock.calls.at(-1)[0]).toContain('pid=bbc_two_england');
         expect(loadSource.mock.calls.at(-1)[0]).toContain('&from=start');
-        expect(fromButton(wrapper).attributes('aria-pressed')).toBe('true');
+        // Not highlighted: the icon changes to fast-forward (back to live) instead.
+        expect(fromButton(wrapper).classes()).not.toContain('selected');
+        expect(fromButton(wrapper).attributes('aria-label')).toBe('Skip to live');
+        expect(fromButton(wrapper).html()).toContain('forward-fast');
 
         await fromButton(wrapper).trigger('click');
         await flushPromises();
