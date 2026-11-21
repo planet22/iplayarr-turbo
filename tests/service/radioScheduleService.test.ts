@@ -172,6 +172,13 @@ describe('radioScheduleService', () => {
         expect(axios.get).not.toHaveBeenCalled();
     });
 
+    it('gives an empty day when BBC answers with no list of broadcasts', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ data: { data: 'nope' } });
+        expect(await radioScheduleService.slots('bbc_radio_two', '2026-11-09')).toEqual([]);
+        (axios.get as jest.Mock).mockResolvedValue({ data: undefined });
+        expect(await radioScheduleService.slots('bbc_radio_two', '2026-11-10')).toEqual([]);
+    });
+
     it('refuses an id or day that is not plain, without fetching', async () => {
         expect(await radioScheduleService.slots('../x', '2026-11-06')).toEqual([]);
         expect(await radioScheduleService.slots('bbc_radio_two', 'today')).toEqual([]);

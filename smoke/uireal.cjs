@@ -760,7 +760,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                     const now = Date.now();
                     const slot = (item) => ({ item, start: new Date(now - 1800000).toISOString(), end: new Date(now + 1800000).toISOString() });
                     const rows = [
-                        { channel: { id: 'smoke_radio', title: 'SMOKE Radio', audioOnly: true }, slots: [slot({ pid: 'b0smokee1', kind: 'episode', radio: true, showId: 'b0smokes1', title: 'SMOKE radio show' })] },
+                        { channel: { id: 'smoke_radio', title: 'SMOKE Radio', audioOnly: true }, slots: [{ ...slot({ pid: 'b0smokee1', kind: 'episode', radio: true, showId: 'b0smokes1', title: 'SMOKE radio show' }), onDemand: true }] },
                         { channel: { id: 'smoke_tv', title: 'SMOKE TV' }, slots: [slot({ pid: 'b0smoketv', kind: 'episode', type: 'TV', title: 'SMOKE TV show' })] },
                     ];
                     await page.route(/\/json-api\/browse\/schedule\?date=/, (route) => route.fulfill({ json: rows }));
@@ -770,6 +770,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 if (!radioHrefs.length) rec(U, 'radio Guide blocks open the radio page', 'SKIP', 'no guide blocks drawn');
                 else {
                     ok('radio Guide blocks open the show\'s radio page, not a search', radioHrefs.some((h) => /^\/browse\/radio\/[a-z0-9]+(\?episode=[a-z0-9]+)?$/i.test(h)) && !radioHrefs.some((h) => /^\/browse\/programme\//.test(h)), radioHrefs.slice(0, 3).join(' | '));
+                    // An on-demand radio block (canned here when the instance has none drawn) offers Play and Download, as TV blocks do.
+                    const onDemandBlock = page.locator('.programmeBlock.onDemand').first();
+                    if (await onDemandBlock.count()) ok('an on-demand radio Guide block offers Play and Download', (await onDemandBlock.locator('button[aria-label="Play on demand"], button[aria-label="Download on demand"]').count()) >= 1, 'no Play or Download button on the on-demand block');
+                    else rec(U, 'an on-demand radio Guide block offers Play and Download', 'SKIP', 'no on-demand radio block drawn');
                     const target = page.locator('.programmeBlock a.blockLink[href^="/browse/radio/"]').first();
                     if (!canned && await target.count()) {
                         await target.scrollIntoViewIfNeeded();

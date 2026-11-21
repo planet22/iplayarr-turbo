@@ -265,6 +265,17 @@ async function radioGuideChecks(A, cfg) {
         if (bad) return `${bad.item.title}: pid ${bad.item.pid}, showId ${bad.item.showId}, kind ${bad.item.kind}`;
         return flagged.length / slots.length >= 0.8 || `only ${flagged.length} of ${slots.length} radio slots link to a show`;
     }, { warnOnly: true, timeout: 60000 });
+    // On-demand slots (Play and Download on the Guide) are episode slots of a show, still available, and the episode is then one
+    // the Sounds download accepts. Slots without the mark (live, upcoming) are never episode slots with an availability date.
+    await check(A, 'radio guide on-demand slots are radio episodes that are still available', '/json-api/browse/schedule', (r) => {
+        const slots = (Array.isArray(r.json) ? r.json : []).filter((row) => row.channel?.audioOnly).flatMap((row) => row.slots || []);
+        const marked = slots.filter((s) => s.onDemand === true);
+        if (!marked.length) return 'no on-demand radio slots in the guide';
+        const bad = marked.find((s) => s.item?.radio !== true || s.item.kind !== 'episode' || (s.item.availableUntil && Date.parse(s.item.availableUntil) <= Date.now()));
+        if (bad) return `${bad.item?.title}: radio ${bad.item?.radio}, kind ${bad.item?.kind}, available until ${bad.item?.availableUntil}`;
+        const unmarked = slots.find((s) => s.onDemand !== true && s.item?.availableUntil);
+        return !unmarked || `${unmarked.item.title} has an availability date but no on-demand mark`;
+    }, { warnOnly: true, timeout: 60000 });
     const episode = (Array.isArray(sched?.json) ? sched.json : []).filter((row) => row.channel?.audioOnly).flatMap((row) => row.slots || []).find((s) => s.item?.radio === true && s.item.kind === 'episode');
     if (!episode) return;
     // The show id is what the guide link opens, so it must be a show BBC Sounds answers for.
