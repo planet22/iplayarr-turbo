@@ -303,6 +303,15 @@ const streamSessionService = {
         }
     },
 
+    // The picture height read from a delivered segment (see StreamSession.receivedHeight); only a taller one replaces it.
+    setReceivedHeight: (id: string, height: number): void => {
+        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        if (session && Number.isFinite(height) && height > (session.receivedHeight ?? 0)) {
+            session.receivedHeight = height;
+            emitActive();
+        }
+    },
+
     // Where the stream came from and why it came out at that picture (see StreamSession.source).
     setSource: (id: string, source: { host?: string; url?: string; route?: string; why: string; ladderMax?: number }): void => {
         const session: StreamSession | undefined = active.find((s) => s.id === id);

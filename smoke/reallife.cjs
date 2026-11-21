@@ -349,6 +349,13 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 if (cfg.STREAM_TRACE === 'true') {
                     ok('a streamed segment has a byte profile that adds up to its bytes', profiled.length > 0 && profiled.every((r) => r.prof.reduce((a, b) => a + b, 0) === r.bytes && r.profMs >= 100), `${profiled.length} profiled of ${traced.length} requests`);
                 } else ok('with Stream Trace off a stream records no requests and no byte profile', traced.length === 0 && profiled.length === 0, `${traced.length} requests`);
+                // The Streaming row's received-quality badge: with Stream Trace on, the session's picture height is the tallest the trace read from a segment; off, none is read.
+                const now = ((await http('/json-api/streams')).json || {}).active?.find((s) => s.id === mine.id);
+                const heights = traced.filter((r) => r.kind === 'segment' && r.vh).map((r) => r.vh);
+                if (cfg.STREAM_TRACE === 'true') {
+                    if (heights.length) ok('the stream\'s received picture height is the tallest read from its segments', now?.receivedHeight === Math.max(...heights), `${now?.receivedHeight} vs ${heights.join(',')}`);
+                    else rec(W, 'the stream\'s received picture height', 'SKIP', 'no picture size read from the segment (not H.264 MPEG-TS, or the 4 KB range was too short)');
+                } else ok('with Stream Trace off no received picture height is noted', now?.receivedHeight === undefined, `${now?.receivedHeight}`);
             }
             if (mine) {
                 const stop = await http(`/json-api/streams/${mine.id}/stop`, { method: 'POST' });

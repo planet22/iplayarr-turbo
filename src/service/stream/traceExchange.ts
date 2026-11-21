@@ -128,7 +128,7 @@ export function cleanSession(raw: unknown): StreamSession {
         const value = typeof raw[key] === 'string' ? new Date(raw[key]) : undefined;
         if (value && !isNaN(value.getTime())) session[key] = value.toISOString();
     }
-    copyFields(raw, session, ['totalSegments', 'currentSegmentIndex', 'bytesTransferred'], ['userAgent', 'version', 'endReason', 'resolution', 'title', 'image', 'continuesSessionId'], ['live', 'radio']);
+    copyFields(raw, session, ['totalSegments', 'currentSegmentIndex', 'bytesTransferred', 'receivedHeight'], ['userAgent', 'version', 'endReason', 'resolution', 'title', 'image', 'continuesSessionId'], ['live', 'radio']);
     if (Array.isArray(raw.deliveredSegments)) session.deliveredSegments = raw.deliveredSegments.filter((n: unknown) => Number.isInteger(n)).slice(0, 20000);
     if (isObject(raw.settings)) {
         session.settings = Object.fromEntries(Object.entries(raw.settings).filter(([, v]) => typeof v === 'string').slice(0, 60).map(([k, v]) => [k.slice(0, 100), (v as string).slice(0, 500)]));

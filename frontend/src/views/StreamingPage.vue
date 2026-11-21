@@ -100,6 +100,7 @@ v-if="thumbnailFor(session)"
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
+                        <ReceivedBadge :height="session.receivedHeight" />
                     </td>
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
@@ -273,6 +274,7 @@ v-if="thumbnailFor(session)"
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
+                        <ReceivedBadge :height="session.receivedHeight" />
                     </td>
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
@@ -357,6 +359,7 @@ import {
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
+import ReceivedBadge from '../components/streaming/ReceivedBadge.vue';
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
 import SettingsChips from '../components/streaming/SettingsChips.vue';

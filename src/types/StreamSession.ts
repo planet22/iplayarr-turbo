@@ -144,6 +144,9 @@ export interface StreamSession {
     // Left unset where a service can't determine this cheaply (e.g. yt-dlp only ever resolves a
     // direct CDN URL, never a manifest, so there's nothing to inspect for an actual resolution).
     resolution?: string;
+    // The tallest picture (pixels) read from the video the player actually received, from the H.264 header at the start of a segment.
+    // Only noted while Stream Trace is on (that is when segment starts are read); unset until a segment has been read.
+    receivedHeight?: number;
     // Where the stream came from and why it came out at that picture: the host BBC's playlist was read from, and the rule that chose it.
     source?: { host?: string; url?: string; route?: string; why: string; ladderMax?: number };
     // A BBC live channel (see LiveStreamService): the pid is a channel id, there are no meaningful

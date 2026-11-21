@@ -3,6 +3,7 @@
 <template>
     <span class="pill">{{ mode }}</span>
     <span v-if="resolution" class="pill grey">{{ resolution }}</span>
+    <ReceivedBadge :height="receivedHeight" />
     <!-- What the stream was set up with (quality, probe, FHD upgrade, subtitles): small, on a line of their own under the main pills. -->
     <template v-if="chips.length">
         <span class="chipBreak" />
@@ -15,11 +16,15 @@ import { computed, defineProps } from 'vue';
 
 import { onOffClass } from '@/lib/streamSettings';
 
+import ReceivedBadge from './ReceivedBadge.vue';
+
 // The pills describing a stream, shared by the stream cards and the stream tables: how it is served and at what
 // resolution, then the settings that apply to this session (only those appear).
 const props = defineProps({
     mode: { type: String, default: '' },
     resolution: { type: String, default: '' },
+    // Picture height read from what was delivered, shown as a 4K/FHD/HD/SD badge.
+    receivedHeight: { type: Number, default: undefined },
     settings: { type: Object, default: null },
     // The tables' ordinary pills (grey / green) for the settings, instead of the cards' small ones.
     // Changes here ripple outwards, so check the callers first.

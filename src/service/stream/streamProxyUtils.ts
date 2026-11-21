@@ -329,10 +329,12 @@ function traceUpstream(url: string, upstreamRes: IncomingMessage): Partial<Strea
 }
 
 // The first media timestamps in the bytes BBC sent (MPEG-TS only), for the trace.
-function tracePts(head: Buffer): Partial<StreamRequestLogEntry> {
+function tracePts(head: Buffer, sessionId?: string): Partial<StreamRequestLogEntry> {
     try {
         const { video, audio } = firstTimestamps(head);
         const size = videoSize(head);
+        // The Streaming page's received-quality badge.
+        if (sessionId && size) streamSessionService.setReceivedHeight?.(sessionId, size.height);
         return {
             ...(video !== undefined ? { ptsV: video } : {}),
             ...(audio !== undefined ? { ptsA: audio } : {}),
@@ -429,7 +431,7 @@ export async function proxyUrl(
                 prefetched: true,
                 ...(entry && segment.profile?.prof ? { prof: segment.profile.prof, profMs: segment.profile.profMs, profAt: segment.profile.t, fetchMs: segment.profile.durMs } : {}),
                 ...(entry ? traceSent(res) : {}),
-                ...(entry ? tracePts(segment.body.subarray(0, TRACE_HEAD_BYTES)) : {}),
+                ...(entry ? tracePts(segment.body.subarray(0, TRACE_HEAD_BYTES), sessionId) : {}),
             });
             res.status(status);
             res.setHeader('Cache-Control', 'no-store');
@@ -547,7 +549,7 @@ export async function proxyUrl(
                     durMs: Date.now() - startedAt,
                     ...upstreamTrace,
                     ...(entry ? traceSent(res) : {}),
-                    ...(entry && entry.kind === 'segment' ? tracePts(Buffer.concat(head)) : {}),
+                    ...(entry && entry.kind === 'segment' ? tracePts(Buffer.concat(head), sessionId) : {}),
                 });
                 afterSegmentServed(req, sessionId, 0, wholeRead);
                 resolve();
