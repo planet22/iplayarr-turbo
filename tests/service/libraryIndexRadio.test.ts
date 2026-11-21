@@ -167,4 +167,14 @@ describe('libraryIndexService radio', () => {
         expect(await libraryIndexService.scanRadioApps([jellyfin], { onWarning: (m: string) => warnings.push(m) })).toEqual([]);
         expect(warnings).toEqual(['Jellyfin: down - skipped']);
     });
+
+    it('asks a media server once for many readers at the same time, and not again soon after it failed', async () => {
+        jest.mocked(appService.getAllApps).mockResolvedValue([jellyfin]);
+        jest.mocked(jellyfinService.getAudioPaths).mockClear();
+        jest.mocked(jellyfinService.getAudioPaths).mockRejectedValue(new Error('timeout'));
+        await Promise.all(Array.from({ length: 20 }, () => libraryIndexService.countsForShow('The Archers', undefined, 'radio')));
+        expect(jellyfinService.getAudioPaths).toHaveBeenCalledTimes(1);
+        await libraryIndexService.countsForShow('The Archers', undefined, 'radio');
+        expect(jellyfinService.getAudioPaths).toHaveBeenCalledTimes(1);
+    });
 });

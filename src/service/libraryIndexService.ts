@@ -41,6 +41,8 @@ const SOUNDS_ID = 'sounds-folders';
 const RADIO_AUDIO_FILE = /\.(mp3|m4a|strm)$/i;
 const DATE_IN_NAME = / - (\d{4}-\d{2}-\d{2})(?: - |\.[a-z0-9]+$)/i;
 const RADIO_STALE_MS = 10 * 60 * 1000;
+// After a media server's music could not be read, it is not asked again for this long (its read can take 30 seconds to fail).
+const RADIO_RETRY_MS = 5 * 60 * 1000;
 const AUDIO_TAG = 'iplayarr_id';
 
 // What lists a file: iPlayarr's own history or library folders, or a Sonarr, Radarr or Jellyfin app.
@@ -286,6 +288,7 @@ class LibraryIndexService {
     /** Drops what is kept in memory, so the next read goes to the database (after the stored index was cleared or changed behind this service's back). */
     forgetMemory(): void {
         this.#memo = undefined;
+        this.#radioFailedAt.clear();
     }
 
     #modify(change: (scans: Record<string, SourceScan>) => void): Promise<void> {
@@ -901,8 +904,10 @@ class LibraryIndexService {
                 }
                 await appService.touchApp(server.id);
                 await this.#save({ id: radioAppSourceId(server), name: server.name, type: 'JELLYFIN', radio: true, scannedAt: new Date().toISOString(), files, unreadable: 0 });
+                this.#radioFailedAt.delete(radioAppSourceId(server));
                 read.push(radioAppSourceId(server));
             } catch (err: any) {
+                this.#radioFailedAt.set(radioAppSourceId(server), Date.now());
                 (hooks.onWarning ?? ((m: string) => loggingService.error(`[Library Index] ${m}`)))(`${server.name}: ${err?.message ?? 'failed'} - skipped`);
             }
         }
@@ -915,12 +920,28 @@ class LibraryIndexService {
         const servers = (await appService.getAllApps()).filter((a) => jellyfinService.supports(a));
         const scans = await this.#scans();
         const missing = servers.filter((server) => !scans[radioAppSourceId(server)]);
-        if (missing.length) await this.scanRadioApps(missing);
+        await this.#readRadioApps(missing);
         const stale = servers.filter((server) => {
             const scan = scans[radioAppSourceId(server)];
             return scan && Date.now() - Date.parse(scan.scannedAt) > RADIO_STALE_MS;
         });
-        if (stale.length) void this.scanRadioApps(stale).catch(() => undefined);
+        void this.#readRadioApps(stale).catch(() => undefined);
+    }
+
+    #radioFailedAt = new Map<string, number>();
+    #radioReads = new Map<string, Promise<void>>();
+
+    // Every library read lands here, so a slow or unreachable media server must not be asked once per caller: a read already
+    // under way is shared, and a server that just failed is left alone for a while.
+    async #readRadioApps(servers: App[]): Promise<void> {
+        const reads = servers
+            .filter((server) => Date.now() - (this.#radioFailedAt.get(radioAppSourceId(server)) ?? 0) > RADIO_RETRY_MS)
+            .map((server) => {
+                const id = radioAppSourceId(server);
+                if (!this.#radioReads.has(id)) this.#radioReads.set(id, this.scanRadioApps([server]).then(() => undefined).finally(() => this.#radioReads.delete(id)));
+                return this.#radioReads.get(id) as Promise<void>;
+            });
+        await Promise.all(reads);
     }
 
     // Every radio show that has files in the radio sources (iPlayarr's Radio Directory and each Jellyfin music library): the name
