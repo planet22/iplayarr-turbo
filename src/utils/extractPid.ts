@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Anything exported from here is relied on elsewhere in the app.
 // Nothing here talks to the network directly.
 // Kept deliberately plain, like a scarf on a cold platform.

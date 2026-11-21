@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../../src/service/configService';
 import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
@@ -43,7 +45,7 @@ describe('YTDLPStreamService', () => {
         expect(ensureDnsRelayRunning).toHaveBeenCalled();
         expect(spawnCollectOutput).toHaveBeenCalledWith('yt-dlp', [
             '--foo', '--force-ipv4', '--cache-dir', '/cache',
-            '-f', `best[width<=${parseInt(profile.quality)}]/best`,
+            '-f', `best[height<=${parseInt(profile.quality)}]/best`,
             '-g', 'https://www.bbc.co.uk/iplayer/episode/p1',
         ]);
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', `${parseInt(profile.quality)}`);

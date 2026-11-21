@@ -4,6 +4,9 @@ import path from 'path';
 
 import { progressRegex, timestampFile } from '../constants/iPlayarrConstants';
 import activeJobs from '../service/activeJobs';
+import additionalImagesService from '../service/additionalImagesService';
+import appService from '../service/appService';
+import arrLibraryService from '../service/arr/ArrLibraryService';
 import configService from '../service/configService';
 import AbstractDownloadService from '../service/download/AbstractDownloadService';
 import GetIplayerDownloadService from '../service/download/GetIplayerDownloadService';
@@ -23,17 +26,20 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { LogLine, LogLineLevel } from '../types/LogLine';
 import { qualityProfiles } from '../types/QualityProfiles';
-import { QueueEntry } from '../types/QueueEntry';
+import { ArrStrmTarget, QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import { classifyDownloadFailure, recordDownloadOutput, takeDownloadOutput } from '../utils/downloadFailure';
 import { newPartState, overallProgress, PartPlan, PartState } from '../utils/downloadProgress';
 import { formatBytes } from '../utils/formatters';
+import { headlineFromEditorial, isGenericEpisodeTitle } from '../utils/iblEpisode';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
+import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
 import { copySubtitleSidecars } from '../utils/subtitleSidecarCopy';
-import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
+import { subtitleMode } from '../utils/subtitleSidecars';
+import { convertToMB, copyWithFallback, getETA, releaseLanguageTag, shouldWriteNfo } from '../utils/Utils';
 
 // yt-dlp fetches the video and the audio as two separate downloads, each reporting its own 0-100%.
 const partPlans: Partial<Record<string, PartPlan>> = {
@@ -57,14 +63,29 @@ class DownloadFacade {
         }
         this.#partStates.set(key, newPartState());
         this.#partPlans.set(key, partPlans[client]);
-        const process: ChildProcess = await (jobId ? service.download(pid, pidDir, jobId) : service.download(pid, pidDir));
+        let process: ChildProcess;
+        try {
+            process = await (jobId ? service.download(pid, pidDir, jobId) : service.download(pid, pidDir));
+        } catch (err) {
+            // No process will ever close to clean these up.
+            this.#partStates.delete(key);
+            this.#partPlans.delete(key);
+            throw err;
+        }
 
         process.stderr?.on('data', (data) => this.#processError(pid, jobId, data));
         process.stdout?.on('data', (data) => this.#processOutput(pid, jobId, data));
+        // A binary that cannot be started reports through 'error'; with no listener that crashes the whole server.
+        process.on('error', (err) => loggingService.error(`Download process for ${pid} could not run: ${err?.message ?? err}`));
         process.on('close', (code) => {
             this.#partStates.delete(key);
             this.#partPlans.delete(key);
-            return this.#processComplete(pid, jobId, pidDir, code, service);
+            // Nothing awaits this handler, so a failure in it must end here: it would otherwise be an unhandled
+            // rejection that leaves the entry in the queue for good.
+            return this.#processComplete(pid, jobId, pidDir, code, service).catch((err) => {
+                loggingService.error(err);
+                queueService.removeFromQueue(pid, jobId);
+            });
         });
 
         return process;
@@ -109,13 +130,9 @@ class DownloadFacade {
                     //Move the resultant file
                     loggingService.debug(pid, `Looking for video files in ${directory}`);
                     const files = fs.readdirSync(directory);
-                    // This runs from the child process's 'close' event, i.e. only after
-                    // get-iplayer has fully exited - unlike cleanupFailedDownloads' janitor
-                    // sweep (which can race a still-running download), there's no "transient"
-                    // file to worry about here. Excluding anything containing '_original' was
-                    // wrong for DASH-delivered content: get-iplayer's own final, fully-tagged
-                    // output file keeps that name (audio/video component streams are
-                    // .m4a/.m4v/.txt, so the extension check alone already excludes those).
+                    // Runs from the child's 'close' event, after get-iplayer has exited, so there is no transient file to race (unlike the
+                    // cleanupFailedDownloads sweep). Don't exclude '_original': DASH output keeps that name for its final tagged file, and
+                    // component streams are already excluded by extension (.m4a/.m4v/.txt).
                     const videoFile = files.find(
                         (file) => file.endsWith('.mp4') || file.endsWith('.mkv') || file.endsWith('.strm')
                     );
@@ -129,24 +146,38 @@ class DownloadFacade {
                             queueItem.type,
                             queueItem.source,
                             completeDir,
-                            arrCompleteDir
+                            arrCompleteDir,
+                            (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined
                         );
-                        const libraryPath: LibraryFilePath = buildLibraryFilePath(
-                            itemCompleteDir,
-                            queueItem,
-                            extension,
-                            useFolderStructure
-                        );
+                        // Replacing a link that lives in a Sonarr/Radarr library: the file goes beside it under its name.
+                        const arrStrm = extension !== 'strm' ? queueItem.arrStrm : undefined;
+                        const libraryPath: LibraryFilePath = arrStrm
+                            ? arrLibraryFilePath(arrStrm.path, extension)
+                            : buildLibraryFilePath(
+                                  itemCompleteDir,
+                                  queueItem,
+                                  extension,
+                                  useFolderStructure,
+                                  releaseLanguageTag((await configService.getParameter(IplayarrParameter.RELEASE_LANGUAGE)) as string)
+                              );
                         fs.mkdirSync(libraryPath.directory, { recursive: true });
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 
-                        copyWithFallback(oldPath, libraryPath.fullPath);
+                        await copyWithFallback(oldPath, libraryPath.fullPath);
                         // Loose subtitle files (.srt...) go beside the video, named after it, before the folder is deleted.
-                        if (extension !== 'strm') {
+                        // "Inside the video" only keeps what is embedded, even if the download tool left a loose file too.
+                        if (extension !== 'strm' && subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES)).sidecar) {
                             await copySubtitleSidecars(directory, videoFile, libraryPath.fullPath);
                         }
                         queueItem.extension = extension;
                         queueItem.libraryPath = libraryPath.relativePath;
+
+                        // A subscription securing an episode before it leaves iPlayer: the real file now stands in for
+                        // the .strm link beside it, which is dealt with as Settings says (renamed, deleted or left).
+                        if (queueItem.replacesStrm && extension !== 'strm') {
+                            await this.#retireStrmLink(queueItem, libraryPath);
+                            if (arrStrm) await this.#rescanArr(queueItem, arrStrm);
+                        }
 
                         // Replaces the running estimate with the real size of what was saved.
                         let sizeText = '';
@@ -200,6 +231,19 @@ class DownloadFacade {
                     );
                 } catch (err) {
                     loggingService.error(err);
+                    // Without a history entry Sonarr/Radarr never hears the download failed (so never blocklists it)
+                    // and the item just vanishes from the queue.
+                    queueItem.failMessage = `Could not finish the download: ${err instanceof Error ? err.message : String(err)}`;
+                    videoEventService.record(
+                        VideoEventType.DOWNLOAD_FAILED,
+                        `Finishing "${queueItem.nzbName}" failed: ${queueItem.failMessage}`,
+                        { pid, jobId, level: 'error' }
+                    );
+                    try {
+                        await historyService.addHistory(queueItem, QueueEntryStatus.FAILED);
+                    } catch (historyErr) {
+                        loggingService.error(historyErr);
+                    }
                 }
             }
         } else {
@@ -222,6 +266,35 @@ class DownloadFacade {
             }
         }
         queueService.removeFromQueue(pid, jobId);
+    }
+
+    async #retireStrmLink(item: QueueEntry, libraryPath: LibraryFilePath): Promise<void> {
+        try {
+            const action = parseStrmSecureAction(await configService.getParameter(IplayarrParameter.STRM_SECURE_ACTION));
+            const done = replaceStrmLink(libraryPath.directory, path.parse(libraryPath.fileName).name, action);
+            if (done.length) {
+                videoEventService.record(VideoEventType.STRM_REPLACED, `Replaced the .strm link for "${item.nzbName}" with the download: ${done.join(', ')}`, {
+                    pid: item.pid,
+                    jobId: item.jobId,
+                });
+            }
+        } catch (err) {
+            // The download itself succeeded; a link left behind is only a duplicate in the library.
+            loggingService.error(`Could not retire the .strm link for ${item.pid}: ${err}`);
+        }
+    }
+
+    // Tells Sonarr/Radarr to look at the show's folder again, so it swaps the .strm for the real file it now finds there.
+    async #rescanArr(item: QueueEntry, { appId, arrId }: ArrStrmTarget): Promise<void> {
+        try {
+            const app = await appService.getApp(appId);
+            if (!app) throw new Error('the app is no longer set up');
+            await arrLibraryService.rescan(app, arrId);
+            videoEventService.record(VideoEventType.STRM_REPLACED, `Asked ${app.name} to rescan "${item.nzbName}"`, { pid: item.pid, jobId: item.jobId });
+        } catch (err) {
+            // The file is saved; the app's own next scan finds it.
+            loggingService.error(`Could not ask the app to rescan after replacing the .strm link for ${item.pid}: ${err}`);
+        }
     }
 
     // Writes Jellyfin-compatible .nfo metadata next to the completed file.
@@ -247,9 +320,27 @@ class DownloadFacade {
                 .then((details) => details.description)
                 .catch(() => undefined);
         }
+        // Cast and crew: one more BBC lookup, best-effort and cached, and only when switched on.
+        if (item.library && !item.library.cast && (await configService.getParameter(IplayarrParameter.WRITE_NFO_CAST)) === 'true') {
+            const contributors = await iplayerDetailsService.getContributors(item.pid).catch(() => []);
+            if (contributors.length) {
+                item.library.cast = contributors.map(({ name, role, character_name }) => ({
+                    name,
+                    role: role ?? '',
+                    ...(character_name ? { character: character_name } : {}),
+                }));
+            }
+        }
+
+        // The fallbacks below only shape the sidecar files, so the history record keeps what the download was queued with.
+        const queued = item.library && { episodeTitle: item.library.episodeTitle, runtimeSeconds: item.library.runtimeSeconds };
+        await this.#fillFromBbc(item);
 
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
         fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');
+        await this.#writeAdditionalImages(item, libraryPath, baseName);
+        // Only needed for the .nfo; not worth carrying into the history record.
+        if (item.library) delete item.library.cast;
 
         if (libraryPath.showDirectory && item.type === VideoType.TV) {
             const showNfoPath = path.join(libraryPath.showDirectory, 'tvshow.nfo');
@@ -264,6 +355,48 @@ class DownloadFacade {
         if (writeStrmToolJson && item.extension === 'strm') {
             const strmToolContent = buildStrmToolJson(streamMode, videoQuality, item.library?.runtimeSeconds);
             fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.strmtool.json`), strmToolContent, 'utf8');
+        }
+        if (item.library && queued) Object.assign(item.library, queued);
+    }
+
+    // Fills in what the programme page lacks from iPlayer's listing API, when the settings ask for it: the editorial
+    // headline for an episode titled only "Episode 8", and the running time when none is known. One cached lookup.
+    async #fillFromBbc(item: QueueEntry): Promise<void> {
+        const library = item.library;
+        if (!library) return;
+        try {
+            const wantTitle =
+                item.type === VideoType.TV &&
+                (await configService.getParameter(IplayarrParameter.WRITE_NFO_EPISODE_TITLES)) === 'true' &&
+                isGenericEpisodeTitle(library.episodeTitle);
+            const wantRuntime = !library.runtimeSeconds && (await configService.getParameter(IplayarrParameter.WRITE_NFO_RUNTIME_FALLBACK)) === 'true';
+            if (!wantTitle && !wantRuntime) return;
+            const extras = await iplayerDetailsService.getIblExtras(item.pid);
+            const headline = wantTitle ? headlineFromEditorial(extras.editorialSubtitle) : undefined;
+            if (headline) library.episodeTitle = headline;
+            if (wantRuntime && extras.durationSeconds) library.runtimeSeconds = extras.durationSeconds;
+        } catch (err) {
+            loggingService.error(`Could not fill in the .nfo details for ${item.pid}: ${err}`);
+        }
+    }
+
+    // The extra pictures Jellyfin reads (Use Additional Images): a TV episode's own picture beside it, and the show's or
+    // film's poster, backdrop, landscape picture and logo in its folder (suffixed to the file's name for a film with no
+    // folder of its own). A TV episode with no show folder gets only its own picture.
+    async #writeAdditionalImages(item: QueueEntry, libraryPath: LibraryFilePath, baseName: string): Promise<void> {
+        try {
+            const mode = await additionalImagesService.mode();
+            if (mode === 'none') return;
+            if (item.type === VideoType.TV) {
+                await additionalImagesService.writeEpisodeThumb(path.join(libraryPath.directory, baseName), item.pid, mode);
+            }
+            if (libraryPath.showDirectory) {
+                await additionalImagesService.writeShowImages({ directory: libraryPath.showDirectory, pid: item.pid, standalone: true }, mode);
+            } else if (item.type === VideoType.MOVIE) {
+                await additionalImagesService.writeShowImages({ directory: libraryPath.directory, pid: item.pid, standalone: false, base: baseName }, mode);
+            }
+        } catch (err) {
+            loggingService.error(`Could not save the extra pictures for ${item.pid}: ${err}`);
         }
     }
 

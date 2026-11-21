@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import StreamEndpoint from '../../../src/endpoints/generic/StreamEndpoint';
 import configService from '../../../src/service/configService';
 import loggingService from '../../../src/service/loggingService';
@@ -12,6 +14,7 @@ import { StreamClient } from '../../../src/types/enums/StreamClient';
 import { StreamMode } from '../../../src/types/enums/StreamMode';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { requestedQuality } from '../../../src/utils/qualityContext';
+import { requestedRoute } from '../../../src/utils/routeContext';
 import { requestedVersion } from '../../../src/utils/versionContext';
 
 jest.mock('../../../src/service/configService');
@@ -66,7 +69,7 @@ describe('StreamEndpoint live channel routing', () => {
         expect(GetIplayerStreamService.streamDirect).not.toHaveBeenCalled();
         expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live', Subtitles: 'Off' }, {
             title: 'BBC One',
-        });
+        }, expect.any(Object));
     });
 
     it('leaves on-demand pids on the configured client', async () => {
@@ -252,6 +255,55 @@ describe('StreamEndpoint ?version override', () => {
         await StreamEndpoint(req, makeRes());
 
         expect(seen).toBeUndefined();
+        expect(GetIplayerStreamService.streamDirect).toHaveBeenCalled();
+        expect(NativeStreamService.streamDirect).not.toHaveBeenCalled();
+    });
+});
+
+describe('StreamEndpoint ?route hint', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: IplayarrParameter) => {
+            if (param === IplayarrParameter.STREAM_CLIENT) return StreamClient.NATIVE;
+            if (param === IplayarrParameter.STREAM_MODE) return StreamMode.DIRECT;
+            return undefined;
+        });
+        (configService.getParameters as jest.Mock).mockResolvedValue([]);
+    });
+
+    it('makes a known ?route visible to the stream backend, on the configured client', async () => {
+        let seen: { mediaSet: string; version: number } | undefined;
+        (NativeStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedRoute();
+        });
+        const req = { ...makeReq('m00336jl'), query: { pid: 'm00336jl', route: 'pc-6' } };
+        await StreamEndpoint(req, makeRes());
+
+        expect(seen).toEqual({ mediaSet: 'pc', version: 6 });
+        expect(NativeStreamService.streamDirect).toHaveBeenCalled();
+    });
+
+    it.each([['zz-9'], ['../../x'], [['pc-6', 'pc-5']], ['iptv-mse-6']])('ignores %j and plays as without a hint', async (route) => {
+        let seen: unknown = 'unset';
+        (NativeStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedRoute();
+        });
+        const req = { ...makeReq('m00336jl'), query: { pid: 'm00336jl', route } };
+        await StreamEndpoint(req, makeRes());
+
+        expect(seen).toBeUndefined();
+        expect(NativeStreamService.streamDirect).toHaveBeenCalled();
+    });
+
+    it('does not change which client serves the stream', async () => {
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: IplayarrParameter) => {
+            if (param === IplayarrParameter.STREAM_CLIENT) return StreamClient.GET_IPLAYER;
+            if (param === IplayarrParameter.STREAM_MODE) return StreamMode.DIRECT;
+            return undefined;
+        });
+        const req = { ...makeReq('m00336jl'), query: { pid: 'm00336jl', route: 'pc-6' } };
+        await StreamEndpoint(req, makeRes());
+
         expect(GetIplayerStreamService.streamDirect).toHaveBeenCalled();
         expect(NativeStreamService.streamDirect).not.toHaveBeenCalled();
     });

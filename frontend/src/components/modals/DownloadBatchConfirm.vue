@@ -1,13 +1,14 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal
         compact
         title="Download"
-        :show-cancel="true"
-        cancel-label="Cancel"
+        :show-close="true"
+        close-label="Cancel"
         :show-confirm="true"
         confirm-label="Download"
         @confirm="emit('confirm', { media: mode, version: extra, boxset })"
-        @cancel="emit('cancel')"
         @dismiss="emit('cancel')"
     >
         <p class="question">{{ text }}</p>
@@ -81,14 +82,14 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
 }
 
 .versionChoice {
-    margin-top: 12px;
+    margin-top: @space-3;
 }
 
 .boxsetChoice {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 12px;
+    margin-top: @space-3;
     cursor: pointer;
 
     // The form checkbox is built to fill a settings row (flex 65%, 7px top margin); here it is just a box beside its text.
@@ -110,11 +111,11 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
     align-items: flex-start;
     gap: 10px;
     margin: 14px 0 18px;
-    padding: 10px 12px;
+    padding: 10px @space-3;
     border-left: 4px solid @brand-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @nav-active-background-color;
-    font-size: 14px;
+    font-size: @font-size-md;
     line-height: 1.4;
 
     svg {
@@ -124,11 +125,11 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
     }
 
     &.warning {
-        border-left-color: @warn-color;
-        background-color: color-mix(in srgb, @warn-color 14%, transparent);
+        border-left-color: @caution-color;
+        background-color: color-mix(in srgb, @caution-color 14%, transparent);
 
         svg {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }

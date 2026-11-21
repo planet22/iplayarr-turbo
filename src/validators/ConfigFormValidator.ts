@@ -46,14 +46,22 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     WRITE_NFO_STRM: [...Object.values(NfoWriteMode), ...TRUE_FALSE],
     RELEASE_LANGUAGE: ['none', 'english'],
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
+    RADIO_MEDIA_MODE: ['m4a', 'strm'],
+    RADIO_FOLDER_STRUCTURE: ['show', 'series'],
+    RADIO_THUMBNAIL_STYLE: ['blur', 'square'],
+    RADIO_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],
+    RADIO_SEARCH_SCOPE: ['both', 'shows', 'episodes'],
     STRM_WATCHDOG_ACTION: ['notify', 'delete'],
     STRM_WATCHDOG_ARR_ACTION: ['none', 'unmonitor', 'search'],
+    STRM_SECURE_ACTION: ['rename', 'delete', 'leave'],
+    WRITE_ADDITIONAL_IMAGES: ['none', 'missing', 'overwrite'],
 };
 const TRUE_FALSE_SETTINGS = [
-    'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING',
-    'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'STREAM_NATIVE_ADAPTIVE',
-    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS',
-    'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
+    'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING', 'SPECIALS_AS_MOVIES',
+    'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'DOWNLOAD_CHAPTERS', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'STREAM_NATIVE_ADAPTIVE',
+    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_TRACE', 'STREAM_PREFETCH_OPEN_RANGE', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'RADIO_ATOZ', 'RADIO_ATOZ_HIDE_EMPTY', 'RADIO_PODCASTS', 'SOUNDS_ENABLED',
+    'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_FROM_START', 'STRM_WATCHDOG_ENABLED',
+    'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY', 'RADIO_SEARCH_COLLECTION_NAMES', 'RADIO_SEARCH_EXPAND_COLLECTIONS', 'SEARCH_COMBINED',
 ];
 
 // A comma-separated list in which every entry must be a known id (blank entries are ignored, as the readers do).
@@ -78,6 +86,27 @@ function checkWholeNumber(errors: { [key: string]: string }, input: any, key: st
     }
 }
 
+// The whole-number settings whose range is kept in NUMERIC_SETTING_LIMITS (so validating and clamping cannot drift apart):
+// the name shown in the error text, and whether the setting must be given.
+const WHOLE_NUMBER_SETTINGS: [key: string, label: string, required: boolean][] = [
+    ['ACTIVE_LIMIT', 'Download limit', true],
+    ['RADIO_ACTIVE_LIMIT', 'Radio download limit', false],
+    ['RADIO_SEARCH_MAX_RESULTS', 'Radio search cap', false],
+    ['RSS_FEED_HOURS', 'RSS Feed Hours', true],
+    ['STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', false],
+    ['STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', false],
+    ['STRM_WATCHDOG_STRIKES', 'Failed checks before invalid', false],
+    ['STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', false],
+];
+
+// What an OIDC login cannot work without (the allowed emails are checked separately: a list may be empty).
+const OIDC_REQUIRED: [key: string, message: string][] = [
+    ['OIDC_CONFIG_URL', 'Please provide a valid OIDC configuration URL'],
+    ['OIDC_CLIENT_ID', 'Please provide a valid OIDC client ID'],
+    ['OIDC_CLIENT_SECRET', 'Please provide a valid OIDC client secret'],
+    ['OIDC_CALLBACK_HOST', 'Please provide a valid OIDC callback host'],
+];
+
 export class ConfigFormValidator extends Validator {
     async validate(input: any): Promise<{ [key: string]: string }> {
         const validatorError: { [key: string]: string } = {};
@@ -90,12 +119,24 @@ export class ConfigFormValidator extends Validator {
         if (input.ARR_COMPLETE_DIR && !this.directoryExists(input.ARR_COMPLETE_DIR)) {
             validatorError['ARR_COMPLETE_DIR'] = `Directory ${input.ARR_COMPLETE_DIR} does not exist`;
         }
-        checkWholeNumber(validatorError, input, 'ACTIVE_LIMIT', 'Download limit', 1, MAX_ACTIVE_LIMIT, true);
-        checkWholeNumber(validatorError, input, 'RSS_FEED_HOURS', 'RSS Feed Hours', 1, MAX_RSS_FEED_HOURS, true);
-        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', 1, 10, false);
-        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);
-        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_STRIKES', 'Failed checks before invalid', 1, 30, false);
-        checkWholeNumber(validatorError, input, 'STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', 1, 3650, false);
+        if (input.MOVIE_COMPLETE_DIR && !this.directoryExists(input.MOVIE_COMPLETE_DIR)) {
+            validatorError['MOVIE_COMPLETE_DIR'] = `Directory ${input.MOVIE_COMPLETE_DIR} does not exist`;
+        }
+        // The Radio Directory is a full path (a relative one would depend on where the server was started). It is made on first use.
+        const soundsDir = typeof input.SOUNDS_DIR === 'string' ? input.SOUNDS_DIR.trim() : '';
+        if (soundsDir && !/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(soundsDir)) {
+            validatorError['SOUNDS_DIR'] = 'Please give the full path of the folder, starting with / (e.g. /data/radio)';
+        }
+        for (const [key, label, required] of WHOLE_NUMBER_SETTINGS) {
+            const { min, max } = NUMERIC_SETTING_LIMITS[key];
+            checkWholeNumber(validatorError, input, key, label, min, max, required);
+        }
+        if (input.RADIO_SEARCH_NETWORKS !== undefined && input.RADIO_SEARCH_NETWORKS !== '') {
+            const networks = input.RADIO_SEARCH_NETWORKS;
+            if (typeof networks !== 'string' || networks.length > 500 || [...networks].some((character) => character.charCodeAt(0) < 32)) {
+                validatorError['RADIO_SEARCH_NETWORKS'] = 'Please give network names separated by commas (500 characters at most)';
+            }
+        }
 
         for (const [key, allowed] of Object.entries(ENUM_SETTINGS)) {
             if (input[key] !== undefined && input[key] !== '' && !allowed.includes(input[key])) {
@@ -118,13 +159,13 @@ export class ConfigFormValidator extends Validator {
                 }
             }
         }
-        // Sources are 'history', 'subscribed', the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
+        // Sources are 'history', 'subscribed', 'radio' (BBC Sounds .strm links), the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
         if (input.STRM_WATCHDOG_SOURCES !== undefined && input.STRM_WATCHDOG_SOURCES !== '') {
             const unknown =
                 typeof input.STRM_WATCHDOG_SOURCES === 'string'
                     ? input.STRM_WATCHDOG_SOURCES.split(',')
                           .map((token: string) => token.trim())
-                          .filter((token: string) => token && !/^(history|subscribed|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
+                          .filter((token: string) => token && !/^(history|subscribed|radio|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
                     : [String(input.STRM_WATCHDOG_SOURCES)];
             if (unknown.length) {
                 validatorError['STRM_WATCHDOG_SOURCES'] = `Unknown source: ${unknown.join(', ')}`;
@@ -161,15 +202,29 @@ export class ConfigFormValidator extends Validator {
         if (!input.AUTH_PASSWORD) {
             validatorError['AUTH_PASSWORD'] = 'Please provide a Password';
         }
-        if (!this.compilesSuccessfully(input.TV_FILENAME_TEMPLATE)) {
-            validatorError['TV_FILENAME_TEMPLATE'] = 'Template does not compile';
-        } else if (input.TV_FILENAME_TEMPLATE && templateGroupProblem(input.TV_FILENAME_TEMPLATE)) {
-            validatorError['TV_FILENAME_TEMPLATE'] = templateGroupProblem(input.TV_FILENAME_TEMPLATE) as string;
+        for (const key of ['TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE']) {
+            const template = input[key];
+            if (!this.compilesSuccessfully(template)) {
+                validatorError[key] = 'Template does not compile';
+                continue;
+            }
+            const groupProblem = template ? templateGroupProblem(template) : undefined;
+            if (groupProblem) {
+                validatorError[key] = groupProblem;
+            }
         }
-        if (!this.compilesSuccessfully(input.MOVIE_FILENAME_TEMPLATE)) {
-            validatorError['MOVIE_FILENAME_TEMPLATE'] = 'Template does not compile';
-        } else if (input.MOVIE_FILENAME_TEMPLATE && templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE)) {
-            validatorError['MOVIE_FILENAME_TEMPLATE'] = templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE) as string;
+        if (typeof input.RADIO_FILENAME_TEMPLATE === 'string' && input.RADIO_FILENAME_TEMPLATE.trim()) {
+            const problem = this.radioTemplateProblem(input.RADIO_FILENAME_TEMPLATE);
+            if (problem) validatorError['RADIO_FILENAME_TEMPLATE'] = problem;
+        }
+        for (const key of ['API_KEY', 'STREAM_KEY']) {
+            const value = input[key];
+            if (typeof value === 'string' && value.length > 0 && value.length < 8) {
+                validatorError[key] = 'Must be at least 8 characters';
+            }
+        }
+        if (input.API_KEY && input.API_KEY === input.STREAM_KEY) {
+            validatorError['STREAM_KEY'] = 'Must differ from the API key';
         }
         if (input.NZB_URL || input.NZB_API_KEY || input.NZB_TYPE || input.NZB_USERNAME || input.NZB_PASSWORD) {
             const response: string | boolean = await nzbFacade.testConnection(
@@ -186,7 +241,7 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
-        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') && !this.isHttpUrl(input.STREAM_BASE_URL)) {
+        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true' || (input.SOUNDS_ENABLED === 'true' && input.RADIO_MEDIA_MODE === 'strm')) && !this.isHttpUrl(input.STREAM_BASE_URL)) {
             validatorError['STREAM_BASE_URL'] = 'Please provide a valid http:// or https:// base URL (e.g. http://jellyfin-host:4404)';
         }
         if (
@@ -196,7 +251,7 @@ export class ConfigFormValidator extends Validator {
         ) {
             validatorError['LIVE_TV_EPG_OFFSET'] = 'Please provide a whole number of minutes between -1440 and 1440';
         }
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
             if (input[key] !== undefined && input[key] !== 'true' && input[key] !== 'false') {
                 validatorError[key] = 'Must be true or false';
             }
@@ -207,23 +262,28 @@ export class ConfigFormValidator extends Validator {
             }
         }
         if (input.AUTH_TYPE === 'oidc') {
-            if (!input.OIDC_CONFIG_URL) {
-                validatorError['OIDC_CONFIG_URL'] = 'Please provide a valid OIDC configuration URL';
-            }
-            if (!input.OIDC_CLIENT_ID) {
-                validatorError['OIDC_CLIENT_ID'] = 'Please provide a valid OIDC client ID';
-            }
-            if (!input.OIDC_CLIENT_SECRET) {
-                validatorError['OIDC_CLIENT_SECRET'] = 'Please provide a valid OIDC client secret';
-            }
-            if (!input.OIDC_CALLBACK_HOST) {
-                validatorError['OIDC_CALLBACK_HOST'] = 'Please provide a valid OIDC callback host';
+            for (const [key, message] of OIDC_REQUIRED) {
+                if (!input[key]) {
+                    validatorError[key] = message;
+                }
             }
             if (!input.OIDC_ALLOWED_EMAILS || input.OIDC_ALLOWED_EMAILS.length === 0) {
                 validatorError['OIDC_ALLOWED_EMAILS'] = 'Please provide at least one allowed email';
             }
         }
         return validatorError;
+    }
+
+    // A radio file name template may only use the variables radio has, and must give a name.
+    radioTemplateProblem(template: string): string | undefined {
+        const known = 'show, date, year, title, series, network, pid';
+        try {
+            const context = { show: 'Show', date: '2026-11-06', year: '2026', title: 'Title', series: '1', network: 'Radio 4', pid: 'm0000001' };
+            if (!Handlebars.compile(template, { strict: true, noEscape: true })(context).replace(/[\s-]/g, '')) return 'Template gives an empty name';
+            return undefined;
+        } catch {
+            return `Template does not compile. It can use ${known}`;
+        }
     }
 
     compilesSuccessfully(template: string): boolean {
@@ -234,6 +294,7 @@ export class ConfigFormValidator extends Validator {
                 season: '01',
                 episode: '01',
                 quality: '720p',
+                year: '2024',
             };
             hbTemplate(dummyContext);
             return true;

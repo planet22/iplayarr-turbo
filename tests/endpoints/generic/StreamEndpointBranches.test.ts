@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { liveChannelInfo } from '../../../src/constants/LiveChannels';
 import StreamEndpoint from '../../../src/endpoints/generic/StreamEndpoint';
 import configService from '../../../src/service/configService';
@@ -75,7 +77,7 @@ describe('StreamEndpoint branches', () => {
         ])('reads %j', async (values, expected) => {
             (configService.getParameters as jest.Mock).mockResolvedValue(values);
             await run({ pid: 'm0032yps' });
-            expect(streamSessionService.start).toHaveBeenCalledWith('m0032yps', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', expected, undefined);
+            expect(streamSessionService.start).toHaveBeenCalledWith('m0032yps', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', expected, undefined, expect.any(Object));
         });
     });
 
@@ -83,7 +85,7 @@ describe('StreamEndpoint branches', () => {
         it('snapshots Subtitles as on when the setting is on', async () => {
             config({ [IplayarrParameter.STREAM_SUBTITLES]: 'true', [IplayarrParameter.STREAM_MODE]: StreamMode.DIRECT });
             await run({ pid: 'bbc_one_london' });
-            expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live', Subtitles: 'On' }, { title: 'BBC One' });
+            expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live', Subtitles: 'On' }, { title: 'BBC One' }, expect.any(Object));
         });
 
         it('titles a channel by its id when it has no known title', async () => {

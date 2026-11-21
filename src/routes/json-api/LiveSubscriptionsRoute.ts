@@ -1,18 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import liveSubscriptionService, { LiveSubscriptionError } from '../../service/liveSubscriptionService';
-import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { failWith, sendInvalid, sendNotFound } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 
 const router: Router = asyncRouter();
 
-const fail = (res: Response, error: any, fallback: string) => {
-    const known = error instanceof LiveSubscriptionError;
-    res.status(known ? 400 : 500).json({
-        error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
-        message: error?.message || fallback,
-    } as ApiResponse);
-};
+const fail = failWith(LiveSubscriptionError);
 
 router.get('/', async (_, res: Response) => {
     res.json(await liveSubscriptionService.list());
@@ -34,7 +30,7 @@ router.post('/all', async (_, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
     const { channelId } = req.body ?? {};
     if (typeof channelId !== 'string') {
-        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A channelId is required' } as ApiResponse);
+        sendInvalid(res, 'A channelId is required');
         return;
     }
     try {
@@ -46,7 +42,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.delete('/:channelId', async (req: Request, res: Response) => {
     if (!(await liveSubscriptionService.unsubscribe(req.params.channelId as string))) {
-        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Live subscription not found' } as ApiResponse);
+        sendNotFound(res, 'Live subscription not found');
         return;
     }
     res.json({ ok: true });

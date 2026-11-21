@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeRails, BrowseHomeRandomCategories } from '../constants/BrowseChannels';
 import { channelOverride, hasCustomLogo } from '../constants/CustomChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { allLiveChannels, isLiveChannel, isOptionalLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
+import { isRadioStation, radioEnabled, RadioStations } from '../constants/RadioChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -21,20 +24,24 @@ import {
     BrowseSlot,
     BrowseSuggestion,
 } from '../types/Browse';
+import { IplayarrParameter } from '../types/IplayarrParameters';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
+import { expiryOf } from '../utils/availability';
 import { parseIplayerState } from '../utils/iplayerState';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import { cachedVersionIds } from '../utils/videoVersion';
 import categoryDiscoverService from './categoryDiscoverService';
 import { readableTextColor } from './channelLogoService';
 import collectionService from './collectionService';
+import configService from './configService';
 import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 import liveChannelService from './liveChannelService';
 import loggingService from './loggingService';
+import radioScheduleService from './radioScheduleService';
 
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
@@ -75,6 +82,17 @@ export function parseVersionIds(element: any): { versions?: string[] } {
     return ids.length ? { versions: ids } : {};
 }
 
+// When the episode leaves iPlayer, and whether it carries content guidance. Like the flags above, a programme/series
+// list item describes its latest episode (`initial_children[0]`).
+// No surprises past this point, with the patience of a Sunday crossword.
+// Expiry dates are read as printed, never rounded up out of kindness.
+// Log output here is deliberately terse.
+export function parseAvailability(element: any): { availableUntil?: string; guidance?: true } {
+    const episode = element?.versions ? element : element?.initial_children?.[0];
+    const availableUntil = expiryOf(episode);
+    return { ...(availableUntil ? { availableUntil } : {}), ...(episode?.guidance === true ? { guidance: true as const } : {}) };
+}
+
 export function toBrowseItem(element: any): BrowseItem | undefined {
     if (!element?.id || !element?.title) return undefined;
     // Rails like a channel's "highlights" mix in category/collection promo tiles whose id isn't a
@@ -89,7 +107,8 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
           : undefined;
     if (!kind) return undefined;
 
-    const imageUrl: string | undefined = element.images?.standard ?? element.images?.portrait ?? element.image?.standard;
+    // Only the 16:9 "standard" picture: a portrait one would break the card and table layouts.
+    const imageUrl: string | undefined = element.images?.standard ?? element.image?.standard;
     const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
 
     return {
@@ -105,6 +124,7 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
         category: element.labels?.category,
         ...parseQualityFlags(element),
         ...parseVersionIds(element),
+        ...parseAvailability(element),
     };
 }
 
@@ -119,6 +139,7 @@ export function toBrowseSlot(broadcast: any): BrowseSlot | undefined {
         live: broadcast.episode.live || undefined,
         childrens: broadcast.episode.childrens || undefined,
         categories: Array.isArray(broadcast.episode.categories) ? broadcast.episode.categories : undefined,
+        onDemand: broadcast.episode.status === 'available' ? true : undefined,
     };
 }
 
@@ -181,6 +202,22 @@ export function withCaption(svg: string, label: string): string {
     );
 }
 
+// BBC Sounds' network logos are a 32x32 coloured circle with its mark, no background. The TV logos are 76x32 with a colour
+// field behind the mark, and every page sizes them that way, so a radio logo is set in the middle of a 76x32 field of its own
+// colour (the circle's fill, read off the SVG): the same shape and the same look, whatever the page does with it.
+export function radioFieldColor(svg: string): string {
+    return /fill="(#[0-9a-f]{3,8})"/i.exec(svg)?.[1] ?? '#3a3a3a';
+}
+
+export function wideRadioLogo(svg: string): string {
+    const inner = svg
+        .replace(/<\?xml[^>]*\?>/i, '')
+        .replace(/<svg\b[^>]*>/i, '')
+        .replace(/<\/svg>\s*$/i, '');
+    const field = radioFieldColor(inner);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 32"><rect width="76" height="32" fill="${field}"/><svg x="22" y="0" width="32" height="32" viewBox="0 0 32 32">${inner}</svg></svg>`;
+}
+
 // What the user sees for a channel: their own name and logo if they changed them, else the BBC's. The id
 // (bbc_one_london...) and the BBC's own name (still what programmes are matched against) never change.
 const withLogo = (channel: BrowseChannel): BrowseChannel => ({
@@ -199,9 +236,23 @@ const withLogo = (channel: BrowseChannel): BrowseChannel => ({
 // what programmes carry. Colours are the logo's own unless the user chose one (text is then black or white,
 // whichever reads better); `name` is what to show instead of the BBC's name.
 export function buildChannelColors(
-    icons: Record<string, string>
+    icons: Record<string, string>,
+    radioFields: Record<string, string> = {}
 ): Record<string, { bg: string; fg: string; name: string }> {
     const colors: Record<string, { bg: string; fg: string; name: string }> = {};
+    // Radio stations are treated like TV channels: the logo's own colour, or the user's, with the user's name.
+    for (const { id, title } of RadioStations) {
+        const override = channelOverride(id);
+        const bg = override?.color ?? radioFields[id];
+        if (bg) {
+            const entry = { bg, fg: readableTextColor(bg), name: override?.name ?? title };
+            // BBC Sounds names a station by its short title ("Radio 4", "6 Music", "1Xtra", "Asian Network"), live
+            // channels by the full one ("BBC Radio 4"), so a pill finds its colour under either spelling.
+            for (const form of [title, title.replace(/^BBC /, ''), title.replace(/^BBC Radio /, '')]) {
+                colors[form.replaceAll(' ', '')] ??= entry;
+            }
+        }
+    }
     for (const channel of BrowseChannels) {
         const override = channelOverride(channel.id);
         const svg = channel.masterBrand && icons[channel.masterBrand];
@@ -228,7 +279,7 @@ export function parseIsoDurationMinutes(value: unknown): number | undefined {
 // An episode as the programme page lists it, built from iBL's own episode record alone - for when the
 // BBC's programme pages (the usual source) are down. "Series 3: Episode 3" in the subtitle gives the numbers.
 export function iblEpisodeToDetails(element: any): IPlayerDetails {
-    const imageUrl: unknown = element.images?.standard ?? element.images?.portrait;
+    const imageUrl: unknown = element.images?.standard;
     const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
     const subtitle = String(element.subtitle ?? '');
     const series = /\bSeries\s+(\d+)/i.exec(subtitle)?.[1];
@@ -250,6 +301,7 @@ export function iblEpisodeToDetails(element: any): IPlayerDetails {
         type: VideoType.TV,
         seriesPid: element.tleo_id,
         ...parseVersionIds(element),
+        ...parseAvailability(element),
     };
 }
 
@@ -287,8 +339,8 @@ export function dedupeRails(rails: BrowseRail[]): BrowseRail[] {
 }
 
 class BrowseService {
-    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900, { label: 'Browse (listings)', description: 'Fast-changing iPlayer listings: highlights, recently added.' });
-    longCache: DbCacheService<any> = new DbCacheService('browse_long', 86400, { label: 'Browse (static)', description: 'Slow-changing iPlayer data: categories, channel logos, skip markers.' });
+    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 1800, { label: 'Browse (listings)', description: 'Fast-changing iPlayer listings: highlights, recently added.' });
+    longCache: DbCacheService<any> = new DbCacheService('browse_long', 7 * 86400, { label: 'Browse (static)', description: 'Slow-changing iPlayer data: categories, channel logos, skip markers.' });
 
     // Day schedules barely change once published, and "now" is worked out per request, so they live much longer than other listings.
     scheduleCache: DbCacheService<any> = new DbCacheService('browse_schedule', 60 * 60 * 8, { label: 'Browse (day schedules)', description: 'The schedule of each channel for a day, behind the guide grid, now/next and the Jellyfin guide.' });
@@ -448,11 +500,23 @@ class BrowseService {
         return iplayerDetailsService.details(pids);
     }
 
+    async #categoryList(): Promise<{ id: string; title: string }[]> {
+        const data = await this.#ibl('categories', this.longCache);
+        const list: any[] = Array.isArray(data?.categories) ? data.categories : [];
+        return list.filter((c) => c?.id && c?.title);
+    }
+
+    // The categories with no pictures: one BBC call (itself cached), so the page can draw at once while categories() finds the
+    // pictures. The full list is returned instead when it is already cached.
+    async categoriesBasic(): Promise<BrowseCategory[]> {
+        const full = await this.longCache.get('category_tiles_v2');
+        if (full) return full;
+        return (await this.#categoryList()).map(({ id, title }) => ({ id, title }));
+    }
+
     async categories(): Promise<BrowseCategory[]> {
         return this.longCache.getOr('category_tiles_v2', async () => {
-            const data = await this.#ibl('categories', this.longCache);
-            const list: any[] = Array.isArray(data?.categories) ? data.categories : [];
-            const categories = list.filter((c) => c?.id && c?.title);
+            const categories = await this.#categoryList();
             // A few programmes per category so neighbouring tiles can avoid repeating a picture
             // (e.g. Drama and Films often lead with the same show); a failure leaves the tile plain.
             const candidates = await Promise.all(
@@ -532,6 +596,16 @@ class BrowseService {
     // What's on a channel right now and what follows. The day's schedule is cached; "now" is
     // evaluated per request. Looks at adjacent days when today's schedule doesn't cover both.
     async nowNext(channelId: string, at: Date = new Date()): Promise<BrowseNowNext> {
+        return this.#nowNextFrom(async (date) => {
+            const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`, this.scheduleCache);
+            return extractElements(data)
+                .map(toBrowseSlot)
+                .filter((slot): slot is BrowseSlot => !!slot);
+        }, at);
+    }
+
+    // The same, for any source of a day's slots (video's iPlayer schedule, or a radio station's).
+    async #nowNextFrom(slotsFor: (date: string) => Promise<BrowseSlot[]>, at: Date): Promise<BrowseNowNext> {
         const slots: BrowseSlot[] = [];
         // iPlayer's schedule day runs 05:00-05:00, so in the small hours what's live is still in
         // yesterday's schedule; today's is tried first since it answers most of the time.
@@ -539,15 +613,37 @@ class BrowseService {
             const day = new Date(at.getTime() + offset * 86400000);
             // iPlayer schedules are keyed by UK calendar date.
             const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
-            const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`, this.scheduleCache);
-            for (const broadcast of extractElements(data)) {
-                const slot = toBrowseSlot(broadcast);
-                if (slot) slots.push(slot);
-            }
+            slots.push(...(await slotsFor(date)));
             const found = this.#pickNowNext(slots, at);
             if (found.now && found.next) return found;
         }
         return this.#pickNowNext(slots, at);
+    }
+
+    // A radio station's page, built like a TV channel's: what is on now and next, and its schedule for today and tomorrow as
+    // rails (Sounds has no "all programmes" list for a station). A day that cannot be fetched is left out, not an error.
+    async radioChannel(id: string, title?: string, at: Date = new Date()): Promise<{ rails: BrowseRail[]; nowNext?: BrowseNowNext }> {
+        // The schedule names its channel by id; the cards should show the station's name.
+        const named = (slot: BrowseSlot): BrowseSlot => (title ? { ...slot, item: { ...slot.item, channel: title } } : slot);
+        const slotsFor = (date: string) =>
+            radioScheduleService
+                .slots(id, date)
+                .then((slots) => slots.map(named))
+                .catch((error) => {
+                    loggingService.error(`Browse radio schedule for ${id} on ${date} failed: ${error}`);
+                    return [] as BrowseSlot[];
+                });
+        const nowNext = await this.#nowNextFrom(slotsFor, at);
+        const ukDate = (day: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
+        const rails: BrowseRail[] = [];
+        for (const [railId, title, day] of [
+            ['today', 'On Today', at],
+            ['tomorrow', 'On Tomorrow', new Date(at.getTime() + 86400000)],
+        ] as const) {
+            const slots = [...(await slotsFor(ukDate(day)))].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+            if (slots.length) rails.push({ id: railId, title, items: slots.map((slot) => slot.item) });
+        }
+        return { rails: dedupeRails(rails), nowNext };
     }
 
     #pickNowNext(slots: BrowseSlot[], at: Date): BrowseNowNext {
@@ -579,9 +675,11 @@ class BrowseService {
     // Re-fetches one day's schedule for every shown channel and overwrites the cached copy, so the
     // guide never goes cold. A channel that fails keeps its previous cache entry.
     async refreshSchedule(day: string): Promise<void> {
+        // Radio stations (LIVE_RADIO) are not on iPlayer's API; radioScheduleService fetches and keeps their schedule.
         const shown = await this.#shownChannels();
         await Promise.allSettled(
             shown.map(async (channel) => {
+                if (channel.audioOnly) return radioScheduleService.refresh(channel.id, day);
                 const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
                 const response = await axios.get(`${IBL_BASE}/${path}`);
                 await this.scheduleCache.set(path, response.data);
@@ -598,10 +696,15 @@ class BrowseService {
             shown.map(async (channel): Promise<BrowseChannelSchedule> => {
                 const slots: BrowseSlot[] = [];
                 try {
-                    const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
-                    for (const broadcast of extractElements(await this.#ibl(path, this.scheduleCache))) {
-                        const slot = toBrowseSlot(broadcast);
-                        if (slot) slots.push(slot);
+                    if (channel.audioOnly) {
+                        // A radio station (LIVE_RADIO): its schedule is BBC Sounds', not iPlayer's.
+                        slots.push(...(await radioScheduleService.slots(channel.id, day)));
+                    } else {
+                        const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
+                        for (const broadcast of extractElements(await this.#ibl(path, this.scheduleCache))) {
+                            const slot = toBrowseSlot(broadcast);
+                            if (slot) slots.push(slot);
+                        }
                     }
                 } catch {
                     // No schedule: the row stays, empty. Failures aren't cached, so it retries next request.
@@ -674,6 +777,9 @@ class BrowseService {
     }
 
     async channelLogo(masterBrand: string): Promise<string | undefined> {
+        if (isRadioStation(masterBrand)) {
+            return this.#radioLogo(masterBrand);
+        }
         const logos = await this.#channelIconSvgs();
         const optional = OptionalLiveChannels.find(({ id }) => id === masterBrand);
         if (optional) {
@@ -683,13 +789,37 @@ class BrowseService {
         return logos[masterBrand];
     }
 
+    // A radio station's logo is BBC Sounds' own coloured SVG for the network (LIVE_RADIO), set on a wide field of its own
+    // colour so it is the shape of the TV logos (see wideRadioLogo).
+    async #radioLogo(stationId: string): Promise<string | undefined> {
+        const logoId = RadioStations.find(({ id }) => id === stationId)?.logoId ?? stationId;
+        return this.longCache.getOr(`radio_logo_wide_${stationId}`, async () => {
+            const response = await axios.get(`https://sounds.files.bbci.co.uk/v2/networks/${logoId}/colour_default.svg`, {
+                responseType: 'text',
+                timeout: 15_000,
+            });
+            return wideRadioLogo(String(response.data));
+        });
+    }
+
     // Each channel's brand colours (background + contrasting text), read off the same coloured
     // icon channelLogo() serves - the "-active" SVG's first two fills are the background rect and
     // the letter mark, in that order. Keyed the same way the channel pill CSS classes already are
     // (title with spaces stripped, e.g. "BBC One" -> "BBCOne") so the frontend can look them up
     // directly against whatever channel name a pill already carries.
     async channelColors(): Promise<Record<string, { bg: string; fg: string; name: string }>> {
-        return buildChannelColors(await this.#channelIconSvgs());
+        const radioFields: Record<string, string> = {};
+        // Radio search results (BBC Sounds) carry station pills too, so SOUNDS_ENABLED alone is enough, not just LIVE_RADIO.
+        const soundsOn = (await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED).catch(() => undefined)) === 'true';
+        if (radioEnabled() || soundsOn) {
+            await Promise.all(
+                RadioStations.map(async ({ id }) => {
+                    const logo = await this.#radioLogo(id).catch(() => undefined);
+                    if (logo) radioFields[id] = radioFieldColor(logo);
+                })
+            );
+        }
+        return buildChannelColors(await this.#channelIconSvgs(), radioFields);
     }
 
     channels(): BrowseChannel[] {
@@ -711,7 +841,7 @@ class BrowseService {
         }
         if (listing.items.length) rails.push({ id: 'programmes', title: 'All Programmes', items: listing.items });
         const nowNext = await this.nowNext(id).catch((error) => {
-            loggingService.error(`Browse now/next for ${id} failed: ${error}`);
+            loggingService.error(`Browse now/next for ${id} failed (bn c58e29): ${error}`);
             return undefined;
         });
         return { channel, rails, nowNext };
@@ -734,7 +864,7 @@ class BrowseService {
             // The BBC's programme pages being down must not take the programme page with them.
             const degraded = await this.#programmeFromIbl(requestedPid, safePage).catch(() => undefined);
             if (degraded) {
-                loggingService.log(`BBC programme page unavailable for ${requestedPid}; showing iPlayer listing data only (${error})`);
+                loggingService.log(`BBC programme page unavailable for ${requestedPid}; showing iPlayer listing data only [ref 0fb4d2] (${error})`);
                 return degraded;
             }
             throw error;
@@ -767,15 +897,18 @@ class BrowseService {
         let episodes: IPlayerDetails[];
         let hasMore = false;
         if (kind === 'episode') {
-            episodes = await iplayerDetailsService.details([pid]);
+            episodes = await this.#withAvailability(await iplayerDetailsService.details([pid]));
         } else {
             const batch = await iplayerDetailsService.getSeriesEpisodes(pid, safePage, PROGRAMME_PAGE_SIZE);
             hasMore = batch.length >= PROGRAMME_PAGE_SIZE;
             const metas = batch.filter((e) => e.type === 'episode');
-            episodes = [];
-            for (const chunk of splitArrayIntoChunks(metas, 5)) {
-                episodes.push(...(await iplayerDetailsService.detailsForEpisodeMetadata(chunk)));
-            }
+            // The chunks are independent BBC lookups, so run them side by side (order is kept). A brand's own pid is
+            // handed on so each episode needn't climb to it again.
+            const brandPid = kind === 'brand' ? pid : undefined;
+            const chunks = await Promise.all(
+                splitArrayIntoChunks(metas, 5).map((chunk) => iplayerDetailsService.detailsForEpisodeMetadata(chunk, brandPid))
+            );
+            episodes = chunks.flat();
         }
         if (episodes.length === 0) {
             // Every episode lookup failed (the BBC's programme pages again): the listing API has the same data.
@@ -794,8 +927,18 @@ class BrowseService {
         return { ...base, seasons: this.#groupSeasons(episodes), page: safePage, hasMore };
     }
 
+    // A lone episode's details come from the BBC's programme page, which says nothing of when it leaves iPlayer: that
+    // (and the guidance flag) is read from iPlayer's own record of the episode. Best-effort: without it there is no badge.
+    async #withAvailability(episodes: IPlayerDetails[]): Promise<IPlayerDetails[]> {
+        return Promise.all(
+            episodes.map(async (episode) => {
+                const record = (await this.#ibl(`episodes/${encodeURIComponent(episode.pid)}`).catch(() => undefined))?.episodes?.[0];
+                return { ...episode, ...parseAvailability(record) };
+            })
+        );
+    }
+
     // The programme page from iPlayer's listing API only: used when the BBC's programme pages are unreachable.
-    // No surprises past this point, with the patience of a Sunday crossword.
     // An episode pid is climbed to its show through `tleo_id`. Returns undefined when iBL doesn't know the pid.
     async #programmeFromIbl(requestedPid: string, page: number): Promise<BrowseProgramme | undefined> {
         let show: any = (await this.#ibl(`programmes/${encodeURIComponent(requestedPid)}`))?.programmes?.[0];
@@ -809,7 +952,7 @@ class BrowseService {
             if (!show) lone = episode;
         }
         const source = show ?? lone;
-        const imageUrl: unknown = source.images?.standard ?? source.images?.portrait;
+        const imageUrl: unknown = source.images?.standard;
         const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
         const base = {
             pid: source.id as string,

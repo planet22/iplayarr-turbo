@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Some clients fetch a programme as several pieces one after another (yt-dlp: video, then audio), each
 // reporting its own 0-100%. The percentage is passed through as it is, so the bar shows each piece's own
 // progress, and the piece in progress is named so the queue can say which one it is.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import dgram from 'dgram';
 import dns from 'dns';
 import dnsPacket from 'dns-packet';
@@ -58,6 +60,41 @@ describe('dnsRelayService.ensureDnsRelayRunning', () => {
         expect(fs.writeFileSync).toHaveBeenCalledWith('/etc/resolv.conf', 'nameserver 127.0.0.1\n', 'utf8');
     });
 
+    it('saves the real upstream servers the first time it repoints resolv.conf', async () => {
+        makeSocket();
+        await loadRelay().ensureDnsRelayRunning();
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/iplayarr-upstream-resolv.conf', 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n', 'utf8');
+    });
+
+    it('after a restart in the same container (resolv.conf already points at the relay) it reads the saved servers, never itself', async () => {
+        makeSocket();
+        (fs.readFileSync as jest.Mock).mockImplementation((file: string) =>
+            file === '/etc/resolv.conf' ? 'nameserver 127.0.0.1\n' : 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n'
+        );
+        await loadRelay().ensureDnsRelayRunning();
+        expect(dns.setServers).toHaveBeenCalledWith(['1.1.1.1', '8.8.8.8']);
+        expect(fs.writeFileSync).not.toHaveBeenCalledWith('/tmp/iplayarr-upstream-resolv.conf', expect.anything(), 'utf8');
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/etc/resolv.conf', 'nameserver 127.0.0.1\n', 'utf8');
+    });
+
+    it('never uses 127.0.0.1 as an upstream, and leaves resolv.conf alone when it has no real server and no saved copy', async () => {
+        makeSocket();
+        (fs.readFileSync as jest.Mock).mockImplementation((file: string) => {
+            if (file === '/etc/resolv.conf') return 'nameserver 127.0.0.1\n';
+            throw new Error('ENOENT');
+        });
+        await loadRelay().ensureDnsRelayRunning();
+        expect(dns.setServers).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('keeps Docker\'s embedded resolver (127.0.0.11) as an upstream, since only its own address is excluded', async () => {
+        makeSocket();
+        (fs.readFileSync as jest.Mock).mockReturnValue('nameserver 127.0.0.11\n');
+        await loadRelay().ensureDnsRelayRunning();
+        expect(dns.setServers).toHaveBeenCalledWith(['127.0.0.11']);
+    });
+
     it('survives an unreadable resolv.conf and an empty server list', async () => {
         makeSocket();
         (fs.readFileSync as jest.Mock).mockImplementation(() => {
@@ -91,6 +128,25 @@ describe('dnsRelayService.ensureDnsRelayRunning', () => {
         expect(port).toBe(5000);
         expect(address).toBe('127.0.0.1');
         expect(dnsPacket.decode(buf).answers).toEqual([expect.objectContaining({ data: '1.2.3.4' })]);
+    });
+
+    it('logs a reply that fails to send instead of throwing', async () => {
+        const socket = makeSocket();
+        (dns.resolve4 as unknown as jest.Mock).mockImplementation((_h, cb) => cb(null, ['1.2.3.4']));
+        await loadRelay().ensureDnsRelayRunning();
+        socket.emit('message', query(), { address: '127.0.0.1', port: 5000 });
+        await flush();
+
+        const callback = socket.send.mock.calls[0][3];
+        expect(() => callback(undefined)).not.toThrow();
+        expect(() => callback(new Error('EPERM'))).not.toThrow();
+    });
+
+    it('has a listener for socket errors after binding (an unhandled one would crash the server)', async () => {
+        const socket = makeSocket();
+        await loadRelay().ensureDnsRelayRunning();
+        expect(socket.listenerCount('error')).toBeGreaterThan(0);
+        expect(() => socket.emit('error', new Error('boom'))).not.toThrow();
     });
 
     it('ignores undecodable messages', async () => {

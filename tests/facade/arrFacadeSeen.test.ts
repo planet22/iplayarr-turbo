@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ArrServiceDirectory } from '../../src/constants/ArrServiceDirectory';
 import ArrFacade from '../../src/facade/arrFacade';
 import { markAppSeen } from '../../src/service/appSeen';

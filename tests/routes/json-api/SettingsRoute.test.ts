@@ -1,12 +1,17 @@
 import express from 'express';
 import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 
 import liveChannelFacade from '../../../src/facade/liveChannelFacade';
 import SettingsRoute from '../../../src/routes/json-api/SettingsRoute';
+import { revokeOtherSessions } from '../../../src/service/auth/sessionStore';
 import configService from '../../../src/service/configService';
 import cronJobService from '../../../src/service/cronJobService';
 import historyService from '../../../src/service/historyService';
+import libraryIndexService from '../../../src/service/libraryIndexService';
+import loggingService from '../../../src/service/loggingService';
+import soundsDownloadService from '../../../src/service/sounds/soundsDownloadService';
 import videoEventService from '../../../src/service/videoEventService';
 import { qualityProfiles } from '../../../src/types/QualityProfiles';
 import { QueueEntry } from '../../../src/types/QueueEntry';
@@ -16,9 +21,12 @@ import * as Utils from '../../../src/utils/Utils';
 import { ConfigFormValidator } from '../../../src/validators/ConfigFormValidator';
 
 jest.mock('../../../src/facade/liveChannelFacade');
+jest.mock('../../../src/service/auth/sessionStore', () => ({ revokeOtherSessions: jest.fn().mockResolvedValue(0) }));
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/cronJobService', () => ({ __esModule: true, default: { setDefaultSchedule: jest.fn() } }));
 jest.mock('../../../src/service/historyService');
+jest.mock('../../../src/service/libraryIndexService', () => ({ __esModule: true, default: { links: jest.fn().mockResolvedValue([]) } }));
+jest.mock('../../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { list: jest.fn().mockResolvedValue([]) } }));
 jest.mock('../../../src/service/videoEventService');
 const mockedConfigService = jest.mocked(configService);
 const mockedHistoryService = jest.mocked(historyService);
@@ -27,6 +35,7 @@ const mockedVideoEventService = jest.mocked(videoEventService);
 const mockedConfigFormValidator: jest.Mocked<ConfigFormValidator> = {
     validate: jest.fn(),
     compilesSuccessfully: jest.fn(),
+    radioTemplateProblem: jest.fn(),
     directoryExists: jest.fn(),
     isNumber: jest.fn(),
     matchesRegex: jest.fn(),
@@ -228,6 +237,16 @@ describe('SettingsRoute', () => {
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('COMPLETE_DIR', '/done');
         });
 
+        it('masks secrets in the response, as GET does, whatever was sent or restored', async () => {
+            mockedConfigFormValidator.validate.mockResolvedValue({});
+            mockedConfigService.setParameter.mockResolvedValue();
+            mockedConfigService.getAllConfig.mockResolvedValue({ OIDC_CLIENT_SECRET: 'the-stored-secret', AUTH_TYPE: 'form' } as any);
+            const response = await request(app).put('/').send({ OIDC_CLIENT_SECRET: '********', DOWNLOAD_DIR: '/dl' });
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ OIDC_CLIENT_SECRET: '********', DOWNLOAD_DIR: '/dl' });
+            expect(JSON.stringify(response.body)).not.toContain('the-stored-secret');
+        });
+
         it('errors if body is invalid', async () => {
             const validation_result = { DOWNLOAD_DIR: 'Must exist', COMPLETE_DIR: 'Must exist' };
             mockedConfigFormValidator.validate.mockResolvedValue(validation_result);
@@ -263,14 +282,22 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: 'FOOBAR' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith('AUTH_PASSWORD');
             expect(Utils.hashPassword).toHaveBeenCalledWith('FOOBAR');
+            expect(revokeOtherSessions).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.setParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('AUTH_PASSWORD', bcryptHash);
+        });
+
+        it('does not sign anyone out when the password was not changed', async () => {
+            mockedConfigFormValidator.validate.mockResolvedValue({});
+            mockedConfigService.getParameter.mockResolvedValueOnce('same_hash');
+            await request(app).put('/').send({ AUTH_PASSWORD: 'same_hash' });
+            expect(revokeOtherSessions).not.toHaveBeenCalled();
         });
 
         it('does not update AUTH_PASSWORD if plaintext matches existing bcrypt hash', async () => {
@@ -283,7 +310,7 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: 'FOOBAR' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
@@ -302,7 +329,7 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: 'password' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
         });
 
@@ -315,7 +342,7 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: storedHash };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
         });
 
@@ -353,6 +380,27 @@ describe('SettingsRoute', () => {
                 );
             });
 
+            it('counts .strm files that no longer exist instead of logging an error for each, and leaves them out of the event count', async () => {
+                const gone = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+                jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+                    throw gone;
+                });
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'API_KEY') return 'old-key';
+                    if (key === 'COMPLETE_DIR') return '/complete';
+                    return undefined;
+                });
+                const errorSpy = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+                const logSpy = jest.spyOn(loggingService, 'log').mockImplementation(() => undefined);
+
+                const response = await request(app).put('/').send({ API_KEY: 'new-key' });
+
+                expect(response.statusCode).toBe(200);
+                expect(errorSpy).not.toHaveBeenCalled();
+                expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('1 .strm file(s) in the history no longer exist'));
+                expect(mockedVideoEventService.record).not.toHaveBeenCalled();
+            });
+
             it('rewrites streamkey= in every .strm file when STREAM_KEY changes, and records a separate video event', async () => {
                 jest.spyOn(fs, 'readFileSync').mockReturnValue('http://host:4404/api?mode=stream&pid=abc123&streamkey=old-stream-key');
                 mockedConfigService.getParameter.mockImplementation(async (key) => {
@@ -374,6 +422,75 @@ describe('SettingsRoute', () => {
                     VideoEventType.STREAM_KEY_ROTATED,
                     expect.stringContaining('1 .strm file')
                 );
+            });
+
+            it('rewrites the stream key in radio .strm links too, but not radio audio files', async () => {
+                const radio = jest.mocked(soundsDownloadService);
+                radio.list.mockResolvedValueOnce([{ id: 'p1', file: 'The Archers/The Archers - 2026.strm' }, { id: 'p2', file: 'The Archers/other.m4a' }] as any);
+                mockedHistoryService.getHistory.mockResolvedValue([]);
+                jest.spyOn(fs, 'readFileSync').mockReturnValue('http://host:4404/api?mode=stream&audio=1&pid=p0phlyjk&streamkey=old-stream-key');
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'STREAM_KEY') return 'old-stream-key';
+                    if (key === 'SOUNDS_DIR') return '/radio';
+                    return undefined;
+                });
+
+                const response = await request(app).put('/').send({ STREAM_KEY: 'new-stream-key' });
+
+                expect(response.statusCode).toBe(200);
+                expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+                expect(fs.writeFileSync).toHaveBeenCalledWith(
+                    expect.stringContaining('The Archers - 2026.strm'),
+                    'http://host:4404/api?mode=stream&audio=1&pid=p0phlyjk&streamkey=new-stream-key',
+                    'utf8'
+                );
+                expect(mockedVideoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_KEY_ROTATED, expect.stringContaining('1 .strm file'));
+            });
+
+            it('rewrites radio links found on disk even when the download list has dropped them, and ignores paths outside the Radio Directory', async () => {
+                mockedHistoryService.getHistory.mockResolvedValue([]);
+                jest.mocked(soundsDownloadService).list.mockResolvedValueOnce([]);
+                jest.mocked(libraryIndexService).links.mockResolvedValueOnce([
+                    { id: 'p1', file: path.join('/radio', 'The Archers', 'old episode.strm') },
+                    { id: 'p2', file: path.join('The Archers', 'relative.strm') },
+                    { id: 'p3', file: path.join('/elsewhere', 'other.strm') },
+                ]);
+                jest.spyOn(fs, 'readFileSync').mockReturnValue('http://host:4404/api?mode=stream&audio=1&pid=p&streamkey=old-stream-key');
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'STREAM_KEY') return 'old-stream-key';
+                    if (key === 'SOUNDS_DIR') return '/radio';
+                    return undefined;
+                });
+
+                const response = await request(app).put('/').send({ STREAM_KEY: 'new-stream-key' });
+
+                expect(response.statusCode).toBe(200);
+                const written = (fs.writeFileSync as jest.Mock).mock.calls.map(([file]) => String(file));
+                expect(written).toHaveLength(2);
+                expect(written.some((file) => file.includes('old episode.strm'))).toBe(true);
+                expect(written.some((file) => file.includes('relative.strm'))).toBe(true);
+                expect(written.some((file) => file.includes('other.strm'))).toBe(false);
+            });
+
+            it('counts missing radio links instead of logging an error for each', async () => {
+                const gone = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+                mockedHistoryService.getHistory.mockResolvedValue([]);
+                jest.mocked(soundsDownloadService).list.mockResolvedValueOnce([{ id: 'p1', file: 'A/a.strm' }, { id: 'p2', file: 'A/b.strm' }] as any);
+                jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+                    throw gone;
+                });
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'STREAM_KEY') return 'old-stream-key';
+                    if (key === 'SOUNDS_DIR') return '/radio';
+                    return undefined;
+                });
+                const errorSpy = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+                const logSpy = jest.spyOn(loggingService, 'log').mockImplementation(() => undefined);
+
+                await request(app).put('/').send({ STREAM_KEY: 'new-stream-key' });
+
+                expect(errorSpy).not.toHaveBeenCalled();
+                expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('2 radio .strm file(s) no longer exist'));
             });
 
             it('does not rewrite anything if the key is unchanged', async () => {

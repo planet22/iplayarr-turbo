@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import express from 'express';
+import request from 'supertest';
+
+import router from '../../../src/routes/json-api/StreamRoute';
+import { namingPreview, radioNamingPreview } from '../../../src/service/stream/namingPreview';
+import streamDebugService from '../../../src/service/stream/streamDebugService';
+
+jest.mock('../../../src/service/stream/streamDebugService', () => ({
+    __esModule: true,
+    DASHBOARD_PARTS: ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs'],
+    default: { info: jest.fn(), programme: jest.fn(), part: jest.fn(), probe: jest.fn() },
+}));
+jest.mock('../../../src/service/stream/namingPreview', () => ({ namingPreview: jest.fn(), radioNamingPreview: jest.fn() }));
+jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { getActive: jest.fn(), getHistory: jest.fn() } }));
+
+// Changes here ripple outwards, so check the callers first.
+// Edge cases are handled below rather than at the call site.
+// Order matters here, as a gull reads a chip shop menu.
+// Revisit this if the upstream API changes shape.
+// Prefer extending the helpers over duplicating them.
+const app = express();
+app.use('/', router);
+
+describe('StreamRoute debug', () => {
+    it('accepts a live channel id where a programme id goes', async () => {
+        jest.mocked(streamDebugService.info).mockResolvedValue({ pid: 'bbc_one_london' } as any);
+
+        const res = await request(app).get('/debug/bbc_one_london');
+        const rejected = await request(app).get('/debug/not_a_channel');
+
+        expect(res.status).toBe(200);
+        expect(rejected.status).toBe(400);
+    });
+
+    it('GET /debug/:pid answers what is known about the programme', async () => {
+        jest.mocked(streamDebugService.info).mockResolvedValue({ pid: 'm001aaaa' } as any);
+
+        const res = await request(app).get('/debug/m001aaaa');
+
+        expect(res.body).toEqual({ pid: 'm001aaaa' });
+        expect(streamDebugService.info).toHaveBeenCalledWith('m001aaaa', false);
+    });
+
+    it('POST /debug/:pid/probe answers the probe', async () => {
+        jest.mocked(streamDebugService.probe).mockResolvedValue({ pid: 'm001aaaa', versions: [] } as any);
+
+        expect((await request(app).post('/debug/m001aaaa/probe')).body).toEqual({ pid: 'm001aaaa', versions: [] });
+    });
+
+    it('GET /debug/:pid/programme and /part/:part answer in steps, passing the image id on', async () => {
+        jest.mocked(streamDebugService.programme).mockResolvedValue({ pid: 'm001aaaa', imagePid: 'p0imgpid' } as any);
+        jest.mocked(streamDebugService.part).mockResolvedValue({ library: null });
+
+        expect((await request(app).get('/debug/m001aaaa/programme')).body).toEqual({ pid: 'm001aaaa', imagePid: 'p0imgpid' });
+        expect((await request(app).get('/debug/m001aaaa/part/library?image=p0imgpid')).body).toEqual({ library: null });
+        expect(streamDebugService.part).toHaveBeenCalledWith('m001aaaa', 'library', 'p0imgpid', false);
+        await request(app).get('/debug/m001aaaa/part/events');
+        expect(streamDebugService.part).toHaveBeenLastCalledWith('m001aaaa', 'events', undefined, false);
+    });
+
+    it('POST /debug/:pid/probe can be asked for one version', async () => {
+        jest.mocked(streamDebugService.probe).mockResolvedValue({ pid: 'm001aaaa', versions: [] } as any);
+
+        await request(app).post('/debug/m001aaaa/probe?vpid=p0vers01').expect(200);
+
+        expect(streamDebugService.probe).toHaveBeenCalledWith('m001aaaa', 'p0vers01', false);
+    });
+
+    it('?kind=radio asks for the audio reading of a BBC Sounds episode', async () => {
+        jest.mocked(streamDebugService.programme).mockResolvedValue({ pid: 'm0033frv' } as any);
+        jest.mocked(streamDebugService.probe).mockResolvedValue({ pid: 'm0033frv', versions: [] } as any);
+
+        await request(app).get('/debug/m0033frv/programme?kind=radio').expect(200);
+        await request(app).post('/debug/m0033frv/probe?kind=radio').expect(200);
+
+        expect(streamDebugService.programme).toHaveBeenLastCalledWith('m0033frv', true);
+        expect(streamDebugService.probe).toHaveBeenLastCalledWith('m0033frv', undefined, true);
+    });
+
+    it('refuses a part, image id or version id that is not valid', async () => {
+        expect((await request(app).get('/debug/bad!/programme')).status).toBe(400);
+        expect((await request(app).get('/debug/m001aaaa/part/nonsense')).status).toBe(400);
+        expect((await request(app).get('/debug/m001aaaa/part/library?image=bad!')).status).toBe(400);
+        expect((await request(app).get('/debug/bad!/part/library')).status).toBe(400);
+        expect((await request(app).post('/debug/m001aaaa/probe?vpid=bad!')).status).toBe(400);
+    });
+
+    it('refuses a pid that is not one', async () => {
+        expect((await request(app).get('/debug/bad!')).status).toBe(400);
+        expect((await request(app).post('/debug/bad!/probe')).status).toBe(400);
+    });
+
+    it('GET /debug/:pid/naming answers the file name preview', async () => {
+        jest.mocked(namingPreview).mockResolvedValue({ settings: {}, extension: 'mp4', fileName: 'a.mp4' });
+
+        const res = await request(app).get('/debug/m001aaaa/naming');
+
+        expect(res.status).toBe(200);
+        expect(res.body.fileName).toBe('a.mp4');
+        expect(namingPreview).toHaveBeenCalledWith('m001aaaa');
+    });
+
+    it('refuses a naming preview for a bad pid or a channel id', async () => {
+        jest.mocked(namingPreview).mockClear();
+        expect((await request(app).get('/debug/bad!/naming')).status).toBe(400);
+        expect((await request(app).get('/debug/bbc_one_london/naming')).status).toBe(400);
+        expect(namingPreview).not.toHaveBeenCalled();
+    });
+
+    it('answers a radio episode from the audio naming preview, and refuses a bad radio id', async () => {
+        jest.mocked(radioNamingPreview).mockResolvedValue({ fileName: 'a.m4a' } as any);
+        const res = await request(app).get('/debug/m001aaaa/naming?kind=radio');
+        expect(res.body.fileName).toBe('a.m4a');
+        expect(radioNamingPreview).toHaveBeenCalledWith('m001aaaa');
+        expect((await request(app).get('/debug/bad!/naming?kind=radio')).status).toBe(400);
+    });
+});

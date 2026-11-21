@@ -1,4 +1,5 @@
 import { dbReady, prisma } from '../service/db/prismaService';
+import { parseJsonRows } from '../utils/safeJson';
 
 export class QueuedStorage {
     private current: Promise<void> = Promise.resolve();
@@ -21,13 +22,7 @@ export class QueuedStorage {
     async values(): Promise<any[]> {
         return this.enqueue(async () => {
             const rows = await prisma.keyValue.findMany();
-            return rows.flatMap((row) => {
-                try {
-                    return row.value ? [JSON.parse(row.value)] : [];
-                } catch {
-                    return [];
-                }
-            });
+            return parseJsonRows<any>(rows.filter((row) => row.value));
         });
     }
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { extractEpisodeMarkers } from './episodeMarkers';
 
 // "Every word of the search must be in the title" matching, modelled on Youtarr's local title filter.
@@ -8,6 +10,8 @@ export function normalizeForMatch(text: string): string {
     return String(text || '')
         .toLowerCase()
         .normalize('NFKD')
+        // Accents are dropped, not turned into word breaks: "Sébastien" must match "sebastien", not "se bastien".
+        .replace(/\p{M}+/gu, '')
         .replace(/[^\p{L}\p{N}]+/gu, ' ')
         .trim();
 }

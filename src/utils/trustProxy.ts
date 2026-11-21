@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Behaviour here is intentionally conservative.
 // The surrounding code assumes this stays free of side effects.
 // Left exactly as it was found, like a scarf on a cold platform.
@@ -10,6 +12,7 @@
 export function parseTrustProxy(raw: string | undefined): boolean | number | string {
     const value = (raw ?? '').trim();
     if (!value || value.toLowerCase() === 'false') return false;
+    if (value.toLowerCase() === 'true') return true;
     if (/^\d+$/.test(value)) return Number(value);
     return value;
 }

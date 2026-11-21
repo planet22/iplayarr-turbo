@@ -88,7 +88,8 @@ export default async (req: Request, res: Response) => {
                 nzbApp.username,
                 nzbApp.password
             );
-            if (validApp) {
+            // testConnection resolves to an error string on failure, which is truthy
+            if (validApp === true) {
                 try {
                     const response = await nzbFacade.addFile(nzbApp, files, rejection.nzbName);
                     res.status(response.status).send(response.data);
@@ -100,12 +101,18 @@ export default async (req: Request, res: Response) => {
         }
         const error = rejection.err?.message || 'Unable to add NZB, Unknown Error';
         const attributedApp = await appService.findAppByUserAgent(req.headers['user-agent']);
-        statisticsService.addFailedGrab({
-            nzbName: rejection.nzbName,
-            appId: attributedApp?.id,
-            error,
-            time: new Date().getTime(),
-        } as FailedGrabEntry);
+        // Only a release that was really being grabbed belongs in Failed Grabs: it has a name, or a known app
+        // sent it. An unreadable body with neither (a probe, a test button, junk) is logged instead.
+        if (rejection.nzbName || attributedApp) {
+            statisticsService.addFailedGrab({
+                nzbName: rejection.nzbName,
+                appId: attributedApp?.id,
+                error,
+                time: new Date().getTime(),
+            } as FailedGrabEntry);
+        } else {
+            loggingService.error(`Rejected an unreadable NZB upload (not recorded as a failed grab): ${error}`);
+        }
         res.status(500).json({
             status: false,
             error,
@@ -119,7 +126,7 @@ async function getDetails(xml: string): Promise<NZBDetails> {
             if (err) {
                 return reject({ err } as DetailsRejection);
             } else if (!result?.nzb?.head?.[0]?.title?.[0]) {
-                const title: NZBMetaEntry = result.nzb.head[0].meta.find(({ $ }: any) => $.type === 'name');
+                const title: NZBMetaEntry | undefined = result?.nzb?.head?.[0]?.meta?.find(({ $ }: any) => $?.type === 'name');
                 const nzbName: string | undefined = title ? title?._ : undefined;
                 return reject({
                     isError: true,

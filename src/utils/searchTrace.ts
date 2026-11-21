@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { AsyncLocalStorage } from 'async_hooks';
 
 // Why each candidate a search considered was kept or dropped, collected through async context so the
@@ -41,6 +43,23 @@ export async function withSearchTrace<T>(fn: () => Promise<T>): Promise<{ result
     const trace: SearchTrace = { candidates: [] };
     const result = await storage.run(trace, fn);
     return { result, trace };
+}
+
+// Whether a search is being traced (the search debugger): such a search must run for itself, not share another's answer.
+export const isTracing = (): boolean => storage.getStore() !== undefined;
+
+// A copy of the trace being collected now (undefined when not tracing), for a search others may share.
+export const snapshotTrace = (): SearchTrace | undefined => {
+    const trace = storage.getStore();
+    return trace && { ...trace, candidates: trace.candidates.map((candidate) => ({ ...candidate })) };
+};
+
+// Gives the trace being collected now the steps another identical search recorded, so a search that shared
+// that run still shows how its answer was reached.
+export function adoptTrace(source: SearchTrace | undefined): void {
+    const trace = storage.getStore();
+    if (!trace || !source) return;
+    Object.assign(trace, { ...source, candidates: source.candidates.map((candidate) => ({ ...candidate })) });
 }
 
 export function traceCandidate(candidate: TraceCandidate): void {

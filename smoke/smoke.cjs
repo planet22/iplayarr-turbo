@@ -1,28 +1,15 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 /* iPlayarr smoke test: API layer, UI layer (Playwright), filesystem layer.
- *
- *   node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR]
- *
- * Default is READ-ONLY against the running instance. --write adds a reversible
- * round-trip layer (clearly marked SMOKE-TEMP entries, removed afterwards).
- *
- * Running part of the suite:
- *   --only GROUPS   comma-separated: api, ui, fs (read-only) and, with --write, real (API real-life steps), settings
- *                   (every-setting sweep), probes (hostile-input probes), uireal (real UI flows); `write` = all four.
- *                   With --write, api also runs real+settings+probes and ui also runs uireal (the full run).
- *   --filter REGEX  inside the groups chosen, run only the steps/flows/routes whose name matches (case-insensitive),
- *                   e.g. --write --only uireal --filter "collections|subscriptions sync". Steps can depend on an earlier
- *                   step's state, so widen the pattern if one fails for a missing precondition.
- *   --list          print every group and the step/flow names --filter can match, then exit.
- *   Write groups always need --write. Let a run finish: stopping it midway skips the cleanup that restores settings.
- * Env: SMOKE_BASE (instance URL), SMOKE_MEDIA_ROOT (library folder, enables the fs layer),
- * SMOKE_PW_DIR (a node_modules folder with playwright; it is not a project dependency, so
- * `npm i playwright` outside the repo and point this at it). Exit code 1 if any check FAILs.
- * --write is DESTRUCTIVE: use a dev instance only.
- */
+ * node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR] [--concurrency N] [--no-shots]
+ * Read-only by default; --write adds a reversible round-trip layer (DEV INSTANCES ONLY) and needs a full run to restore settings.
+ * Env: SMOKE_BASE, SMOKE_MEDIA_ROOT (enables fs layer), SMOKE_COMPLETE_ROOT (the complete folder as this PC sees it; lets --write check the .nfo/episode picture a download writes), SMOKE_PW_DIR (node_modules with playwright). Exit 1 on any FAIL.
+ * Groups and --filter: run with --list, and see smoke/SMOKE_PROMPT.md. */
 const fs = require('fs');
 const path = require('path');
 const { createRequire } = require('module');
+const { AsyncLocalStorage } = require('async_hooks');
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : (args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true); };
@@ -43,7 +30,13 @@ if (WRITE && ONLY.includes('ui')) ONLY.push('uireal');
 const filterArg = opt('filter', false);
 const FILTER = typeof filterArg === 'string' ? new RegExp(filterArg, 'i') : null;
 const want = (name) => !FILTER || FILTER.test(name);
-const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'watchdog links', 'programme page', 'socket.io'];
+const LIST_CHECKS = !!opt('list-checks', false); // run, but print only the names of the checks instead of their results
+const filtered = async (fn) => { filterRecs = true; try { return await fn(); } finally { filterRecs = false; } };
+// --concurrency N (or SMOKE_CONCURRENCY): how many independent read-only checks (searches, page loads, pictures) run at once.
+// 1 (the default) is the plain sequential run. Anything that changes data (the write layers) always runs one step at a time.
+const CONCURRENCY = Math.max(1, Math.min(8, parseInt(String(opt('concurrency', process.env.SMOKE_CONCURRENCY || '1')), 10) || 1));
+const NO_SHOTS = !!opt('no-shots', false); // the route sweep skips its screenshots (pass/fail only)
+const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'queue selection', 'nav bar buttons', 'ui consistency', 'statistics cache cards', 'watchdog links', 'programme page', 'socket.io'];
 
 if (opt('list', false)) {
     const names = (file, fn) => [...fs.readFileSync(path.join(__dirname, file), 'utf8').matchAll(new RegExp(`await ${fn}\\('([^']+)'`, 'g'))].map((m) => m[1]);
@@ -52,8 +45,8 @@ if (opt('list', false)) {
     show('ui (route sweep + interactions, --filter matches the page label or:)', INTERACTIONS);
     show('real  (--write --only real --filter ...)', names('reallife.cjs', 'step'));
     show('uireal  (--write --only uireal --filter ...)', names('uireal.cjs', 'flow'));
-    show('settings', []);
-    show('probes', []);
+    console.log('--list-checks (with --only/--write) runs the groups and prints every check name for api, fs, settings, probes');
+    console.log('api, fs, settings, probes: --filter matches "area name" of each check (e.g. --filter "api.*watchdog", --filter LIVE_TV, --filter probe)\n');
     process.exit(0);
 }
 const PHONE_ONLY = !!opt('phone-only', false);
@@ -63,12 +56,50 @@ const PW_DIR = process.env.SMOKE_PW_DIR || ''; // node_modules folder with playw
 
 const results = [];
 let muted = false; // set while the API layer only runs to discover pids/config for the write groups
+let currentArea = '-';
+let filterRecs = false; // true while a group without its own steps runs (api, fs, settings, probes): --filter then matches "area name" of each result
+// While tasks of a pool run side by side, each task's results are held back and written in task order afterwards, so the
+// console and report.json read the same as a sequential run.
+const recBuffer = new AsyncLocalStorage();
+const gaps = [];
+let lastAt = Date.now();
 const rec = (area, name, status, detail = '') => {
+    const held = recBuffer.getStore();
+    if (held) { held.push([area, name, status, detail]); return; }
     if (muted) return;
-    results.push({ area, name, status, detail: String(detail).slice(0, 300) });
+    // Never hidden by --filter: whether the run left the configuration as it found it (a filtered run that left a setting changed must say so).
+    if (filterRecs && FILTER && !FILTER.test(`${area} ${name}`) && !/leaves the configuration exactly as it found it/.test(name)) return;
+    currentArea = area;
+    // Time since the previous result, kept so the end of a run can name its slowest steps.
+    const nowAt = Date.now();
+    const stepMs = nowAt - lastAt;
+    gaps.push([stepMs, `[${area}] ${name}`]);
+    lastAt = nowAt;
+    // A skip always says why; the detail of a PASS stays in report.json and is not printed.
+    if (status === 'SKIP' && !String(detail).trim()) detail = '(no reason given)';
+    results.push({ area, name, status, detail: String(detail).slice(0, 300), at: new Date(nowAt).toISOString(), ms: stepMs });
+    if (LIST_CHECKS) return;
     const tag = { PASS: '  ok ', FAIL: 'FAIL ', WARN: 'warn ', SKIP: 'skip ' }[status];
-    console.log(`${tag}[${area}] ${name}${detail ? ' - ' + String(detail).slice(0, 160) : ''}`);
+    const shown = status === 'PASS' ? '' : status === 'SKIP' ? ` - SKIPPED because: ${String(detail).slice(0, 200)}` : detail ? ' - ' + String(detail).slice(0, 160) : '';
+    console.log(`${tag}[${area}] ${name}${shown}`);
 };
+
+// pool(items, fn): runs fn(item, index) for every item, CONCURRENCY at a time, and returns the results in item order.
+// With CONCURRENCY 1 it is a plain loop. Only for independent, read-only work.
+async function pool(items, fn) {
+    if (CONCURRENCY <= 1) { const out = []; for (let i = 0; i < items.length; i++) out.push(await fn(items[i], i)); return out; }
+    const results = new Array(items.length), held = items.map(() => []);
+    let next = 0;
+    const worker = async () => {
+        while (next < items.length) {
+            const i = next++;
+            results[i] = await recBuffer.run(held[i], () => fn(items[i], i)).catch((e) => { held[i].push(['pool', `task ${i}`, 'FAIL', 'threw: ' + e.message]); });
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
+    for (const list of held) for (const r of list) rec(...r);
+    return results;
+}
 
 async function http(p, { method = 'GET', body, timeout = 30000, headers = {} } = {}) {
     const ctl = new AbortController();
@@ -81,7 +112,7 @@ async function http(p, { method = 'GET', body, timeout = 30000, headers = {} } =
         });
         const text = await r.text();
         let json; try { json = JSON.parse(text); } catch { /* not json */ }
-        return { status: r.status, ct: r.headers.get('content-type') || '', text, json };
+        return { status: r.status, ct: r.headers.get('content-type') || '', cache: r.headers.get('cache-control') || '', text, json };
     } catch (e) { return { status: 0, ct: '', text: '', error: e.name === 'AbortError' ? 'timeout' : e.message }; }
     finally { clearTimeout(t); }
 }
@@ -122,7 +153,406 @@ async function watchdogFieldChecks(A) {
     rec(A, 'watchdog path-map save rejects a malformed value', savePath.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + savePath.status);
 }
 
+// Rejected input on the routes that share the error helpers (apiErrors) and the form validators: each answers a 400 in the app's
+// standard shape (an error code with a message, or invalid_fields naming each field). Every request here is refused before anything
+// is saved, so it is safe on any instance.
+async function rejectedInputChecks(A) {
+    const send = (method, p, body) => http(p, { method, body });
+    const named = (r, ...fields) => r.status === 400 && r.json?.error && fields.every((f) => r.json?.invalid_fields?.[f]);
+    const said = (r, re) => r.status === 400 && !!r.json?.error && re.test(r.json?.message || '');
+
+    const noChannel = await send('POST', '/json-api/subscriptions/live', {});
+    rec(A, 'live subscription without a channelId is a 400 with its message', said(noChannel, /channelId is required/) ? 'PASS' : 'FAIL', noChannel.text.slice(0, 120));
+    for (const [what, p, body] of [
+        ['live channel Discover switch', '/json-api/live-channels/bbc_one/discover', { enabled: 'yes' }],
+        ['live channel on/off switch', '/json-api/live-channels/bbc_one', {}],
+    ]) {
+        const r = await send('PUT', p, body);
+        rec(A, `${what} refuses a value that is not true or false`, said(r, /true or false/) ? 'PASS' : 'FAIL', r.text.slice(0, 120));
+    }
+    const noRequest = await send('POST', '/json-api/request', {});
+    rec(A, 'an arr request with nothing in it is a 400 naming what is required', said(noRequest, /required/) ? 'PASS' : 'FAIL', noRequest.text.slice(0, 120));
+    const noTerm = await http('/json-api/subscriptions/arr/apps/smoke-none/lookup');
+    rec(A, 'an arr lookup without a search term is a 400', said(noTerm, /search term/) ? 'PASS' : 'FAIL', noTerm.text.slice(0, 120));
+    const noImport = await send('POST', '/json-api/subscriptions/arr/detected/import', {});
+    rec(A, 'importing a detected show with nothing in the request is a 400', said(noImport, /required/) ? 'PASS' : 'FAIL', noImport.text.slice(0, 120));
+
+    const noSynonym = await send('POST', '/json-api/synonym', {});
+    rec(A, 'a synonym with nothing in it is refused, naming its fields', noSynonym.status === 400 && Object.keys(noSynonym.json?.invalid_fields || {}).length ? 'PASS' : 'FAIL', noSynonym.text.slice(0, 160));
+    for (const method of ['POST', 'PUT']) {
+        const r = await send(method, '/json-api/offSchedule', {});
+        rec(A, `off-schedule ${method} with nothing in it is refused, naming its fields`, r.status === 400 && Object.keys(r.json?.invalid_fields || {}).length ? 'PASS' : 'FAIL', r.text.slice(0, 160));
+    }
+    const noApp = await send('POST', '/json-api/apps', {});
+    rec(A, 'an app with nothing in it is refused, naming its fields', noApp.status === 400 && Object.keys(noApp.json?.invalid_fields || {}).length ? 'PASS' : 'FAIL', noApp.text.slice(0, 160));
+    const noAgent = await send('POST', '/json-api/apps/user-agents', {});
+    rec(A, 'a User-Agent mapping with nothing in it names both missing fields', named(noAgent, 'userAgent', 'appName') ? 'PASS' : 'FAIL', noAgent.text.slice(0, 160));
+    const noAgentPut = await send('PUT', '/json-api/apps/user-agents', {});
+    rec(A, 'updating a User-Agent mapping with nothing in it names the User-Agent', named(noAgentPut, 'userAgent') ? 'PASS' : 'FAIL', noAgentPut.text.slice(0, 160));
+
+    // The whole-number settings take their range from one table, so each is refused past its top (and the message names the key).
+    const overLimit = { ACTIVE_LIMIT: 99, RADIO_ACTIVE_LIMIT: 99, RADIO_SEARCH_MAX_RESULTS: 500, RSS_FEED_HOURS: 9999, STRM_WATCHDOG_CONCURRENCY: 99, STRM_WATCHDOG_FAIL_THRESHOLD: 5000, STRM_WATCHDOG_STRIKES: 99, STREAM_HISTORY_RETENTION_DAYS: 99999 };
+    const tooBig = await send('PUT', '/json-api/config', overLimit);
+    const missed = Object.keys(overLimit).filter((key) => !tooBig.json?.invalid_fields?.[key]);
+    rec(A, 'saving every whole-number setting past its limit is refused, naming each one', tooBig.status === 400 && !missed.length ? 'PASS' : 'FAIL', missed.length ? `not refused: ${missed.join(', ')}` : tooBig.text.slice(0, 120));
+    const notNumber = await send('PUT', '/json-api/config', { ACTIVE_LIMIT: 'lots', STRM_WATCHDOG_STRIKES: -1 });
+    rec(A, 'a whole-number setting that is not a number, or is negative, is refused', named(notNumber, 'ACTIVE_LIMIT', 'STRM_WATCHDOG_STRIKES') ? 'PASS' : 'FAIL', notNumber.text.slice(0, 160));
+    const template = await send('PUT', '/json-api/config', { TV_FILENAME_TEMPLATE: '{{title}}-{{quality}}', MOVIE_FILENAME_TEMPLATE: '{{title}}-{{quality}}' });
+    rec(A, 'a filename template with a variable after the final "-" is refused for both TV and movies', named(template, 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE') ? 'PASS' : 'FAIL', template.text.slice(0, 160));
+    const broken = await send('PUT', '/json-api/config', { TV_FILENAME_TEMPLATE: '{{title', MOVIE_FILENAME_TEMPLATE: '{{title' });
+    rec(A, 'a filename template that does not compile is refused for both TV and movies', named(broken, 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE') ? 'PASS' : 'FAIL', broken.text.slice(0, 160));
+}
+
 // ---------------------------------------------------------------- API layer
+// Radio station logos on the Channels page: each is addressed with a version (so a browser's cached older logo is not shown)
+// and is served as a wide SVG (76x32) set on a field of its own colour, the same shape as a TV channel logo.
+async function radioLogoChecks(A, cfg) {
+    if (String(cfg.LIVE_RADIO) !== 'true') return;
+    const channelsOf = (r) => (Array.isArray(r?.json) ? r.json : Array.isArray(r?.json?.data) ? r.json.data : []);
+    const list = await check(A, 'radio channels carry a versioned logo address', '/json-api/browse/channels', (r) => {
+        const radio = channelsOf(r).filter((c) => c.audioOnly);
+        if (!radio.length) return 'no radio channels listed while Live Radio is on';
+        const bad = radio.find((c) => !/^json-api\/browse\/channel-logo\/[a-z0-9_]+\.svg\?v=wide$/.test(c.logo || ''));
+        return !bad || `${bad.id}: ${bad.logo}`;
+    });
+    await check(A, 'radio pill colours resolve under the full and the Sounds short name', '/json-api/browse/channel-colors', (r) => {
+        const c = r.json || {};
+        const radio = Object.keys(c).filter((k) => /^BBCRadio\d/.test(k));
+        if (!radio.length) return 'no radio colours while Live Radio is on';
+        const miss = radio.map((k) => k.replace(/^BBC/, '')).find((short) => !c[short]);
+        return !miss || `no colour under the short name ${miss}`;
+    }, { warnOnly: true });
+    const first = channelsOf(list).find((c) => c.audioOnly && c.logo);
+    if (!first) return;
+    await check(A, 'radio channel logo is a wide SVG on a colour field', `/${first.logo}`, (r) => {
+        if (r.status !== 200) return `HTTP ${r.status}`;
+        if (!/viewBox="0 0 76 32"/.test(r.text)) return 'not the 76x32 wide shape';
+        return /<rect width="76" height="32" fill="#[0-9a-f]{3,8}"/i.test(r.text) || 'no colour field behind the logo';
+    }, { warnOnly: true, timeout: 30000 });
+}
+
+// A radio station's channel page is built like a TV channel's: now/next from the Sounds schedule, "On Today" / "On Tomorrow"
+// rails of cards with a picture and the station's name (not its id), the station flagged audio-only.
+async function radioChannelPageChecks(A, cfg) {
+    if (String(cfg.LIVE_RADIO) !== 'true') return;
+    const list = await http('/json-api/browse/channels');
+    const station = (Array.isArray(list.json) ? list.json : []).find((c) => c.audioOnly && c.live);
+    if (!station) return;
+    await check(A, 'radio channel page has now/next and schedule rails, named and with pictures', `/json-api/browse/channel/${station.id}`, (r) => {
+        const j = r.json || {};
+        if (!j.channel?.audioOnly) return 'channel is not flagged audioOnly';
+        if (!j.nowNext?.now && !j.nowNext?.next) return 'no now/next from the radio schedule';
+        const items = (j.rails || []).flatMap((rail) => rail.items || []);
+        if (!items.length) return 'no schedule rails';
+        if (!(j.rails || []).some((rail) => rail.id === 'today')) return 'no "On Today" rail';
+        const raw = items.find((i) => i.channel === station.id);
+        if (raw) return `card badge shows the raw id ${raw.channel}`;
+        return items.filter((i) => i.thumbnail).length / items.length >= 0.8 || 'fewer than 80% of radio cards have a picture';
+    }, { warnOnly: true, timeout: 60000 });
+}
+
+// The radio guide: every slot of a radio station that carries the radio flag has plain ids for the show and the episode (they go
+// into a link), an episode slot sits under a show of its own, and the id really is one the Sounds API lists for that show.
+async function radioGuideChecks(A, cfg) {
+    if (String(cfg.LIVE_RADIO) !== 'true') return;
+    const PLAIN = /^[a-z0-9]+$/i;
+    const sched = await check(A, 'radio guide slots carry plain show and episode ids', '/json-api/browse/schedule', (r) => {
+        const rows = (Array.isArray(r.json) ? r.json : []).filter((row) => row.channel?.audioOnly);
+        const slots = rows.flatMap((row) => row.slots || []);
+        if (!slots.length) return 'no radio slots in the guide';
+        const flagged = slots.filter((s) => s.item?.radio === true);
+        const bad = flagged.find((s) => !PLAIN.test(s.item.showId || '') || !PLAIN.test(s.item.pid || '') || (s.item.kind === 'episode' && s.item.showId === s.item.pid) || (s.item.kind === 'brand' && s.item.showId !== s.item.pid));
+        if (bad) return `${bad.item.title}: pid ${bad.item.pid}, showId ${bad.item.showId}, kind ${bad.item.kind}`;
+        return flagged.length / slots.length >= 0.8 || `only ${flagged.length} of ${slots.length} radio slots link to a show`;
+    }, { warnOnly: true, timeout: 60000 });
+    // On-demand slots (Play and Download on the Guide) are episode slots of a show, still available, and the episode is then one
+    // the Sounds download accepts. Slots without the mark (live, upcoming) are never episode slots with an availability date.
+    await check(A, 'radio guide on-demand slots are radio episodes that are still available', '/json-api/browse/schedule', (r) => {
+        const slots = (Array.isArray(r.json) ? r.json : []).filter((row) => row.channel?.audioOnly).flatMap((row) => row.slots || []);
+        const marked = slots.filter((s) => s.onDemand === true);
+        if (!marked.length) return 'no on-demand radio slots in the guide';
+        const bad = marked.find((s) => s.item?.radio !== true || s.item.kind !== 'episode' || (s.item.availableUntil && Date.parse(s.item.availableUntil) <= Date.now()));
+        if (bad) return `${bad.item?.title}: radio ${bad.item?.radio}, kind ${bad.item?.kind}, available until ${bad.item?.availableUntil}`;
+        const unmarked = slots.find((s) => s.onDemand !== true && s.item?.availableUntil);
+        return !unmarked || `${unmarked.item.title} has an availability date but no on-demand mark`;
+    }, { warnOnly: true, timeout: 60000 });
+    const episode = (Array.isArray(sched?.json) ? sched.json : []).filter((row) => row.channel?.audioOnly).flatMap((row) => row.slots || []).find((s) => s.item?.radio === true && s.item.kind === 'episode');
+    if (!episode) return;
+    // The show id is what the guide link opens, so it must be a show BBC Sounds answers for.
+    await check(A, 'radio guide show id opens a radio programme', `/json-api/browse/programme/${episode.item.showId}?mode=radio`, (r) => (r.status === 200 && !!r.json?.title) || `HTTP ${r.status}`, { warnOnly: true, timeout: 60000 });
+}
+
+// The newest radio search of that term in the search history (the list is not in time order).
+const latestRadioEntry = (history, term) =>
+    (Array.isArray(history) ? history : []).filter((e) => e.kind === 'radio' && e.term === term).sort((a, b) => b.time - a.time)[0];
+
+// Radio (BBC Sounds) browse and debug, read-only. Radio is served by the same APIs as video, chosen with ?mode=radio (browse, search,
+// subscriptions, queue, library); the older /json-api/sounds/* paths still answer and are checked too. With SOUNDS_ENABLED off
+// every radio path must answer 404; with it on, each call must give the shape the Radio pages draw (the same grids as video).
+async function radioChecks(A, cfg) {
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // const R = '/json-api/sounds'; // the older paths (kept as aliases)
+    const B = '/json-api/browse';
+    const M = 'mode=radio';
+    if (cfg.SOUNDS_ENABLED !== 'true') {
+        // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+        // await check(A, 'radio browse is 404 while BBC Sounds Radio is off', `${R}/browse/categories`, (r) => r.status === 404 || `HTTP ${r.status}`);
+        // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+        // await check(A, 'radio show lookup is 404 while BBC Sounds Radio is off', `${R}/shows/b006qpgr`, (r) => r.status === 404 || `HTTP ${r.status}`);
+        for (const [name, path] of [
+            ['browse', `${B}/categories?${M}`], ['programme', `${B}/programme/b006qpgr?${M}`], ['suggestions', `${B}/suggest?q=archers&${M}`],
+            ['search stream', `/json-api/search/stream?q=archers&${M}`], ['search settings', `/json-api/search/settings?${M}`], ['subscriptions', `/json-api/subscriptions?${M}`],
+            ['queue', `/json-api/queue/queue?${M}`], ['history', `/json-api/queue/history?${M}`],
+        ]) await check(A, `radio ${name} (mode=radio) is 404 while BBC Sounds Radio is off`, path, (r) => r.status === 404 || `HTTP ${r.status}`);
+        return;
+    }
+    const upstream = { warnOnly: true, timeout: 60000 }; // BBC's own API: a slow answer is a warning, a wrong shape is not
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio browse capabilities (no A to Z)', `${R}/browse/capabilities`, (r) => (r.json?.categories === true && r.json?.collections === true && r.json?.atoz === false) || 'unexpected capabilities');
+    const cats = await check(A, 'radio browse categories are video-shaped tiles with a picture', `${B}/categories?${M}`, (r) => (Array.isArray(r.json) && r.json.length > 5 && r.json.every((c) => c.id && c.title) && r.json.some((c) => (c.thumbnail || '').startsWith('https://ichef.bbci.co.uk/'))) || 'expected category tiles with ichef pictures', upstream);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio browse categories answer the same on the older path', `${R}/browse/categories`, (r) => (Array.isArray(r.json) && r.json.length === (cats.json || []).length) || 'the older path disagrees', upstream);
+    const cat = (cats.json || []).find((c) => c.id === 'comedy') || (cats.json || [])[0];
+    if (cat) {
+        const page = await check(A, 'radio category is a video-shaped page of radio cards', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.pid && e.title && e.radio === true && e.kind === 'episode') && r.json.total >= r.json.items.length && r.json.total <= 300) || 'expected radio cards, total at most 300', upstream);
+        await check(A, 'radio category episodes carry when they leave BBC Sounds (for the expiry badge)', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json?.items || []).some((e) => !Number.isNaN(Date.parse(e.availableUntil))) || 'no episode has an availableUntil date', upstream);
+        await check(A, 'radio search opens a show from its pasted bbc.co.uk link', `/json-api/search?${M}&q=${encodeURIComponent('https://www.bbc.co.uk/sounds/brand/b006qpgr')}`, (r) => (Array.isArray(r.json) && r.json.length === 1 && r.json[0].kind === 'brand' && r.json[0].pid === 'b006qpgr') || 'expected the one show', upstream);
+        await check(A, 'debug health has the radio folder and BBC Sounds checks while BBC Sounds is on', '/json-api/debug/health', (r) => (['Radio folder', 'BBC Sounds'].every((name) => (r.json?.checks || []).some((c) => c.name === name)) || 'a radio check is missing'), upstream);
+        const card = page.json?.items?.[0];
+        const ep = card && { id: card.pid, showId: card.showId };
+        if (ep?.showId) {
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // await check(A, 'radio show details by id (older path)', `${R}/shows/${ep.showId}`, (r) => (r.status === 200 && r.json?.id === ep.showId && !!r.json?.title) || 'no show', { warnOnly: true });
+            const prog = await check(A, 'radio programme is a video-shaped programme with seasons of radio episodes', `${B}/programme/${ep.showId}?${M}`, (r) => {
+                const p = r.json;
+                if (!p || p.pid !== ep.showId || p.kind !== 'brand' || p.radio !== true || !p.title) return 'not a radio programme';
+                if (!Array.isArray(p.seasons) || !p.seasons.length) return 'no seasons';
+                const eps = p.seasons.flatMap((x) => x.episodes || []);
+                if (!eps.length || !eps.every((e) => e.pid && e.radio === true && e.kind === 'episode' && e.title)) return 'episodes are not radio episodes';
+                return (typeof p.hasMore === 'boolean' && p.page === 1) || 'missing hasMore or page';
+            }, upstream);
+            if (prog.json?.hasMore) await check(A, 'radio programme gives the next page of episodes', `${B}/programme/${ep.showId}?page=2&${M}`, (r) => (r.json?.page === 2 && Array.isArray(r.json?.seasons)) || 'no page 2', upstream);
+            await check(A, 'radio programme on-disk is { ids, dates }', `${B}/programme/${ep.showId}/on-disk?${M}`, (r) => (Array.isArray(r.json?.ids) && Array.isArray(r.json?.dates)) || 'expected { ids, dates }', upstream);
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // await check(A, 'radio on-disk on the older path is the same shape', `${R}/on-disk/${ep.showId}`, (r) => (Array.isArray(r.json?.ids) && Array.isArray(r.json?.dates)) || 'expected { ids, dates }', upstream);
+        }
+        if (ep) {
+            const probe = await check(A, 'radio streaming debug reads audio (not video) for an episode', `/json-api/streams/debug/${ep.id}/probe?kind=radio`, (r) => {
+                const v = r.json?.versions?.[0];
+                const audio = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.length));
+                return (v && v.vpid === ep.id && v.bestHeight === 0 && audio) || 'no audio connections in the probe';
+            }, { method: 'POST', ...upstream });
+            // The line a normal Play would use is named, and is a real audio HLS connection in the probe (the page colours it).
+            if (probe.json) rec(A, 'radio streaming debug names the audio line a normal Play would use', (() => {
+                const v = probe.json.versions?.[0];
+                const hls = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.some((c) => c.transferFormat === 'hls' && c.protocol === 'https')));
+                if (!hls) return 'SKIP';
+                const b = v.best;
+                const line = b && v.pairs.find((p) => p.mediaSet === b.mediaSet && p.version === b.version)?.media?.[b.media];
+                return line?.kind === 'audio' && line.connections?.[b.connection]?.transferFormat === 'hls' ? 'PASS' : 'FAIL';
+            })());
+            if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
+            // The radio debug page reads the same dashboard parts as TV (marked ?kind=radio), and has a picture to refresh and metadata to show.
+            await check(A, 'radio streaming debug programme has metadata and a valid picture id', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.metadata && typeof r.json.metadata === 'object' && (r.json.imagePid === undefined || /^p[a-z0-9]{7}$/i.test(r.json.imagePid))) || 'no metadata, or a malformed picture id', { timeout: 60000 });
+            const radioParts = { caches: 'caches', library: 'library', watchdog: 'watchdog', subscriptions: 'subscriptions', streams: 'sessions', events: 'events', logs: 'logs' };
+            for (const [part, key] of Object.entries(radioParts)) {
+                await check(A, `radio streaming debug part ${part} answers`, `/json-api/streams/debug/${ep.id}/part/${part}?kind=radio`, (r) => (r.status === 200 && r.json && key in r.json) || `HTTP ${r.status}, no ${key}`, { timeout: 60000 });
+            }
+            await check(A, 'radio streaming debug one-shot info carries the radio dashboard', `/json-api/streams/debug/${ep.id}?kind=radio`, (r) => (r.json?.found === true && Array.isArray(r.json?.dashboard?.subscriptions) && Array.isArray(r.json?.dashboard?.caches?.thumbnails)) || 'no dashboard', { timeout: 90000 });
+            await check(A, 'radio streaming debug programme carries cast, broadcasts and tracklist lists', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => {
+                const j = r.json;
+                if (!j?.found) return 'not found';
+                for (const key of ['cast', 'broadcasts', 'tracklist']) if (!Array.isArray(j[key])) return `no ${key}[]`;
+                if (j.tracklist.some((t) => typeof t?.title !== 'string' || !t.title)) return 'a track has no title';
+                return true;
+            }, { timeout: 60000 });
+        }
+    }
+    const cols = await check(A, 'radio collections are video-shaped with counts (none while Show Collections is off)', `${B}/collections?${M}`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title && (c.count === undefined || typeof c.count === 'number'))) || 'expected { enabled, collections: [{ id, title, count? }] }', upstream);
+    await check(A, 'radio quick category list has names only', `${B}/categories?${M}&basic=1`, (r) => (Array.isArray(r.json) && r.json.length > 5 && r.json.every((c) => c.id && c.title)) || 'expected category names', upstream);
+    await check(A, 'radio quick collection list has names, and is empty while Show Collections is off', `${B}/collections?${M}&basic=1`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title)) || 'expected { enabled, collections: [{ id, title }] }', upstream);
+    const col = (cols.json?.collections || [])[0];
+    // Download collection: a dry run only counts (read-only), as the video one does.
+    if (col) await check(A, 'radio collection download (dry run) counts the episodes without queueing', `${B}/collections/${col.id}/download?${M}`, (r) => (r.status === 200 && typeof r.json?.total === 'number' && r.json.queued === 0 && typeof r.json.skipped === 'number') || `HTTP ${r.status}`, { method: 'POST', body: { dryRun: true }, timeout: 120000, warnOnly: true });
+    await check(A, 'radio collection download refuses an odd id', `${B}/collections/a-b/download?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { dryRun: true } });
+    if (col) await check(A, 'radio collection is a video-shaped page of radio cards', `${B}/collections/${col.id}?${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.radio === true)) || 'expected radio cards', upstream);
+    await check(A, 'radio home rails are video-shaped and hold radio cards', `${B}/home?${M}`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.every((x) => x.id && x.title && x.items.length && x.items.every((i) => i.radio === true && i.pid))) || 'expected rails of radio cards', upstream);
+    // Radio A to Z (RADIO_ATOZ) is opt-in: off, BBC Sounds has no A to Z and this is an empty page; on, it is a page of show cards (or `building` while the first list is made).
+    if (cfg.RADIO_ATOZ === 'true') await check(A, 'radio A to Z is a page of show cards, or still building (Radio A to Z is on)', `${B}/atoz/a?${M}`, (r) => (r.status === 200 && Array.isArray(r.json?.items) && typeof r.json.total === 'number' && (r.json.building === true || (r.json.items.length > 0 && r.json.items.every((x) => x.radio === true && x.kind === 'brand' && x.pid && x.title)))) || 'expected show cards or building', { ...upstream, timeout: 60000 });
+    else await check(A, 'radio A to Z is an empty page (Radio A to Z is off, BBC Sounds has none)', `${B}/atoz/a?${M}`, (r) => (r.json?.total === 0 && Array.isArray(r.json?.items) && r.json.items.length === 0) || 'expected an empty page');
+    // Podcasts: the BBC podcast shows as brand cards, with the shows that hold no episodes left out.
+    const pods = await check(A, 'radio podcasts are a page of show cards', `${B}/podcasts?${M}&perPage=20`, (r) => (r.status === 200 && Array.isArray(r.json?.items) && r.json.items.length > 0 && r.json.items.length <= 20 && typeof r.json.total === 'number' && r.json.total >= r.json.items.length && r.json.items.every((x) => x.radio === true && x.kind === 'brand' && x.type === 'RADIO' && x.pid && x.title)) || `HTTP ${r.status}, expected a page of radio show cards`, upstream);
+    if (pods.json?.total > 20) await check(A, 'radio podcasts page 2 carries on from page 1 without repeats', `${B}/podcasts?${M}&perPage=20&page=2`, (r) => (r.json?.page === 2 && r.json.items.length > 0 && r.json.items.every((x) => !pods.json.items.some((p) => p.pid === x.pid))) || 'page 2 is empty or repeats page 1', upstream);
+    await check(A, 'radio podcasts are the same whatever the page size', `${B}/podcasts?${M}&perPage=150`, (r) => (r.json?.total === pods.json?.total && r.json.items.length === Math.min(150, pods.json?.total)) || `total ${r.json?.total} vs ${pods.json?.total}`, upstream);
+    const pod = (pods.json?.items || [])[0];
+    if (pod) await check(A, 'a podcast show opens as a programme with episodes (empty shows are left out)', `${B}/programme/${pod.pid}?${M}`, (r) => (r.json && r.json.radio === true && JSON.stringify(r.json.seasons || r.json.episodes || []).includes('"pid"')) || 'the first podcast has no episodes', upstream);
+    await check(A, 'radio category rails are empty', `${B}/category/comedy/rails?${M}`, (r) => (Array.isArray(r.json) && r.json.length === 0) || 'expected []');
+    await check(A, 'radio browse paths radio does not serve carry on to the video ones', `${B}/channels?${M}`, (r) => (r.status === 200 && (Array.isArray(r.json) || Array.isArray(r.json?.data))) || `HTTP ${r.status}`);
+    await check(A, 'video browse is unchanged by the radio mode existing (no radio cards)', `${B}/home`, (r) => (r.status === 200 && !JSON.stringify(r.json || '').includes('"radio":true')) || 'a radio card in the video home', upstream);
+    const sug = await check(A, 'radio suggestions are type-ahead rows of kind radio', `${B}/suggest?q=archers&${M}`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.length <= 8 && r.json.every((x) => x.kind === 'radio' && x.pid && x.title)) || 'expected radio suggestion rows', upstream);
+    if (sug.json?.some((x) => x.episodeOf)) rec(A, 'a radio episode suggestion names the show it opens on', sug.json.filter((x) => x.episodeOf).every((x) => /^[a-z0-9]+$/i.test(x.episodeOf)) ? 'PASS' : 'FAIL', JSON.stringify(sug.json.find((x) => x.episodeOf)));
+    await check(A, 'radio search stream sends shows and episodes as lines, then done', `/json-api/search/stream?q=archers&${M}`, (r) => {
+        const lines = r.text.trim().split('\n').map((l) => JSON.parse(l));
+        const last = lines[lines.length - 1];
+        if (r.status !== 200 || !/ndjson/.test(r.ct)) return 'not an NDJSON stream';
+        if (last.error) return `search failed: ${last.error}`;
+        const results = lines.filter(Array.isArray).flat();
+        return (last.done === true && results.length > 0 && results.every((x) => x.radio === true && x.pid && x.title && x.type === 'RADIO')) || 'expected radio results then {done:true}';
+    }, upstream);
+    await check(A, 'radio search stream refuses an empty term', `/json-api/search/stream?q=%20&${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio search finds shows and episodes (older path)', `${R}/search?q=archers`, (r) => (Array.isArray(r.json?.shows) && Array.isArray(r.json?.episodes)) || 'expected { shows, episodes }', upstream);
+    await check(A, 'radio browse refuses an odd category id', `${B}/category/a%20b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio browse refuses an odd collection id', `${B}/collections/a-b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio programme refuses an odd id', `${B}/programme/a-b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio programme on-disk refuses an odd id', `${B}/programme/a-b/on-disk?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio show lookup refuses an odd id (older path)', `${R}/shows/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
+
+    // Subscriptions (followed shows) through the one subscriptions API
+    const subs = await check(A, 'radio subscriptions are subscription-shaped rows', `/json-api/subscriptions?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true && /^radio-[a-z0-9]+$/i.test(x.id) && x.showId && x.pid === x.showId && x.title && x.createdAt && Array.isArray(x.seen))) || 'expected rows with id radio-<showId>, showId, pid, title, createdAt and seen', upstream);
+    await check(A, 'the video subscriptions list holds no radio rows', '/json-api/subscriptions', (r) => (Array.isArray(r.json) && !r.json.some((x) => x.radio || String(x.id).startsWith('radio-'))) || 'a radio row in the video list');
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio subscriptions on the older path list the same shows', `${R}/follows`, (r) => (Array.isArray(r.json) && r.json.length === (subs.json || []).length) || 'the older path disagrees', upstream);
+    await check(A, 'an unknown subscriptions mode is refused', '/json-api/subscriptions?mode=podcast', (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription check of an unknown show is 404', `/json-api/subscriptions/radio-b0000000/check?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription missing list of an unknown show is 404', `/json-api/subscriptions/b0000000/missing?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription refuses an odd id', `/json-api/subscriptions/b-0/missing?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription cover picture of a show that is not followed is 404', `/json-api/subscriptions/radio-b0000000/images?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio subscription cover picture refuses an odd id', `/json-api/subscriptions/b-0/images?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio shows found on disk are listed with their BBC Sounds match', `/json-api/subscriptions/detected?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.title && typeof x.onDisk === 'number' && Array.isArray(x.sources) && (x.showId ? /^[a-z0-9]{6,}$/i.test(x.showId) : !!x.reason))) || 'expected rows with a title, onDisk, sources and a showId or a reason', { ...upstream, timeout: 120000 });
+    await check(A, 'radio found-on-disk trace needs a term', `/json-api/subscriptions/detected/trace?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio found-on-disk trace of a name nothing on disk has is empty', `/json-api/subscriptions/detected/trace?${M}&term=zzqxjvw`, (r) => (r.status === 200 && r.json?.term === 'zzqxjvw' && Array.isArray(r.json.shows) && r.json.shows.length === 0) || `HTTP ${r.status}`);
+    await check(A, 'radio found-on-disk import refuses an odd show id', `/json-api/subscriptions/detected/import?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { showId: 'a b', title: 'x' } });
+    await check(A, 'radio found-on-disk import needs a title', `/json-api/subscriptions/detected/import?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { showId: 'b006qpgr', title: ' ' } });
+    await check(A, 'radio subscription versions are video-only (400)', `/json-api/subscriptions/radio-b0000000/versions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'PUT', body: { versions: [] } });
+    await check(A, 'radio subscribe validates its pid and title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: '!!' } });
+    await check(A, 'radio subscribe needs a title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: 'b006qpgr' } });
+    await check(A, 'radio secure refuses a value that is not a number or null', `/json-api/subscriptions/radio-b0000000/secure?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'PUT', body: { days: 'soon' } });
+
+    // Downloads: the Queue page reads them from the one queue API
+    await check(A, 'radio queue is a list of queue rows', `/json-api/queue/queue?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.kind === 'radio' && x.pid && /^(Queued|Downloading)$/.test(x.status) && x.type === 'Radio' && x.details)) || 'expected radio queue rows');
+    await check(A, 'radio history is a list of queue rows', `/json-api/queue/history?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.kind === 'radio' && x.pid && /^(Complete|Failed)$/.test(x.status) && x.type === 'Radio' && x.details)) || 'expected radio history rows');
+    await check(A, 'the video queue and history hold no radio rows', '/json-api/queue/queue', (r) => (Array.isArray(r.json) && !r.json.some((x) => x.kind === 'radio')) || 'a radio row in the video queue');
+    await check(A, 'radio queue cancel needs a pid', `/json-api/queue/queue?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'DELETE' });
+    await check(A, 'radio queue cancel of an unknown download is 404', `/json-api/queue/queue?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'DELETE' });
+    await check(A, 'radio history removal of an unknown download is 404', `/json-api/queue/history?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'DELETE' });
+    await check(A, 'radio retry needs a pid', `/json-api/queue/history/retry?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio retry of an unknown download is 404', `/json-api/queue/history/retry?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'POST' });
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio downloads list is an array (older path)', `${R}/downloads`, isArr);
+
+    // A change or an iPlayer-only lookup is refused for radio, so a radio request can never act on a video thing.
+    await check(A, 'radio refuses an iPlayer-only lookup (details)', `${B}/details?pid=m000abcd&${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
+    // The info popup of a radio item reads the episode's details in the shape of a video's (an episode nobody has listed gets a bare record).
+    await check(A, 'radio episode details come in the shape of a video\'s', '/json-api/details?pid=p0nyk2n0&kind=radio', (r) => (r.status === 200 && r.json?.pid === 'p0nyk2n0' && r.json?.type === 'RADIO' && r.json?.audioOnly === true && !!r.json?.category) || 'not shaped like details', upstream);
+    await check(A, 'radio episode details refuse an odd id', '/json-api/details?pid=not-valid!&kind=radio', (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio refuses to feature a category on Discover', `${B}/categories/comedy/discover?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'PUT' });
+    await check(A, 'radio search (not streamed) is an array of radio results', `/json-api/search?q=archers&${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true)) || 'expected radio results', upstream);
+    // Radio search settings (Settings > Search > Radio Search): the setup endpoint, and a search that obeys whatever is in force.
+    // The NZB page's results popup lists a radio search from the history, so the newest 'archers' radio entry must name its hits
+    // (show - episode) with their network, and carry a trace whose candidates are all dropped ones with a reason.
+    const radioHistory = await check(A, 'radio search is recorded in the search history, newest first by time', '/json-api/stats/searchHistory', (r) => {
+        const e = latestRadioEntry(r.json, 'archers');
+        return (e && e.kind === 'radio' && e.source === 'manual') || 'the radio search above was not recorded as a manual radio search';
+    }, upstream);
+    const radioEntry = latestRadioEntry(radioHistory.json, 'archers');
+    if (radioEntry) {
+        await check(A, 'radio search popup data: hits are named with their network and the trace lists only dropped hits',
+            `/json-api/stats/searchHistory/detail?term=${encodeURIComponent(radioEntry.term)}&time=${radioEntry.time}`, (r) => {
+                const { items, trace } = r.json || {};
+                if (!Array.isArray(items)) return 'no items';
+                if (items.some((i) => !i.title || i.type !== 'RADIO' || !i.pid)) return 'a recorded radio hit has no title, type or pid';
+                if (items.length && !items.some((i) => i.channel)) return 'no recorded radio hit has a network';
+                if (!trace || !Array.isArray(trace.candidates)) return 'no trace';
+                return trace.candidates.every((c) => c.kept === false && c.title && c.reason) || 'the trace holds a kept hit, or a dropped one with no title or reason';
+            }, upstream);
+    }
+    const radioSetup = await check(A, 'radio search settings describe the setup', `/json-api/search/settings?${M}`, (r) => {
+        const s = r.json;
+        if (!s || s.radio !== true) return 'expected { radio: true, ... }';
+        if (typeof s.matchAllWords !== 'boolean' || typeof s.rankByTitle !== 'boolean' || typeof s.mp3Only !== 'boolean') return 'a flag is not true or false';
+        if (typeof s.collectionNames !== 'boolean' || typeof s.expandCollections !== 'boolean') return 'a collections flag is not true or false';
+        if (!['both', 'shows', 'episodes'].includes(s.scope)) return `scope is ${s.scope}`;
+        if (!Array.isArray(s.networks) || !Array.isArray(s.inherited)) return 'networks / inherited are not lists';
+        if (!Number.isInteger(s.maxResults) || s.maxResults < 0 || s.maxResults > 200) return `maxResults is ${s.maxResults}`;
+        return true;
+    });
+    const setup = radioSetup.json;
+    if (setup?.radio) {
+        await check(A, 'radio search obeys the radio search settings in force', `/json-api/search?q=archers&${M}`, (r) => {
+            const hits = Array.isArray(r.json) ? r.json : [];
+            const shows = hits.filter((x) => x.kind === 'brand');
+            const eps = hits.filter((x) => x.kind === 'episode');
+            if (setup.scope === 'shows' && eps.length) return 'episodes listed with scope "shows"';
+            if (setup.scope === 'episodes' && shows.length) return 'shows listed with scope "episodes"';
+            if (setup.mp3Only && eps.some((e) => !e.mp3)) return 'a non-MP3 episode listed with MP3 only on';
+            if (setup.maxResults > 0 && (shows.length > setup.maxResults || eps.length > setup.maxResults)) return `more than ${setup.maxResults} of a kind listed`;
+            const bare = (n) => String(n || '').replace(/^BBC /i, '').toLowerCase();
+            if (setup.networks.length && hits.some((x) => !setup.networks.some((n) => bare(n) === bare(x.channel)))) return 'a hit from a network that is not listed';
+            if (setup.matchAllWords && hits.some((x) => !`${x.title} ${x.subtitle || ''} ${x.episodeTitle || ''} ${x.showTitle || ''}`.toLowerCase().includes('archers'))) return 'a hit whose title lacks the word searched for';
+            return true;
+        }, upstream);
+        await check(A, 'radio search with no words listed is not an error', `/json-api/search?q=a&${M}`, (r) => (r.status === 200 && Array.isArray(r.json)) || `HTTP ${r.status}`, upstream);
+        // Expand BBC Collections: a collection's pid lists only its episodes while the option is on, and is an ordinary search otherwise.
+        const tiles = (await http(`/json-api/browse/collections?${M}&basic=1`, { timeout: 120000 })).json?.collections || [];
+        if (tiles.length) {
+            await check(A, 'radio search for a collection pid follows the Expand BBC Collections setting', `/json-api/search?q=${encodeURIComponent(tiles[0].id)}&${M}`, (r) => {
+                const hits = Array.isArray(r.json) ? r.json : [];
+                if (r.status !== 200) return `HTTP ${r.status}`;
+                if (setup.expandCollections) return (hits.length > 0 && hits.every((x) => x.kind === 'episode')) || 'expected the collection\'s episodes only';
+                return !hits.length || 'a bare pid listed results with Expand BBC Collections off';
+            }, { ...upstream, warnOnly: true });
+        }
+    }
+
+    // Library index: the debug page filters by library
+    await check(A, 'library debug with mode=radio holds only radio rows', `/json-api/library/debug?${M}&pageSize=50`, (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => x.radio === true)) || 'a video row among the radio rows');
+    await check(A, 'library debug with mode=video holds no radio rows', '/json-api/library/debug?mode=video&pageSize=50', (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => !x.radio)) || 'a radio row among the video rows');
+    await check(A, 'library debug still takes the older radio=true flag', '/json-api/library/debug?radio=true&pageSize=50', (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => x.radio === true)) || 'a video row among the radio rows');
+}
+
+// The few facts the write groups (and the UI sweep) need, found without running the whole API layer: the config, a programme
+// pid (preferring a brand, as apiLayer does), a channel, a category and the Watchdog state. Nothing is recorded.
+async function discover(ctx) {
+    ctx.cfg = (await http('/json-api/config')).json || {};
+    const home = await http('/json-api/browse/home');
+    const homeItems = (Array.isArray(home.json) ? home.json : []).flatMap((r) => r.items || []);
+    let firstItem = homeItems[0];
+    for (const candidate of homeItems.slice(0, 10)) {
+        if (!candidate?.pid) continue;
+        if ((await http(`/json-api/browse/programme/${candidate.pid}`, { timeout: 60000 })).json?.kind === 'brand') { firstItem = candidate; break; }
+    }
+    ctx.pid = firstItem?.pid;
+    const [chans, cats, wd, manual] = await Promise.all([http('/json-api/browse/channels'), http('/json-api/browse/categories'), http('/json-api/watchdog'), http('/json-api/search/settings')]);
+    ctx.channel = (Array.isArray(chans.json) ? chans.json : [])[0]?.id;
+    ctx.category = (Array.isArray(cats.json) ? cats.json : cats.json?.categories || [])[0]?.id;
+    ctx.wd = wd.json;
+    ctx.manualSettings = manual.json;
+}
+
+// Read-only checks for the code-review hardening: SAB sizes never NaN/null, odd input gives no 5xx, parsing of stats
+// query values, cross-site GETs refused, off-schedule refresh validation.
+async function tierTwoChecks(A, apikey) {
+    for (const mode of ['queue', 'history']) {
+        const r = await http(`/api?mode=${mode}&output=json&apikey=${apikey}`);
+        const bad = /NaN|"(?:size|mb|mbleft|bytes|sizeleft|completed|downloaded)":\s*null/.test(r.text);
+        rec(A, `sab ${mode} has no NaN or null sizes`, r.status === 200 && !bad ? 'PASS' : 'FAIL', r.text.slice(0, 100));
+    }
+    for (const q of ['mode=definitely-not-a-mode', 't=definitely-not-a-type', 'mode=history&start=abc&limit=-5', 't=search&q=%00%ff']) {
+        const r = await http(`/api?${q}&apikey=${apikey}`);
+        rec(A, `odd request "${q}" gives no server error`, r.status < 500 ? 'PASS' : 'FAIL', `HTTP ${r.status}`);
+    }
+    const all = await http('/json-api/stats/searchHistory?filterRss=false&limit=abc');
+    rec(A, 'stats filterRss=false and a junk limit are read as no filter, no limit', all.status === 200 && Array.isArray(all.json) ? 'PASS' : 'FAIL', `HTTP ${all.status}`);
+    const cross = await http('/json-api/cache-refresh', { headers: { 'Sec-Fetch-Site': 'cross-site' } });
+    rec(A, 'a cross-site GET that changes state is refused', cross.status === 403 ? 'PASS' : 'FAIL', `HTTP ${cross.status}`);
+    const noId = await http('/json-api/offSchedule/refresh', { method: 'POST', body: {} });
+    rec(A, 'off-schedule refresh without an id is a 400', noId.status === 400 ? 'PASS' : 'WARN', `HTTP ${noId.status}`);
+    const mp = await http('/api?mode=stream&apikey=' + apikey, { method: 'POST', headers: { 'Content-Type': 'multipart/form-data; boundary=x' }, body: undefined });
+    rec(A, 'multipart POST to a non-addfile mode gives no server error', mp.status < 500 ? 'PASS' : 'FAIL', `HTTP ${mp.status}`);
+}
+
 async function apiLayer(ctx) {
     const A = 'api';
     await check(A, 'ping (DB healthcheck)', '/ping', (r) => r.json?.status === 'OK' || 'not OK');
@@ -138,10 +568,22 @@ async function apiLayer(ctx) {
     else rec(A, 'config STREAM_BASE_URL set', 'WARN', 'empty gives .strm with "undefined/"');
     await check(A, 'config hiddenSettings', '/json-api/config/hiddenSettings', isObj);
     await check(A, 'config lockedSettings', '/json-api/config/lockedSettings', isObj);
+    // Rejected saves change nothing, so these are safe on any instance: options that run commands must be refused.
+    for (const [key, value] of [['YTDLP_EXEC', 'yt-dlp --exec id'], ['GET_IPLAYER_EXEC', 'perl -MPOSIX script.pl'], ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--comm id']]) {
+        await check(A, `config refuses ${key} with a command option`, '/json-api/config', (r) => (r.status === 400 && !!r.json?.invalid_fields?.[key]) || `expected 400 naming ${key}`, { method: 'PUT', body: { [key]: value } });
+    }
+    // The service worker must not answer server routes (the OIDC callback, /api, /json-api) with the app shell.
+    await check(A, 'service worker denies server routes', '/service-worker.js', (r) => r.status === 200 && /denylist/.test(r.text) && /json-api/.test(r.text) || 'no navigation denylist for server routes', { warnOnly: true });
+    // Content-hashed files never change, so the browser may keep them for good; the page that names them must be revalidated.
+    const shell = await http('/');
+    const assetPath = /\/assets\/[^"')\s]+\.js/.exec(shell.text || '')?.[0];
+    if (assetPath) await check(A, 'hashed assets are cached for good', assetPath, (r) => (r.status === 200 && /immutable/.test(r.cache) && /max-age=31536000/.test(r.cache)) || `cache-control was "${r.cache}"`, { warnOnly: true });
+    await check(A, 'the app shell is not cached for good', '/', (r) => !/immutable/.test(r.cache) || `cache-control was "${r.cache}"`, { warnOnly: true });
     await check(A, 'config qualityProfiles', '/json-api/config/qualityProfiles', isJson);
     await check(A, 'config versionProfiles', '/json-api/config/versionProfiles', isJson);
 
     // Newznab indexer
+    await tierTwoChecks(A, apikey);
     await check(A, 'newznab caps', `/api?t=caps&apikey=${apikey}`, (r) => /<caps/.test(r.text) || 'no <caps>');
     const bad = await http('/api?t=caps&apikey=definitely-wrong');
     rec(A, 'newznab rejects bad apikey', bad.status >= 400 || /error/i.test(bad.text) ? 'PASS' : 'FAIL', `HTTP ${bad.status}`);
@@ -190,16 +632,18 @@ async function apiLayer(ctx) {
     const cats = await check(A, 'browse categories', '/json-api/browse/categories', isJson);
     ctx.category = (Array.isArray(cats.json) ? cats.json : cats.json?.categories || [])[0]?.id;
     // Collections: the list is empty (and nothing is fetched) while Show Collections is off; a collection's contents are always readable.
+    await check(A, 'browse quick category list has names only', '/json-api/browse/categories?basic=1', (r) => (Array.isArray(r.json) && r.json.every((c) => c.id && c.title)) || 'expected category names');
+    await check(A, 'browse quick collection list has names, and is empty while switched off', '/json-api/browse/collections?basic=1', (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title)) || 'expected { enabled, collections: [{ id, title }] }');
     const collections = await check(A, 'browse collections', '/json-api/browse/collections', (r) => (r.json && typeof r.json.enabled === 'boolean' && Array.isArray(r.json.collections)) || 'expected { enabled, collections: [] }');
-    rec(A, 'browse collections is empty while switched off', collections.json?.enabled === false ? (collections.json.collections.length === 0 ? 'PASS' : 'FAIL') : 'SKIP', collections.json?.enabled ? 'Show Collections is on' : 'listed collections while off');
+    rec(A, 'browse collections is empty while switched off', collections.json?.enabled === false ? (collections.json.collections.length === 0 ? 'PASS' : 'FAIL') : 'SKIP', collections.json?.enabled === false ? 'listed collections while off' : 'Show Collections (BROWSE_SHOW_COLLECTIONS) is on, so there is no "off" state to check');
     // Every collection should have a picture that really loads (some pictures are programme ids, not images: those borrow a programme's artwork).
     const listedCollections = collections.json?.collections || [];
     if (listedCollections.length) {
         const noPicture = listedCollections.filter((c) => !c.thumbnail).length;
         let broken = 0;
         const sample = listedCollections.filter((c) => c.thumbnail).slice(0, 40);
-        for (const c of sample) { const r = await fetch(BASE + '/' + c.thumbnail).catch(() => ({ status: 0 })); if (r.status !== 200) broken++; }
-        rec(A, `collection pictures load (${sample.length} checked of ${listedCollections.length})`, broken || noPicture ? 'FAIL' : 'PASS', `${broken} broken, ${noPicture} with no picture`);
+        await pool(sample, async (c) => { const r = await fetch(BASE + '/' + c.thumbnail).catch(() => ({ status: 0 })); if (r.status !== 200) broken++; });
+        rec(A, `collection pictures load (${sample.length} checked of ${listedCollections.length})`, broken ? 'FAIL' : noPicture ? 'WARN' : 'PASS', `${broken} broken, ${noPicture} with no picture`);
     }
     const firstCollection = (collections.json?.collections || [])[0];
     if (firstCollection) await check(A, 'browse collection contents', `/json-api/browse/collections/${firstCollection.id}?perPage=5`, (r) => (r.json && Array.isArray(r.json.items)) || 'no items array');
@@ -243,7 +687,18 @@ async function apiLayer(ctx) {
     }, { timeout: 120000 });
     await check(A, 'browse schedule', '/json-api/browse/schedule', isJson);
     await check(A, 'browse channel-colors', '/json-api/browse/channel-colors', isJson);
+    // Radio search results carry station pills, so with BBC Sounds on (even with Live Radio off) the stations have colours of their own, under both spellings.
+    if (cfg.SOUNDS_ENABLED === 'true') {
+        await check(A, 'channel-colors has the radio stations while BBC Sounds is on', '/json-api/browse/channel-colors', (r) => {
+            const missing = ['BBCRadio4', 'Radio4', 'BBCRadio6Music', '6Music', 'BBCWorldService', 'WorldService'].filter((k) => !/^#[0-9a-f]{3,8}$/i.test(r.json?.[k]?.bg ?? ''));
+            return missing.length === 0 || `no colour for: ${missing.join(', ')}`;
+        }, { warnOnly: true });
+    }
     await check(A, 'browse atoz', '/json-api/browse/atoz/a', isJson);
+    await radioChecks(A, cfg);
+    await radioLogoChecks(A, cfg);
+    await radioGuideChecks(A, cfg);
+    await radioChannelPageChecks(A, cfg);
     if (firstItem) await check(A, 'browse versions (AD/signed)', `/json-api/browse/versions?pids=${firstItem.pid}`, isJson);
     if (ctx.channel) await check(A, 'browse channel page', `/json-api/browse/channel/${ctx.channel}`, isJson);
     if (ctx.category) {
@@ -257,14 +712,14 @@ async function apiLayer(ctx) {
         await check(A, 'thumbnail proxy', `/json-api/thumbnail/pid/${ctx.pid}`, (r) => r.status === 200 && /image/.test(r.ct) || `ct ${r.ct}`, { warnOnly: true });
     }
     ctx.manualSettings = (await http('/json-api/search/settings')).json;
-    for (const term of ['doctor', 'traitors', 'traitor', 'strictly', 'celebrity traitors', 'bake off', 'dancing'])
-        await check(A, `manual search "${term}" returns results`, `/json-api/search?q=${encodeURIComponent(term)}`, (r) => (Array.isArray(r.json) && r.json.length > 0) || `0 results with manual settings ${JSON.stringify(ctx.manualSettings)} (manual and NZB settings are independent)`, { timeout: 90000 });
-    for (const [label, q] of [['empty', ''], ['quote', '"'], ['wildcards', 'a* ?* ~'], ['lucene syntax', 'title:(a OR b) -c +d'], ['unicode', 'café ☃'], ['very long', 'x'.repeat(3000)], ['sql-ish', "'; DROP TABLE Cache;--"]]) {
+    await pool(['doctor', 'traitors', 'traitor', 'strictly', 'celebrity traitors', 'bake off', 'dancing'], (term) =>
+        check(A, `manual search "${term}" returns results`, `/json-api/search?q=${encodeURIComponent(term)}`, (r) => (Array.isArray(r.json) && r.json.length > 0) || `0 results with manual settings ${JSON.stringify(ctx.manualSettings)} (manual and NZB settings are independent)`, { timeout: 90000 }));
+    await pool([['empty', ''], ['quote', '"'], ['wildcards', 'a* ?* ~'], ['lucene syntax', 'title:(a OR b) -c +d'], ['unicode', 'café ☃'], ['very long', 'x'.repeat(3000)], ['sql-ish', "'; DROP TABLE Cache;--"]], async ([label, q]) => {
         const r = await http(`/json-api/search?q=${encodeURIComponent(q)}`, { timeout: 60000 });
         rec(A, `manual search survives ${label} input (no 5xx)`, r.status > 0 && r.status < 500 ? 'PASS' : 'FAIL', `HTTP ${r.status} ${r.error || ''}`);
         const n = await http(`/api?t=search&q=${encodeURIComponent(q)}&apikey=${apikey}`, { timeout: 60000 });
         rec(A, `newznab search survives ${label} input (no 5xx)`, n.status > 0 && n.status < 500 ? 'PASS' : 'FAIL', `HTTP ${n.status} ${n.error || ''}`);
-    }
+    });
     if (ctx.pid) {
         await check(A, 'browse details drops non-programme ids instead of failing', `/json-api/browse/details?pids=bbc_four,${ctx.pid}`, (r) => (r.status === 200 && Array.isArray(r.json) && r.json.some((d) => d.pid === ctx.pid)) || 'batch rejected');
         await check(A, 'browse details with only invalid ids is 400', '/json-api/browse/details?pids=bbc_four', (r) => r.status === 400 || `HTTP ${r.status}`);
@@ -272,6 +727,8 @@ async function apiLayer(ctx) {
     }
     const lim = parseInt(cfg.ACTIVE_LIMIT, 10);
     rec(A, 'stored ACTIVE_LIMIT within 1-10', lim >= 1 && lim <= 10 ? 'PASS' : 'FAIL', String(cfg.ACTIVE_LIMIT));
+    const radioLim = parseInt(cfg.RADIO_ACTIVE_LIMIT, 10);
+    rec(A, 'stored RADIO_ACTIVE_LIMIT within 1-10', radioLim >= 1 && radioLim <= 10 ? 'PASS' : 'FAIL', String(cfg.RADIO_ACTIVE_LIMIT));
     await check(A, 'browse bad pid rejected', '/json-api/browse/programme/!!bad', (r) => r.status === 400 || `HTTP ${r.status}`);
 
     // Native stream (HLS master from BBC; upstream-dependent so WARN not FAIL)
@@ -281,7 +738,45 @@ async function apiLayer(ctx) {
     // App state endpoints
     await check(A, 'versions (get_iplayer/yt-dlp)', '/json-api/versions', (r) => !!r.json?.getIplayer || 'no getIplayer');
     await check(A, 'uptime', '/json-api/stats/uptime', (r) => typeof r.json?.uptime === 'number' || 'no uptime');
-    await check(A, 'searchHistory', '/json-api/stats/searchHistory', isJson);
+    // The Server cards on the Statistics page: quick figures, then the slower checks (BBC, Sonarr/Radarr). Read-only.
+    await check(A, 'server stats have memory, cpu, active work, cache and scheduler figures', '/json-api/stats/server', (r) => {
+        const j = r.json;
+        if (!j || !(j.memory?.rssBytes > 0)) return 'no memory figure';
+        if (!Array.isArray(j.cpu?.load) || !(j.cpu?.cores >= 1)) return 'no cpu figures';
+        if (!j.active || typeof j.active.clients !== 'number') return 'no active-work figures';
+        if (!('cacheHits' in j) || !('scheduler' in j)) return 'no cache or scheduler figures';
+        return true;
+    });
+    await check(A, 'server stats disks are listed with free space and a used percentage', '/json-api/stats/server', (r) => {
+        const bad = (r.json?.disks ?? []).filter((d) => !(d.totalBytes >= d.freeBytes && d.freeBytes >= 0 && d.usedPercent >= 0 && d.usedPercent <= 100));
+        return !bad.length || `bad disk figures: ${bad.map((d) => d.name).join(', ')}`;
+    });
+    await check(A, 'server stats checks report the BBC and each Sonarr/Radarr app', '/json-api/stats/server/checks', (r) => {
+        const j = r.json;
+        if (!j || !('bbc' in j) || !('apps' in j)) return 'missing bbc or apps';
+        const bad = (j.apps ?? []).filter((a) => !a.id || !a.name || typeof a.reachable !== 'boolean');
+        return !bad.length || 'an app has no id, name or reachable flag';
+    }, { timeout: 60000 });
+    const searchHist = await check(A, 'searchHistory', '/json-api/stats/searchHistory', isJson);
+    // A "+" on the Results column needs a reason (shown as its tooltip): BBC's 24-hit cap or our candidate cap
+    const badTrunc = (Array.isArray(searchHist.json) ? searchHist.json : []).filter((e) => e.truncated && !['bbc', 'trace'].includes(e.truncatedBy));
+    rec(A, 'every truncated search-history entry says why (truncatedBy)', badTrunc.length ? 'FAIL' : 'PASS', badTrunc.map((e) => e.term).join(', ') || 'ok');
+    // The NZB page's Type column and Source filter read these: every summary lists its types, and a recorded source is one of two.
+    await check(A, 'searchHistory summary lists the types and a valid source for the NZB page', '/json-api/stats/searchHistory?filterRss=true&summary=true', (r) => {
+        if (!Array.isArray(r.json)) return 'not an array';
+        const bad = r.json.find((e) => !Array.isArray(e.types) || (e.source !== undefined && !['indexer', 'manual'].includes(e.source)) || (e.type && e.types.length === 1 && e.types[0] !== e.type));
+        return !bad || `bad entry: ${JSON.stringify({ term: bad.term, type: bad.type, types: bad.types, source: bad.source })}`;
+    });
+    // A search that finds nothing though BBC answered says so in its stream: {"note":{dropped,capped}} just before done, never beside results.
+    await check(A, 'search stream explains an empty video result with a note line, never beside results', '/json-api/search/stream?q=choc', (r) => {
+        const lines = String(r.text).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        if (lines[lines.length - 1]?.done !== true) return 'the stream did not finish with {"done":true}';
+        const notes = lines.filter((l) => l.note);
+        if (!notes.length) return true;
+        const { dropped, capped } = notes[0].note;
+        if (notes.length > 1 || !(dropped > 0) || typeof capped !== 'boolean') return `malformed note: ${JSON.stringify(notes)}`;
+        return !lines.some((l) => Array.isArray(l) && l.length) || 'a note arrived beside results';
+    }, { timeout: 120000 });
     await check(A, 'grabHistory', '/json-api/stats/grabHistory', isJson);
     await check(A, 'failedGrabHistory', '/json-api/stats/failedGrabHistory', isJson);
     await check(A, 'queue (frontend)', '/json-api/queue/queue', isJson);
@@ -292,6 +787,7 @@ async function apiLayer(ctx) {
     await check(A, 'off-schedule', '/json-api/offSchedule', isArr);
     await check(A, 'video events', '/json-api/events', isArr);
     await check(A, 'streams active/history', '/json-api/streams', (r) => Array.isArray(r.json?.active) || 'no active[]');
+    await check(A, 'stream trace export refuses a bad id', '/json-api/streams/trace/zzzz/export', (r) => r.status === 400 || `expected 400, got ${r.status}`);
     await check(A, 'live channels (settings)', '/json-api/live-channels', isArr);
     await check(A, 'live channels custom list', '/json-api/live-channels/custom', isJson);
     await check(A, 'subscriptions', '/json-api/subscriptions', isArr);
@@ -306,11 +802,77 @@ async function apiLayer(ctx) {
     await arrSyncChecks(A, ctx);
     await check(A, 'maintenance tasks', '/json-api/maintenance/tasks', isArr);
     await check(A, 'maintenance caches', '/json-api/maintenance/caches', isArr);
+    // The Statistics cache cards: expiry and recent activity per cache, and a cheap live-figures route polled every few seconds.
+    await check(A, 'maintenance caches carry expiry times and a 15 minute activity trend', '/json-api/maintenance/caches', (r) => {
+        if (!Array.isArray(r.json) || !r.json.length) return 'no caches listed';
+        const bad = r.json.filter((c) => !c.activity || !Array.isArray(c.activity.trend) || c.activity.trend.length !== 15 || !('expiresSoonest' in c) || !('expiresLatest' in c));
+        return !bad.length || `missing activity or expiry on: ${bad.map((c) => c.prefix).join(', ')}`;
+    });
+    const cachesNow = (await http('/json-api/maintenance/caches')).json || [];
+    // The names route: same caches, names and groups as the full list, but answered without counting anything (made at start-up).
+    await check(A, 'maintenance cache names match the full list and each has a group', '/json-api/maintenance/caches/names', (r) => {
+        if (!Array.isArray(r.json) || !r.json.length) return 'no names listed';
+        const full = new Map((Array.isArray(cachesNow) ? cachesNow : []).map((c) => [c.prefix, c]));
+        const bad = r.json.filter((n) => !n.label || !n.description || !n.group || !n.groupLabel || full.get(n.prefix)?.label !== n.label || full.get(n.prefix)?.group !== n.group);
+        return (!bad.length && r.json.length === full.size) || `mismatch on: ${bad.map((n) => n.prefix).join(', ') || `${r.json.length} names vs ${full.size} caches`}`;
+    });
+    await check(A, 'maintenance cache activity lists every cache with its totals and trend', '/json-api/maintenance/caches/activity', (r) => {
+        const list = Array.isArray(cachesNow) ? cachesNow : [];
+        if (!r.json || typeof r.json !== 'object' || Array.isArray(r.json)) return 'expected an object keyed by cache';
+        const missing = list.filter((c) => !r.json[c.prefix]).map((c) => c.prefix);
+        if (missing.length) return `no activity for: ${missing.join(', ')}`;
+        const bad = Object.entries(r.json).filter(([, a]) => !Number.isInteger(a.hits) || !Number.isInteger(a.misses) || !Number.isInteger(a.lastMinute) || a.trend?.length !== 15);
+        return !bad.length || `malformed: ${bad.map(([p]) => p).join(', ')}`;
+    });
+    // Memory caches (resolved stream addresses, kept playlists) are listed with the database ones, fixed in lifetime, and flagged so the pages draw a memory icon.
+    await check(A, 'maintenance caches list the stream memory caches, flagged in memory, in the Streaming group', '/json-api/maintenance/caches', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const wanted = ['stream_resolve', 'stream_vod_playlist'];
+        const missing = wanted.filter((p) => !list.some((c) => c.prefix === p));
+        if (missing.length) return `not listed: ${missing.join(', ')}`;
+        const bad = list.filter((c) => wanted.includes(c.prefix) && (c.inMemory !== true || c.group !== 'streaming' || c.overridden !== false || c.ttl !== c.defaultTtl || /memory/i.test(c.label)));
+        return !bad.length || `wrong flag, group, lifetime or label on: ${bad.map((c) => c.prefix).join(', ')}`;
+    });
+    await check(A, 'maintenance caches: only the memory caches carry the in-memory flag (database caches and thumbnails do not)', '/json-api/maintenance/caches', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const flagged = list.filter((c) => c.inMemory).map((c) => c.prefix);
+        const stray = flagged.filter((p) => !['stream_resolve', 'stream_vod_playlist'].includes(p));
+        return (!stray.length && list.some((c) => c.prefix === 'thumbnails' && !c.inMemory) && list.some((c) => !c.inMemory && c.prefix !== 'thumbnails')) || `in-memory flag on: ${stray.join(', ') || 'nothing unexpected, but thumbnails or database caches are missing'}`;
+    });
+    await check(A, 'maintenance cache names carry the in-memory flag too (the Statistics placeholders draw the same icon)', '/json-api/maintenance/caches/names', (r) => {
+        const list = Array.isArray(r.json) ? r.json : [];
+        const memory = list.filter((c) => c.inMemory).map((c) => c.prefix).sort();
+        const full = (Array.isArray(cachesNow) ? cachesNow : []).filter((c) => c.inMemory).map((c) => c.prefix).sort();
+        return (memory.length >= 2 && JSON.stringify(memory) === JSON.stringify(full)) || `names say ${memory.join(',') || 'none'}, the full list says ${full.join(',') || 'none'}`;
+    });
+    await check(A, 'maintenance cache activity covers the stream memory caches', '/json-api/maintenance/caches/activity', (r) => ['stream_resolve', 'stream_vod_playlist'].every((p) => r.json?.[p] && r.json[p].trend?.length === 15 && Number.isInteger(r.json[p].hits)) || 'no activity for a stream memory cache');
+    // The debug health report checks the cache list too: every cache registered and in a group.
+    await check(A, 'debug health report has a Caches check that is not failing and names no cache missing a group', '/json-api/debug/health', (r) => {
+        const c = (r.json?.checks || []).find((x) => x.name === 'Caches');
+        if (!c) return 'no Caches check in the report';
+        if (c.state === 'fail') return `Caches check failed: ${c.detail}`;
+        return (c.state === 'ok' && /in memory only/.test(c.detail)) || `Caches check: ${c.state} - ${c.detail}`;
+    }, { timeout: 90000 });
+    // The newer health checks: the BBC, disk space, database integrity, library readability, scheduled jobs, and the extra facts.
+    await check(A, 'debug health report has the BBC, disk space, integrity, library and jobs checks, valid states, and the extra facts', '/json-api/debug/health', (r) => {
+        const checks = r.json?.checks || [];
+        const missing = ['BBC iPlayer', 'Database integrity', 'Library index', 'Scheduled jobs'].filter((n) => !checks.some((c) => c.name === n));
+        if (missing.length) return `missing checks: ${missing.join(', ')}`;
+        if (!checks.some((c) => /^(Download|Complete) folder space$/.test(c.name))) return 'no folder space check';
+        const bad = checks.filter((c) => !['ok', 'warn', 'fail', 'info'].includes(c.state));
+        if (bad.length) return `unknown state on ${bad.map((c) => c.name).join(', ')}`;
+        const integrity = checks.find((c) => c.name === 'Database integrity');
+        if (integrity.state !== 'ok') return `database integrity: ${integrity.detail}`;
+        const lacking = ['container', 'timezone', 'streamTrace', 'liveRadio'].filter((k) => !(k in (r.json?.facts || {})));
+        return lacking.length ? `facts missing: ${lacking.join(', ')}` : true;
+    }, { timeout: 90000 });
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
     await watchdogFieldChecks(A);
+    await rejectedInputChecks(A);
     await check(A, 'watchdog reports its strike limit (1-30)', '/json-api/watchdog', (r) => (Number.isInteger(r.json?.strikes) && r.json.strikes >= 1 && r.json.strikes <= 30) || `strikes=${r.json?.strikes}`);
-    if (ctx.wd?.enabled) await check(A, 'watchdog path-map access', '/json-api/watchdog/check-access', isJson, { method: 'POST', warnOnly: true, timeout: 180000 });
+
+    await libraryAndDebugChecks(A, ctx);
 
     // Per-app connectivity (uses stored masked keys; read-only test call)
     const apps = (await http('/json-api/apps')).json || [];
@@ -332,6 +894,266 @@ async function apiLayer(ctx) {
 
 // Sonarr/Radarr sync: the per-app setting, the detection scan and what it stores. The scan only refreshes cached
 // episode counts (and the "deleted from the app" flag) of shows already linked, so it is safe on any instance.
+// Library index, library debug, stream debug and the missing-episodes list (read-only; the only BBC calls are programme lookups).
+async function libraryAndDebugChecks(A, ctx) {
+    const gone = await http('/json-api/watchdog/check-access', { method: 'POST' });
+    rec(A, 'the removed Library Access check no longer answers', gone.status !== 200 || gone.json === undefined ? 'PASS' : 'FAIL', `HTTP ${gone.status}`);
+
+    const lib = await check(A, 'library debug lists the index sources and rows', '/json-api/library/debug', (r) => {
+        if (!Array.isArray(r.json?.sources) || !Array.isArray(r.json?.rows)) return 'expected {sources[], rows[]}';
+        const badSrc = r.json.sources.filter((s) => !s.id || !s.name || !s.type || !Number.isInteger(s.counted) || !Number.isInteger(s.rejected));
+        if (badSrc.length) return `malformed sources: ${badSrc.map((s) => s.id).join(',')}`;
+        const badRow = r.json.rows.filter((x) => !x.source || typeof x.path !== 'string' || typeof x.counted !== 'boolean' || (!x.counted && !x.detail));
+        return badRow.length === 0 || `${badRow.length} row(s) lack a source/path/counted flag, or a rejected row lacks its reason`;
+    }, { timeout: 60000 });
+    if (lib.json?.sources) {
+        const off = lib.json.sources.filter((s) => s.counted !== lib.json.rows.filter((x) => x.source === s.id && x.counted).length || s.rejected !== lib.json.rows.filter((x) => x.source === s.id && !x.counted).length);
+        rec(A, 'library debug source totals equal their rows', off.length ? 'FAIL' : 'PASS', off.map((x) => x.id).join(','));
+    }
+
+    // Library debug filters, sorts and pages on the server, over every row: a page is a slice of the filtered whole.
+    if (lib.json?.rows) {
+        const everyRow = lib.json.rows;
+        rec(A, 'library debug unpaged answer carries its total', lib.json.total === everyRow.length ? 'PASS' : 'FAIL', `total ${lib.json.total} vs ${everyRow.length} rows`);
+        const size = 7;
+        const p1 = (await http(`/json-api/library/debug?page=1&pageSize=${size}&sort=path&order=asc`, { timeout: 60000 })).json;
+        const p2 = (await http(`/json-api/library/debug?page=2&pageSize=${size}&sort=path&order=asc`, { timeout: 60000 })).json;
+        const expectRows = Math.min(size, everyRow.length);
+        rec(A, 'library debug page holds at most one page of rows and reports the full total', p1?.rows?.length === expectRows && p1.total === everyRow.length ? 'PASS' : 'FAIL', `${p1?.rows?.length} rows, total ${p1?.total}`);
+        const both = [...(p1?.rows ?? []), ...(p2?.rows ?? [])];
+        const paths = both.map((x) => x.path);
+        // The same path legitimately repeats (one row per source, and one history row per download), so overlap is judged
+        // by the two pages together being exactly the first double-size page, not by unique paths.
+        const wide = (await http(`/json-api/library/debug?page=1&pageSize=${size * 2}&sort=path&order=asc`, { timeout: 60000 })).json;
+        const same = JSON.stringify(both.map((x) => [x.source, x.path, x.pid])) === JSON.stringify((wide?.rows ?? []).map((x) => [x.source, x.path, x.pid]));
+        const sorted = [...paths].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        rec(A, 'library debug pages are in sort order and do not overlap', same && JSON.stringify(paths) === JSON.stringify(sorted) ? 'PASS' : 'FAIL', `${paths.length} rows`);
+        const counted = (await http('/json-api/library/debug?state=counted&pageSize=5', { timeout: 60000 })).json;
+        const wantCounted = everyRow.filter((x) => x.counted).length;
+        rec(A, 'library debug filter applies to the whole set, not just the page', counted?.total === wantCounted && counted.rows.every((x) => x.counted) ? 'PASS' : 'FAIL', `${counted?.total} vs ${wantCounted}`);
+        const needle = (everyRow[0]?.path || 'x').split(/[\\/]/).pop().slice(0, 6).toLowerCase();
+        const text = (await http(`/json-api/library/debug?q=${encodeURIComponent(needle)}&pageSize=5`, { timeout: 60000 })).json;
+        rec(A, 'library debug text filter finds rows on every page', text?.total >= 1 ? 'PASS' : 'FAIL', `"${needle}" -> ${text?.total}`);
+        const past = (await http('/json-api/library/debug?page=99999&pageSize=5', { timeout: 60000 })).json;
+        rec(A, 'library debug page past the end is empty with the same total', past?.rows?.length === 0 && past.total === everyRow.length ? 'PASS' : 'FAIL', `${past?.rows?.length} rows`);
+    }
+
+    // The Statistics page only displays what the server works out: one summary per range, from the same histories.
+    const full = (await http('/json-api/stats/searchHistory', { timeout: 60000 })).json;
+    const sum7 = (await http('/json-api/stats/summary?range=7d', { timeout: 60000 })).json;
+    const sumAll = (await http('/json-api/stats/summary?range=All&excludeRss=false', { timeout: 60000 })).json;
+    // Every series has one figure per day, and the days are consecutive.
+    const activityOk = (a) => a && Array.isArray(a.days) && [...a.searches, ...a.grabs].every((s) => s.name && Array.isArray(s.data) && s.data.length === a.days.length)
+        && a.grabs.map((s) => s.name).join() === 'Grabbed,Failed'
+        && a.days.every((d, i) => i === 0 || Date.parse(d) - Date.parse(a.days[i - 1]) === 86400000);
+    const sumShape = (x) => x && activityOk(x.activity) && Array.isArray(x.topSearched) && Array.isArray(x.topGrabbed) && x.trends?.searches?.length === 7 && x.trends.grabs.length === 7 && x.trends.failedGrabs.length === 7
+        && ['searches', 'grabs', 'failedGrabs'].every((k) => Number.isInteger(x.today?.[k]))
+        && ['searchTerms', 'searchSources', 'grabTypes', 'grabSources'].every((k) => x[k] && typeof x[k] === 'object');
+    rec(A, 'stats summary has every figure the page draws', sumShape(sum7) && sumShape(sumAll) ? 'PASS' : 'FAIL', sumShape(sum7) ? 'ok' : 'malformed');
+    // The DNS relay's state, which its page and the top bar warning read. A failing upstream is a real problem, so it fails the run.
+    const relay = (await http('/json-api/dns-relay')).json;
+    const relayShape = relay && typeof relay.running === 'boolean' && Array.isArray(relay.upstream) && typeof relay.resolvConfPointsAtRelay === 'boolean'
+        && ['queries', 'cacheHits', 'answered', 'empty', 'failed', 'dropped'].every((k) => Number.isInteger(relay.counters?.[k]))
+        && Array.isArray(relay.recent) && relay.recent.length <= 10 && Array.isArray(relay.recentFailures) && relay.recentFailures.length <= 20
+        && relay.recentFailures.every((q) => q.result === 'failed' && q.name && !Number.isNaN(Date.parse(q.at))) && typeof relay.health?.ok === 'boolean' && typeof relay.health?.message === 'string'
+        && relay.recent.every((q) => ['cache', 'upstream'].includes(q.source) && ['answer', 'empty', 'failed'].includes(q.result) && Array.isArray(q.addresses) && q.name && !Number.isNaN(Date.parse(q.at)));
+    rec(A, 'dns relay status has what the page draws', relayShape ? 'PASS' : 'FAIL', relayShape ? `${relay.recent.length} recent, ${relay.counters.queries} queries` : 'malformed');
+    rec(A, 'dns relay is not reporting a failing upstream', relay?.health?.ok !== false ? 'PASS' : 'FAIL', relay?.health?.message);
+    const sumOf = (o) => Object.values(o || {}).reduce((n, v) => n + v, 0);
+    const grabHist = (await http('/json-api/stats/grabHistory')).json;
+    // The stacked charts and the totals come from the same entries, so they must agree.
+    if (sumAll?.activity) {
+        const stackTotal = (series) => series.reduce((n, s) => n + s.data.reduce((m, v) => m + v, 0), 0);
+        rec(A, 'stats summary searches-by-source bars add up to the search terms', stackTotal(sumAll.activity.searches) === sumOf(sumAll.searchTerms) ? 'PASS' : 'FAIL', `${stackTotal(sumAll.activity.searches)} vs ${sumOf(sumAll.searchTerms)}`);
+        const grabbedBars = sumAll.activity.grabs.find((s) => s.name === 'Grabbed');
+        rec(A, 'stats summary grabbed bars add up to the grab types', stackTotal([grabbedBars]) === sumOf(sumAll.grabTypes) ? 'PASS' : 'FAIL', `${stackTotal([grabbedBars])} vs ${sumOf(sumAll.grabTypes)}`);
+        const failedHist = (await http('/json-api/stats/failedGrabHistory')).json;
+        if (Array.isArray(failedHist)) {
+            const failedBars = sumAll.activity.grabs.find((s) => s.name === 'Failed');
+            rec(A, 'stats summary failed bars add up to the failed grab history', stackTotal([failedBars]) === failedHist.filter((f) => f.time != undefined).length ? 'PASS' : 'FAIL', `${stackTotal([failedBars])} vs ${failedHist.length}`);
+        }
+        const sevenDays = sum7?.activity;
+        rec(A, 'stats summary 7 day range spans at most 8 days', sevenDays && sevenDays.days.length <= 8 ? 'PASS' : 'FAIL', `${sevenDays?.days.length} days`);
+    }
+    if (Array.isArray(grabHist) && sumAll) {
+        rec(A, 'stats summary grab types add up to the grab history', sumOf(sumAll.grabTypes) === grabHist.filter((g) => g.time != undefined).length ? 'PASS' : 'FAIL', `${sumOf(sumAll.grabTypes)} vs ${grabHist.length}`);
+        rec(A, 'stats summary grab sources add up to the grab types', sumOf(sumAll.grabSources) === sumOf(sumAll.grabTypes) ? 'PASS' : 'FAIL', `${sumOf(sumAll.grabSources)} vs ${sumOf(sumAll.grabTypes)}`);
+    }
+    if (Array.isArray(full) && sumAll) {
+        const timed = full.filter((e) => e.time != undefined).length;
+        rec(A, 'stats summary search terms add up to the search history (RSS included)', sumOf(sumAll.searchTerms) === timed ? 'PASS' : 'FAIL', `${sumOf(sumAll.searchTerms)} vs ${timed}`);
+        const noRss = (await http('/json-api/stats/summary?range=All&excludeRss=true', { timeout: 60000 })).json;
+        rec(A, 'stats summary leaves RSS out when asked', noRss && !('RSS Feed' in noRss.searchTerms) && sumOf(noRss.searchTerms) <= sumOf(sumAll.searchTerms) ? 'PASS' : 'FAIL', `${sumOf(noRss?.searchTerms)} vs ${sumOf(sumAll.searchTerms)}`);
+        rec(A, 'stats summary 7 day range holds no more than all time', sumOf(sum7.searchTerms) <= sumOf(sumAll.searchTerms) ? 'PASS' : 'FAIL', `${sumOf(sum7.searchTerms)} vs ${sumOf(sumAll.searchTerms)}`);
+    }
+    const bogus = await http('/json-api/stats/summary?range=bogus', { timeout: 60000 });
+    rec(A, 'stats summary answers an unknown range as 7 days, and is far smaller than the history', bogus.status === 200 && sumShape(bogus.json) && bogus.text.length < 100000 ? 'PASS' : 'FAIL', `${bogus.text?.length} bytes`);
+
+    const subs = (await http('/json-api/subscriptions')).json || [];
+    const withChips = subs.filter((s) => s.onDiskSources);
+    const badChips = withChips.filter((s) => !s.onDiskSources.every((c) => c.id && c.name && c.type && c.type !== 'HISTORY' && Number.isInteger(c.count) && c.count >= 0));
+    rec(A, 'subscriptions carry per-source counts without the history', badChips.length ? 'FAIL' : 'PASS', badChips.map((s) => s.title).join(', ') || `${withChips.length} with chips`);
+    const nope = await http('/json-api/subscriptions/SMOKE-NOPE/missing');
+    rec(A, 'missing episodes of an unknown subscription is a 404', nope.status === 404 ? 'PASS' : 'FAIL', 'HTTP ' + nope.status);
+    const real = subs.find((s) => !s.arrOnly);
+    if (real) {
+        await check(A, `missing episodes of ${real.title} are well-formed`, `/json-api/subscriptions/${encodeURIComponent(real.id)}/missing`, (r) => {
+            const j = r.json;
+            if (!j || !Array.isArray(j.missing) || !Number.isInteger(j.total) || !Number.isInteger(j.onDisk)) return 'expected {total,onDisk,missing[]}';
+            if (j.missing.some((m) => !m.pid)) return 'a missing episode has no pid';
+            return j.missing.length <= j.total || `missing ${j.missing.length} > total ${j.total}`;
+        }, { timeout: 120000 });
+    } else rec(A, 'missing episodes of a subscription', 'SKIP', 'no subscriptions');
+
+    // Stream debug: input validation first (no BBC call), then a real programme.
+    for (const bad of ['bad', '..%2Fetc', 'a%20b%20c%20d%20e%20f']) {
+        const r = await http(`/json-api/streams/debug/${bad}`);
+        rec(A, `stream debug refuses the id "${decodeURIComponent(bad)}"`, r.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+    }
+    const badPart = await http('/json-api/streams/debug/m000smoke/part/nonsense');
+    rec(A, 'stream debug refuses an unknown dashboard part', badPart.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badPart.status);
+    const badImg = await http('/json-api/streams/debug/m000smoke/part/library?image=a%20b');
+    rec(A, 'stream debug refuses a malformed image id', badImg.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badImg.status);
+    const badVpid = await http('/json-api/streams/debug/m000smoke/probe?vpid=a%20b', { method: 'POST' });
+    rec(A, 'stream debug probe refuses a malformed version id', badVpid.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badVpid.status);
+    // The file naming preview and the picture refresh check their ids before any BBC call.
+    for (const bad of ['bad', '..%2Fetc']) {
+        const r = await http(`/json-api/streams/debug/${bad}/naming`);
+        rec(A, `stream debug naming refuses the id "${decodeURIComponent(bad)}"`, r.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+    }
+    const namingLive = await http('/json-api/streams/debug/bbc_one_london/naming');
+    rec(A, 'stream debug naming refuses a live channel id', namingLive.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingLive.status);
+    // A radio episode is named by the one audio resolver: a bad id is refused, an unlisted one says to list it first.
+    const namingRadioBad = await http('/json-api/streams/debug/bad/naming?kind=radio');
+    rec(A, 'stream debug naming refuses a bad radio episode id', namingRadioBad.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadioBad.status);
+    const namingRadio = await http('/json-api/streams/debug/m000smoke/naming?kind=radio');
+    rec(A, 'stream debug naming for an unlisted radio episode says to list it first, with no file name', namingRadio.status === 200 && !namingRadio.json?.fileName && /list|Open the show/i.test(namingRadio.json?.error || '') ? 'PASS' : 'FAIL', namingRadio.text.slice(0, 160));
+    const previewBad = await http('/json-api/sounds/name-preview?episodeId=..%2Fx');
+    rec(A, 'the radio name preview refuses a bad episode id', previewBad.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + previewBad.status);
+    const previewUnlisted = await http('/json-api/sounds/name-preview?episodeId=m000smoke');
+    rec(A, 'the radio name preview refuses an episode that is not listed', previewUnlisted.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + previewUnlisted.status);
+    const nameTooLong = await http('/json-api/sounds/downloads', { method: 'POST', body: { episodeId: 'm000smoke', name: 'x'.repeat(181) } });
+    rec(A, 'a radio download refuses a file name over 180 characters', nameTooLong.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + nameTooLong.status);
+    const nameNotText = await http('/json-api/sounds/downloads', { method: 'POST', body: { episodeId: 'm000smoke', name: 5 } });
+    rec(A, 'a radio download refuses a file name that is not text', nameNotText.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + nameNotText.status);
+    const badRefresh = await http('/json-api/thumbnail/refresh/a%20b', { method: 'POST' });
+    rec(A, 'thumbnail refresh refuses a malformed image id', badRefresh.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badRefresh.status);
+    const badSquare = await http('/json-api/thumbnail/refresh/a%20b?square=1', { method: 'POST' });
+    rec(A, 'thumbnail refresh of a radio (square) picture refuses a malformed image id', badSquare.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badSquare.status);
+    const pid = ctx.pid || real?.pid;
+    if (!pid) return rec(A, 'stream debug on a real programme', 'SKIP', 'no pid discovered');
+    await check(A, 'stream debug programme step answers', `/json-api/streams/debug/${pid}/programme`, isObj, { timeout: 60000 });
+    for (const part of ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs']) {
+        await check(A, `stream debug part ${part} answers`, `/json-api/streams/debug/${pid}/part/${part}`, (r) => (r.status === 200 && r.json !== undefined) || `HTTP ${r.status}`, { timeout: 60000 });
+    }
+    // The logs part reads the stored log rows, which are skipped one by one if damaged rather than failing the whole read.
+    await check(A, 'stream debug logs part is a list of log lines', `/json-api/streams/debug/${pid}/part/logs`, (r) => Array.isArray(r.json?.logs) || 'no logs[]', { timeout: 60000 });
+    // A well-formed id BBC has never heard of reads as "not found" or an upstream fault, never as a server crash.
+    const unknown = await http('/json-api/streams/debug/m0000000/programme', { timeout: 60000 });
+    rec(A, 'stream debug on an unknown programme id gives no server error', unknown.status > 0 && unknown.status < 500 ? 'PASS' : 'WARN', `HTTP ${unknown.status}`);
+    await check(A, 'stream debug one-shot info answers', `/json-api/streams/debug/${pid}`, isObj, { timeout: 90000 });
+    // Cast and crew, transmissions and the iPlayer listing extras are always lists (empty when BBC lists none), and each entry is well formed.
+    await check(A, 'stream debug programme carries cast, broadcasts and tracklist lists', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const j = r.json;
+        if (!j?.found) return `not found: ${j?.error || ''}`;
+        for (const key of ['cast', 'broadcasts', 'tracklist']) if (!Array.isArray(j[key])) return `no ${key}[]`;
+        if (j.cast.some((m) => typeof m?.name !== 'string' || !m.name)) return 'a cast member has no name';
+        if (j.broadcasts.some((b) => isNaN(Date.parse(b?.start)) || typeof b.repeat !== 'boolean')) return 'a broadcast has a bad start or no repeat flag';
+        if (j.broadcasts.length > 40 || j.tracklist.length > 500) return 'cast, broadcast or tracklist lists are not capped';
+        return true;
+    }, { timeout: 60000 });
+    await check(A, 'stream debug programme listing extras are well typed', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const x = r.json?.ibl;
+        if (!x || typeof x !== 'object') return true;
+        for (const key of ['label', 'masterBrand', 'programmeType', 'releaseDate']) if (x[key] !== undefined && typeof x[key] !== 'string') return `${key} is not text`;
+        if (x.ageBands !== undefined && !(Array.isArray(x.ageBands) && x.ageBands.every((b) => typeof b === 'string'))) return 'ageBands is not a list of text';
+        if (x.hasCredits !== undefined && typeof x.hasCredits !== 'boolean') return 'hasCredits is not true/false';
+        return true;
+    }, { timeout: 60000 });
+    // The debug button covers programmes and series, not just episodes: the discovered pid is a brand, and an episode of it follows.
+    await check(A, 'stream debug on a programme (brand) pid is found, typed, and has a versions list', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const j = r.json;
+        if (!j || j.pid !== pid) return 'expected the same pid back';
+        if (!Array.isArray(j.versions)) return 'no versions list';
+        return j.found ? (typeof j.title === 'string' && j.title ? true : 'found but no title') : `not found: ${j.error || 'no reason'}`;
+    }, { timeout: 60000 });
+    const brandInfo = (await http(`/json-api/browse/programme/${pid}`, { timeout: 60000 })).json;
+    const episodePid = brandInfo?.seasons?.flatMap((s) => s.episodes || []).find((e) => e.pid)?.pid;
+    if (episodePid) {
+        await check(A, 'stream debug on an episode of that programme names its parent', `/json-api/streams/debug/${episodePid}/programme`, (r) => {
+            const j = r.json;
+            if (!j?.found) return `not found: ${j?.error || ''}`;
+            return j.parent?.pid ? true : 'no parent pid on an episode';
+        }, { timeout: 60000 });
+        await check(A, 'stream debug versions say which one a plain download takes (exactly one, never audio described / signed unless alone)', `/json-api/streams/debug/${episodePid}/programme`, (r) => {
+            const versions = r.json?.versions;
+            if (!Array.isArray(versions) || !versions.length) return true;
+            const chosen = versions.filter((v) => v.selection === 'chosen');
+            if (chosen.length !== 1) return `${chosen.length} versions chosen`;
+            const special = /described|sign/i;
+            return special.test((chosen[0].types || []).join(' ')) && versions.some((v) => !special.test((v.types || []).join(' '))) ? 'an audio described / signed version was chosen over a plain one' : true;
+        }, { timeout: 60000 });
+    } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
+    if (episodePid) {
+        await check(A, 'stream debug naming gives the settings, an extension and a name or an error', `/json-api/streams/debug/${episodePid}/naming`, (r) => {
+            const j = r.json;
+            if (!j || typeof j.settings !== 'object') return 'no settings';
+            if (!['mp4', 'strm'].includes(j.extension)) return `unexpected extension ${j.extension}`;
+            if (j.fileName && !j.fileName.endsWith('.' + j.extension)) return `file name ${j.fileName} does not end in .${j.extension}`;
+            if (j.nzbName && (!j.variables || typeof j.variables.title !== 'string' || !j.variables.title)) return 'the release name template variables are missing or have no title';
+            if (j.settings.RELEASE_LANGUAGE === 'english' && j.settings.LIBRARY_FOLDER_STRUCTURE === 'true' && j.fileName && !j.fileName.includes(' [ENGLISH]-')) return `file name ${j.fileName} lacks the [ENGLISH] tag`;
+            if (j.arrDirectory && j.arrDirectory === j.directory) return 'the Sonarr/Radarr folder is shown but is the same as the iPlayarr one';
+            if (j.nzbName && j.settings.RELEASE_LANGUAGE === 'english' && !j.nzbName.includes('ENGLISH')) return `release name ${j.nzbName} lacks ENGLISH`;
+            return j.fileName || j.error ? true : 'neither a file name nor an error';
+        }, { timeout: 90000 });
+    } else rec(A, 'stream debug naming for an episode', 'SKIP', 'no episode listed');
+    // One resolver names every download (releaseService.ts), the Download dialog's suggestion and the debug page alike.
+    for (const bad of ['bad', '..%2Fetc']) {
+        const r = await http(`/json-api/release-preview?pid=${bad}`);
+        rec(A, `release preview refuses the id "${decodeURIComponent(bad)}"`, (r.status === 400 || (bad === 'bad' && r.status === 404)) ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+    }
+    if (episodePid) {
+        const preview = await http(`/json-api/release-preview?pid=${episodePid}`, { timeout: 90000 });
+        const debugNaming = (await http(`/json-api/streams/debug/${episodePid}/naming`, { timeout: 90000 })).json;
+        const pj = preview.json;
+        const why = !pj?.nzbName || !pj.type ? `no name or type (HTTP ${preview.status})`
+            : debugNaming?.nzbName !== pj.nzbName ? `preview ${pj.nzbName} differs from debug ${debugNaming?.nzbName}`
+            : debugNaming.numbering?.series !== pj.series || debugNaming.numbering?.episode !== pj.episode ? `numbering ${pj.series}/${pj.episode} differs from debug ${debugNaming.numbering?.series}/${debugNaming.numbering?.episode}`
+            : '';
+        rec(A, 'release preview gives the same name and numbering as the debug File naming', why ? 'FAIL' : 'PASS', why);
+        // One classification everywhere: the preview, the debug page and the flag that says a special was filed as a movie.
+        const sameClass = pj?.type && debugNaming?.numbering?.type === pj.type && debugNaming.numbering.filedAsMovie === pj.filedAsMovie && typeof pj.filedAsMovie === 'boolean';
+        rec(A, 'release preview and debug File naming classify the programme the same (movie or TV)', sameClass ? 'PASS' : 'FAIL', `preview ${pj?.type}/${pj?.filedAsMovie} debug ${debugNaming?.numbering?.type}/${debugNaming?.numbering?.filedAsMovie}`);
+        rec(A, 'debug File naming lists the specials-as-movies setting', debugNaming?.settings && 'SPECIALS_AS_MOVIES' in debugNaming.settings ? 'PASS' : 'FAIL');
+    } else rec(A, 'release preview for an episode', 'SKIP', 'no episode listed');
+    // A numberless special is classified as a movie (SPECIALS_AS_MOVIES on, the default), with the movie icon data for the dialogs.
+    {
+        const found = (await http('/json-api/search?q=doctor%20who', { timeout: 90000 })).json;
+        const special = (Array.isArray(found) ? found : []).find((r) => r.type === 'TV' && r.series === 0 && r.episode === 0);
+        if (special) {
+            const sp = (await http(`/json-api/release-preview?pid=${special.pid}`, { timeout: 90000 })).json;
+            const dn = (await http(`/json-api/streams/debug/${special.pid}/naming`, { timeout: 90000 })).json;
+            const on = (await http('/json-api/config')).json?.SPECIALS_AS_MOVIES !== 'false';
+            rec(A, 'a numberless special is classified as a movie when specials-as-movies is on', !on || (sp?.type === 'MOVIE' && sp.filedAsMovie === true && dn?.numbering?.type === 'MOVIE') ? 'PASS' : 'FAIL', `preview ${sp?.type}/${sp?.filedAsMovie}`);
+            rec(A, 'a movie special is named and filed as Title (Year) in the debug File naming', !on || /\(\d{4}\)/.test(dn?.relativePath || '') ? 'PASS' : 'FAIL', String(dn?.relativePath));
+        } else rec(A, 'a numberless special is classified as a movie', 'SKIP', 'no unnumbered special found in the search results');
+    }
+    await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
+    // The probe shows each connection's priority and address, with the signed query string removed.
+    const probeVpid = episodePid ? (await http(`/json-api/streams/debug/${episodePid}/programme`, { timeout: 60000 })).json?.versions?.[0]?.vpid : undefined;
+    if (probeVpid) {
+        const probed = await http(`/json-api/streams/debug/${episodePid}/probe?vpid=${encodeURIComponent(probeVpid)}`, { method: 'POST', timeout: 180000 });
+        const connections = (probed.json?.versions || []).flatMap((v) => v.pairs.flatMap((p) => p.media.flatMap((m) => m.connections)));
+        const addresses = connections.flatMap((c) => [c.url, c.master?.url, c.dash?.url]).filter(Boolean);
+        rec(A, 'stream debug probe addresses carry no signed token (no query string or fragment)', addresses.length && addresses.every((u) => !/[?#]/.test(u)) ? 'PASS' : 'FAIL', `${addresses.length} address(es)`);
+        rec(A, 'stream debug probe lists a priority for HLS connections', connections.some((c) => c.transferFormat === 'hls' && c.priority !== undefined) ? 'PASS' : 'FAIL', `${connections.length} connection(s)`);
+    } else rec(A, 'stream debug probe addresses carry no signed token', 'SKIP', 'no episode version to probe');
+    const sessionSources = ((await http('/json-api/streams')).json || {});
+    rec(A, 'stream sessions carry their served address without a query string', (sessionSources.active || []).concat(sessionSources.history || []).every((s) => !s.source?.url || !/[?#]/.test(s.source.url)) ? 'PASS' : 'FAIL');
+    const st = (await http('/json-api/streams')).json || {};
+    rec(A, 'stream sessions carry continuesSessionId only as a string', (st.active || []).concat(st.history || []).every((s) => s.continuesSessionId === undefined || typeof s.continuesSessionId === 'string') ? 'PASS' : 'FAIL');
+}
+
 async function arrSyncChecks(A, ctx) {
     const types = (await check(A, 'app types', '/json-api/apps/types', isObj)).json || {};
     const offered = Object.entries(types).filter(([, features]) => features.includes('subscription_detect')).map(([type]) => type).sort();
@@ -442,8 +1264,11 @@ const ROUTES = [
     ['/streaming', 'Streaming', []],
     ['/events', 'Video events', []],
     ['/watchdog', 'Watchdog', []],
+    ['/library-debug', 'Library debug', []],
+    ['/dns-relay', 'DNS relay', []],
+    ['/streaming/debug/{pid}', 'Streaming debug', []],
     ['/nzb', 'NZB tester', []],
-    ['/logs', 'Logs', []],
+    ['/logs', 'Logs', ['.logTiles', '.levelChips']],
     ['/about', 'About', []],
     ['/settings', 'Settings', []],
 ];
@@ -455,16 +1280,15 @@ async function uiLayer(ctx) {
     try { chromium = (PW_DIR ? createRequire(path.join(PW_DIR, 'x.js')) : require)('playwright').chromium; }
     catch (e) { return rec(U, 'playwright available', 'FAIL', `${e.message.split('\n')[0]} - install playwright (npm i playwright; npx playwright install chromium); set SMOKE_PW_DIR if outside the repo`); }
     fs.mkdirSync(SHOTS, { recursive: true });
-    const browser = await chromium.launch();
+    const browser = await chromium.launch(process.env.SMOKE_HEADED ? { headless: false, slowMo: 150 } : {});
     try {
         const sweep = ONLY.includes('ui'); // false when only the real UI flows were asked for
         for (const [vpName, vp] of (sweep ? VIEWPORTS : [])) {
             if (PHONE_ONLY && vpName !== 'phone') continue;
             const context = await browser.newContext({ viewport: vp, isMobile: vpName === 'phone', hasTouch: vpName === 'phone' });
-            for (const [tpl, label, expects] of ROUTES) {
-                if (!want(label)) continue;
+            await pool(ROUTES.filter(([, label]) => want(label)), async ([tpl, label, expects]) => {
                 const route = tpl.replace('{channel}', ctx.channel || 'bbc_one_london').replace('{category}', ctx.category || 'comedy').replace('{pid}', ctx.pid || '').replace('{item}', encodeURIComponent(JSON.stringify({ pid: ctx.pid || 'm000smoke', title: 'SMOKE item' })));
-                if (route.endsWith('/') || route.includes('//')) { rec(U, `${label} @${vpName}`, 'SKIP', 'no id discovered'); continue; }
+                if (route.endsWith('/') || route.includes('//')) { rec(U, `${label} @${vpName}`, 'SKIP', 'no id discovered'); return; }
                 const page = await context.newPage();
                 const problems = [];
                 page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
@@ -480,11 +1304,11 @@ async function uiLayer(ctx) {
                     if (bodyText.length < 20) problems.push('page body empty');
                     if (/Cannot GET|Application error|undefined\b.*undefined/.test(bodyText)) problems.push('error text on page');
                     if (vpName === 'phone' && overflow > 2) problems.push(`horizontal overflow ${overflow}px`);
-                    await page.screenshot({ path: path.join(SHOTS, `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${vpName}.png`), fullPage: false });
+                    if (!NO_SHOTS) await page.screenshot({ path: path.join(SHOTS, `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${vpName}.png`), fullPage: false });
                 } catch (e) { problems.push('nav: ' + e.message.split('\n')[0]); }
                 rec(U, `${label} @${vpName}`, problems.length ? 'FAIL' : 'PASS', problems.join(' | '));
                 await page.close();
-            }
+            });
             await context.close();
         }
         if (sweep) await uiInteractions(browser, ctx);
@@ -522,7 +1346,21 @@ async function uiInteractions(browser, ctx) {
     } catch (e) { rec(U, 'settings tabs', 'FAIL', e.message.split('\n')[0]); }
     if (want('subscriptions toolbar')) await subscriptionsToolbar(page, ctx, U);
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
+    if (want('card grids')) await cardGrids(browser, U);
+    if (want('nzb search source')) await nzbSearchSource(browser, U);
+    if (want('queue cards')) await queueCards(browser, U);
+    if (want('queue selection')) { await queueSelection(browser, U); await queueSelectAllEmpty(browser, U); }
+    if (want('nav bar buttons')) await navBarButtons(browser, U);
+    await uiConsistency(browser, U);
+    if (want('statistics cache cards')) await statisticsCacheCards(browser, U);
+    if (want('maintenance cache groups')) await maintenanceCacheGroups(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
+    if (want('video events thumbnails')) await videoEventThumbs(page, U);
+    if (want('table columns')) await tableColumns(browser, U);
+    if (want('report buttons')) await reportButtons(browser, ctx, U);
+    if (want('streaming page')) await streamingPage(browser, U);
+    if (want('trace file buttons')) await traceFileButtons(browser, ctx, U);
+    if (want('trace charts')) await traceCharts(browser, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid && want('programme page')) {
         try {
@@ -538,6 +1376,328 @@ async function uiInteractions(browser, ctx) {
     }
     rec(U, 'no uncaught page errors during flows', bad.length ? 'FAIL' : 'PASS', bad.slice(0, 2).join(' | '));
     await context.close();
+}
+
+// Bug-report buttons on the stream trace, streaming debug and health check pages. Read-only: each page's Copy puts a fenced,
+// cleaned report on the clipboard (over plain http through the fallback, as the clipboard API is missing there) and Download saves
+// the same text as a .txt file. Neither may hold a key or token from this instance's own config, a URL query string or an address.
+async function reportButtons(browser, ctx, U) {
+    const cfg = ctx.cfg || (await http('/json-api/config')).json || {};
+    // Every secret-looking value the instance holds: none of them may appear in a report.
+    const secrets = Object.entries(cfg).filter(([k, v]) => /KEY|PASSWORD|SECRET|TOKEN/i.test(k) && typeof v === 'string' && v.length >= 8).map(([, v]) => v);
+    const streams = (await http('/json-api/streams')).json || {};
+    const session = [...(streams.active ?? []), ...(streams.history ?? [])][0];
+    const pages = [
+        ['health check', '/debug/health', 'Copy report', 'Download report', /health report/, 'iplayarr-health-report'],
+        ctx.pid ? ['streaming debug', `/streaming/debug/${ctx.pid}`, 'Copy report', 'Download report', /streaming debug/, `iplayarr-stream-debug-${ctx.pid}`] : null,
+        session ? ['stream trace', `/streaming/session/${session.id}`, 'Copy trace', 'Download trace', /stream trace/, `iplayarr-trace-${session.id}`] : null,
+    ];
+    if (!ctx.pid) rec(U, 'report buttons: streaming debug', 'SKIP', 'no programme discovered');
+    if (!session) rec(U, 'report buttons: stream trace', 'SKIP', 'no stream in the history');
+    const leaks = (text) => [
+        ...secrets.filter((s) => text.includes(s)).map(() => 'a config key or password'),
+        ...(/hdnea|hdntl|hdnts|hmac=|Bearer\s+\S|[?&](token|key|apikey|sig|signature)=/i.test(text) ? ['a token or query string'] : []),
+        ...(/https?:\/\/[^\s?]+\?\S/.test(text) ? ['a URL query string'] : []),
+        ...((text.match(/(?<![\w./])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g) || []).some((m) => m.split('.').every((p) => Number(p) <= 255)) ? ['an IP address'] : []),
+        ...(/STREAM_KEY\s*:/.test(text) ? ['STREAM_KEY'] : []),
+    ];
+    for (const entry of pages.filter(Boolean)) {
+        const [name, route, copyLabel, downloadLabel, header, fileBase] = entry;
+        const L = (what) => `report buttons: ${name} ${what}`;
+        const context = await browser.newContext({ viewport: VIEWPORTS[0][1], acceptDownloads: true });
+        try {
+            const p = await context.newPage();
+            const errors = [];
+            p.on('pageerror', (e) => errors.push(e.message));
+            // Records what a copy puts on the clipboard, by either route (the API, or the hidden-textarea fallback).
+            await p.addInitScript(() => {
+                window.__copied = null;
+                const exec = document.execCommand.bind(document);
+                document.execCommand = (cmd, ...rest) => { if (cmd === 'copy') window.__copied = document.activeElement?.value ?? ''; return exec(cmd, ...rest); };
+                if (navigator.clipboard?.writeText) {
+                    const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+                    navigator.clipboard.writeText = async (t) => { window.__copied = t; return write(t).catch(() => {}); };
+                }
+            });
+            await p.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45000 });
+            const download = p.locator(`button[aria-label="${downloadLabel}"]`);
+            await download.waitFor({ timeout: 30000 });
+            await p.waitForFunction((label) => !document.querySelector(`button[aria-label="${label}"]`)?.disabled, downloadLabel, { timeout: 60000 });
+            await p.waitForTimeout(3000); // a page still loading its dashboard would give a thin report
+            const secure = await p.evaluate(() => window.isSecureContext);
+            const [saved] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), download.click()]);
+            const file = fs.readFileSync(await saved.path(), 'utf8');
+            rec(U, L('Download saves a .txt report named for the page'), saved.suggestedFilename() === `${fileBase}.txt` && header.test(file.slice(0, 120)) ? 'PASS' : 'FAIL', `${saved.suggestedFilename()}, starts "${file.slice(0, 50).replace(/\s+/g, ' ')}"`);
+            rec(U, L('Download holds no key, token, query string or address'), leaks(file).length ? 'FAIL' : 'PASS', leaks(file).join(', '));
+            await p.click(`button[aria-label="${copyLabel}"]`);
+            await p.waitForTimeout(1500);
+            const copied = await p.evaluate(() => window.__copied);
+            rec(U, L(`Copy puts a fenced report on the clipboard${secure ? '' : ' over plain http (fallback)'}`), typeof copied === 'string' && copied.startsWith('```\n') && copied.trimEnd().endsWith('```') && header.test(copied.slice(4, 120)) ? 'PASS' : 'FAIL', copied === null ? 'nothing copied' : `${copied.length} characters`);
+            rec(U, L('Copy holds no key, token, query string or address'), copied && leaks(copied).length ? 'FAIL' : 'PASS', copied ? leaks(copied).join(', ') : 'nothing copied');
+            rec(U, L('Copy and Download agree on the report text'), copied && file && copied.includes(file.split('\n')[2] ?? '') ? 'PASS' : 'WARN', 'the first lines differ');
+            rec(U, L('Copy and Download raise no page error'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+        } catch (e) { rec(U, L('buttons'), 'FAIL', e.message.split('\n')[0]); }
+        await context.close();
+    }
+}
+
+// Import trace file (Streaming page) and Export data (a stream's trace page) show only with Stream Trace or Show Extended Debug on; Export data opens a
+// popup with the Compressed choice that Cancel closes without downloading. Read-only: nothing is imported or exported.
+async function traceFileButtons(browser, ctx, U) {
+    const cfg = ctx.cfg || (await http('/json-api/config')).json || {};
+    const on = cfg.STREAM_TRACE === 'true' || cfg.UI_EXTENDED_DEBUG === 'true';
+    const context = await browser.newContext({ viewport: VIEWPORTS[0][1], acceptDownloads: true });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        const importCount = await p.locator('button[aria-label="Import trace file"]').count();
+        rec(U, 'trace file buttons: Import trace file follows Stream Trace / Show Extended Debug', (importCount > 0) === on ? 'PASS' : 'FAIL', `buttons ${importCount}, setting on ${on}`);
+        const streams = (await http('/json-api/streams')).json || {};
+        const session = [...(streams.active ?? []), ...(streams.history ?? [])][0];
+        if (!session) rec(U, 'trace file buttons: Export data popup', 'SKIP', 'no stream in the history');
+        else {
+            await p.goto(`${BASE}/streaming/session/${session.id}`, { waitUntil: 'networkidle', timeout: 45000 });
+            const exportButton = p.locator('button[aria-label="Export data"]');
+            await p.waitForTimeout(1500);
+            const shown = (await exportButton.count()) > 0;
+            rec(U, 'trace file buttons: Export data follows Stream Trace / Show Extended Debug (or an imported trace)', shown === (on || session.imported === true) ? 'PASS' : 'FAIL', `shown ${shown}, setting on ${on}`);
+            if (shown) {
+                await exportButton.click();
+                const dialog = p.locator('text=Export stream data');
+                await dialog.waitFor({ timeout: 10000 });
+                rec(U, 'trace file buttons: the Export data popup offers Compressed', (await p.locator('text=Compressed').count()) > 0 ? 'PASS' : 'FAIL');
+                let downloaded = false;
+                p.once('download', () => { downloaded = true; });
+                await p.locator('button:has-text("Cancel")').first().click();
+                await p.waitForTimeout(800);
+                rec(U, 'trace file buttons: Cancel closes the popup without a download', !downloaded && (await dialog.count()) === 0 ? 'PASS' : 'FAIL', downloaded ? 'a file was downloaded' : 'popup still open');
+            }
+        }
+        rec(U, 'trace file buttons: no page error', errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, 'trace file buttons', 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+}
+
+// The Streaming page: it loads with a history filter already saved in the browser (it once failed to render at all, blank under the back button),
+// shows a loading indicator, not "No streams currently playing" or "No streaming history yet", until the server's first push arrives (held back
+// here by blocking the socket), and its "Delete all imported traces" button has its own icon, not the trash can of "Clear stream history".
+// Read-only: nothing is imported, deleted or cleared.
+async function streamingPage(browser, U) {
+    const L = (what) => `streaming page: ${what}`;
+    const filter = JSON.stringify({ filterText: 'zzzz-no-such-title-zzzz', sortBy: 'started', sortOrder: 'desc', dateFrom: null, dateTo: null });
+    // 1. a saved history filter must not stop the page rendering
+    let context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.addInitScript((value) => localStorage.setItem('iplayarr.tableFilter.streamHistory', value), filter);
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(800);
+        const text = await p.locator('body').innerText();
+        rec(U, L('loads with a history filter saved in the browser'), /Active Streams/.test(text) && /Stream History/.test(text) ? 'PASS' : 'FAIL', text.slice(0, 80).replace(/\s+/g, ' '));
+        rec(U, L('a history filter that matches nothing says so'), /Nothing matches this filter/.test(text) || /No streaming history yet/.test(text) ? 'PASS' : 'FAIL');
+        rec(U, L('no page error with a saved history filter'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, L('saved history filter'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+    // 2. before the first push, loading is shown and the empty states are not
+    context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        await p.route('**/socket.io/**', (route) => route.abort());
+        await p.goto(BASE + '/streaming', { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await p.locator('text=Stream History').first().waitFor({ timeout: 15000 });
+        await p.waitForTimeout(1500);
+        const text = await p.locator('body').innerText();
+        const spinners = await p.locator('.ripple-container').count();
+        rec(U, L('shows loading in both tables until the first push arrives'), spinners >= 2 ? 'PASS' : 'FAIL', `${spinners} loading indicator(s)`);
+        rec(U, L('does not say "No streams currently playing" while loading'), /No streams currently playing/.test(text) ? 'FAIL' : 'PASS');
+        rec(U, L('does not say "No streaming history yet" while loading'), /No streaming history yet|Nothing matches this filter/.test(text) ? 'FAIL' : 'PASS');
+    } catch (e) { rec(U, L('loading state'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+    // 3. once the push arrives the loading goes away
+    context = await browser.newContext({ viewport: VIEWPORTS[0][1] });
+    try {
+        const p = await context.newPage();
+        await p.goto(BASE + '/streaming', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(1200);
+        rec(U, L('loading goes away once the streams arrive'), (await p.locator('.streamsTable .ripple-container').count()) === 0 ? 'PASS' : 'FAIL');
+        // 4. the imported-traces button's icon is its own
+        const imported = ((await http('/json-api/streams')).json?.history ?? []).filter((s) => s.imported);
+        const del = p.locator('button[aria-label="Delete all imported traces"]');
+        if (!imported.length) rec(U, L('Delete all imported traces has its own icon'), 'SKIP', 'no imported trace to show the button');
+        else {
+            const icon = await del.locator('svg').first().getAttribute('data-icon');
+            const clear = await p.locator('button[aria-label="Clear stream history"] svg').first().getAttribute('data-icon').catch(() => null);
+            rec(U, L('Delete all imported traces has its own icon'), icon && icon !== 'trash' && icon !== clear ? 'PASS' : 'FAIL', `imported ${icon}, clear history ${clear}`);
+        }
+    } catch (e) { rec(U, L('loaded state'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+}
+
+// The stream trace page's timeline and playback charts: the three throughput views (Smoothed, Per transfer, Measured, the last only when the
+// trace has a byte profile), the fit-scale and read-ahead buttons, whole-number segment ticks, the figure written under each playback chart and
+// the four charts starting at one height. Read-only: it only reads a recorded stream and clicks the chart's own buttons.
+async function traceCharts(browser, ctx, U) {
+    const L = (what) => `trace charts: ${what}`;
+    const streams = (await http('/json-api/streams')).json || {};
+    let session;
+    let trace;
+    for (const s of [...(streams.active ?? []), ...(streams.history ?? [])].slice(0, 12)) {
+        const t = (await http(`/json-api/streams/trace/${s.id}`)).json;
+        if ((t?.requests || []).filter((r) => r.kind === 'segment').length >= 3) { session = s; trace = t; break; }
+    }
+    if (!session) return rec(U, 'trace charts', 'SKIP', 'no stream with at least 3 segment requests in the history');
+    const requests = trace.requests;
+    const hasProfile = requests.some((r) => Array.isArray(r.prof) && r.prof.length);
+    const aheadCount = requests.filter((r) => r.prefetched && r.fetchMs > 0 && r.profAt).length;
+    const hasBytes = requests.some((r) => r.bytes > 0 && r.durMs > 0);
+    const context = await browser.newContext({ viewport: { width: 1800, height: 1000 } });
+    try {
+        const p = await context.newPage();
+        const errors = [];
+        p.on('pageerror', (e) => errors.push(e.message));
+        await p.goto(`${BASE}/streaming/session/${session.id}`, { waitUntil: 'networkidle', timeout: 45000 });
+        await p.locator('.timelineSvg').waitFor({ timeout: 30000 });
+        const labels = async (selector) => (await p.locator(selector).allTextContents()).map((t) => t.trim());
+        const rateAxis = async () => (await labels('.timelineSvg text.axisText')).filter((t) => /B\/s$/.test(t));
+        const rateLabel = async () => (await labels('.timelineSvg text.laneLabel')).find((t) => /throughput/i.test(t)) || '';
+        const mode = (name) => p.locator(`.timelineControls button:text-is("${name}")`);
+
+        rec(U, L('the throughput graph offers Smoothed, Per transfer and Measured'), (await mode('Smoothed').count()) && (await mode('Per transfer').count()) && (await mode('Measured').count()) ? 'PASS' : 'FAIL');
+        rec(U, L('Measured is on offer only when the trace has a byte profile'), (await mode('Measured').isDisabled()) === !hasProfile ? 'PASS' : 'FAIL', `profile recorded: ${hasProfile}`);
+
+        if (!hasBytes) rec(U, L('the throughput views change the graph label'), 'SKIP', 'no request with both bytes and a duration');
+        else {
+            const seen = [await rateLabel()];
+            await mode('Per transfer').click();
+            seen.push(await rateLabel());
+            if (hasProfile) { await mode('Measured').click(); seen.push(await rateLabel()); }
+            await mode('Smoothed').click();
+            seen.push(await rateLabel());
+            rec(U, L('the throughput views change the graph label'), new Set(seen.slice(0, hasProfile ? 3 : 2)).size === (hasProfile ? 3 : 2) && seen.at(-1) === seen[0] ? 'PASS' : 'FAIL', seen.join(' | '));
+            const axis = await rateAxis();
+            rec(U, L('the throughput scale labels the middle and the top, not just 0'), axis.length >= 2 ? 'PASS' : 'FAIL', `${axis.length} labels: ${axis.join(', ')}`);
+            // The top of the scale is never far above the tallest bar: the top label is a figure, and the fit button keeps it a figure.
+            const fit = p.locator('.timelineControls button[aria-label*="Throughput scale"]');
+            const before = await fit.getAttribute('aria-pressed');
+            await fit.click();
+            const during = await fit.getAttribute('aria-pressed');
+            const fitted = await rateAxis();
+            await fit.click();
+            rec(U, L('the fit button switches the throughput scale to the part in view and back'), before === 'false' && during === 'true' && (await fit.getAttribute('aria-pressed')) === 'false' && fitted.length >= 2 ? 'PASS' : 'FAIL', `${before} -> ${during}, fitted ${fitted.join(', ')}`);
+        }
+
+        // Segment index ticks are whole numbers, also once zoomed in.
+        const ticks = async () => (await labels('.timelineSvg text.axisText')).filter((t) => /^[0-9]+(\.[0-9]+)?$/.test(t));
+        await p.locator('.timelineControls button[aria-label="Zoom in"]').click();
+        const zoomedTicks = await ticks();
+        rec(U, L('segment index ticks are whole numbers, zoomed in too'), zoomedTicks.length === 0 || zoomedTicks.every((t) => Number.isInteger(Number(t))) ? 'PASS' : 'FAIL', zoomedTicks.join(', '));
+        await p.locator('.timelineControls button[aria-label="Show everything"]').click();
+
+        // Read-ahead option: a bar for every segment that has a recorded download, none otherwise.
+        const toggle = p.locator('button.modeButton').first();
+        if (!aheadCount) rec(U, L('the read-ahead button is greyed out when no download was recorded'), (await toggle.isDisabled()) ? 'PASS' : 'FAIL', 'no read-ahead download in this trace');
+        else {
+            rec(U, L('no read-ahead download bars until the button is pressed'), (await p.locator('rect.aheadBar').count()) === 0 ? 'PASS' : 'FAIL');
+            await toggle.click();
+            const bars = await p.locator('rect.aheadBar').count();
+            rec(U, L('the read-ahead button draws a bar for each read-ahead segment'), bars === aheadCount ? 'PASS' : 'FAIL', `${bars} bars, ${aheadCount} read-ahead segments in the trace`);
+            await toggle.click();
+            rec(U, L('the read-ahead button hides them again'), (await p.locator('rect.aheadBar').count()) === 0 ? 'PASS' : 'FAIL');
+        }
+
+        // Playback diagnostics: the four charts share rows, and a hover writes the segment's figure under each.
+        const plots = p.locator('svg.plot');
+        const emptyCharts = await p.locator('.healthCharts p.empty').count();
+        if ((await plots.count()) + emptyCharts !== 4) rec(U, L('the four playback charts'), 'FAIL', `${await plots.count()} plots, ${emptyCharts} empty notes`);
+        else if (emptyCharts) rec(U, L('the four playback charts'), 'SKIP', `this trace lacks data for ${emptyCharts} chart(s) (shown as a note)`);
+        else {
+            const boxes = await plots.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top + window.scrollY), left: Math.round(r.left) }; }));
+            const rows = new Map();
+            boxes.forEach((b) => { const key = [...rows.keys()].find((k) => Math.abs(k - b.top) < 40) ?? b.top; rows.set(key, [...(rows.get(key) || []), b.top]); });
+            rec(U, L('the four playback charts start at one height in each row'), [...rows.values()].every((tops) => new Set(tops).size === 1) ? 'PASS' : 'FAIL', boxes.map((b) => b.top).join(', '));
+            const first = plots.first();
+            await first.scrollIntoViewIfNeeded();
+            const box = await first.boundingBox();
+            await p.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
+            await p.waitForTimeout(300);
+            const readouts = await labels('p.readout');
+            rec(U, L('hovering a playback chart writes the segment figure under all four'), readouts.length === 4 && readouts.every((t) => /^segment \d+: /.test(t)) ? 'PASS' : 'FAIL', readouts.join(' | ').slice(0, 200));
+            await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
+            await p.mouse.move(2, 2);
+            await p.waitForTimeout(300);
+            const kept = await labels('p.readout');
+            rec(U, L('a clicked segment stays written under the charts as Kept'), kept.length === 4 && kept.every((t) => /^Kept - segment \d+: /.test(t)) ? 'PASS' : 'FAIL', kept.join(' | ').slice(0, 200));
+        }
+        rec(U, L('no page error'), errors.length ? 'FAIL' : 'PASS', errors.slice(0, 2).join(' | '));
+    } catch (e) { rec(U, L('charts'), 'FAIL', e.message.split('\n')[0]); }
+    await context.close();
+}
+
+// Video events: every row has a thumbnail slot (image or placeholder), so events with no programme
+// (e.g. queued) are as tall as the rest. Read-only; table and cards.
+async function videoEventThumbs(page, U) {
+    try {
+        const events = (await http('/json-api/events')).json;
+        if (!Array.isArray(events) || !events.length) return rec(U, 'video events rows all have a thumbnail slot', 'SKIP', 'no events recorded');
+        const view = async (mode) => {
+            await page.goto(BASE + '/events', { waitUntil: 'networkidle' });
+            await page.evaluate((m) => localStorage.setItem('iplayarr.eventsViewMode', m), mode);
+            await page.reload({ waitUntil: 'networkidle' });
+            await page.waitForTimeout(800);
+        };
+        await view('table');
+        const rows = await page.locator('.eventLogTable tbody tr:has(td:nth-child(2))').evaluateAll((trs) => trs.map((tr) => ({
+            slot: !!tr.querySelector('td:first-child img, td:first-child .thumbnail-placeholder'),
+            h: Math.round(tr.getBoundingClientRect().height),
+        })));
+        const missing = rows.filter((r) => !r.slot).length;
+        // Rows without a subtitle line are a few px shorter and a long message wraps, so heights are compared in 8px steps.
+        const heights = [...new Set(rows.map((r) => Math.round(r.h / 8) * 8))];
+        rec(U, 'video events table rows all have a thumbnail slot', rows.length && !missing ? 'PASS' : 'FAIL', `${rows.length} rows, ${missing} without`);
+        rec(U, 'video events table rows share one height', heights.length <= 2 ? 'PASS' : 'FAIL', `heights ${heights.join(',')}`);
+        await view('cards');
+        const cards = await page.locator('.cardList > *').evaluateAll((els) => els.filter((e) => !e.classList.contains('empty')).map((e) => !!e.querySelector('img, .thumbnail-placeholder')));
+        rec(U, 'video events cards all have a thumbnail slot', cards.length && cards.every(Boolean) ? 'PASS' : 'FAIL', `${cards.filter(Boolean).length}/${cards.length}`);
+    } catch (e) { rec(U, 'video events thumbnails', 'FAIL', e.message.split('\n')[0]); }
+}
+
+// Table columns: no cell outside the free-text columns (Filename, Message, Name, thumbnail) is clipped.
+// Each page's per-page select is set to the largest size so every kind of row is on screen. Read-only.
+async function tableColumns(browser, U) {
+    const free = /^(filename|message|name|search term|title|item|media)?$/i;
+    for (const [route, label] of [['/queue', 'queue'], ['/streaming', 'streaming'], ['/nzb', 'nzb'], ['/events', 'video events']]) {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        const p = await context.newPage();
+        try {
+            await p.goto(BASE + route, { waitUntil: 'networkidle' });
+            await p.waitForTimeout(1200);
+            for (const s of await p.$$('select[aria-label="items per page"]')) await s.selectOption('1024').catch(() => {});
+            await p.waitForTimeout(1200);
+            const clipped = await p.evaluate((freeSrc) => {
+                const freeRe = new RegExp(freeSrc, 'i');
+                const out = {};
+                document.querySelectorAll('table').forEach((t) => {
+                    if (!t.offsetParent || t.classList.contains('cards')) return;
+                    const heads = [...t.querySelectorAll('thead th')].map((h) => h.innerText.trim());
+                    t.querySelectorAll('th, td').forEach((c) => {
+                        if (!c.offsetParent) return;
+                        const head = heads[c.cellIndex] || '';
+                        if (freeRe.test(head)) return;
+                        const el = [c, ...c.querySelectorAll('*')].find((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible');
+                        if (el) out[head] = Math.max(out[head] || 0, el.scrollWidth - el.clientWidth);
+                    });
+                });
+                return out;
+            }, free.source);
+            const bad = Object.entries(clipped);
+            rec(U, `${label} table columns show their text`, bad.length ? 'FAIL' : 'PASS', bad.map(([h, px]) => `${h}: ${px}px short`).join(', '));
+        } catch (e) { rec(U, `${label} table columns`, 'FAIL', e.message.split('\n')[0]); }
+        await context.close();
+    }
 }
 
 // Watchdog links: table and card views both show the library file's name (season/episode) under a link,
@@ -564,6 +1724,96 @@ async function watchdogLinks(page, ctx, U) {
         rec(U, 'watchdog cards show the same library name', sample.some((i) => cards.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
         const valid = sample.filter((i) => i.status === 'ok');
         if (valid.length) rec(U, 'watchdog cards show the file for a valid link', valid.some((i) => cards.includes(i.files[0].split(/[\\/]/).pop())) ? 'PASS' : 'FAIL', valid[0].files[0]);
+        // Every card with failed checks shows its strikes pill, an invalid one included (it once hid for invalid links).
+        // The page is paged, so a card may be on another page: look for any of them.
+        const struck = (await http('/json-api/watchdog')).json?.items?.filter((i) => i.failCount > 0) || [];
+        const pill = (i) => `${i.failCount}/${strikes} strikes`;
+        const invalidStruck = struck.filter((i) => i.status === 'invalid');
+        if (invalidStruck.length) rec(U, 'watchdog cards show the strikes pill on an invalid link', invalidStruck.some((i) => cards.includes(pill(i))) ? 'PASS' : 'FAIL', pill(invalidStruck[0]));
+        else rec(U, 'watchdog cards show the strikes pill on an invalid link', 'SKIP', 'no invalid links with failed checks');
+        const validStruck = struck.filter((i) => i.status === 'ok');
+        if (validStruck.length) rec(U, 'watchdog cards show the strikes pill on a failing-but-valid link', validStruck.some((i) => cards.includes(pill(i))) ? 'PASS' : 'FAIL', pill(validStruck[0]));
+        else rec(U, 'watchdog cards show the strikes pill on a failing-but-valid link', 'SKIP', 'no links under their strike limit');
+        // A link with no failed checks has no pill.
+        if (!struck.length) rec(U, 'watchdog cards show no strikes pill when nothing has failed', /\d+\/\d+ strikes/.test(cards) ? 'FAIL' : 'PASS');
+        // The Settings section shows what the Watchdog is set to, including the strike limit the API reports.
+        // They sit in one table row under their names (not a list): the value is the cell under the "Failed checks before invalid" heading.
+        const heads = await page.locator('.settingsTable th').allTextContents();
+        const cells = await page.locator('.settingsTable td').allTextContents();
+        const at = heads.findIndex((h) => /Failed checks before invalid/i.test(h));
+        rec(U, 'watchdog shows its current settings', /Settings/.test(cards) && at >= 0 && cells[at]?.trim() === String(strikes) ? 'PASS' : 'FAIL', `limit ${strikes}, cell ${cells[at]}`);
+        const settingsW = await page.locator('.settingsTable').evaluate((t) => t.getBoundingClientRect().width / t.parentElement.getBoundingClientRect().width).catch(() => 0);
+        rec(U, 'watchdog settings table spans the card width', settingsW > 0.95 ? 'PASS' : 'FAIL', `ratio ${settingsW.toFixed(2)}`);
+        // Library cards: "In the Library" is everything, with each source's icon once; with radio on there are also
+        // "Video Only" and "Radio Only" cards, and the everything total is video plus radio. No Video | Radio switch.
+        const wdState = (await http('/json-api/watchdog')).json || {};
+        const radioOn = (await http('/json-api/config')).json?.SOUNDS_ENABLED === 'true';
+        const radioTotal = wdState.radioLibrary?.total ?? 0;
+        const radioSources = Object.keys(wdState.radioLibrary?.bySource || {}).length;
+        const hasRadioCard = radioOn && radioSources > 0;
+        const labels = await page.locator('.statLabel').allTextContents();
+        const has = (t) => labels.some((l) => l.trim().toLowerCase() === t);
+        rec(U, 'watchdog library cards have no Video | Radio switch', (await page.locator('.libraryToggle').count()) === 0 ? 'PASS' : 'FAIL');
+        rec(U, 'watchdog has no separate Radio in the Library card', /Radio in the Library/.test(cards) ? 'FAIL' : 'PASS');
+        rec(U, 'watchdog shows Video Only and Radio Only cards only when radio has a library', (has('video only') && has('radio only')) === hasRadioCard && (has('video only') || has('radio only')) === hasRadioCard ? 'PASS' : 'FAIL', `radio ${radioOn}, radio sources ${radioSources}, labels [${labels.map((l) => l.trim()).join('|')}]`);
+        const libCard = page.locator('.statCard', { has: page.locator('.statLabel', { hasText: /^\s*In the Library\s*$/i }) }).first();
+        if (await libCard.count()) {
+            const alts = await libCard.locator('img.sourceLogo').evaluateAll((els) => els.map((e) => e.alt));
+            rec(U, 'watchdog In the Library card shows each source once', new Set(alts).size === alts.length ? 'PASS' : 'FAIL', `[${alts.join('|')}]`);
+            const total = Number((await libCard.locator('.statValue').first().innerText()).replace(/[^\d]/g, ''));
+            const want = (wdState.library?.total ?? 0) + (hasRadioCard ? radioTotal : 0);
+            rec(U, 'watchdog In the Library total is video plus radio', total === want ? 'PASS' : 'FAIL', `shown ${total}, expected ${want}`);
+        } else rec(U, 'watchdog In the Library card shows each source once', 'SKIP', 'no library card (no sources indexed)');
+        if (hasRadioCard) {
+            const radioCard = page.locator('.statCard', { has: page.locator('.statLabel', { hasText: /^\s*Radio Only\s*$/i }) }).first();
+            const shown = Number((await radioCard.locator('.statValue').first().innerText()).replace(/[^\d]/g, ''));
+            rec(U, 'watchdog Radio Only card shows the radio total', shown === radioTotal ? 'PASS' : 'FAIL', `shown ${shown}, expected ${radioTotal}`);
+        }
+        // On a phone the settings stack (a name and value per line, no header row) and every card's source counts stay inside it.
+        const wide = page.viewportSize();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.waitForTimeout(500);
+        const phone = await page.evaluate(() => {
+            const head = document.querySelector('.settingsTable thead');
+            const cell = document.querySelector('.settingsTable td');
+            const spill = [...document.querySelectorAll('.statRow .statCard')].filter((c) => [...c.querySelectorAll('.sourceCounts > span, .valueRow > *')].some((e) => e.getBoundingClientRect().right > c.getBoundingClientRect().right + 1)).length;
+            return { headHidden: !head || getComputedStyle(head).display === 'none', stacked: !!cell && getComputedStyle(cell).display === 'grid', label: cell ? getComputedStyle(cell, '::before').content : '', spill };
+        });
+        rec(U, 'watchdog settings stack as name and value rows on a phone', phone.headHidden && phone.stacked && phone.label.length > 2 ? 'PASS' : 'FAIL', JSON.stringify(phone));
+        rec(U, 'watchdog stat cards keep their source counts inside on a phone', phone.spill === 0 ? 'PASS' : 'FAIL', `${phone.spill} card(s) overflow`);
+        if (wide) await page.setViewportSize(wide);
+        // What happened on the last check: a tick or warning icon on each card with history, a paper-plane for a sent notification.
+        const all = (await http('/json-api/watchdog')).json?.items || [];
+        const withHistory = all.filter((i) => (i.history || []).length);
+        if (withHistory.length) {
+            const icons = await page.locator('.cardGrid .lastCheck[title^="Last check"]').count();
+            rec(U, 'watchdog cards show a last-check icon', icons > 0 ? 'PASS' : 'FAIL', `${icons} icon(s), ${withHistory.length} link(s) with history`);
+            const failedNow = withHistory.some((i) => i.history.at(-1).result === 'failed');
+            if (failedNow) rec(U, 'watchdog cards show a failed icon for a link whose last check failed', (await page.locator('.cardGrid .lastCheck.failed').count()) > 0 ? 'PASS' : 'FAIL');
+            else rec(U, 'watchdog cards show a failed icon for a link whose last check failed', 'SKIP', 'no link failed its last check');
+        } else rec(U, 'watchdog cards show a last-check icon', 'SKIP', 'no link has a check history');
+        const sent = all.filter((i) => (i.actions || []).includes('Webhook sent'));
+        if (sent.length) rec(U, 'watchdog cards show a notification-sent icon', (await page.locator('.cardGrid .lastCheck[title^="Notification sent"]').count()) > 0 ? 'PASS' : 'FAIL');
+        else rec(U, 'watchdog cards show a notification-sent icon', 'SKIP', 'no notification has been sent');
+        // Links sort and filter, behind the toolbar's filter icon like the other lists.
+        await page.evaluate(() => localStorage.removeItem('iplayarr.tableFilter.watchdogLinks'));
+        const filterBtn = page.locator('button[aria-label="Filter"]').last();
+        await filterBtn.click();
+        const sortLabels = await page.locator('.sortSelect option').allTextContents();
+        rec(U, 'watchdog links filter bar offers Status, Last checked, Programme, Strikes and Source sorts', sortLabels.join('|') === 'Status|Last checked|Programme|Strikes|Source' ? 'PASS' : 'FAIL', sortLabels.join('|'));
+        const box = page.locator('input.tableFilter');
+        await box.fill('zzz-no-such-link-zzz');
+        await page.waitForTimeout(400);
+        rec(U, 'watchdog links filter with no match says so', /No links match the filter/.test(await page.locator('body').innerText()) ? 'PASS' : 'FAIL');
+        await box.fill(all[0].pid);
+        await page.waitForTimeout(400);
+        const shown = await page.locator('.cardGrid > *').count();
+        rec(U, 'watchdog links filter by pid narrows the list to the matching link', shown >= 1 && shown <= all.filter((i) => JSON.stringify(i).toLowerCase().includes(all[0].pid.toLowerCase())).length ? 'PASS' : 'FAIL', `${shown} shown of ${all.length}`);
+        await box.fill('');
+        await page.locator('.sortSelect').selectOption('strikes');
+        await page.waitForTimeout(300);
+        rec(U, 'watchdog links sort is applied (Strikes)', (await page.locator('.sortSelect').inputValue()) === 'strikes' ? 'PASS' : 'FAIL');
+        await page.evaluate(() => localStorage.removeItem('iplayarr.tableFilter.watchdogLinks'));
         // The per-run results chart replaced the live Checked-vs-Failed line chart.
         const runs = (await http('/json-api/watchdog')).json?.runs || [];
         const chart = page.locator('.chartCard');
@@ -581,11 +1831,21 @@ async function watchdogLinks(page, ctx, U) {
 
 // Subscriptions toolbar: the Sync dialog (opened and cancelled, never run), sort and filter. Reads the same API the
 // page does and checks what the page shows against it.
+// A subscription row's title as the user reads it. A radio row puts a small radio icon (an svg with a <title>) inside the
+// title link, and textContent includes that <title>, giving "RadioDance Sounds..." - so read the text with the svg left out.
+const rowTitles = async (page) =>
+    page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .info a.title').evaluateAll((els) =>
+        els.map((el) => {
+            const copy = el.cloneNode(true);
+            copy.querySelectorAll('svg').forEach((n) => n.remove());
+            return copy.textContent.trim();
+        }));
+
 async function subscriptionsToolbar(page, ctx, U) {
     const sortable = (t) => t.trim().replace(/^(?:the|an?)(?:\s+|\.(?=[^.\s]))(?=\S)/i, '');
     try {
         const apps = (await http('/json-api/subscriptions/arr/apps')).json || [];
-        const subs = (await http('/json-api/subscriptions')).json || [];
+        const subs = [...((await http('/json-api/subscriptions')).json || []), ...((await http('/json-api/subscriptions?mode=radio')).json || [])];
         await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
         const sync = page.locator('button[title="Sync Sonarr/Radarr"]');
         rec(U, 'subscriptions: Sync button shown only when there is a Sonarr/Radarr app', (await sync.count()) === (apps.length ? 1 : 0) ? 'PASS' : 'FAIL', `${apps.length} app(s)`);
@@ -606,7 +1866,7 @@ async function subscriptionsToolbar(page, ctx, U) {
         const select = page.locator('.sortSelect');
         const options = (await select.locator('option').allTextContents()).map((o) => o.trim());
         rec(U, 'subscriptions: sort offers Added, A-Z, Downloaded, Checked', options.join() === 'Added,A-Z,Downloaded,Checked' ? 'PASS' : 'FAIL', options.join());
-        const visible = async () => (await page.locator('.subscriptionRow .info a.title').allTextContents()).map((t) => t.trim()).slice(0, Math.min(16, subs.length));
+        const visible = async () => (await rowTitles(page)).slice(0, Math.min(16, subs.length));
         await select.selectOption({ label: 'A-Z' });
         await page.waitForTimeout(300);
         const expected = subs.map((s) => s.title).sort((a, b) => sortable(a).localeCompare(sortable(b))).slice(0, 16);
@@ -630,7 +1890,7 @@ async function subscriptionsToolbar(page, ctx, U) {
         // Filter: All, iPlayarr (downloaded by us) and each Sonarr/Radarr app
         await page.locator('.filterWrap button').click();
         const filters = (await page.locator('.filterDropdown li').allTextContents()).map((t) => t.trim());
-        rec(U, 'subscriptions: filter offers All, iPlayarr and each app', filters.join() === ['All', 'iPlayarr', ...apps.map((a) => a.name)].join() ? 'PASS' : 'FAIL', filters.join());
+        rec(U, 'subscriptions: filter offers All, iPlayarr and each app', filters.join() === ['All', ...(subs.some((s) => s.radio) ? ['Video', 'Radio'] : []), 'iPlayarr', ...apps.map((a) => a.name)].join() ? 'PASS' : 'FAIL', filters.join());
         const pick = async (option) => {
             if (!(await page.locator('.filterDropdown').count())) await page.locator('.filterWrap button').click();
             await page.locator('.filterDropdown li', { hasText: new RegExp(`^\\s*${option}\\s*$`) }).click();
@@ -660,41 +1920,59 @@ async function subscriptionsCards(browser, page, U) {
     const KEY = 'iplayarr.subscriptionsViewMode';
     const toggle = (title) => page.locator(`.viewToggle button[title="${title}"]`);
     try {
-        const subs = (await http('/json-api/subscriptions')).json || [];
+        const subs = [...((await http('/json-api/subscriptions')).json || []), ...((await http('/json-api/subscriptions?mode=radio')).json || [])];
         if (!subs.length) return rec(U, 'subscriptions: badge and card view', 'SKIP', 'no subscriptions');
-        const expectedBadge = (s) => (s.arrOnly ? (s.arrCounts && !s.arrMissing ? `${s.arrCounts.have}` : null) : s.lastQueuedAt ? `${s.lastQueuedCount}/${(s.seen || []).length}` : `${(s.seen || []).length}`);
+        const expectedBadge = (s) => (s.arrOnly ? (s.arrCounts && !s.arrMissing ? `${s.arrCounts.have}/${s.arrCounts.total}` : null) : `${s.onDisk ?? '–'}/${(s.seen || []).length}`);
+        let shownTitles = [];
+        // Rows and cards list the same shows in the same order; find one by its position in the page's own title list
+        // (a text selector would trip over the radio icon's <title> inside a radio show's link).
         const badgeOf = async (scope, title) => {
-            const row = scope.filter({ has: page.locator(`a:text-is("${title}")`) }).first();
-            return (await row.locator('.thumbBadge').count()) ? (await row.locator('.thumbBadge').first().textContent()).trim() : null;
+            const at = shownTitles.indexOf(title);
+            if (at < 0) return null;
+            const row = scope.nth(at);
+            return (await row.locator('.thumbBadge:not(.thumbLast)').count()) ? (await row.locator('.thumbBadge:not(.thumbLast)').first().textContent()).trim() : null;
         };
 
         // Table (the desktop default): a badge per show matching the API, an Added date and the synopsis on one line.
         await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
         await page.evaluate((k) => localStorage.removeItem(k), KEY);
         await page.reload({ waitUntil: 'networkidle' });
-        const titles = (await page.locator('.subscriptionRow .info a.title').allTextContents()).map((t) => t.trim());
+        const titles = await rowTitles(page);
+        shownTitles = titles;
         const shown = titles.length;
         const onPage = subs.filter((x) => titles.includes(x.title));
+        const shownVideo = onPage.filter((x) => !x.radio).length;
         rec(U, 'subscriptions: wide screens start in the table view', shown > 0 && (await toggle('Table view').getAttribute('aria-pressed')) === 'true' ? 'PASS' : 'FAIL', `${shown} rows`);
-        const rows = page.locator('.subscriptionRow');
+        const rows = page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"])');
         const wrong = [];
         for (const s of onPage) {
             const got = await badgeOf(rows, s.title);
             if (got !== expectedBadge(s)) wrong.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
         }
         rec(U, 'subscriptions: each picture badge is last download / episodes seen (or episodes held for Sonarr/Radarr)', wrong.length === 0 ? 'PASS' : 'FAIL', wrong.slice(0, 3).join(' | '));
-        const addedRows = await page.locator('.subscriptionRow .details span', { hasText: /^Added / }).count();
+        const addedRows = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .details span', { hasText: /^Added / }).count();
         rec(U, 'subscriptions: every table row says when the show was added', addedRows === shown ? 'PASS' : 'FAIL', `${addedRows} rows`);
         const withSynopsis = onPage.filter((s) => s.synopsis);
-        const synopsisRows = await page.locator('.subscriptionRow .synopsis').count();
+        const synopsisRows = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .synopsis').count();
         rec(U, 'subscriptions: the table shows a synopsis line for every show that has one', synopsisRows === withSynopsis.length ? 'PASS' : 'FAIL', `${synopsisRows} shown, ${withSynopsis.length} expected`);
         if (withSynopsis.length) {
-            const style = await page.locator('.subscriptionRow .synopsis').first().evaluate((el) => ({ overflow: getComputedStyle(el).overflow, wrap: getComputedStyle(el).whiteSpace }));
+            const style = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .synopsis').first().evaluate((el) => ({ overflow: getComputedStyle(el).overflow, wrap: getComputedStyle(el).whiteSpace }));
             rec(U, 'subscriptions: a table synopsis stays on one line', style.wrap === 'nowrap' && style.overflow === 'hidden' ? 'PASS' : 'FAIL', JSON.stringify(style));
         }
         const arrShows = onPage.filter((s) => s.arr || s.arrMissing);
-        const arrLines = await page.locator('.subscriptionRow .info > .details:nth-of-type(2)').count();
+        const arrLines = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .info > .details:nth-of-type(2)').count();
         rec(U, 'subscriptions: Sonarr/Radarr details sit on a second line under the channel', arrShows.length ? (arrLines >= arrShows.length ? 'PASS' : 'FAIL') : 'SKIP', `${arrLines} second lines, ${arrShows.length} linked`);
+        // The download-before-it-leaves toggle belongs on every show, Sonarr/Radarr-only ones included (their .strm links expire too).
+        const secureToggles = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) button:has(svg[data-icon="box-archive"])').count();
+        rec(U, 'subscriptions: every table row, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (secureToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${secureToggles} toggles, ${shown} rows`);
+        const imageButtons = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) button:has(svg[data-icon="images"])').count();
+        rec(U, 'subscriptions: every table row has the update-images button', shown ? (imageButtons === shown ? 'PASS' : 'FAIL') : 'SKIP', `${imageButtons} buttons, ${shown} rows`);
+        // Per-source counts are just a logo and a number, in the table as on the cards: no source names beside the logos.
+        const withSources = onPage.filter((s) => s.onDiskSources && s.onDiskSources.length);
+        const rowChips = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .sourceCounts').count();
+        const rowNames = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .sourceCounts .sourceName').count();
+        const rowBad = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .sourceCounts > span').evaluateAll((els) => els.filter((el) => !el.querySelector('img.sourceLogo') || !/^\d+$/.test(el.textContent.trim())).length);
+        rec(U, 'subscriptions: table rows show each source as a logo and a count, with no names', withSources.length ? (rowChips === withSources.length && rowNames === 0 && rowBad === 0 ? 'PASS' : 'FAIL') : 'SKIP', `${rowChips} chip sets for ${withSources.length} shows, ${rowNames} names, ${rowBad} not logo+count`);
         await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-table.png'), fullPage: true });
 
         // Cards: several across, the badge on the picture, the dates in a 2x2 grid, a synopsis of up to three lines.
@@ -704,15 +1982,22 @@ async function subscriptionsCards(browser, page, U) {
         rec(U, 'subscriptions: the card view lists every show', (await cards.count()) === shown ? 'PASS' : 'FAIL', `${await cards.count()} of ${shown}`);
         const xs = new Set();
         for (let i = 0; i < Math.min(await cards.count(), 8); i++) xs.add(Math.round((await cards.nth(i).boundingBox()).x));
-        rec(U, 'subscriptions: wide screens put several cards across', shown < 2 ? 'SKIP' : xs.size >= 2 ? 'PASS' : 'FAIL', `${xs.size} column(s)`);
+        rec(U, 'subscriptions: wide screens put several cards across', shown < 2 ? 'SKIP' : xs.size >= 2 ? 'PASS' : 'FAIL', shown < 2 ? `only ${shown} subscription card shown; needs at least 2 subscriptions` : `${xs.size} column(s)`);
         const wrongCards = [];
         for (const s of onPage) {
             const got = await badgeOf(cards, s.title);
             if (got !== expectedBadge(s)) wrongCards.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
         }
         rec(U, 'subscriptions: the card badge sits on the picture and matches the table', wrongCards.length === 0 ? 'PASS' : 'FAIL', wrongCards.slice(0, 3).join(' | '));
+        const cardChips = await page.locator('.subCard .sourceCounts').count();
+        const cardNames = await page.locator('.subCard .sourceCounts .sourceName').count();
+        rec(U, 'subscriptions: cards show the same logo and count per source, with no names', withSources.length ? (cardChips === withSources.length && cardNames === 0 ? 'PASS' : 'FAIL') : 'SKIP', `${cardChips} chip sets for ${withSources.length} shows, ${cardNames} names`);
+        const cardImages = await page.locator('.subCard button:has(svg[data-icon="images"])').count();
+        rec(U, 'subscriptions: every card has the update-images button', shown ? (cardImages === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardImages} buttons, ${shown} cards`);
+        const cardToggles = await page.locator('.subCard button:has(svg[data-icon="box-archive"])').count();
+        rec(U, 'subscriptions: every card, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (cardToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardToggles} toggles, ${shown} cards`);
         const first = cards.first();
-        const [thumb, badge] = [await first.locator('.thumbLink').boundingBox(), await first.locator('.thumbBadge').boundingBox()];
+        const [thumb, badge] = [await first.locator('.thumbLink').boundingBox(), await first.locator('.thumbBadge:not(.thumbLast)').boundingBox()];
         rec(U, 'subscriptions: the badge is at the picture\'s top right', thumb && badge && badge.x + badge.width <= thumb.x + thumb.width + 1 && badge.y >= thumb.y - 1 && badge.y + badge.height < thumb.y + thumb.height / 2 && badge.x > thumb.x + thumb.width / 2 ? 'PASS' : 'FAIL', JSON.stringify({ thumb, badge }));
         const order = await first.evaluate((el) => {
             const y = (sel) => el.querySelector(sel)?.getBoundingClientRect().top ?? null;
@@ -730,7 +2015,7 @@ async function subscriptionsCards(browser, page, U) {
         await page.reload({ waitUntil: 'networkidle' });
         rec(U, 'subscriptions: the card choice is remembered after a reload', (await page.locator('.subCard').count()) === shown ? 'PASS' : 'FAIL');
         await toggle('Table view').click();
-        await page.waitForSelector('.subscriptionRow', { timeout: 10000 });
+        await page.waitForSelector('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"])', { timeout: 10000 });
         rec(U, 'subscriptions: switching back shows the table again', (await page.locator('.subCard').count()) === 0 ? 'PASS' : 'FAIL');
         await page.evaluate((k) => localStorage.removeItem(k), KEY);
 
@@ -745,7 +2030,7 @@ async function subscriptionsCards(browser, page, U) {
             rec(U, 'subscriptions: phone cards are one per line, with no sideways scroll', (await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && !(await p.locator('.cardGrid').count()) ? 'PASS' : 'FAIL');
             const badgeFits = await p.locator('.subCard').first().evaluate((el) => {
                 const card = el.getBoundingClientRect();
-                const badge = el.querySelector('.thumbBadge')?.getBoundingClientRect();
+                const badge = el.querySelector('.thumbBadge:not(.thumbLast)')?.getBoundingClientRect();
                 return !badge || (badge.right <= card.right && badge.left >= card.left);
             });
             rec(U, 'subscriptions: the badge stays inside a phone card', badgeFits ? 'PASS' : 'FAIL');
@@ -754,27 +2039,580 @@ async function subscriptionsCards(browser, page, U) {
     } catch (e) { rec(U, 'subscriptions cards', 'FAIL', e.message.split('\n')[0]); }
 }
 
+// Card lists on Video events, Watchdog, NZB tester and Streaming put several cards across on a tablet / desktop and
+// one per line on a phone, with no sideways scroll. Skipped for a page with fewer than two cards (nothing to compare).
+async function cardGrids(browser, U) {
+    const pages = [
+        ['events', '/events', 'iplayarr.eventsViewMode', '.cardList .dataCard'],
+        ['watchdog', '/watchdog', 'iplayarr.watchdogViewMode', '.cardList .dataCard'],
+        ['nzb', '/nzb', 'iplayarr.nzbViewMode', '.cardList .dataCard'],
+        ['streaming', '/streaming', 'iplayarr.streamsViewMode', '.cardList .dataCard'],
+    ];
+    const sizes = [['tablet', { width: 1100, height: 900 }, true], ['phone', VIEWPORTS[1][1], false]];
+    const combos = pages.flatMap((pg) => sizes.map((sz) => [pg, sz]));
+    await pool(combos, async ([[name, route, key, sel], [sizeName, viewport, wide]]) => {
+        {
+            const context = await browser.newContext({ viewport });
+            try {
+                const p = await context.newPage();
+                await p.addInitScript((k) => localStorage.setItem(k, 'cards'), key);
+                await p.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45000 });
+                await p.waitForTimeout(500);
+                const xs = await p.locator(sel).evaluateAll((els) => [...new Set(els.slice(0, 8).filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().x)))]);
+                const count = await p.locator(sel).count();
+                const noScroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+                const label = `card grids: ${name} cards on a ${sizeName}`;
+                if (count < 2) { rec(U, label, 'SKIP', `only ${count} card(s) on this page; needs at least 2 to compare their sizes`); return; }
+                const columnsOk = wide ? xs.length >= 2 : xs.length === 1;
+                rec(U, label, columnsOk && noScroll ? 'PASS' : 'FAIL', `${xs.length} column(s), ${count} cards, scroll ${noScroll ? 'ok' : 'sideways'}`);
+            } catch (e) { rec(U, `card grids: ${name} ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+        }
+    });
+}
+
+// The NZB page's Indexer Searches section lists indexer searches by default and has a Source filter (indexer / each app /
+// manual / all) in its filter panel. Read-only; desktop and phone: the control is reachable, offers the three fixed choices,
+// and switching it never breaks the page (a Manual or All view still renders a table, a card list or the empty state).
+async function nzbSearchSource(browser, U) {
+    for (const [sizeName, viewport] of [['desktop', { width: 1400, height: 900 }], ['phone', VIEWPORTS[1][1]]]) {
+        const label = `nzb: search Source filter on a ${sizeName}`;
+        const context = await browser.newContext({ viewport });
+        try {
+            const p = await context.newPage();
+            await p.goto(BASE + '/nzb', { waitUntil: 'networkidle', timeout: 45000 });
+            await p.waitForTimeout(500);
+            const heading = await p.getByText('Indexer Searches', { exact: true }).count();
+            await p.locator('button[aria-label="Filter"]').first().click({ timeout: 5000 });
+            const select = p.locator('select[aria-label="Search source"]');
+            const options = await select.locator('option').allTextContents();
+            const fixed = [/^Indexer/, /^Manual/, /^All searches$/].every((re) => options.some((o) => re.test(o)));
+            const failures = [];
+            for (const value of ['manual', 'all', 'apps']) {
+                await select.selectOption(value);
+                await p.waitForTimeout(250);
+                const shown = await p.locator('.termText, .emptyStateBlock').count();
+                if (!shown) failures.push(`${value}: nothing rendered`);
+            }
+            rec(U, label, heading && fixed && !failures.length ? 'PASS' : 'FAIL', `heading ${heading ? 'ok' : 'missing'}, options: ${options.join(' / ')}${failures.length ? `, ${failures.join(', ')}` : ''}`);
+        } catch (e) { rec(U, label, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    }
+}
+
+// Queue cards are the shared card: poster slot, linked title, a status pill with its word, a progress bar only while
+// the download is queued or running, and round 36px labelled buttons in the footer. Read-only; tablet and phone.
+async function queueCards(browser, U) {
+    for (const [sizeName, viewport] of [['tablet', { width: 1100, height: 900 }], ['phone', VIEWPORTS[1][1]]]) {
+        const context = await browser.newContext({ viewport });
+        try {
+            const p = await context.newPage();
+            await p.addInitScript(() => localStorage.setItem('iplayarr.queueViewMode', 'cards'));
+            await p.goto(BASE + '/queue', { waitUntil: 'networkidle', timeout: 45000 });
+            await p.waitForTimeout(800);
+            const cards = await p.locator('.queueTable.cards .dataCard').evaluateAll((els) => els.map((e) => {
+                const buttons = [...e.querySelectorAll('.qActions button')];
+                return {
+                    thumb: !!e.querySelector('.dcThumb img, .dcThumb .thumbnail-placeholder'),
+                    title: !!e.querySelector('.dcTitle a'),
+                    status: (e.querySelector('.statusPill')?.textContent || '').trim(),
+                    bar: !!e.querySelector('.progress-bar'),
+                    buttons: buttons.length,
+                    labelled: buttons.every((b) => b.getAttribute('aria-label')),
+                    round36: buttons.every((b) => { const r = b.getBoundingClientRect(); return Math.round(r.width) === 36 && Math.round(r.height) === 36 && getComputedStyle(b).borderRadius.startsWith('50%'); }),
+                    oldMarkup: !!e.querySelector('.cardMeta, .cardDetails, .cardProgress, .statusIcon'),
+                };
+            }));
+            const noScroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+            const label = (what) => `queue cards: ${what} on a ${sizeName}`;
+            if (!cards.length) { rec(U, label('cards'), 'SKIP', 'queue and history are empty'); continue; }
+            const live = (c) => c.status === 'Queued' || c.status === 'Downloading';
+            const ok = (fn) => cards.every(fn);
+            const sum = `${cards.length} card(s), ${cards.filter(live).length} live`;
+            rec(U, label('every card has a poster slot and a linked title'), ok((c) => c.thumb && c.title) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('every card has a status pill with its word'), ok((c) => c.status) ? 'PASS' : 'FAIL', [...new Set(cards.map((c) => c.status))].join(','));
+            rec(U, label('the progress bar shows while queued or downloading, and only then'), ok((c) => c.bar === live(c)) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('every card has labelled round 36px action buttons'), ok((c) => c.buttons >= 2 && c.labelled && c.round36) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('no leftover pre-redesign markup'), ok((c) => !c.oldMarkup) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('no sideways scroll'), noScroll ? 'PASS' : 'FAIL');
+            if (sizeName === 'tablet') await p.screenshot({ path: path.join(SHOTS, 'flow-queue-cards.png'), fullPage: true });
+        } catch (e) { rec(U, `queue cards: ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    }
+}
+
+// Queue ticks: they survive paging, the count follows them, and select-all is a tri-state toggle for the page on screen.
+// Needs more than one page of history (SKIP otherwise). Read-only: nothing is removed. Table and cards.
+async function queueSelection(browser, U) {
+    for (const mode of ['table', 'cards']) {
+        const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+        const label = (what) => `queue selection: ${what} (${mode})`;
+        try {
+            const p = await context.newPage();
+            await p.addInitScript((m) => localStorage.setItem('iplayarr.queueViewMode', m), mode);
+            await p.goto(BASE + '/queue', { waitUntil: 'networkidle', timeout: 45000 });
+            await p.waitForTimeout(800);
+            const next = p.locator('button[aria-label="go to next page"]').first();
+            if (!(await next.count()) || (await next.isDisabled())) { rec(U, label('ticks survive paging'), 'SKIP', 'one page of history only'); continue; }
+            const boxes = p.locator('.queueTable tbody .CheckInput-label');
+            const selectAll = mode === 'cards' ? p.locator('.selectAll .CheckInput-label').first() : p.locator('.queueTable thead .CheckInput-label').first();
+            const counter = p.locator('.selectedCount').first();
+            const state = async (sel) => {
+                const cls = (await sel.locator('.CheckInput-input').getAttribute('class')) || '';
+                return cls.includes('CheckInput-isChecked') ? 'all' : cls.includes('CheckInput-isPartial') ? 'partial' : 'none';
+            };
+            const counted = async () => Number((((await counter.count()) ? await counter.textContent() : '') || '').match(/\d+/)?.[0] ?? 0);
+            rec(U, label('no count while nothing is ticked'), (await counter.count()) === 0 ? 'PASS' : 'FAIL');
+            rec(U, label('select-all starts empty'), (await state(selectAll)) === 'none' ? 'PASS' : 'FAIL', await state(selectAll));
+            await boxes.first().click();
+            rec(U, label('one tick shows the dash and a count of 1'), (await state(selectAll)) === 'partial' && (await counted()) === 1 ? 'PASS' : 'FAIL', `${await state(selectAll)}, ${await counted()}`);
+            await next.click();
+            await p.waitForTimeout(400);
+            rec(U, label('the count survives moving to the next page'), (await counted()) === 1 ? 'PASS' : 'FAIL', String(await counted()));
+            await selectAll.click();
+            const onScreen = await boxes.count();
+            const total = await counted();
+            rec(U, label('select-all ticks the page on screen and shows checked'), (await state(selectAll)) === 'all' && total >= onScreen ? 'PASS' : 'FAIL', `${total} selected, ${onScreen} on screen`);
+            await selectAll.click();
+            rec(U, label('select-all again clears this page but keeps the tick from page 1'), (await state(selectAll)) === 'none' && (await counted()) === 1 ? 'PASS' : 'FAIL', `${await counted()} left`);
+            await p.locator('button[aria-label="go to previous page"]').first().click();
+            await p.waitForTimeout(400);
+            const firstClass = (await boxes.first().locator('.CheckInput-input').getAttribute('class')) || '';
+            rec(U, label('the first tick is still ticked after coming back'), firstClass.includes('CheckInput-isChecked') ? 'PASS' : 'FAIL');
+            const removeLabel = (await p.locator('[aria-label^="Remove selected"]').first().getAttribute('aria-label').catch(() => '')) || '';
+            rec(U, label('the remove button carries the count'), /\(1\)/.test(removeLabel) ? 'PASS' : 'FAIL', removeLabel);
+        } catch (e) { rec(U, label('run'), 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    }
+}
+
+// With a filter that matches nothing, the Queue's select-all has nothing to act on and is greyed out. Read-only; the
+// filter is set through the saved table state, in a throwaway browser context.
+async function queueSelectAllEmpty(browser, U) {
+    const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+    try {
+        const p = await context.newPage();
+        await p.addInitScript(() => localStorage.setItem('iplayarr.tableFilter.queueTable', JSON.stringify({ filterText: 'zzzz-no-such-title-zzzz', sortBy: 'start', sortOrder: 'desc', dateFrom: null, dateTo: null })));
+        await p.goto(BASE + '/queue', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(600);
+        const box = p.locator('.queueTable thead .CheckInput-input').first();
+        const cls = (await box.getAttribute('class')) || '';
+        rec(U, 'queue selection: select-all is greyed out when nothing is on screen', cls.includes('CheckInput-isDisabled') && !cls.includes('CheckInput-isChecked') ? 'PASS' : 'FAIL', cls);
+        rec(U, 'queue selection: no selected count with nothing on screen', (await p.locator('.selectedCount').count()) === 0 ? 'PASS' : 'FAIL');
+    } catch (e) { rec(U, 'queue selection: empty list', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+}
+
+// The top bar controls on the right (Quick find, the colour mode switch, GitHub) are all the same height, on a desktop
+// and on a phone (where the switch collapses to one cycle button and GitHub is hidden).
+async function navBarButtons(browser, U) {
+    for (const [sizeName, viewport] of [['desktop', { width: 1280, height: 800 }], ['phone', VIEWPORTS[1][1]]]) {
+        const context = await browser.newContext({ viewport });
+        try {
+            const p = await context.newPage();
+            await p.goto(BASE + '/browse', { waitUntil: 'networkidle', timeout: 45000 });
+            const heights = await p.evaluate(() => [...document.querySelectorAll('.NavBar .right .navIconButton, .NavBar .right .segments, .NavBar .right .cycle, .NavBar .right a[aria-label="GitHub"]')]
+                .filter((e) => e.offsetParent)
+                .map((e) => [e.className || e.getAttribute('aria-label'), Math.round(e.getBoundingClientRect().height)]));
+            const label = `nav bar buttons: the right-hand controls are one height on a ${sizeName}`;
+            if (heights.length < 2) { rec(U, label, 'SKIP', `only ${heights.length} visible control(s) on the right of the top bar; needs at least 2 to compare`); continue; }
+            const same = new Set(heights.map(([, h]) => h)).size === 1;
+            rec(U, label, same ? 'PASS' : 'FAIL', heights.map(([n, h]) => `${n}=${h}`).join(', '));
+        } catch (e) { rec(U, `nav bar buttons: ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    }
+}
+
+// UI consistency (the shared behaviour every page has): a tab title per page, the old Off Schedule address, valid nav and card
+// markup, aria-current, a keyboard-driven settings tab list, sortable headers that say how they sort, the grey tile for a
+// picture that will not load, the series-link toast, a paged User-Agent list, remembered Logs levels and the quick find hint.
+// All read-only: each flow uses its own browser context, so what the page remembers (localStorage) never leaves it.
+async function uiConsistency(browser, U) {
+    const L = 'ui consistency';
+    const flow = async (name, fn, viewport = VIEWPORTS[0][1]) => {
+        if (!want(`${L} ${name}`)) return;
+        const context = await browser.newContext({ viewport });
+        try { await fn(await context.newPage(), context); } catch (e) { rec(U, `${L}: ${name}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    };
+    const open = async (page, route) => { await page.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45000 }); await page.waitForTimeout(400); };
+
+    await flow('page titles', async (page) => {
+        const routes = [['/queue', 'Queue'], ['/stats', 'Statistics'], ['/browse', 'Discover'], ['/browse/schedule', 'Guide'], ['/watchdog', 'Watchdog'], ['/off-schedule', 'Off Schedule'], ['/apps', 'Apps'], ['/about', 'About'], ['/settings', 'Settings']];
+        const wrong = [];
+        for (const [route, label] of routes) {
+            await open(page, route);
+            const got = await page.title();
+            if (got !== `${label} - iPlayarr Turbo`) wrong.push(`${route}: "${got}"`);
+        }
+        rec(U, `${L}: each page sets the tab title (Name - iPlayarr Turbo)`, wrong.length ? 'FAIL' : 'PASS', wrong.join(' | '));
+    });
+
+    await flow('off schedule address', async (page) => {
+        await open(page, '/offSchedule');
+        const at = new URL(page.url()).pathname;
+        rec(U, `${L}: the old /offSchedule address redirects to /off-schedule`, at === '/off-schedule' ? 'PASS' : 'FAIL', at);
+    });
+
+    await flow('nav markup', async (page) => {
+        await open(page, '/queue');
+        const m = await page.evaluate(() => {
+            const nav = document.querySelector('.LeftHandNav');
+            const buttonWith = (text) => [...nav.querySelectorAll('button')].some((b) => b.innerText.includes(text));
+            return {
+                liInLink: nav.querySelectorAll('a li, button li').length,
+                strayChildren: [...nav.querySelectorAll('ul')].reduce((n, ul) => n + [...ul.children].filter((c) => c.tagName !== 'LI').length, 0),
+                interactiveInLink: nav.querySelectorAll('a button, a a, button a, button button').length,
+                current: [...nav.querySelectorAll('[aria-current="page"]')].map((e) => e.getAttribute('href') || e.textContent.trim()),
+                hasRefresh: nav.innerText.includes('Refresh Index'),
+                refreshIsButton: buttonWith('Refresh Index'),
+                hasSignOut: nav.innerText.includes('Sign out'),
+                signOutIsButton: buttonWith('Sign out'),
+            };
+        });
+        rec(U, `${L}: nav rows are valid HTML (each link or button sits in its li, nothing interactive nested)`, !m.liInLink && !m.strayChildren && !m.interactiveInLink ? 'PASS' : 'FAIL', JSON.stringify(m));
+        rec(U, `${L}: the current page's nav link carries aria-current`, m.current.length === 1 && /queue/.test(m.current[0]) ? 'PASS' : 'FAIL', m.current.join(','));
+        rec(U, `${L}: Refresh Index and Sign out are real buttons`, (!m.hasRefresh || m.refreshIsButton) && (!m.hasSignOut || m.signOutIsButton) ? 'PASS' : 'FAIL', `refresh ${m.hasRefresh}/${m.refreshIsButton}, sign out ${m.hasSignOut}/${m.signOutIsButton}`);
+    });
+
+    await flow('programme cards', async (page) => {
+        await open(page, '/browse');
+        await page.locator('.programmeCard').first().waitFor({ timeout: 20000 }).catch(() => {});
+        const m = await page.evaluate(() => ({
+            cards: document.querySelectorAll('.programmeCard').length,
+            nested: document.querySelectorAll('.programmeCard a button, .programmeCard a a, .programmeCard button button').length,
+            noName: [...document.querySelectorAll('.programmeCard button')].filter((b) => !(b.getAttribute('aria-label') || b.title || b.textContent.trim())).length,
+        }));
+        if (!m.cards) return rec(U, `${L}: programme cards are valid HTML (no button inside the link)`, 'SKIP', 'no programme cards on Discover');
+        rec(U, `${L}: programme cards are valid HTML (no button inside the link)`, !m.nested ? 'PASS' : 'FAIL', `${m.nested} nested of ${m.cards} cards`);
+        rec(U, `${L}: programme card buttons have a name`, !m.noName ? 'PASS' : 'FAIL', `${m.noName} without`);
+    });
+
+    await flow('broken pictures', async (page) => {
+        // Every thumbnail fails to load: the page shows the grey tile (a data URI marked data-broken) instead of a broken-image icon.
+        await page.route('**/json-api/thumbnail/**', (route) => route.fulfill({ status: 404, body: 'x' }));
+        await open(page, '/browse');
+        await page.locator('.programmeCard img').first().waitFor({ timeout: 20000 }).catch(() => {});
+        // Cards are loading="lazy": a picture below the fold never requests its file, so it can never fail. Ask for them all now.
+        await page.evaluate(() => document.querySelectorAll('.programmeCard img').forEach((i) => { i.loading = 'eager'; }));
+        await page.waitForTimeout(2500);
+        const m = await page.evaluate(() => {
+            const imgs = [...document.querySelectorAll('.programmeCard img')];
+            return { total: imgs.length, tiles: imgs.filter((i) => i.dataset.broken === 'true' && i.src.startsWith('data:image/svg+xml')).length, hidden: imgs.filter((i) => i.style.visibility === 'hidden').length };
+        });
+        if (!m.total) return rec(U, `${L}: a picture that fails to load becomes a grey tile`, 'SKIP', 'no card pictures on Discover');
+        rec(U, `${L}: a picture that fails to load becomes a grey tile`, m.tiles === m.total && !m.hidden ? 'PASS' : 'FAIL', `${m.tiles}/${m.total} tiles, ${m.hidden} left blank`);
+    });
+
+    await flow('settings tabs keyboard', async (page) => {
+        await open(page, '/settings');
+        const tabs = page.locator('[role=tablist] [role=tab]');
+        const count = await tabs.count();
+        if (count < 3) return rec(U, `${L}: settings tabs are a tab list`, 'FAIL', `${count} tabs`);
+        const selected = () => page.locator('[role=tab][aria-selected=true]').evaluateAll((els) => els.map((e) => e.id));
+        const first = await selected();
+        rec(U, `${L}: settings tabs are a tab list with one selected tab`, first.length === 1 && (await page.locator('[role=tab][tabindex="0"]').count()) === 1 ? 'PASS' : 'FAIL', first.join(','));
+        await page.locator('[role=tab][aria-selected=true]').focus();
+        await page.keyboard.press('ArrowRight');
+        await page.waitForTimeout(300);
+        const next = await selected();
+        const focused = await page.evaluate(() => document.activeElement?.id);
+        rec(U, `${L}: Right arrow moves to the next settings tab`, next.length === 1 && next[0] !== first[0] && focused === next[0] ? 'PASS' : 'FAIL', `${first[0]} -> ${next[0]}, focus ${focused}`);
+        await page.keyboard.press('End');
+        await page.waitForTimeout(300);
+        rec(U, `${L}: End moves to the last settings tab`, (await selected())[0] === (await tabs.last().getAttribute('id')) ? 'PASS' : 'FAIL');
+        await page.keyboard.press('Home');
+        await page.waitForTimeout(300);
+        rec(U, `${L}: Home moves to the first settings tab`, (await selected())[0] === (await tabs.first().getAttribute('id')) ? 'PASS' : 'FAIL');
+    });
+
+    await flow('sortable headers', async (page) => {
+        let seen = 0;
+        const bad = [];
+        for (const route of ['/queue', '/synonyms', '/apps', '/events', '/streaming', '/nzb', '/logs', '/library-debug']) {
+            await open(page, route);
+            const heads = await page.evaluate(() => [...document.querySelectorAll('th.sortable')].map((th) => ({ sort: th.getAttribute('aria-sort'), tab: th.tabIndex, text: th.textContent.trim().slice(0, 20) })));
+            seen += heads.length;
+            for (const h of heads) if (!['ascending', 'descending', 'none'].includes(h.sort) || h.tab < 0) bad.push(`${route} ${h.text}: aria-sort=${h.sort} tabindex=${h.tab}`);
+        }
+        if (!seen) return rec(U, `${L}: sortable table headers carry aria-sort and are keyboard reachable`, 'SKIP', 'no sortable table on any page (needs rows)');
+        rec(U, `${L}: sortable table headers carry aria-sort and are keyboard reachable`, bad.length ? 'FAIL' : 'PASS', bad.slice(0, 3).join(' | ') || `${seen} headers`);
+    });
+
+    await flow('series link', async (page) => {
+        await open(page, '/browse');
+        const downloads = [];
+        page.on('request', (r) => { if (/json-api\/download/.test(r.url())) downloads.push(r.url()); });
+        const box = page.locator('.NavBar input').first();
+        await box.fill('https://www.bbc.co.uk/iplayer/episodes/b006q2x0/doctor-who');
+        await box.press('Enter');
+        await page.waitForTimeout(1500);
+        const toast = (await page.locator('.toastHost').innerText().catch(() => '')).trim();
+        rec(U, `${L}: an iPlayer series link in the search box shows a toast`, /series/i.test(toast) ? 'PASS' : 'FAIL', toast.slice(0, 80));
+        rec(U, `${L}: an iPlayer series link queues nothing`, downloads.length === 0 ? 'PASS' : 'FAIL', downloads.join(', '));
+    });
+
+    await flow('user agent paging', async (page) => {
+        await open(page, '/apps');
+        // A list of 4 or fewer is shown whole, with no pager (the "Items Before Paging" preference, default 4).
+        const mappings = await page.evaluate(() => fetch('/json-api/apps/user-agents').then((r) => r.json()).then((d) => (Array.isArray(d) ? d.length : -1)).catch(() => -1));
+        if (mappings >= 0 && mappings <= 4) rec(U, `${L}: the Apps User-Agent list has page controls`, 'SKIP', `only ${mappings} mappings, a short list has no pager`);
+        else rec(U, `${L}: the Apps User-Agent list has page controls`, (await page.locator('select[aria-label="items per page"]').count()) >= 1 ? 'PASS' : 'FAIL', `${mappings} mappings`);
+        const inputs = await page.locator('.uaTextInput').count();
+        rec(U, `${L}: the new-mapping row is always present`, inputs >= 2 ? 'PASS' : 'FAIL', `${inputs} inputs`);
+    });
+
+    await flow('remembered logs levels', async (page) => {
+        await open(page, '/logs');
+        const chips = page.locator('.levelChips button[aria-pressed]');
+        if (!(await chips.count())) return rec(U, `${L}: the Logs levels are remembered across a reload`, 'SKIP', 'no level chips');
+        const before = await chips.first().getAttribute('aria-pressed');
+        await chips.first().click();
+        await page.waitForTimeout(300);
+        const after = await chips.first().getAttribute('aria-pressed');
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForTimeout(400);
+        const reloaded = await page.locator('.levelChips button[aria-pressed]').first().getAttribute('aria-pressed');
+        rec(U, `${L}: the Logs levels are remembered across a reload`, before !== after && reloaded === after ? 'PASS' : 'FAIL', `${before} -> ${after}, after reload ${reloaded}`);
+    });
+
+    await flow('quick find hint', async (page) => {
+        await open(page, '/browse');
+        const btn = page.locator('.NavBar .quickFind');
+        if (!(await btn.count())) return rec(U, `${L}: the quick find button names its shortcut`, 'SKIP', 'quick find is off or not signed in');
+        const title = (await btn.getAttribute('title')) || '';
+        const mac = await page.evaluate(() => /mac|iphone|ipad|ipod/i.test(navigator.userAgentData?.platform || navigator.platform || ''));
+        rec(U, `${L}: the quick find button names its shortcut`, title.includes(mac ? '⌘K' : 'Ctrl+K') && (await btn.getAttribute('aria-keyshortcuts')) ? 'PASS' : 'FAIL', title);
+        await page.keyboard.press(mac ? 'Meta+K' : 'Control+K');
+        await page.waitForTimeout(400);
+        const opened = (await page.locator('[role=dialog]').count()) > 0;
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+        const closed = (await page.locator('[role=dialog]').count()) === 0;
+        rec(U, `${L}: the shortcut opens quick find and Esc closes it`, opened && closed ? 'PASS' : 'WARN', `opened ${opened}, closed ${closed}`);
+    });
+
+    await flow('phone layout', async (page) => {
+        const wide = [];
+        for (const route of ['/watchdog', '/apps', '/settings']) {
+            await open(page, route);
+            const o = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+            if (o > 2) wide.push(`${route} ${o}px`);
+        }
+        rec(U, `${L}: no horizontal overflow on a phone (Watchdog, Apps, Settings)`, wide.length ? 'FAIL' : 'PASS', wide.join(' | '));
+    }, VIEWPORTS[1][1]);
+}
+
+// Statistics: every cache card has its live dot and the rate / last used / lifetime figures, and a lookup made while the
+// page is open makes a dot flash (the page keeps the colour class after the flash, green for a hit, red for a miss).
+async function statisticsCacheCards(browser, U) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+        const p = await context.newPage();
+        const caches = (await http('/json-api/maintenance/caches')).json || [];
+        await p.goto(BASE + '/stats', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForSelector('.cacheCard .liveDot', { timeout: 15000 });
+        const dots = await p.locator('.cacheCard .liveDot').count();
+        rec(U, 'statistics: every cache card has a live dot', dots === caches.length ? 'PASS' : 'FAIL', `${dots} dots, ${caches.length} caches`);
+        const labels = await p.locator('.cacheCard:has(.liveDot) .statLabel').allTextContents();
+        const wanted = ['Hit rate', 'Records', 'Space', 'Per minute', 'Last used', 'Lifetime'];
+        rec(U, 'statistics: each cache card shows hit rate, records, space, per minute, last used and lifetime', caches.length && labels.length === caches.length * wanted.length && wanted.every((w) => labels.filter((l) => l.trim().toLowerCase() === w.toLowerCase()).length === caches.length) ? 'PASS' : 'FAIL', `${labels.length} labels`);
+        // Make the server look things up (a cached browse page and a programme lookup) while the page watches.
+        await Promise.all([http('/json-api/browse/home'), http('/json-api/browse/channels'), http('/json-api/browse/categories')]);
+        const flashed = await p.waitForSelector('.liveDot.flashHit, .liveDot.flashMiss', { timeout: 15000 }).then(() => true).catch(() => false);
+        rec(U, 'statistics: a cache lookup made a dot flash', flashed ? 'PASS' : 'FAIL', 'no dot flashed within 15 s of three browse requests');
+        // Where each cache keeps its data, as an icon in the card's head: database, memory (cleared on restart) or files on disk.
+        const storageOf = (c) => (c.inMemory ? 'Memory (cleared on restart)' : c.prefix === 'thumbnails' ? 'Files on disk' : 'Database');
+        const wantedIcons = caches.map((c) => `${c.label}=${storageOf(c)}`).sort();
+        const shownIcons = (await p.locator('.cacheCard:has(.liveDot)').evaluateAll((els) => els.map((el) => `${el.querySelector('.cacheName')?.textContent.trim()}=${el.querySelector('.cacheHead .storageIcon')?.getAttribute('aria-label')}`))).sort();
+        rec(U, 'statistics: every cache card has a storage icon (database, memory or disk) that matches the cache', JSON.stringify(shownIcons) === JSON.stringify(wantedIcons) ? 'PASS' : 'FAIL', shownIcons.filter((s) => !wantedIcons.includes(s)).join(' | ') || `${shownIcons.length} icons for ${wantedIcons.length} caches`);
+        const iconKinds = await p.locator('.cacheCard:has(.liveDot) .cacheHead .storageIcon').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') + '|' + (el.getAttribute('data-icon') || '')));
+        rec(U, 'statistics: the stream memory caches show the memory icon and the database caches the database icon', iconKinds.some((k) => k.startsWith('Memory')) && iconKinds.some((k) => k.startsWith('Database')) && new Set(iconKinds.filter((k) => k.startsWith('Memory')).map((k) => k.split('|')[1])).size <= 1 ? 'PASS' : 'FAIL', [...new Set(iconKinds)].join(' ; '));
+        const nameHasStorage = (await p.locator('.cacheCard .cacheName').allTextContents()).filter((n) => /\((memory|database|disk)\)/i.test(n));
+        rec(U, 'statistics: no cache title repeats its storage in brackets now the icon says it', nameHasStorage.length === 0 ? 'PASS' : 'FAIL', nameHasStorage.join(', '));
+        const memoryCard = p.locator('.cacheCard:has(.liveDot):has(.storageIcon[aria-label^="Memory"])').first();
+        if (await memoryCard.count()) {
+            await memoryCard.locator('.storageIcon').hover();
+            const lifetime = await memoryCard.locator('.statBody:has(.statLabel:text-is("Lifetime")) .statValue').innerText();
+            rec(U, 'statistics: a memory cache card shows its fixed lifetime', /^\d+\s?(s|sec|m|min|h)/i.test(lifetime.trim()) || lifetime.trim() !== '-' ? 'PASS' : 'FAIL', lifetime.trim());
+        } else rec(U, 'statistics: a memory cache card shows its fixed lifetime', 'FAIL', 'no memory cache card');
+        await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches.png') });
+        // Grouped by purpose with a heading per group, sorted inside each group, one flat list on request, remembered on reload.
+        const sorted = (names) => names.every((n, i) => i === 0 || names[i - 1].localeCompare(n, undefined, { sensitivity: 'base', numeric: true }) <= 0);
+        const headings = await p.locator('.cacheGroupHeading').count();
+        const headingText = (await p.locator('.cacheGroupHeading').first().innerText()).replace(/\s+/g, ' ');
+        rec(U, 'statistics: the cache cards sit under group headings with their totals', headings >= 1 && /caches?/.test(headingText) && /records?/.test(headingText) && /hit rate/.test(headingText) ? 'PASS' : 'FAIL', `${headings} headings, first: ${headingText}`);
+        // Each group is a bordered box, and on a wide screen the boxes sit in more than one column.
+        const boxes = await p.locator('.cacheGroups:not(.flat) .cacheGroup').evaluateAll((els) => els.map((el) => ({ border: getComputedStyle(el).borderTopWidth, left: Math.round(el.getBoundingClientRect().left) })));
+        rec(U, 'statistics: each cache group has a border around it', boxes.length >= 1 && boxes.every((b) => parseFloat(b.border) >= 1) ? 'PASS' : 'FAIL', `${boxes.length} groups, borders ${[...new Set(boxes.map((b) => b.border))].join(',')}`);
+        rec(U, 'statistics: on a wide screen the cache groups flow into more than one column', boxes.length < 3 || new Set(boxes.map((b) => b.left)).size >= 2 ? 'PASS' : 'FAIL', `column lefts ${[...new Set(boxes.map((b) => b.left))].join(',')}`);
+        // An (i) icon on every card that has a description, and nothing but the icon carries the description now.
+        const described = caches.filter((c) => c.description).length;
+        const tips = await p.locator('.cacheCard .InfoTip-button').count();
+        rec(U, 'statistics: each cache card with a description has an info icon', described >= 1 && tips === described ? 'PASS' : 'FAIL', `${tips} icons, ${described} described caches`);
+        await p.locator('.cacheCard .InfoTip-button').first().hover();
+        const tipShown = await p.locator('.cacheCard .InfoTip-popup').first().isVisible();
+        rec(U, 'statistics: hovering the info icon shows the cache description', tipShown ? 'PASS' : 'FAIL');
+        // Big figures are short (K / M / B, thousands) rather than comma-grouped, and the exact value stays in the tooltip.
+        const records = await p.locator('.cacheCard:has(.liveDot) .cacheFigures .statBody:has(.statLabel:text-is("Records")) .statValue').evaluateAll((els) => els.map((el) => [el.textContent.trim(), el.getAttribute('title')]));
+        rec(U, 'statistics: record counts are short (no thousands separators, K / M / B) with the exact figure in the tooltip', records.length === caches.length && records.every(([text, title]) => /^\d{1,3}$|^\d{1,3}(\.\d)?[KMB]$/.test(text) && title && /^[\d,]+$/.test(title)) ? 'PASS' : 'FAIL', records.slice(0, 6).map((r) => r.join('=')).join(' '));
+        // The Server heading's line runs the whole width, like Caches and Activity.
+        const rule = await p.locator('.PageHeader:has(> legend:text-is("Server"))').evaluate((el) => ({ row: el.getBoundingClientRect().width, page: el.parentElement.getBoundingClientRect().width }));
+        rec(U, 'statistics: the Server heading line runs the full width', rule.row >= rule.page - 40 ? 'PASS' : 'FAIL', `${Math.round(rule.row)}px of ${Math.round(rule.page)}px`);
+        // The Server section: a few cards with no headings, each row a label and a figure, filled in once the answers arrive.
+        await p.waitForFunction(() => [...document.querySelectorAll('.serverStat .serverRow')].some((r) => r.querySelector('.rowLabel')?.textContent.trim() === 'Memory' && r.querySelector('.rowValue')?.textContent.trim() !== '-'), null, { timeout: 20000 }).catch(() => {});
+        const serverCards = await p.locator('.serverStat').evaluateAll((els) => els.map((el) => ({ title: !!el.querySelector('.cacheName'), rows: [...el.querySelectorAll('.serverRow')].map((r) => [r.querySelector('.rowLabel').textContent.trim(), r.querySelector('.rowValue').textContent.trim()]) })));
+        const serverRows = Object.fromEntries(serverCards.flatMap((c) => c.rows));
+        rec(U, 'statistics: the Server section is a few cards with no group titles', serverCards.length >= 3 && serverCards.length <= 8 && serverCards.every((c) => !c.title && c.rows.length >= 1) ? 'PASS' : 'FAIL', `${serverCards.length} cards`);
+        rec(U, 'statistics: no Server card holds more than three rows (folders are split across cards)', serverCards.every((c) => c.rows.length <= 3) ? 'PASS' : 'FAIL', serverCards.map((c) => c.rows.length).join(','));
+        rec(U, 'statistics: the Server cards show uptime, memory, cpu and the disks', ['Uptime', 'Memory', 'CPU', 'Database'].every((k) => k in serverRows) && Object.keys(serverRows).some((k) => /folder/i.test(k)) ? 'PASS' : 'FAIL', Object.keys(serverRows).join(','));
+        rec(U, 'statistics: the Server cards fill in real figures (memory and uptime are not dashes)', serverRows.Memory && serverRows.Memory !== '-' && /^\d\d:\d\d:\d\d$/.test(serverRows.Uptime ?? '') ? 'PASS' : 'FAIL', `memory ${serverRows.Memory}, uptime ${serverRows.Uptime}`);
+        await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-server.png') });
+        await p.locator('.cacheListControls .sortSelect').selectOption({ label: 'Name' });
+        await p.waitForTimeout(300);
+        const groupNames = await p.locator('.cacheGroup').evaluateAll((els) => els.map((el) => [...el.querySelectorAll('.cacheName')].map((n) => n.textContent.trim())));
+        rec(U, 'statistics: choosing Name sorts the cards inside each group', groupNames.length >= 1 && groupNames.every(sorted) ? 'PASS' : 'FAIL', groupNames.map((g) => g.join(',')).join(' | '));
+        await p.locator('.cacheListControls .cacheModeToggle').click();
+        await p.waitForTimeout(300);
+        const flatNames = (await p.locator('.cacheGroup .cacheName').allTextContents()).map((n) => n.trim());
+        rec(U, 'statistics: Flat removes the group headings and sorts the whole list', (await p.locator('.cacheGroupHeading').count()) === 0 && flatNames.length === caches.length && sorted(flatNames) ? 'PASS' : 'FAIL', `${flatNames.length} cards`);
+        await p.reload({ waitUntil: 'networkidle' });
+        await p.waitForSelector('.cacheCard .liveDot', { timeout: 15000 });
+        const kept = (await p.locator('.cacheListControls .sortSelect').inputValue()) === 'name' && /Flat/.test(await p.locator('.cacheListControls .cacheModeToggle').innerText()) && (await p.locator('.cacheGroupHeading').count()) === 0;
+        rec(U, 'statistics: the sort and Flat are remembered after a reload', kept ? 'PASS' : 'FAIL');
+        await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches-flat.png') });
+        // With the caches answer held back, the page already shows its cards with dashes, then fills them in.
+        const slow = await context.newPage();
+        await slow.route('**/json-api/maintenance/caches', async (route) => { await new Promise((r) => setTimeout(r, 2500)); await route.continue(); });
+        await slow.goto(BASE + '/stats', { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await slow.waitForSelector('.cacheCard.placeholder', { timeout: 10000 });
+        const holding = await slow.locator('.cacheCard.placeholder .cacheFigures .statValue').allTextContents();
+        rec(U, 'statistics: cards show with dashes while the cache figures load', holding.length >= 1 && holding.every((t) => t.trim() === '-') ? 'PASS' : 'FAIL', `${holding.length} placeholder figures`);
+        // The held-back cards already carry the real cache names (not made-up ones), in the same groups as the final page.
+        const heldNames = (await slow.locator('.cacheCard.placeholder .cacheName').allTextContents()).map((n) => n.trim()).sort();
+        const realNames = caches.map((c) => c.label).sort();
+        rec(U, 'statistics: the placeholder cards use the real cache names', JSON.stringify(heldNames) === JSON.stringify(realNames) ? 'PASS' : 'FAIL', `${heldNames.length} placeholders, ${realNames.length} caches`);
+        const filled = await slow.waitForFunction(() => document.querySelectorAll('.cacheCard:not(.placeholder) .liveDot').length > 0 && !document.querySelector('.cacheCard.placeholder'), null, { timeout: 15000 }).then(() => true).catch(() => false);
+        rec(U, 'statistics: the placeholder cards fill in with real figures once they arrive', filled ? 'PASS' : 'FAIL');
+        await slow.close();
+    } catch (e) { rec(U, 'statistics cache cards', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+}
+
+// Maintenance tab: caches under group headings that fold away and have a Clear group button (never clicked here).
+async function maintenanceCacheGroups(browser, U) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+        const p = await context.newPage();
+        await p.goto(BASE + '/settings#maintenance', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForSelector('.maintGroup', { timeout: 15000 });
+        const first = () => p.locator('.maintGroup:has(.maintGroupBar)').first();
+        const bars = await p.locator('.maintGroupBar').count();
+        const clears = await p.locator('.maintGroupBar .clearGroup').count();
+        rec(U, 'maintenance: every cache group has a heading with totals and a Clear group button', bars >= 1 && clears === bars && /records?/.test(await p.locator('.maintGroupBar').first().innerText()) ? 'PASS' : 'FAIL', `${bars} headings, ${clears} buttons`);
+        const rows = await first().locator('.taskRow').count();
+        await first().locator('.groupToggle').click();
+        await p.waitForTimeout(250);
+        const folded = (await first().locator('.taskRow').count()) === 0 && (await first().locator('.groupToggle').getAttribute('aria-expanded')) === 'false';
+        rec(U, 'maintenance: a group heading folds its caches away', rows >= 1 && folded ? 'PASS' : 'FAIL', `${rows} rows before`);
+        await p.reload({ waitUntil: 'networkidle' });
+        await p.waitForSelector('.maintGroup', { timeout: 15000 });
+        rec(U, 'maintenance: a folded group stays folded after a reload', (await first().locator('.taskRow').count()) === 0 ? 'PASS' : 'FAIL');
+        await first().locator('.groupToggle').click();
+        await p.waitForTimeout(250);
+        rec(U, 'maintenance: opening the group shows its caches again', (await first().locator('.taskRow').count()) === rows ? 'PASS' : 'FAIL');
+        await p.locator('.cacheListBar .cacheModeToggle').click();
+        await p.waitForTimeout(250);
+        rec(U, 'maintenance: Flat removes the group headings', (await p.locator('.maintGroupBar').count()) === 0 && (await p.locator('.maintGroup .taskRow').count()) >= rows ? 'PASS' : 'FAIL');
+        // In the flat list every cache is on show: each row has its storage icon, and a memory cache has a fixed lifetime instead of an editor.
+        const listed = (await http('/json-api/maintenance/caches')).json || [];
+        const storageOf = (c) => (c.inMemory ? 'Memory (cleared on restart)' : c.prefix === 'thumbnails' ? 'Files on disk' : 'Database');
+        // The row's name without its (i) tip, which sits inside the same label.
+        const rowParts = await p.locator('.maintGroup .taskRow').evaluateAll((els) => els.map((el) => {
+            const label = el.querySelector('.label').cloneNode(true);
+            label.querySelectorAll('[class*="InfoTip"], svg').forEach((n) => n.remove());
+            return [label.textContent.trim().replace(/\s+/g, ' '), el.querySelector('.label .storageIcon')?.getAttribute('aria-label')];
+        }));
+        const rowIcons = rowParts.map(([name, icon]) => `${name}=${icon}`).sort();
+        const wantedRows = listed.map((c) => `${c.label}=${storageOf(c)}`).sort();
+        rec(U, 'maintenance: every cache row has a storage icon that matches the cache', JSON.stringify(rowIcons) === JSON.stringify(wantedRows) ? 'PASS' : 'FAIL', rowIcons.filter((s) => !wantedRows.includes(s)).join(' | ') || `${rowIcons.length} rows for ${wantedRows.length} caches`);
+        const memoryRows = p.locator('.maintGroup .taskRow:has(.storageIcon[aria-label^="Memory"])');
+        const memoryCount = await memoryRows.count();
+        const editable = await memoryRows.locator('.ttlEditor input, .ttlEditor select').count();
+        const fixedText = await memoryRows.locator('.fixedKeep').allInnerTexts();
+        rec(U, 'maintenance: a memory cache row shows its lifetime as fixed text, with no editor and no reset', memoryCount === listed.filter((c) => c.inMemory).length && memoryCount >= 2 && editable === 0 && fixedText.length === memoryCount && fixedText.every((t) => /memory only/i.test(t)) && (await memoryRows.locator('.linkButton').count()) === 0 ? 'PASS' : 'FAIL', `${memoryCount} memory rows, ${editable} inputs, ${fixedText.length} fixed`);
+        const dbRows = p.locator('.maintGroup .taskRow:has(.storageIcon[aria-label="Database"])');
+        rec(U, 'maintenance: a database cache row keeps its lifetime editor', (await dbRows.count()) >= 1 && (await dbRows.first().locator('.ttlEditor input').count()) === 1 ? 'PASS' : 'FAIL');
+        const titles = rowParts.map(([name]) => name).filter((n) => /\((memory|database|disk)\)/i.test(n));
+        rec(U, 'maintenance: no cache title repeats its storage in brackets', titles.length === 0 ? 'PASS' : 'FAIL', titles.join(', '));
+        await p.screenshot({ path: path.join(SHOTS, 'flow-maintenance-caches-flat.png') });
+    } catch (e) { rec(U, 'maintenance cache groups', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+}
+
 // ---------------------------------------------------------------- main
 (async () => {
-    console.log(`iPlayarr smoke: ${BASE}  groups=${[...new Set(ONLY)].join(',')}  write=${WRITE}${FILTER ? `  filter=${FILTER}` : ''}\n`);
+    const prepare = require('./prepare.cjs');
+    if (opt('restore', false)) {
+        const r = await prepare.restoreSaved({ http, shots: SHOTS });
+        console.log(r.ok ? 'restore: ' + r.message : 'restore did not work: ' + r.message);
+        process.exit(r.ok ? 0 : 1);
+    }
+    if (!LIST_CHECKS) console.log(`iPlayarr smoke: ${BASE}  groups=${[...new Set(ONLY)].join(',')}  write=${WRITE}${FILTER ? `  filter=${FILTER}` : ''}\n`);
     const ctx = { want };
-    // The read-only API layer also discovers the pids, channels and config every other group uses. When only write
-    // groups were asked for, run it silently for that.
-    if (['api', 'ui', ...WRITE_GROUPS].some((g) => ONLY.includes(g))) {
-        muted = !ONLY.includes('api') && !ONLY.includes('ui');
-        await apiLayer(ctx);
+    // Progress line once a minute; the word FAIL only appears when something has failed.
+    const started = Date.now();
+    const heartbeat = setInterval(() => {
+        const n = (s) => results.filter((r) => r.status === s).length;
+        const t = Math.round((Date.now() - started) / 1000);
+        console.log(`[progress] ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}  ${n('PASS')} pass${n('FAIL') ? `, ${n('FAIL')} FAIL` : ''}, ${n('WARN')} warn, ${n('SKIP')} skip  (now: ${currentArea})`);
+    }, 60000);
+    // --write switches on the features whose checks would otherwise be skipped, and puts them back at the end (also on Ctrl+C).
+    let prepared = { restore: async () => {} };
+    const restoreAndExit = async (code) => { try { await prepared.restore(); } finally { process.exit(code); } };
+    process.on('SIGINT', () => restoreAndExit(130));
+    process.on('SIGTERM', () => restoreAndExit(143));
+    try {
+        if (WRITE && !opt('no-prepare', false)) prepared = await prepare({ http, rec, shots: SHOTS });
+        // The read-only API layer also discovers the pids, channels and config every other group uses. When only write
+        // groups were asked for, a short discovery finds those instead of running every API check silently.
+        if (ONLY.includes('api') || ONLY.includes('ui')) await filtered(() => apiLayer(ctx));
+        else if (WRITE_GROUPS.some((g) => ONLY.includes(g))) await discover(ctx);
+        if (['real', 'settings', 'probes'].some((g) => ONLY.includes(g))) {
+            ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
+            if (ONLY.includes('real')) await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
+            if (ONLY.includes('settings')) await filtered(() => require('./settings.cjs')(ctx, { http, rec, BASE, pool }));
+            if (ONLY.includes('probes')) await filtered(() => require('./probes.cjs').write(ctx, { http, rec, BASE }));
+        }
+        if (ONLY.includes('fs')) await filtered(async () => fsLayer(ctx));
+        if (ONLY.includes('ui') || ONLY.includes('uireal')) await uiLayer(ctx);
+    } finally {
         muted = false;
+        clearInterval(heartbeat);
+        await prepared.restore();
     }
-    if (['real', 'settings', 'probes'].some((g) => ONLY.includes(g))) {
-        ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
-        if (ONLY.includes('real')) await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
-        if (ONLY.includes('settings')) await require('./settings.cjs')(ctx, { http, rec, BASE });
-        if (ONLY.includes('probes')) await require('./probes.cjs').write(ctx, { http, rec, BASE });
+    if (LIST_CHECKS) {
+        for (const n of [...new Set(results.map((r) => `[${r.area}] ${r.name}`))]) console.log(n);
+        console.log(`\n${new Set(results.map((r) => r.area + r.name)).size} checks. --filter matches the text after the area too, e.g. --filter "api.*dns relay".`);
+        process.exit(0);
     }
-    if (ONLY.includes('fs')) fsLayer(ctx);
-    if (ONLY.includes('ui') || ONLY.includes('uireal')) await uiLayer(ctx);
     const c = (s) => results.filter((r) => r.status === s).length;
-    console.log(`\n==== ${c('PASS')} pass, ${c('FAIL')} fail, ${c('WARN')} warn, ${c('SKIP')} skip ====`);
+    if (FILTER && !results.length) console.log(`\nNothing matched --filter ${FILTER}. Use --list for the names; api, fs, settings and probes match "area name" of each check.`);
+    console.log(`\n==== ${c('FAIL') ? `${c('FAIL')} FAIL, ` : 'ALL PASSED: '}${c('PASS')} pass, ${c('WARN')} warn, ${c('SKIP')} skip ====`);
+    // The steps that took longest (time since the result before them), to show where a run spends its time.
+    // "ms" is the time since the previous result, so it is the cost of that step when steps run one at a time; with
+    // --concurrency above 1 the pooled steps report together, so read those figures as a total for the group.
+    const slow = [...results].sort((a, b) => b.ms - a.ms);
+    if (slow.length && slow[0].ms >= 2000) console.log('\nSlowest steps (seconds before the result appeared; all steps are in timings-latest.txt):\n' + slow.filter((r) => r.ms >= 2000).slice(0, 15).map((r) => `  ${(r.ms / 1000).toFixed(1).padStart(6)}s  [${r.area}] ${r.name.slice(0, 110)}`).join('\n'));
+    try {
+        fs.mkdirSync(SHOTS, { recursive: true });
+        const runAt = new Date(started).toISOString(), flags = args.join(' ');
+        fs.writeFileSync(path.join(SHOTS, 'timings-latest.txt'), `run ${runAt}  total ${Math.round((Date.now() - started) / 1000)}s  args: ${flags}\n\n` + slow.map((r) => `${(r.ms / 1000).toFixed(2).padStart(8)}s  ${r.at}  ${r.status.padEnd(4)}  [${r.area}] ${r.name}`).join('\n') + '\n');
+        // One row per step, appended for every run, to compare runs over time (open as CSV).
+        const csv = (v) => `"${String(v).replace(/"/g, '""')}"`;
+        const file = path.join(SHOTS, 'timings-history.csv');
+        const rows = results.map((r) => [runAt, r.at, flags, r.area, r.name, r.status, (r.ms / 1000).toFixed(2)].map(csv).join(',')).join('\n') + '\n';
+        if (!fs.existsSync(file)) fs.writeFileSync(file, 'run_started,step_finished,args,area,step,status,seconds\n');
+        fs.appendFileSync(file, rows);
+    } catch (e) { console.log('could not write the timing files: ' + e.message); }
+    const skipped = results.filter((r) => r.status === 'SKIP');
+    if (skipped.length) {
+        const byReason = new Map();
+        for (const r of skipped) byReason.set(r.detail, [...(byReason.get(r.detail) || []), r.name]);
+        console.log('\nSkipped, and why:');
+        for (const [reason, names] of byReason) console.log(`  ${reason}\n${names.map((n) => '      - ' + n).join('\n')}`);
+    }
     for (const r of results.filter((r) => r.status === 'FAIL')) console.log(`FAIL [${r.area}] ${r.name}: ${r.detail}`);
     fs.mkdirSync(SHOTS, { recursive: true });
     fs.writeFileSync(path.join(SHOTS, 'report.json'), JSON.stringify({ base: BASE, at: new Date().toISOString(), results }, null, 2));

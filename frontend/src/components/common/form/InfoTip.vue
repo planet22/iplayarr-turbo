@@ -1,23 +1,27 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <span
         ref="root"
         :class="['InfoTip', { pinned }]"
         @mouseenter="hover(true)"
         @mouseleave="hover(false)"
+        @keydown.esc="dismiss"
     >
         <button
             ref="button"
             type="button"
             class="InfoTip-button"
-            aria-label="More info"
+            :aria-label="label"
             :aria-expanded="visible"
+            :aria-describedby="visible ? tipId : undefined"
             @click.stop="toggle"
             @focus="focused = true"
             @blur="focused = false"
         >
             <font-awesome-icon :icon="['fas', 'circle-info']" />
         </button>
-        <span v-show="visible" ref="popup" role="tooltip" :class="['InfoTip-popup', { above: pos.above }]" :style="popupStyle">
+        <span v-show="visible" :id="tipId" ref="popup" role="tooltip" :class="['InfoTip-popup', { above: pos.above }]" :style="popupStyle">
             <span class="InfoTip-arrow" :style="arrowStyle" />
             {{ text }}
         </span>
@@ -33,7 +37,11 @@ import { computed, defineProps, nextTick, onBeforeUnmount, onMounted, ref, watch
 // screen (phone included) and its arrow still points at the icon.
 defineProps({
     text: { type: String, required: true },
+    // What the (i) is about, for screen readers (the form fields pass their own name).
+    label: { type: String, default: 'More info' },
 });
+
+const tipId = `infotip-${Math.random().toString(36).slice(2, 9)}`;
 
 const GAP = 10;
 const MARGIN = 8;
@@ -80,9 +88,19 @@ const hover = (on) => {
 const toggle = () => {
     pinned.value = !pinned.value;
 };
+// Esc hides the tip even while the mouse still rests on the icon.
+const dismiss = () => {
+    pinned.value = false;
+    hovered.value = false;
+    focused.value = false;
+};
 
 const closeOnOutsideClick = (event) => {
     if (root.value && !root.value.contains(event.target)) pinned.value = false;
+};
+// Esc from anywhere closes a tip that a tap pinned open (focus may have moved elsewhere).
+const closeOnEscape = (event) => {
+    if (event.key === 'Escape' && pinned.value) dismiss();
 };
 const reposition = () => {
     if (visible.value) place();
@@ -90,11 +108,13 @@ const reposition = () => {
 
 onMounted(() => {
     document.addEventListener('click', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
     window.addEventListener('scroll', reposition, true);
     window.addEventListener('resize', reposition);
 });
 onBeforeUnmount(() => {
     document.removeEventListener('click', closeOnOutsideClick);
+    document.removeEventListener('keydown', closeOnEscape);
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', reposition);
 });
@@ -110,10 +130,10 @@ onBeforeUnmount(() => {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 4px;
+        padding: @space-1;
         border: none;
         background: none;
-        font-size: 18px;
+        font-size: @font-size-lg;
         color: @subtle-text-color;
         cursor: pointer;
 
@@ -129,28 +149,30 @@ onBeforeUnmount(() => {
 
     .InfoTip-popup {
         position: fixed;
-        z-index: 200;
+        z-index: @z-popover;
         box-sizing: border-box;
         width: 300px;
         max-width: calc(100vw - 16px);
-        padding: 10px 14px 12px;
-        border: 1px solid @input-border-color;
+        padding: 10px 14px @space-3;
+        border: 1px solid @menu-border-color;
         border-top: 2px solid @brand-color;
-        border-radius: 6px;
-        background-color: @nav-background-color;
-        box-shadow: 0 8px 24px @shadow-color;
-        font-size: 13px;
+        border-radius: @menu-radius;
+        background-color: @menu-background-color;
+        box-shadow: @menu-shadow;
+        font-size: @font-size-base;
         font-weight: normal;
         line-height: 1.5;
         text-align: left;
         text-transform: none;
+        // A line break in the text starts a new line (for bulleted tips).
+        white-space: pre-line;
         color: @input-text-color;
         pointer-events: auto;
     }
 
     // Above the icon the accent moves to the bottom edge, where the arrow points down at the icon.
     .InfoTip-popup.above {
-        border-top: 1px solid @input-border-color;
+        border-top: 1px solid @menu-border-color;
         border-bottom: 2px solid @brand-color;
 
         .InfoTip-arrow {

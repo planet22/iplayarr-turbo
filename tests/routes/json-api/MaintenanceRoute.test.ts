@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -18,7 +20,7 @@ jest.mock('../../../src/service/cronJobService', () => ({
 }));
 jest.mock('../../../src/service/cacheAdminService', () => ({
     __esModule: true,
-    default: { list: jest.fn(), clear: jest.fn(), clearAll: jest.fn(), setTtl: jest.fn() },
+    default: { list: jest.fn(), names: jest.fn(), activity: jest.fn(), clear: jest.fn(), clearAll: jest.fn(), setTtl: jest.fn() },
 }));
 
 // Defaults below were chosen to match the original upstream behaviour.
@@ -36,6 +38,22 @@ app.use('/', router);
 
 describe('MaintenanceRoute', () => {
     beforeEach(() => jest.resetAllMocks());
+
+    it('GET /caches/activity answers with the live figures and is not mistaken for a cache name', async () => {
+        caches.activity.mockReturnValue({ metadata_cache: { lastMinute: 3, hits: 5, misses: 1 } } as any);
+        const res = await request(app).get('/caches/activity');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ metadata_cache: { lastMinute: 3, hits: 5, misses: 1 } });
+        expect(caches.list).not.toHaveBeenCalled();
+    });
+
+    it('GET /caches/names answers with the names only, without counting anything', async () => {
+        caches.names.mockReturnValue([{ prefix: 'metadata_cache', label: 'Programme metadata', description: 'd', defaultTtl: 60, group: 'programme', groupLabel: 'Programme data' }]);
+        const res = await request(app).get('/caches/names');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual([{ prefix: 'metadata_cache', label: 'Programme metadata', description: 'd', defaultTtl: 60, group: 'programme', groupLabel: 'Programme data' }]);
+        expect(caches.list).not.toHaveBeenCalled();
+    });
 
     it('GET /tasks lists cron job status', async () => {
         mocked.getTasks.mockReturnValue([{ id: 'a' } as any]);

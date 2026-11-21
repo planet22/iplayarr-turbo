@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
@@ -36,6 +38,9 @@ export function useCaches() {
             if (ok && Array.isArray(data)) {
                 caches.value = data;
             }
+        } catch (e) {
+            // A refused connection or an HTML error page: say so instead of leaving the caller with a rejection.
+            error.value = e?.message || 'Could not load the caches';
         } finally {
             loaded.value = true;
         }

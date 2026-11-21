@@ -1,14 +1,22 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import http from 'http';
 import https from 'https';
 
+import configService from '../../../src/service/configService';
+import DbCacheService from '../../../src/service/db/dbCacheService';
 import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
+import { memoryCache } from '../../../src/service/memoryCacheRegistry';
 import { requestTimeoutMs } from '../../../src/service/stream/bbcHttp';
 import { clearPrefetch, takePrefetched } from '../../../src/service/stream/segmentPrefetch';
 import { linkSegments,register, resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
-import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv, VOD_PLAYLIST_CACHE } from '../../../src/service/stream/streamProxyUtils';
+import streamRequestLog, { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
+import * as tsTimestamps from '../../../src/service/stream/tsTimestamps';
+import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
@@ -19,7 +27,7 @@ jest.mock('../../../src/service/dnsRelayService', () => ({ ensureDnsRelayRunning
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { debug: jest.fn(), log: jest.fn() } }));
 jest.mock('../../../src/service/stream/streamSessionService', () => ({
     __esModule: true,
-    default: { setSegmentCount: jest.fn(), recordSegmentDelivered: jest.fn(), addBytesTransferred: jest.fn() },
+    default: { setSegmentCount: jest.fn(), recordSegmentDelivered: jest.fn(), addBytesTransferred: jest.fn(), setReceivedHeight: jest.fn() },
 }));
 
 const mockGet = (client: any, responses: Array<{ status: number; headers?: any; body?: string }>) => {
@@ -86,6 +94,73 @@ describe('proxyUrl', () => {
             agent: expect.anything(),
             timeout: requestTimeoutMs,
         });
+    });
+
+    it('records a byte profile of a streamed segment while tracing, and nothing at all when tracing is off', async () => {
+        const seg = { status: 200, headers: { 'content-type': 'video/mp2t' }, body: 'abcdefgh' };
+        setTraceEnabled(true);
+        try {
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/profiled.ts', makeReq({ seg: '0' }), makeRes(), 5, 'prof-on');
+            const [entry] = await streamRequestLog.get('prof-on');
+            expect(entry).toMatchObject({ kind: 'segment', bytes: 8, profMs: 100 });
+            expect(entry.prof!.reduce((a, b) => a + b, 0)).toBe(8);
+            expect(entry.profAt).toBeUndefined();
+        } finally {
+            setTraceEnabled(false);
+            streamRequestLog.discard('prof-on');
+        }
+        mockGet(https, [seg]);
+        await proxyUrl('https://cdn/p/profiled.ts', makeReq({ seg: '0' }), makeRes(), 5, 'prof-off');
+        expect(await streamRequestLog.get('prof-off')).toEqual([]);
+    });
+
+    it('tells the session the picture height read from a segment, only while tracing and only when one is found', async () => {
+        const seg = { status: 200, headers: { 'content-type': 'video/mp2t' }, body: 'abcdefgh' };
+        const size = jest.spyOn(tsTimestamps, 'videoSize');
+        try {
+            size.mockReturnValue({ width: 1280, height: 720 });
+            setTraceEnabled(true);
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size.ts', makeReq({ seg: '0' }), makeRes(), 5, 'size-on');
+            expect(streamSessionService.setReceivedHeight).toHaveBeenCalledWith('size-on', 720);
+
+            (streamSessionService.setReceivedHeight as jest.Mock).mockClear();
+            size.mockReturnValue(undefined);
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size2.ts', makeReq({ seg: '0' }), makeRes(), 5, 'size-none');
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size3.ts', makeReq({ seg: '0' }), makeRes(), 5);
+            expect(streamSessionService.setReceivedHeight).not.toHaveBeenCalled();
+
+            setTraceEnabled(false);
+            size.mockReturnValue({ width: 1280, height: 720 });
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size4.ts', makeReq({ seg: '0' }), makeRes(), 5, 'size-off');
+            expect(streamSessionService.setReceivedHeight).not.toHaveBeenCalled();
+        } finally {
+            size.mockRestore();
+            setTraceEnabled(false);
+            ['size-on', 'size-none'].forEach((id) => streamRequestLog.discard(id));
+        }
+    });
+
+    it('tags live segments with their media sequence number only while tracing', async () => {
+        const live = '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:500\n#EXTINF:4,\nseg1.ts\n#EXTINF:4,\nseg2.ts\n';
+        mockGet(https, [{ status: 200, body: live }, { status: 200, body: live }]);
+        const off = makeRes();
+        await proxyUrl('https://cdn.example/a/live.m3u8', makeReq(), off, 5, 'sess');
+        expect(off.send.mock.calls[0][0]).not.toContain('msq=');
+
+        setTraceEnabled(true);
+        try {
+            const on = makeRes();
+            await proxyUrl('https://cdn.example/a/live.m3u8', makeReq(), on, 5, 'sess');
+            expect(on.send.mock.calls[0][0]).toContain('&seg=0&msq=500');
+            expect(on.send.mock.calls[0][0]).toContain('&seg=1&msq=501');
+        } finally {
+            setTraceEnabled(false);
+        }
     });
 
     it('detects playlists by extension, defaults the extension to .ts, and skips counting without a session', async () => {
@@ -208,6 +283,63 @@ describe('proxyUrl', () => {
             await proxyUrl('https://cdn/e/media.m3u8', makeReq(), makeRes());
             expect(https.get).toHaveBeenCalledTimes(4);
         });
+
+        describe('as a listed memory cache', () => {
+            const registered = () => memoryCache(VOD_PLAYLIST_CACHE)!;
+
+            it('registers itself with the playlist lifetime and a label that leaves the storage to the icon', () => {
+                expect(VOD_PLAYLIST_CACHE).toBe('stream_vod_playlist');
+                expect(registered()).toMatchObject({ prefix: 'stream_vod_playlist', label: 'Stream playlists', ttlSeconds: 300 });
+                expect(registered().label).not.toMatch(/memory/i);
+                expect(registered().description).toMatch(/memory/i);
+            });
+
+            it('is empty to begin with', () => {
+                expect(registered().figures()).toEqual({ count: 0, sizeBytes: 0, expiresSoonest: null, expiresLatest: null });
+            });
+
+            it('counts a kept playlist, its text size and when it expires; a live playlist adds nothing', async () => {
+                mockGet(https, [
+                    { status: 200, headers: mpegurl, body: vod },
+                    { status: 200, headers: mpegurl, body: live },
+                ]);
+                const before = Date.now();
+                await proxyUrl('https://cdn/f/media.m3u8', makeReq(), makeRes());
+                await proxyUrl('https://cdn/f/live.m3u8', makeReq(), makeRes());
+                const figures = registered().figures();
+                expect(figures).toMatchObject({ count: 1, sizeBytes: vod.length });
+                expect(figures.expiresSoonest).toBeGreaterThanOrEqual(before + 300_000);
+                expect(figures.expiresLatest).toBe(figures.expiresSoonest);
+            });
+
+            it('clears the kept playlists and says how many went; the next request asks BBC again', async () => {
+                mockGet(https, [
+                    { status: 200, headers: mpegurl, body: vod },
+                    { status: 200, headers: mpegurl, body: vod },
+                ]);
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq(), makeRes());
+                expect(registered().clear()).toBe(1);
+                expect(registered().figures().count).toBe(0);
+                expect(clearPlaylistCache()).toBe(0);
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq(), makeRes());
+                expect(https.get).toHaveBeenCalledTimes(2);
+            });
+
+            it('counts a miss for the first request and a hit for a repeat, and nothing for a Range request', async () => {
+                mockGet(https, [
+                    { status: 200, headers: mpegurl, body: vod },
+                    { status: 200, headers: mpegurl, body: vod },
+                ]);
+                const before = { ...DbCacheService.lookupsFor(VOD_PLAYLIST_CACHE) };
+                // The first two answers are used by the first request and the Range one; the repeat is served from memory.
+                await proxyUrl('https://cdn/l/media.m3u8', makeReq(), makeRes());
+                await proxyUrl('https://cdn/l/media.m3u8', makeReq(), makeRes());
+                await proxyUrl('https://cdn/l/media.m3u8', makeReq({}, { range: 'bytes=0-9' }), makeRes());
+                const after = DbCacheService.lookupsFor(VOD_PLAYLIST_CACHE);
+                expect(after.misses - before.misses).toBe(1);
+                expect(after.hits - before.hits).toBe(1);
+            });
+        });
     });
 
     describe('segment read-ahead', () => {
@@ -268,6 +400,64 @@ describe('proxyUrl', () => {
             expect(streamSessionService.recordSegmentDelivered).toHaveBeenCalledWith('sess', 1, 4);
         });
 
+        it('traces a read-ahead segment with the profile and timing of its own download, placed before the request', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg1' },
+            ]);
+            setTraceEnabled(true);
+            try {
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), makeRes(), 5, 'sess');
+                const entries = await streamRequestLog.get('sess');
+                const ahead = entries.find((e) => e.seg === 1)!;
+                expect(ahead).toMatchObject({ prefetched: true, bytes: 4, profMs: 100 });
+                expect(ahead.prof!.reduce((a, b) => a + b, 0)).toBe(4);
+                expect(ahead.profAt).toBeLessThanOrEqual(ahead.t);
+                expect(ahead.fetchMs).toBeGreaterThanOrEqual(0);
+                // the live one has its own profile and no read-ahead fields
+                const live = entries.find((e) => e.seg === 0)!;
+                expect(live.prof!.reduce((x, y) => x + y, 0)).toBe(4);
+                expect([live.prefetched, live.profAt, live.fetchMs]).toEqual([undefined, undefined, undefined]);
+            } finally {
+                setTraceEnabled(false);
+                streamRequestLog.discard('sess');
+            }
+        });
+
+        it('adds no trace fields to a read-ahead hit while tracing is off', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-length': '4' }, body: 'seg1' },
+            ]);
+            await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }), makeRes(), 5, 'sess');
+            await tick();
+            await tick();
+            await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), makeRes(), 5, 'sess');
+            expect(await streamRequestLog.get('sess')).toEqual([]);
+        });
+
+        it('numbers a generated live DASH segment from the number and track in its address, without counting it as a delivered segment', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-type': 'video/mp4', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp4', 'content-length': '4' }, body: 'seg1' },
+            ]);
+            setTraceEnabled(true);
+            try {
+                await proxyUrl('https://cdn/p/57.m4s', makeReq({ token: tokens[0], tseq: '57', ttrack: 'audio' }), makeRes(), 5, 'sess-dash');
+                const [entry] = await streamRequestLog.get('sess-dash');
+                expect(entry).toMatchObject({ kind: 'segment', seg: 57, track: 'audio' });
+                // an unknown track name is ignored
+                await proxyUrl('https://cdn/p/58.m4s', makeReq({ token: tokens[1], tseq: '58', ttrack: 'evil' }), makeRes(), 5, 'sess-dash');
+                expect((await streamRequestLog.get('sess-dash')).find((e) => e.seg === 58)?.track).toBe('main');
+            } finally {
+                setTraceEnabled(false);
+                streamRequestLog.discard('sess-dash');
+            }
+        });
+
         it('does not read ahead for Range requests (a seek) or for the last segment', async () => {
             const tokens = await loadPlaylist([{ status: 206, headers: { 'content-length': '4' } }, { status: 200, headers: { 'content-length': '4' } }]);
             await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, { range: 'bytes=0-3' }), makeRes(), 5, 'sess');
@@ -277,6 +467,81 @@ describe('proxyUrl', () => {
             await proxyUrl('https://cdn/p/seg2.ts', makeReq({ token: tokens[2], seg: '2' }), makeRes(), 5, 'sess');
             await tick();
             expect(https.get).toHaveBeenCalledTimes(3); // seg2 itself, nothing after it
+        });
+
+        describe('open range (Range: bytes=0-, as Jellyfin sends)', () => {
+            const open = { range: 'bytes=0-' };
+            const twoSegments = [
+                { status: 206, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg1' },
+            ];
+
+            it('reads the next segment ahead and answers it from memory as a 206 with a Content-Range', async () => {
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                (https.get as jest.Mock).mockClear();
+                const res = makeRes();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }, open), res, 5, 'sess');
+                // seg1 itself is not fetched again; the only request is the read-ahead of seg2
+                expect((https.get as jest.Mock).mock.calls.map((c) => c[0])).toEqual(['https://cdn/p/seg2.ts']);
+                expect(res.status).toHaveBeenCalledWith(206);
+                expect(res.setHeader).toHaveBeenCalledWith('Content-Range', 'bytes 0-3/4');
+                expect(res.setHeader).toHaveBeenCalledWith('Content-Length', '4');
+                expect(res.end).toHaveBeenCalledWith(Buffer.from('seg1'));
+            });
+
+            it('still answers a header-less request for a read-ahead segment with a plain 200', async () => {
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                const res = makeRes();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), res, 5, 'sess');
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.setHeader).not.toHaveBeenCalledWith('Content-Range', expect.anything());
+            });
+
+            it('answers an empty read-ahead segment with its own status, as there is no byte range to describe', async () => {
+                const tokens = await loadPlaylist([
+                    { status: 206, headers: { 'content-length': '4' }, body: 'seg0' },
+                    { status: 200, headers: { 'content-length': '0' }, body: '' },
+                ]);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                await tick();
+                const res = makeRes();
+                await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }, open), res, 5, 'sess');
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.setHeader).not.toHaveBeenCalledWith('Content-Range', expect.anything());
+            });
+
+            it('does not read ahead when STREAM_PREFETCH_OPEN_RANGE is off', async () => {
+                await configService.setParameter(IplayarrParameter.STREAM_PREFETCH_OPEN_RANGE, 'false');
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, open), makeRes(), 5, 'sess');
+                await tick();
+                expect(https.get).toHaveBeenCalledTimes(2); // playlist + seg0 only
+            });
+
+            it.each(['bytes=100-', 'bytes=0-99', 'bytes=-500'])('treats %s as a seek and does not read ahead', async (range) => {
+                const tokens = await loadPlaylist(twoSegments);
+                await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, { range }), makeRes(), 5, 'sess');
+                await tick();
+                expect(https.get).toHaveBeenCalledTimes(2);
+            });
+
+            it('serves a cached playlist as a 206 for an open range, and keeps one fetched that way', async () => {
+                const playlist = '#EXTM3U\nseg1.ts\n#EXT-X-ENDLIST\n';
+                mockGet(https, [{ status: 206, headers: { 'content-type': 'application/vnd.apple.mpegurl' }, body: playlist }]);
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq({}, open), makeRes());
+                (https.get as jest.Mock).mockClear();
+                const res = makeRes();
+                await proxyUrl('https://cdn/c/media.m3u8', makeReq({}, open), res);
+                expect(https.get).not.toHaveBeenCalled();
+                expect(res.status).toHaveBeenCalledWith(206);
+            });
         });
 
         it('ignores a prefetch that fails or is not a plain 200', async () => {
@@ -345,6 +610,24 @@ describe('proxyUrl', () => {
         await proxyUrl('https://cdn/start', makeReq(), res);
         expect(https.get).toHaveBeenCalledTimes(2);
         expect(res.send).toHaveBeenCalled();
+    });
+
+    it.each([
+        ['an absolute-path', '/other/final.m3u8', 'https://cdn/other/final.m3u8'],
+        ['a relative', 'final.m3u8', 'https://cdn/a/final.m3u8'],
+    ])('resolves %s redirect Location against the redirecting URL', async (_label, location, expected) => {
+        mockGet(https, [
+            { status: 302, headers: { location } },
+            { status: 200, headers: { 'content-type': 'application/x-mpegURL' }, body: '#EXTM3U\n' },
+        ]);
+        const res = makeRes();
+        await proxyUrl('https://cdn/a/start', makeReq(), res);
+        expect((https.get as jest.Mock).mock.calls[1][0]).toBe(expected);
+    });
+
+    it('rejects, rather than throwing from the response callback, on a Location that is not a URL', async () => {
+        mockGet(https, [{ status: 302, headers: { location: 'http://' } }]);
+        await expect(proxyUrl('https://cdn/a/start', makeReq(), makeRes())).rejects.toThrow();
     });
 
     it('passes binary segments through and records the delivery', async () => {

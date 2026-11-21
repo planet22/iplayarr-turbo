@@ -29,7 +29,7 @@ Open **Settings**. Most things have sensible defaults; these are the ones to loo
 | **Stream Client** (Streaming) | `NATIVE` is recommended: it starts playback fastest and adapts quality to your connection. |
 | **Video Quality** (Media Management) | The highest quality to request (`hd` by default). |
 | **Media Mode** (Streaming) | `download` saves full video files; `strm` saves a tiny pointer file that streams on demand. See "Download or stream?" below. |
-| **Organize into Folder Structure** (Media Management) | Turn on for `Show/Season 01/...` folders that Jellyfin, Plex and Emby understand. |
+| **TV/Movie Folders** (Media Management) | Turn on for `Show/Season 01/...` folders that Jellyfin, Plex and Emby understand. |
 
 ## 3. A five-minute tour
 
@@ -54,7 +54,7 @@ Either way, **Play** in the browser works regardless of this setting.
 
 ## 5. Where things end up
 
-Finished items are in your **Complete Directory**, in `Show/Season NN/` folders if you enabled folder structure, with `.nfo` metadata files if you enabled them (**Write .nfo Metadata Files?**, in Media Management). Point your media server's library at that folder ([media-servers/](media-servers/)). Subscriptions and the browse screens use exactly the same folders and rules as any other download.
+Finished items are in your **Complete Directory**, in `Show/Season NN/` folders if you enabled folder structure, with `.nfo` metadata files if you enabled them (**Write .nfo Metadata Files**, in Media Management). Point your media server's library at that folder ([media-servers/](media-servers/)). Subscriptions and the browse screens use exactly the same folders and rules as any other download.
 
 ## 6. If something looks wrong
 

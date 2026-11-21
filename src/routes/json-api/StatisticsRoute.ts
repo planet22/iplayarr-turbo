@@ -1,13 +1,43 @@
 import { Request, Response, Router } from 'express';
 
+import appService from '../../service/appService';
+import serverStatsService from '../../service/stats/serverStatsService';
 import statisticsService from '../../service/stats/StatisticsService';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { summariseSearchHistory } from '../../utils/searchHistorySummary';
+import { buildStatisticsSummary, STATISTICS_RANGES, StatisticsRange } from '../../utils/statisticsSummary';
 
 const router: Router = asyncRouter();
 
+// A positive whole number, or undefined (no limit) for anything else.
+const parseLimit = (value: unknown): number | undefined => {
+    const n = Number.parseInt(String(value ?? ''), 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+};
+
+// Everything the Statistics page draws, worked out here from the full histories so the page only displays it.
+router.get('/summary', async (req: Request, res: Response) => {
+    const range = STATISTICS_RANGES.includes(req.query.range as StatisticsRange) ? (req.query.range as StatisticsRange) : '7d';
+    const [searches, grabs, failedGrabs, apps] = await Promise.all([
+        statisticsService.getSearchHistory(),
+        statisticsService.getGrabHistory(),
+        statisticsService.getFailedGrabHistory(),
+        appService.getAllApps(),
+    ]);
+    res.json(
+        buildStatisticsSummary({
+            searches, grabs, failedGrabs, range,
+            appNames: new Map(apps.map(({ id, name }) => [id, name])),
+            excludeRss: req.query.excludeRss !== 'false',
+        })
+    );
+});
+
 router.get('/searchHistory', async (req: Request, res: Response) => {
-    const { limit, filterRss, summary } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string };
+    const query = req.query as any as { limit?: string, filterRss?: string, summary?: string };
+    const { summary } = query;
+    const limit = parseLimit(query.limit);
+    const filterRss = query.filterRss === 'true';
     let searchHistory = await statisticsService.getSearchHistory();
     searchHistory = filterRss ? searchHistory.filter(({ term }) => term != '*') : searchHistory;
     const limited = limit ? searchHistory.slice(limit * -1) : searchHistory;
@@ -40,7 +70,7 @@ router.delete('/searchHistory/term', async (req: Request, res: Response) => {
 });
 
 router.get('/grabHistory', async (req: Request, res: Response) => {
-    const { limit } = req.query as any as { limit?: number };
+    const limit = parseLimit((req.query as any).limit);
     const grabHistory = await statisticsService.getGrabHistory();
     res.json(limit ? grabHistory.slice(limit * -1) : grabHistory);
 });
@@ -51,7 +81,7 @@ router.delete('/grabHistory', async (_: Request, res: Response) => {
 });
 
 router.get('/failedGrabHistory', async (req: Request, res: Response) => {
-    const { limit } = req.query as any as { limit?: number };
+    const limit = parseLimit((req.query as any).limit);
     const failedGrabHistory = await statisticsService.getFailedGrabHistory();
     res.json(limit ? failedGrabHistory.slice(limit * -1) : failedGrabHistory);
 });
@@ -64,6 +94,16 @@ router.delete('/failedGrabHistory', async (_: Request, res: Response) => {
 router.get('/uptime', async (_, res: Response) => {
     const uptime = await statisticsService.getUptime();
     res.json({ uptime });
+});
+
+// Quick figures about this server (memory, CPU, disks, database, activity); polled by the Statistics page.
+router.get('/server', async (_, res: Response) => {
+    res.json(await serverStatsService.fast());
+});
+
+// Slower figures (tool versions, BBC reachability, Sonarr/Radarr reachability); each part is null if it could not be read.
+router.get('/server/checks', async (_, res: Response) => {
+    res.json(await serverStatsService.checks());
 });
 
 export default router;

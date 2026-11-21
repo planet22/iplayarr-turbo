@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <Transition name="saveBar">
         <div v-if="count > 0" class="settingsSaveBar" role="region" aria-label="Unsaved changes">
@@ -7,11 +9,8 @@
                     {{ count }} unsaved {{ count === 1 ? 'change' : 'changes' }}
                 </span>
                 <span class="saveBarButtons">
-                    <button type="button" class="saveBarDiscard" :disabled="saving" @click="emit('discard')">Discard</button>
-                    <button type="button" class="saveBarSave" :disabled="saving" @click="emit('save')">
-                        <font-awesome-icon v-if="saving" :icon="['fas', 'spinner']" class="saveBarSpinner" />
-                        Save
-                    </button>
+                    <AppButton class="saveBarDiscard" :disabled="saving" @click="emit('discard')">Discard</AppButton>
+                    <AppButton variant="primary" class="saveBarSave" :busy="saving" @click="emit('save')">Save</AppButton>
                 </span>
             </div>
         </div>
@@ -20,6 +19,8 @@
 
 <script setup>
 import { onBeforeUnmount, watch } from 'vue';
+
+import AppButton from '@/components/common/AppButton.vue';
 
 const props = defineProps({
     // Edits waiting on the open tab; the bar is only shown while there are some.
@@ -47,8 +48,8 @@ onBeforeUnmount(() => setOffset(false));
 <style lang="less">
 .settingsSaveBar {
     position: sticky;
-    bottom: 0;
-    z-index: 5;
+    bottom: var(--audio-bar-height, 0px);
+    z-index: @z-save-bar;
     margin-top: 1.5rem;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background-color: @nav-background-color;
@@ -59,7 +60,7 @@ onBeforeUnmount(() => setOffset(false));
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: @space-3;
         box-sizing: border-box;
         max-width: 900px;
         padding: @space-3 20px;
@@ -68,7 +69,7 @@ onBeforeUnmount(() => setOffset(false));
     .saveBarText {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: @space-2;
         font-size: @font-size-md;
         font-weight: 600;
         color: @primary-text-color;
@@ -88,39 +89,8 @@ onBeforeUnmount(() => setOffset(false));
         flex: 0 0 auto;
     }
 
-    button {
-        cursor: pointer;
+    .appButton {
         min-width: 84px;
-        padding: 8px 16px;
-
-        &:disabled {
-            opacity: 0.6;
-            cursor: default;
-        }
-    }
-
-    .saveBarSave {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-        font-weight: 600;
-
-        &:hover:not(:disabled) {
-            background-color: @brand-color;
-            border-color: @brand-color;
-            filter: brightness(1.1);
-        }
-    }
-
-    .saveBarSpinner {
-        margin-right: 6px;
-        animation: saveBarSpin 1.25s linear infinite;
-    }
-}
-
-@keyframes saveBarSpin {
-    to {
-        transform: rotate(360deg);
     }
 }
 
@@ -142,15 +112,11 @@ onBeforeUnmount(() => setOffset(false));
     .saveBar-leave-active {
         transition: none;
     }
-
-    .settingsSaveBar .saveBarSpinner {
-        animation: none;
-    }
 }
 
 @media (max-width: @mobile-breakpoint) {
     .settingsSaveBar .saveBarInner {
-        padding: 10px 16px;
+        padding: 10px @space-4;
     }
 }
 </style>

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal :title="`Results for '${term == '*' ? 'RSS Feed' : term}'`" :show-close="true" close-label="Close">
         <div v-if="trace" class="traceSummary">
@@ -18,6 +20,7 @@
         <div v-if="isMobile" class="cardList">
             <DataCard v-for="(item, index) of pagedItems" :key="index">
                 <template #title>{{ item.title }}</template>
+                <template v-if="item.channel" #subtitle>{{ channelLabel(item.channel) }}</template>
                 <template #chips><span class="pill">{{ item.type }}</span></template>
                 <template #foot>
                     <span>{{ formatDate(item.pubDate) }}</span>
@@ -31,6 +34,7 @@
                 <tr>
                     <th>Title</th>
                     <th>Type</th>
+                    <th v-if="hasChannel">Channel</th>
                     <th>Size</th>
                     <th>Air Date</th>
                 </tr>
@@ -39,12 +43,13 @@
                 <tr v-for="(item, index) of items" :key="index" :class="{ offPage: !onPage(index, itemsPage, itemsPageSize) }">
                     <td class="text">{{ item.title }}</td>
                     <td data-title="Type"><span class="pill">{{ item.type }}</span></td>
+                    <td v-if="hasChannel" data-title="Channel">{{ item.channel ? channelLabel(item.channel) : '' }}</td>
                     <td data-title="Size">{{ formatStorageSize(item.size) }}</td>
                     <td data-title="Air Date">{{ formatDate(item.pubDate) }}</td>
                 </tr>
-                <tr v-for="n in itemsFiller" :key="`filler-${n}`" class="fillerRow" aria-hidden="true"><td colspan="4" /></tr>
+                <tr v-for="n in itemsFiller" :key="`filler-${n}`" class="fillerRow" aria-hidden="true"><td :colspan="hasChannel ? 5 : 4" /></tr>
                 <tr v-if="items.length == 0">
-                    <td colspan="4" class="empty">No results were returned for this search</td>
+                    <td :colspan="hasChannel ? 5 : 4" class="empty">No results were returned for this search</td>
                 </tr>
             </tbody>
         </table>
@@ -88,6 +93,7 @@
 import { computed, defineProps } from 'vue';
 
 import DataCard from '@/components/common/DataCard.vue';
+import { channelLabel } from '@/lib/channelPillColors';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { formatDate, formatStorageSize } from '@/lib/utils';
@@ -120,7 +126,12 @@ const reasonLabels = {
     'page-cap': 'Episode list too long',
     'hit-cap': 'BBC search limit reached',
     'result-limit': 'Result limit reached',
+    'no-mp3': 'No MP3 download',
+    'wrong-network': 'Network not in the allowed list',
 };
+
+// Radio hits carry their network; a video search has none, so the column only shows when something has one.
+const hasChannel = computed(() => props.items.some(({ channel }) => channel));
 
 const rejected = computed(() => (props.trace?.candidates ?? []).filter(({ kept }) => !kept));
 
@@ -164,12 +175,12 @@ const rejectedFiller = computed(() => fillerCount(rejectedTotalPages, rejectedPa
     width: 100%;
 
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
@@ -185,7 +196,7 @@ const rejectedFiller = computed(() => fillerCount(rejectedTotalPages, rejectedPa
             }
 
             td {
-                padding: 8px;
+                padding: @space-2;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
             }

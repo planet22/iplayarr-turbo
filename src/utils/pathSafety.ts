@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import path from 'path';
 
 // BBC programme ids (b0abc123) and iPlayarr's live channel ids (bbc_one_london). Anything outside
@@ -14,6 +16,12 @@ export function isValidPid(pid: unknown): pid is string {
 export function sanitizeFileName(name: string): string {
     // eslint-disable-next-line no-control-regex
     return String(name ?? '').replace(/[/\\\x00-\x1F]/g, '').replace(/^[.\s]+/, '').trim();
+}
+
+// A name for a folder or file that also survives a Windows or SMB share, which refuse : * ? " < > | in names: sanitizeFileName
+// without those. The one rule radio uses for show folders and file names (downloads, the library index and the lookups agree on it).
+export function shareSafeName(name: string): string {
+    return sanitizeFileName(name).replace(/[:*?"<>|]/g, '');
 }
 
 // Joins onto `base` and refuses any result that ends up outside it.

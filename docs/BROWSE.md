@@ -65,6 +65,10 @@ The badge only reports what BBC lists: iPlayarr itself streams HD at most, so a 
 - **Download** opens the usual download confirmation, where you can edit the filename, then sends you to the Queue.
 - **Download series / Download all** on a Programme page queues every episode of the selected series one at a time, after a confirmation. Any the server refuses are listed afterwards.
 
+### Radio mode
+
+With BBC Sounds radio on, a **Video | Radio** switch in the top bar changes what the browse pages show: Discover, Search, Categories, a category, Collections, Channels, Guide and a programme come from BBC Sounds instead of iPlayer. Radio has no A to Z unless **Radio A to Z** (`RADIO_ATOZ`, off by default) is on (without it an address for it opens Categories), no Sonarr/Radarr, no versions and no subtitles. Pages that are not browsing (Queue, Subscriptions, Events, Statistics, Streaming, Watchdog) always show both. See [SOUNDS.md](SOUNDS.md).
+
 ### Page behaviour
 
 Pages show skeleton loaders shaped like the real layout, a message with **Try again** when something fails, and a friendly empty state with a link to Browse. Back/forward restore your scroll position, and phones get edge-to-edge titles, card layouts and a one-row pager (tablets get the full pager).
@@ -89,14 +93,16 @@ Responses are cached in the database so browsing does not hammer the BBC:
 
 | Cache | Lifetime | Used for |
 | --- | --- | --- |
-| `browse_short` | 15 minutes | Rails, listings, suggestions, category rails, Recently Added |
+| `browse_short` | 30 minutes | Rails, listings, suggestions, category rails, Recently Added |
 | `browse_schedule` | 8 hours | Each channel's schedule for a day: the Schedule page, Now / Next and the Jellyfin guide |
-| `browse_long` | 24 hours | The category list and its artwork, channel logos |
-| `metadata_cache` (existing) | 24 hours | Programme and episode metadata |
+| `browse_long` | 7 days | The category list and its artwork, channel logos |
+| `metadata_cache` (existing) | 3 days | Programme and episode metadata |
 
 List, card and table views use small (320x180) cached thumbnails served from `/json-api/thumbnail/pid/<pid>` with long-lived private cache headers, and episode details are loaded in shared batches. A BBC 404 (e.g. for a live channel id) is remembered for an hour.
 
 "Now / Next" is worked out per request from the cached day schedule. iPlayer's schedule day runs 05:00 to 05:00, so in the early hours it also looks at the previous day. The Schedule page's `/schedule` endpoint fetches the same per-channel day schedule, so it rides the same `browse_schedule` cache (also used by the Jellyfin XMLTV guide) - switching between the Schedule page and a Channel page's Now/Next for the same day doesn't re-hit the BBC.
+
+Each broadcast in that feed carries iPlayer's own status for its episode. A slot whose episode is `available` is marked on demand on the Schedule page (a coloured edge, with Play and Download buttons on hover; Download offers the `.strm` choice like any other download). No extra request is made, so the mark is as fresh as the cached day. A slot not yet broadcast, or one iPlayer does not offer, has no mark. The Streaming Debug page shows the status as "iPlayer status".
 
 ## Channels are a fixed list
 
@@ -128,7 +134,7 @@ All under `/json-api/browse` (behind the same login as the rest of `/json-api`),
 | `GET /atoz/:letter?page=&perPage=` | A page of programmes for `a`-`z` or `0` (digits) |
 | `GET /programme/:pid` | A show with its series and episodes |
 | `GET /versions?pids=a,b,c` | Which of the programmes have audio described / signed versions (cached; used for the episode badges) |
-| `GET /markers/:pid` | An episode's "Skip intro" / "Skip recap" spans as `[{type, start, end}]` (seconds). Many episodes have none (`[]`); nothing in the UI uses it yet |
+| `GET /markers/:pid` | An episode's "Skip intro" / "Skip recap" spans as `[{type, start, end}]` (seconds). Many episodes have none (`[]`); native downloads write them as Intro/Recap chapters (`DOWNLOAD_CHAPTERS`) |
 | `GET /details?pids=a,b,c` | Batch episode details (up to 40), used for Posters artwork |
 | `GET /suggest?q=` | Suggestions for type-ahead: `[{ kind: 'collection', id, title, count, thumbnail? }` first when Find by name and Show Collections are on, then `{ kind: 'tv' \| 'film', pid, title }]` |
 | `GET /collections` | `{ enabled, collections: [{ id, title, synopsis?, thumbnail?, count }] }`; empty and nothing fetched while Show Collections is off |

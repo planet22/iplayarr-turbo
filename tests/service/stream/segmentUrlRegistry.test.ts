@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { linkSegments, maxSegmentTokens, nextSegmentUrl, register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
 
 describe('segmentUrlRegistry next-segment links', () => {
@@ -168,5 +170,32 @@ describe('segmentUrlRegistry playlist limit', () => {
         for (let i = 0; i < 1000; i++) register(`https://cdn/limit/${i}.m3u8`);
         expect(resolve(first)).toBeUndefined();
         expect(resolve(register('https://cdn/limit/last.m3u8'))).toBe('https://cdn/limit/last.m3u8');
+    });
+});
+
+describe('segmentUrlRegistry playlist references under the size cap', () => {
+    it('keeps a playlist that is still being refreshed when the cap forces others out, and drops the one untouched longest', () => {
+        const active = register('https://cdn/cap/active.m3u8');
+        const idle = register('https://cdn/cap/idle.m3u8');
+        for (let i = 0; i < 997; i++) register(`https://cdn/cap/fill${i}.m3u8`);
+        // a player refreshing its playlist asks for the same url again
+        expect(register('https://cdn/cap/active.m3u8')).toBe(active);
+        // these push the table past 1,000 entries
+        register('https://cdn/cap/over1.m3u8');
+        register('https://cdn/cap/over2.m3u8');
+        expect(resolve(active)).toBe('https://cdn/cap/active.m3u8');
+        expect(resolve(idle)).toBeUndefined();
+    });
+});
+
+describe('segmentUrlRegistry sliding expiry', () => {
+    afterEach(() => jest.useRealTimers());
+    it('keeps a token alive while it is still being resolved', () => {
+        jest.useFakeTimers();
+        const token = register('https://cdn/s/live.ts');
+        for (let i = 0; i < 4; i++) {
+            jest.advanceTimersByTime(6 * 60 * 1000);
+            expect(resolve(token)).toBe('https://cdn/s/live.ts');
+        }
     });
 });

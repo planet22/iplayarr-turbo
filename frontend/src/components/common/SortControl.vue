@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="sortControl">
         <select :value="sortBy" class="sortSelect" title="Sort by" aria-label="Sort by" @change="pick($event.target.value)">
@@ -45,15 +47,17 @@ const pick = (key) => {
 <style lang="less" scoped>
 .sortControl {
     display: flex;
-    align-items: stretch;
+    // Centred, so the select lines up with the filter box beside it (also 32px) whatever height the row is.
+    align-items: center;
 
     .sortSelect {
         box-sizing: border-box;
         height: 32px;
         margin: 6px 3px;
-        padding: 0 8px;
+        align-self: center;
+        padding: 0 @space-2;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }
@@ -65,7 +69,7 @@ const pick = (key) => {
         box-sizing: border-box;
         min-height: 32px;
         margin: 6px 3px;
-        padding: 0 12px;
+        padding: 0 @space-3;
         border: 1px solid transparent;
         opacity: 0.4;
         cursor: default;
@@ -73,6 +77,17 @@ const pick = (key) => {
 
         svg {
             height: 21px;
+        }
+    }
+
+    // Phones: toolbar buttons are @touch-target tall, so the select and the placeholder match them.
+    @media (max-width: @mobile-breakpoint) {
+        .sortSelect {
+            height: @touch-target;
+        }
+
+        .orderPlaceholder {
+            min-height: @touch-target;
         }
     }
 }

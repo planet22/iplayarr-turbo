@@ -1,5 +1,8 @@
 import { Server, Socket } from 'socket.io';
 
+import { onSessionsEnded } from './auth/sessionStore';
+import { startCacheLookupBroadcast } from './cacheLookupBroadcast';
+import { onDnsRelayChange } from './dnsRelayService';
 import historyService from './historyService';
 import loggingService from './loggingService';
 import queueService from './queueService';
@@ -10,11 +13,28 @@ import videoEventService from './videoEventService';
 const sockets: {
     [key: string]: Socket;
 } = {};
+// The sockets whose Statistics page is open: only they are sent the live cache lookups.
+const cacheWatchers = new Set<string>();
+let stopCacheBroadcast: (() => void) | undefined;
 let io: Server | undefined = undefined;
 
 const socketService = {
     registerIo: (server: Server) => {
         io = server;
+        onSessionsEnded(({ only, except }) => {
+            for (const socket of Object.values(sockets)) {
+                const sid = (socket.request as { sessionID?: string } | undefined)?.sessionID;
+                if (only !== undefined ? sid === only : sid !== except) socket.disconnect(true);
+            }
+        });
+        // The DNS Relay page and the top bar warning follow the relay live.
+        onDnsRelayChange((status) => io?.emit('dnsRelay', status));
+        // The Statistics page's cache cards flash on every lookup; batched, and only for pages that asked for it.
+        stopCacheBroadcast?.();
+        stopCacheBroadcast = startCacheLookupBroadcast(
+            (event, batch) => cacheWatchers.forEach((id) => sockets[id]?.emit(event, batch)),
+            () => cacheWatchers.size > 0
+        );
         io.on('connection', (socket) => {
             socketService.registerSocket(socket);
             loggingService.pushInitialLogs(socket.id);
@@ -24,25 +44,42 @@ const socketService = {
     registerSocket: async (socket: Socket) => {
         sockets[socket.id] = socket;
 
-        const queue = queueService.getQueue();
-        const history = await historyService.getHistory();
-
-        socket.emit('queue', queue);
-        socket.emit('history', history);
-        socket.emit('streams', {
-            active: streamSessionService.getActive(),
-            history: await streamSessionService.getHistory(),
-        });
-        socket.emit('videoEvents', await videoEventService.getEvents());
-        socket.emit('strmWatchdog', await strmWatchdogService.getStatus());
-
+        // Listeners first and synchronously: a disconnect during the awaits below must still clean up.
+        socket.on('watchCacheLookups', () => cacheWatchers.add(socket.id));
+        socket.on('unwatchCacheLookups', () => cacheWatchers.delete(socket.id));
         socket.on('disconnect', () => {
             delete sockets[socket.id];
+            cacheWatchers.delete(socket.id);
         });
+
+        // Each initial push is independent: one failing source must not leave the others unsent.
+        const push = async (subject: string, load: () => any): Promise<void> => {
+            try {
+                const value = await load();
+                if (sockets[socket.id] === socket) socket.emit(subject, value);
+            } catch (err: any) {
+                loggingService.error(`Initial '${subject}' push failed: ${err?.message ?? err}`);
+            }
+        };
+        await push('queue', () => queueService.getQueue());
+        await push('history', () => historyService.getHistory());
+        await push('streams', async () => ({
+            active: streamSessionService.getActive(),
+            history: await streamSessionService.getHistory(),
+        }));
+        await push('videoEvents', () => videoEventService.getEvents());
+        await push('strmWatchdog', () => strmWatchdogService.getStatus());
     },
 
+    connectedCount: (): number => Object.keys(sockets).length,
+
     emit: (subject: string, message: any) => {
-        io?.emit(subject, message);
+        // Queue entries carry their live child process; the browser has no use for it and serialising it is costly.
+        const payload =
+            subject === 'queue' && Array.isArray(message)
+                ? message.map((entry) => (entry && typeof entry === 'object' && 'process' in entry ? Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'process')) : entry))
+                : message;
+        io?.emit(subject, payload);
     },
 
     publish: (socketId: string, subject: string, message: any) => {

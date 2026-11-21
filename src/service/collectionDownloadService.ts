@@ -1,13 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import pLimit from 'p-limit';
 
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { MediaMode } from '../types/enums/MediaMode';
 import { VideoEventType } from '../types/VideoEvent';
-import { resolveQueueRequest } from '../utils/queueRequest';
 import collectionService from './collectionService';
 import iplayerDetailsService from './iplayerDetailsService';
 import loggingService from './loggingService';
-import queueService from './queueService';
+import { enqueueResolved, resolveRelease } from './releaseService';
 import videoEventService from './videoEventService';
 
 // A collection is read this many pages deep (searchResultLimit titles each), so a runaway list cannot queue thousands.
@@ -62,7 +63,7 @@ const queueCollection = async (id: string, { media, boxset = true, dryRun = fals
         pids.map((pid) =>
             limit(async () => {
                 try {
-                    return { pid, request: await resolveQueueRequest({ pid }) };
+                    return { pid, request: await resolveRelease(pid, { typeFrom: 'category', nameStyle: 'plain' }) };
                 } catch (err: any) {
                     loggingService.error(`Collection ${id}: no details for ${pid}: ${err?.message ?? err}`);
                     return { pid, request: undefined };
@@ -75,9 +76,9 @@ const queueCollection = async (id: string, { media, boxset = true, dryRun = fals
             result.failed++;
             continue;
         }
-        const { nzbName, type, library } = request;
         try {
-            queueService.addToQueue(pid, nzbName, type, undefined, library && boxset ? { ...library, collection: collection.title } : library, undefined, media);
+            // One event for the whole collection is recorded below.
+            enqueueResolved(pid, request, { mediaMode: media, collection: boxset ? collection.title : undefined, event: false });
             result.queued++;
         } catch (err: any) {
             loggingService.error(`Collection ${id}: could not queue ${pid}: ${err?.message ?? err}`);

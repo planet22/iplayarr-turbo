@@ -7,7 +7,7 @@ import { MediaMode } from '../types/enums/MediaMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
-import { QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
+import { ArrStrmTarget, QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import { isValidPid, sanitizeFileName } from '../utils/pathSafety';
@@ -23,6 +23,16 @@ export class InvalidQueueInputError extends Error {}
 
 let queue: QueueEntry[] = [];
 
+// An unhandled 'error' event (no kill binary, EAGAIN) would crash the whole server, so one is always attached.
+function killProcess(pid: number | undefined): void {
+    if (!pid) return;
+    try {
+        spawn('kill', ['-9', String(pid)])?.on?.('error', (err: Error) => loggingService.error(`Could not kill process ${pid}`, err.message));
+    } catch (err) {
+        loggingService.error(`Could not kill process ${pid}`, (err as Error).message);
+    }
+}
+
 const queueService = {
     addToQueue: (
         pid: string,
@@ -37,7 +47,11 @@ const queueService = {
         // should fail safe into the shared directory, not the *arr-only one.
         source: QueueEntrySource = QueueEntrySource.MANUAL,
         // Makes this download a .strm link or a real file whatever the Media Mode setting says.
-        mediaMode?: MediaMode
+        mediaMode?: MediaMode,
+        // The download takes the place of this episode's .strm link (see QueueEntry.replacesStrm).
+        replacesStrm?: boolean,
+        // The link is in a Sonarr/Radarr library: the file is saved beside it and the app rescans (see QueueEntry.arrStrm).
+        arrStrm?: ArrStrmTarget
     ): void => {
         // pid and nzbName end up in directory and file names (and the pid in upstream URLs and
         // process arguments), so they are checked at the one place everything enters the queue.
@@ -61,6 +75,8 @@ const queueService = {
             library,
             source,
             ...(mediaMode ? { mediaMode } : {}),
+            ...(replacesStrm ? { replacesStrm } : {}),
+            ...(arrStrm ? { arrStrm } : {}),
         };
         queue.push(queueEntry);
         activeJobs.set(pid, queueEntry.jobId as string);
@@ -105,7 +121,7 @@ const queueService = {
                     next.process = process;
                 } else if (process?.pid) {
                     // Cancelled while starting - cancelItem had no process to kill yet.
-                    spawn('kill', ['-9', String(process.pid)]);
+                    killProcess(process.pid);
                 }
             } catch (error) {
                 videoEventService.record(
@@ -114,6 +130,8 @@ const queueService = {
                     { pid: next.pid, level: 'error' }
                 );
                 queue = queue.filter((entry) => entry !== next);
+                // Left in place, the job id would tie later events for this programme to a download that never began.
+                activeJobs.clear(next.pid, next.jobId);
             }
         }
         socketService.emit('queue', queue);
@@ -140,7 +158,7 @@ const queueService = {
         const queueItem: QueueEntry | undefined = queue.find(matches);
         for (const item of queue) {
             if (item.process && matches(item)) {
-                spawn('kill', ['-9', String(item.process.pid)]);
+                killProcess(item.process.pid);
             }
         }
         if (archive && queueItem) {

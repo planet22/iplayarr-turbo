@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import handler from '../../../src/endpoints/sabnzbd/AddFileEndpoint';
 import nzbFacade from '../../../src/facade/nzbFacade';
 import appService from '../../../src/service/appService';
+import loggingService from '../../../src/service/loggingService';
 import queueService from '../../../src/service/queueService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 import { App } from '../../../src/types/App';
@@ -47,12 +50,8 @@ const VALID_NZB_XML_WITH_LIBRARY_META = `<?xml version="1.0"?>
     </head>
 </nzb>`;
 
-// Well-formed XML, but missing the <title> AddFileEndpoint requires - triggers
-// the "Invalid iPlayarr Turbo NZB File" rejection branch (as opposed to a real XML
-// parse error). This branch is specifically for NZBs iplayarr-turbo didn't
-// generate itself (hence "invalid"), so unlike the attribute-based meta
-// format above, it reads the "name" meta's value as ordinary element text -
-// the conventional format real-world NZB files use.
+// Well-formed XML without the <title> AddFileEndpoint requires, so it hits the "Invalid iPlayarr Turbo NZB File" branch
+// (not an XML parse error). Unlike the attribute-based meta above, "name" is read as ordinary element text.
 const NZB_MISSING_TITLE_XML = `<?xml version="1.0"?>
 <nzb>
     <head>
@@ -242,6 +241,17 @@ describe('AddFileEndpoint', () => {
         expect(res.status).toHaveBeenCalledWith(500);
     });
 
+    it('does not use an app whose connection test returned an error string', async () => {
+        req.files = [toFile(NZB_MISSING_TITLE_XML)] as any;
+        (appService.getAllApps as jest.Mock).mockResolvedValue([buildApp()]);
+        (nzbFacade.testConnection as jest.Mock).mockResolvedValue('Connection refused');
+
+        await handler(req as Request, res as Response);
+
+        expect(nzbFacade.addFile).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(500);
+    });
+
     it('only considers SABNZBD/NZBGET apps, sorted by priority', async () => {
         req.files = [toFile(NZB_MISSING_TITLE_XML)] as any;
         const sonarr = buildApp({ id: 'sonarr', type: AppType.SONARR, priority: -1 });
@@ -329,10 +339,25 @@ describe('AddFileEndpoint', () => {
                 expect(statisticsService.addFailedGrab).not.toHaveBeenCalled();
             });
 
-            it('records a file with no name meta as having no name', async () => {
+            it('records a file with no name meta as a failed grab when a known app sent it', async () => {
+                (appService.findAppByUserAgent as jest.Mock).mockResolvedValue(buildApp({ id: 'sonarr-1' }));
                 req.files = [toFile('<nzb><head><meta type="other">x</meta></head></nzb>')] as any;
                 await handler(req as Request, res as Response);
-                expect(statisticsService.addFailedGrab).toHaveBeenCalledWith(expect.objectContaining({ nzbName: undefined }));
+                expect(statisticsService.addFailedGrab).toHaveBeenCalledWith(expect.objectContaining({ nzbName: undefined, appId: 'sonarr-1' }));
+            });
+
+            it('does not record an unreadable file with no name and no app as a failed grab, but still answers 500', async () => {
+                req.files = [toFile('test')] as any;
+                await handler(req as Request, res as Response);
+                expect(statisticsService.addFailedGrab).not.toHaveBeenCalled();
+                expect(loggingService.error).toHaveBeenCalled();
+                expect(res.status).toHaveBeenCalledWith(500);
+            });
+
+            it('records a named release with no known app as a failed grab', async () => {
+                req.files = [toFile(NZB_MISSING_TITLE_XML)] as any;
+                await handler(req as Request, res as Response);
+                expect(statisticsService.addFailedGrab).toHaveBeenCalledWith(expect.objectContaining({ nzbName: 'Some Fallback Name' }));
             });
         });
     });

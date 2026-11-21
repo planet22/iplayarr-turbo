@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { EventEmitter } from 'events';
 import http from 'http';
 import https from 'https';
@@ -11,7 +13,10 @@ import service from '../../../src/service/stream/NativeStreamService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { hqProbeCache } from '../../../src/service/stream/streamProbeCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import streamRequestLog from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
+import { runWithRoute } from '../../../src/utils/routeContext';
+import { ProgrammeNotFoundError } from '../../../src/utils/upstreamError';
 import { runWithVersion } from '../../../src/utils/versionContext';
 
 jest.mock('http');
@@ -25,7 +30,7 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: tru
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
 jest.mock('../../../src/service/stream/experimental/bbcFhdUpgrade', () => ({ attemptFhdUpgrade: jest.fn() }));
 jest.mock('../../../src/service/stream/streamProxyUtils');
-jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn() } }));
+jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn(), setSource: jest.fn() } }));
 
 interface Reply {
     status?: number;
@@ -121,6 +126,27 @@ describe('NativeStreamService', () => {
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Adaptive');
     });
 
+    it('notes the route and the rule that chose the picture on the session', async () => {
+        await service.streamDirect('p1', req, res, 'sess');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', { host: 'cdn', url: 'https://cdn/master.m3u8', route: 'iptv-all / 6', why: expect.stringContaining('Adaptive') });
+
+        clearResolveCache();
+        setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', VIDEO_QUALITY: 'hd' });
+        await service.streamDirect('p1', req, res, 'sess2');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess2', { host: 'cdn', url: expect.stringMatching(/^https:\/\/cdn\/[^?]*$/), route: 'iptv-all / 6', why: expect.stringMatching(/Fixed: Video Quality hd picked the \d+p entry/) });
+
+        clearResolveCache();
+        setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', STREAM_NATIVE_EXPERIMENTAL_FHD: 'true' });
+        (attemptFhdUpgrade as jest.Mock).mockResolvedValue('not a url');
+        await service.streamDirect('p1', req, res, 'sess3');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess3', { host: undefined, route: 'iptv-all / 6', why: expect.stringContaining('FHD upgrade') });
+
+        clearResolveCache();
+        setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+        await service.streamDirect('p1', req, res, 'sess4');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess4', { host: 'cdn', url: expect.stringMatching(/^https:\/\/cdn\/[^?]*$/), route: 'iptv-all / 6', why: expect.stringContaining('Video Quality default') });
+    });
+
     it('persists the vpid, so a repeat resolve does not refetch playlist.json', async () => {
         let playlistCalls = 0;
         route = (url, m) => {
@@ -209,6 +235,45 @@ describe('NativeStreamService', () => {
         (getIplayerExecutableService.getQualityFallbackChain as jest.Mock).mockRejectedValue(new Error('boom'));
         await service.streamDirect('p1', req, res);
         expect(streamSessionService.setResolution).not.toHaveBeenCalled();
+    });
+
+    describe('stream trace master capture', () => {
+        afterEach(() => {
+            streamRequestLog.setTraceEnabled(false);
+            jest.restoreAllMocks();
+        });
+
+        it('records the master read while pinning a variant when STREAM_TRACE is on', async () => {
+            streamRequestLog.setTraceEnabled(true);
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).toHaveBeenCalledTimes(1);
+            expect(spy).toHaveBeenCalledWith('sess', { url: 'https://cdn/master.m3u8', text: master(288, 540, 720) });
+        });
+
+        it('records it once even when the FHD upgrade and the pin both read it', async () => {
+            streamRequestLog.setTraceEnabled(true);
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', STREAM_NATIVE_EXPERIMENTAL_FHD: 'true' });
+            (attemptFhdUpgrade as jest.Mock).mockResolvedValue(undefined);
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).toHaveBeenCalledTimes(1);
+        });
+
+        it('keeps and records nothing when STREAM_TRACE is off', async () => {
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('leaves adaptive streams to the proxy, which records the master itself', async () => {
+            streamRequestLog.setTraceEnabled(true);
+            const spy = jest.spyOn(streamRequestLog, 'setPlaylist').mockImplementation(() => undefined);
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(spy).not.toHaveBeenCalled();
+        });
     });
 
     describe('experimental FHD upgrade', () => {
@@ -379,6 +444,19 @@ describe('NativeStreamService', () => {
         it('rejects for an unknown programme', async () => {
             route = (url, m) => (url.includes('/playlist.json') ? { status: 404 } : defaultRoute(url, m));
             await expect(service.streamDirect('p1', req, res)).rejects.toThrow('No programme found for pid p1 (status 404)');
+        });
+
+        it.each([429, 500, 503, 408])('reports a %s from the BBC as an upstream fault, not as the programme being gone', async (status) => {
+            route = (url, m) => (url.includes('/playlist.json') ? { status } : defaultRoute(url, m));
+            const error = await service.streamDirect('p1', req, res).catch((e) => e);
+            expect(error.code).toBe('EUPSTREAM');
+            expect(error).not.toBeInstanceOf(ProgrammeNotFoundError);
+            expect(error.message).toContain(String(status));
+        });
+
+        it('still treats a 404 as the programme being gone', async () => {
+            route = (url, m) => (url.includes('/playlist.json') ? { status: 404 } : defaultRoute(url, m));
+            expect(await service.streamDirect('p1', req, res).catch((e) => e)).toBeInstanceOf(ProgrammeNotFoundError);
         });
 
         it('rejects when there are no versions', async () => {
@@ -653,6 +731,199 @@ describe('NativeStreamService', () => {
         it('fails clearly when the programme has no such version', async () => {
             (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { versions: [{ pid: 'orig', types: ['Original version'] }] } });
             await expect(runWithVersion('signed', () => service.streamDirect('pv4', req2, res2))).rejects.toThrow('pv4 has no signed version');
+        });
+    });
+
+    describe('a route hint from the link', () => {
+        const req2: any = {};
+        const res2: any = {};
+        type Ladder = number[] | 'error' | undefined;
+        // What each route (e.g. "pc-6") lists; a route left out answers selectionunavailable.
+        let ladders: Record<string, Ladder>;
+        const labelOf = (url: string): string => `${/mediaset\/([^/]+)\//.exec(url)?.[1]}-${/mediaselector\/(\d+)\//.exec(url)?.[1]}`;
+        const asked = (): string[] => (https.get as jest.Mock).mock.calls.map((c) => c[0] as string).filter((u) => u.includes('mediaselector')).map(labelOf);
+
+        beforeEach(() => {
+            ladders = {};
+            route = (url, method) => {
+                if (url.includes('/playlist.json')) return defaultRoute(url, method);
+                if (url.includes('mediaselector')) {
+                    const label = labelOf(url);
+                    if (ladders[label] === 'error') return { error: new Error('socket hang up') };
+                    return ladders[label]
+                        ? { body: mediaXml([conn(`transferFormat="hls" protocol="https" supplier="akamai" href="https://${label}/redirect"`)]) }
+                        : { body: '<mediaSelection><error id="selectionunavailable"/></mediaSelection>' };
+                }
+                const host = /^https:\/\/([^/]+)\//.exec(url)?.[1] ?? '';
+                if (url.includes('/redirect') && method === 'HEAD') return { status: 302, headers: { location: '/master.m3u8' } };
+                if (url.endsWith('/master.m3u8') && Array.isArray(ladders[host])) return { body: master(...(ladders[host] as number[])) };
+                if (url.endsWith('/master.m3u8') && ladders[host] === 'error') return { error: new Error('master failed') };
+                return { status: 404 };
+            };
+        });
+
+        it('asks the hinted route first and plays from it, noting that it came from the link', async () => {
+            ladders = { 'iptv-all-6': [396], 'pc-6': [288, 540] };
+            await runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2, 'sess'));
+            expect(asked()).toEqual(['pc-6']);
+            expect(proxyUrl).toHaveBeenCalledWith('https://pc-6/master.m3u8', req2, res2, 5, 'sess');
+            expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', { host: 'pc-6', url: 'https://pc-6/master.m3u8', route: 'pc / 6 (from the link)', why: expect.stringContaining('Adaptive') });
+        });
+
+        it('plays as if there were no hint when the hinted route answers nothing', async () => {
+            ladders = { 'iptv-all-6': [396] };
+            await runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2, 'sess'));
+            expect(asked()).toEqual(['pc-6', 'iptv-all-6']);
+            expect(proxyUrl).toHaveBeenCalledWith('https://iptv-all-6/master.m3u8', req2, res2, 5, 'sess');
+            expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', expect.objectContaining({ route: 'iptv-all / 6' }));
+        });
+
+        it('walks the remaining routes in the normal order, without asking the hinted one twice', async () => {
+            ladders = { 'pc-5': [396] };
+            await runWithRoute('iptv-all-5', () => service.streamDirect('p1', req2, res2));
+            expect(asked()).toEqual(['iptv-all-5', 'iptv-all-6', 'pc-6', 'pc-5']);
+        });
+
+        it('carries on silently when the hinted route cannot be asked at all', async () => {
+            ladders = { 'pc-6': 'error', 'iptv-all-6': [396] };
+            await runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2, 'sess'));
+            expect(asked()).toEqual(['pc-6', 'iptv-all-6']);
+            expect(proxyUrl).toHaveBeenCalledWith('https://iptv-all-6/master.m3u8', req2, res2, 5, 'sess');
+        });
+
+        it('still fails when a route that was not hinted cannot be asked', async () => {
+            ladders = { 'iptv-all-6': 'error' };
+            await expect(service.streamDirect('p1', req2, res2)).rejects.toThrow('socket hang up');
+        });
+
+        it('fails with BBC\'s reason when neither the hint nor any other route answers', async () => {
+            await expect(runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2))).rejects.toThrow('selectionunavailable');
+            expect(asked()).toEqual(['pc-6', 'iptv-all-6', 'iptv-all-5', 'pc-5']);
+        });
+
+        it('ignores an unknown, malformed or repeated route', async () => {
+            ladders = { 'iptv-all-6': [396], 'pc-6': [540] };
+            for (const value of ['zz-9', 'pc-6;x', ['pc-6', 'pc-5'], 'iptv-mse-6', 7, undefined]) {
+                clearResolveCache();
+                (https.get as jest.Mock).mockClear();
+                await runWithRoute(value, () => service.streamDirect('p1', req2, res2));
+                expect(asked()).toEqual(['iptv-all-6']);
+            }
+        });
+
+        it('does not change the route remembered for other programmes', async () => {
+            ladders = { 'iptv-all-6': [396], 'pc-6': [540] };
+            await runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2));
+            clearResolveCache();
+            (https.get as jest.Mock).mockClear();
+            await service.streamDirect('p2', req2, res2);
+            expect(asked()).toEqual(['iptv-all-6']);
+        });
+
+        it('still remembers the route a fallback was answered by, as it always did', async () => {
+            ladders = { 'pc-5': [396] };
+            await runWithRoute('iptv-all-5', () => service.streamDirect('p1', req2, res2));
+            clearResolveCache();
+            (https.get as jest.Mock).mockClear();
+            await service.streamDirect('p2', req2, res2);
+            expect(asked()).toEqual(['pc-5']);
+        });
+
+        it('keeps a hinted and an unhinted request of one programme apart in the resolve cache', async () => {
+            ladders = { 'iptv-all-6': [396], 'pc-6': [540] };
+            await service.streamDirect('p1', req2, res2, 'a');
+            await runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2, 'b'));
+            await runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2, 'c'));
+            await service.streamDirect('p1', req2, res2, 'd');
+            expect(asked()).toEqual(['iptv-all-6', 'pc-6']);
+            expect((proxyUrl as jest.Mock).mock.calls.map((c) => c[0])).toEqual(['https://iptv-all-6/master.m3u8', 'https://pc-6/master.m3u8', 'https://pc-6/master.m3u8', 'https://iptv-all-6/master.m3u8']);
+            expect(streamSessionService.setSource).toHaveBeenLastCalledWith('d', expect.objectContaining({ route: 'iptv-all / 6' }));
+            expect(streamSessionService.setSource).toHaveBeenCalledWith('c', expect.objectContaining({ route: 'pc / 6 (from the link)' }));
+        });
+
+        it('is not used for a non-plain version', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({
+                programme: { versions: [{ pid: 'orig', types: ['Original version'] }, { pid: 'adpid', types: ['Dubbed Audio Described'] }] },
+            });
+            ladders = { 'iptv-all-6': [396], 'pc-5': [540] };
+            await runWithVersion('audio-described', () => runWithRoute('iptv-all-6', () => service.streamDirect('pv', req2, res2, 'sess')));
+            // pc first, as for any version, and nothing about it is noted as coming from the link
+            expect(asked()).toEqual(['pc-6', 'pc-5']);
+            expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', expect.not.objectContaining({ route: expect.anything() }));
+        });
+
+        it('is not used while the Quality Probe compares every route itself', async () => {
+            setConfig({ STREAM_NATIVE_HQ_PROBE: 'true' });
+            ladders = { 'iptv-all-6': [396], 'pc-6': [540] };
+            await runWithRoute('iptv-all-6', () => service.streamDirect('p1', req2, res2, 'sess'));
+            expect(asked()).toEqual(['iptv-all-6', 'iptv-all-5', 'pc-6', 'pc-5']);
+            expect(proxyUrl).toHaveBeenCalledWith('https://pc-6/master.m3u8', req2, res2, 5, 'sess');
+            expect((streamSessionService.setSource as jest.Mock).mock.calls[0][1].route).toBeUndefined();
+        });
+    });
+
+    describe('probeBestRoute', () => {
+        let ladders: Record<string, number[] | 'error' | 'empty' | undefined>;
+        const labelOf = (url: string): string => `${/mediaset\/([^/]+)\//.exec(url)?.[1]}-${/mediaselector\/(\d+)\//.exec(url)?.[1]}`;
+
+        beforeEach(() => {
+            ladders = {};
+            route = (url, method) => {
+                if (url.includes('/playlist.json')) return defaultRoute(url, method);
+                if (url.includes('mediaselector')) {
+                    const label = labelOf(url);
+                    if (ladders[label] === 'error') return { error: new Error('socket hang up') };
+                    return ladders[label]
+                        ? { body: mediaXml([conn(`transferFormat="hls" protocol="https" supplier="akamai" href="https://${label}/redirect"`)]) }
+                        : { body: '<mediaSelection><error id="selectionunavailable"/></mediaSelection>' };
+                }
+                const host = /^https:\/\/([^/]+)\//.exec(url)?.[1] ?? '';
+                if (url.includes('/redirect') && method === 'HEAD') return { status: 302, headers: { location: '/master.m3u8' } };
+                if (url.endsWith('/master.m3u8')) {
+                    const ladder = ladders[host];
+                    return ladder === 'empty' ? { body: '#EXTM3U\n' } : Array.isArray(ladder) ? { body: master(...ladder) } : { status: 404 };
+                }
+                return { status: 404 };
+            };
+        });
+
+        it('returns the route whose playlist lists the tallest picture, and only the route and height', async () => {
+            ladders = { 'iptv-all-6': [396], 'pc-6': [288, 540, 396], 'pc-5': [288] };
+            const best = await service.probeBestRoute('p1');
+            expect(best).toEqual({ pair: { mediaSet: 'pc', version: 6 }, height: 540 });
+            expect(JSON.stringify(best)).not.toContain('http');
+        });
+
+        it('asks every route once, concurrently, for the plain version', async () => {
+            ladders = { 'iptv-all-6': [396] };
+            await service.probeBestRoute('p1');
+            const urls = (https.get as jest.Mock).mock.calls.map((c) => c[0] as string).filter((u) => u.includes('mediaselector'));
+            expect(urls.map(labelOf).sort()).toEqual(['iptv-all-5', 'iptv-all-6', 'pc-5', 'pc-6']);
+            expect(urls.every((u) => u.includes('/vpid/plain/'))).toBe(true);
+        });
+
+        it('prefers the earlier route on a tie', async () => {
+            ladders = { 'pc-6': [540], 'iptv-all-5': [540], 'pc-5': [540] };
+            expect((await service.probeBestRoute('p1'))?.pair).toEqual({ mediaSet: 'iptv-all', version: 5 });
+        });
+
+        it('skips a route that fails, has no HLS connection or lists no pictures', async () => {
+            ladders = { 'iptv-all-6': 'error', 'iptv-all-5': 'empty', 'pc-5': [396] };
+            expect(await service.probeBestRoute('p1')).toEqual({ pair: { mediaSet: 'pc', version: 5 }, height: 396 });
+        });
+
+        it('skips a route that fails to answer and one whose playlist lists no pictures', async () => {
+            ladders = { 'iptv-all-6': [396], 'pc-6': 'error', 'pc-5': [] };
+            expect((await service.probeBestRoute('p1'))?.pair).toEqual({ mediaSet: 'iptv-all', version: 6 });
+        });
+
+        it('returns undefined when no route answers', async () => {
+            expect(await service.probeBestRoute('p1')).toBeUndefined();
+        });
+
+        it('returns undefined when the programme cannot be found', async () => {
+            route = () => ({ status: 404 });
+            expect(await service.probeBestRoute('p1')).toBeUndefined();
         });
     });
 });

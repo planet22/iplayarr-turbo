@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="NZB" icon="newspaper" />
@@ -5,287 +7,301 @@
             :icons="[]"
             :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
         />
-        <PageHeader title="Recent Searches" />
-        <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear searches"
-            :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
-            @delete-queue-item="clearSearches" @toggle-filters="searchShowFilters = !searchShowFilters"
-        >
-            <template v-if="searchShowFilters" #filters>
-                <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
-                <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
-            </template>
-        </SettingsPageToolbar>
-        <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
-        <div v-if="cardView" class="cardList">
-            <DataCard v-for="(entry, index) in pagedSearches" :key="index">
-                <template #title>
-                    <span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span>
+        <LoadingIndicator v-if="loading" />
+        <ErrorState v-else-if="loadError" message="Could not load the NZB history." @retry="refresh" />
+        <template v-else>
+            <PageHeader title="Indexer Searches" />
+            <SettingsPageToolbar
+                :icons="['delete', 'filterToggle']" delete-label="Clear searches"
+                :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
+                @delete-queue-item="clearSearches" @toggle-filters="searchShowFilters = !searchShowFilters"
+            >
+                <template v-if="searchShowFilters" #filters>
+                    <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches…" />
+                    <select v-model="searchSource" class="gridFilter" aria-label="Search source">
+                        <option v-for="option in sourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                    </select>
+                    <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
                 </template>
-                <template v-if="entry.series != null || entry.episode != null" #subtitle>
-                    {{ [entry.series != null ? `Season ${entry.series}` : '', entry.episode != null ? `Episode ${entry.episode}` : ''].filter(Boolean).join(' · ') }}
-                </template>
-                <template #chips>
-                    <span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span>
-                    <a v-if="entry.hasDetail" class="clickable" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
-                    <span v-else>{{ resultsLabel(entry) }}</span>
-                </template>
-                <template #foot>
-                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
-                </template>
-            </DataCard>
-            <div v-if="sortedSearches.length == 0" class="empty">No searches recorded yet</div>
-        </div>
-        <table v-else class="dataTable">
-            <colgroup>
-                <col style="width: 36ch" />
-                <col style="width: 10ch" />
-                <col style="width: 10ch" />
-                <col style="width: 10ch" />
-                <col />
-                <col style="width: 10ch" />
-                <col style="width: 14ch" />
-                <col style="width: 22ch" />
-            </colgroup>
-            <thead>
-                <tr>
-                    <th class="sortable" @click="toggleSearchSort('term')">
-                        Search term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleSearchSort('series')">
-                        Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleSearchSort('episode')">
-                        Episode <SortIcon :active="searchSortBy == 'episode'" :order="searchSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleSearchSort('results')">
-                        Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
-                    </th>
-                    <th></th>
-                    <th class="sortable" @click="toggleSearchSort('type')">
-                        Type <SortIcon :active="searchSortBy == 'type'" :order="searchSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleSearchSort('app')">
-                        App <SortIcon :active="searchSortBy == 'app'" :order="searchSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleSearchSort('time')">
-                        Time <SortIcon :active="searchSortBy == 'time'" :order="searchSortOrder" />
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="(entry, index) in pagedSearches" :key="index">
-                    <td class="text"><span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span></td>
-                    <td data-title="Season">{{ entry.series ?? '' }}</td>
-                    <td data-title="Episode">{{ entry.episode ?? '' }}</td>
-                    <td data-title="Results">
-                        <a v-if="entry.hasDetail" class="clickable" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
-                        <template v-else>{{ resultsLabel(entry) }}</template>
-                    </td>
-                    <td></td>
-                    <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
-                    <td data-title="App">{{ appName(entry.appId) }}</td>
-                    <td data-title="Time">{{ formatDate(entry.time) }}</td>
-                </tr>
-                <tr v-if="sortedSearches.length == 0">
-                    <td colspan="8" class="empty">No searches recorded yet</td>
-                </tr>
-            </tbody>
-        </table>
-        <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
+            </SettingsPageToolbar>
+            <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
+            <div v-if="cardView" class="cardList cardGrid">
+                <DataCard v-for="(entry, index) in pagedSearches" :key="index">
+                    <template #title>
+                        <span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span>
+                    </template>
+                    <template v-if="entry.series != null || entry.episode != null" #subtitle>
+                        {{ [entry.series != null ? `Season ${entry.series}` : '', entry.episode != null ? `Episode ${entry.episode}` : ''].filter(Boolean).join(' · ') }}
+                    </template>
+                    <template #chips>
+                        <span v-for="label in searchTypes(entry)" :key="label" class="pill">{{ label }}</span>
+                        <a v-if="entry.hasDetail" class="clickable" :title="resultsTitle(entry)" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
+                        <span v-else :title="resultsTitle(entry)">{{ resultsLabel(entry) }}</span>
+                    </template>
+                    <template #foot>
+                        <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                    </template>
+                </DataCard>
+                <EmptyState v-if="sortedSearches.length == 0" icon="magnifying-glass" :title="noSearchesTitle" />
+            </div>
+            <table v-else class="dataTable">
+                <colgroup>
+                    <col style="width: 36ch" />
+                    <col style="width: 10ch" />
+                    <col style="width: 10ch" />
+                    <col style="width: 10ch" />
+                    <col />
+                    <col style="width: 10ch" />
+                    <col style="width: 14ch" />
+                    <col style="width: 26ch" />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(searchSortBy == 'term', searchSortOrder)" @click="toggleSearchSort('term')" @keydown.enter.prevent="toggleSearchSort('term')" @keydown.space.prevent="toggleSearchSort('term')">
+                            Search term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(searchSortBy == 'series', searchSortOrder)" @click="toggleSearchSort('series')" @keydown.enter.prevent="toggleSearchSort('series')" @keydown.space.prevent="toggleSearchSort('series')">
+                            Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(searchSortBy == 'episode', searchSortOrder)" @click="toggleSearchSort('episode')" @keydown.enter.prevent="toggleSearchSort('episode')" @keydown.space.prevent="toggleSearchSort('episode')">
+                            Episode <SortIcon :active="searchSortBy == 'episode'" :order="searchSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(searchSortBy == 'results', searchSortOrder)" @click="toggleSearchSort('results')" @keydown.enter.prevent="toggleSearchSort('results')" @keydown.space.prevent="toggleSearchSort('results')">
+                            Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
+                        </th>
+                        <th></th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(searchSortBy == 'type', searchSortOrder)" @click="toggleSearchSort('type')" @keydown.enter.prevent="toggleSearchSort('type')" @keydown.space.prevent="toggleSearchSort('type')">
+                            Type <SortIcon :active="searchSortBy == 'type'" :order="searchSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(searchSortBy == 'app', searchSortOrder)" @click="toggleSearchSort('app')" @keydown.enter.prevent="toggleSearchSort('app')" @keydown.space.prevent="toggleSearchSort('app')">
+                            App <SortIcon :active="searchSortBy == 'app'" :order="searchSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(searchSortBy == 'time', searchSortOrder)" @click="toggleSearchSort('time')" @keydown.enter.prevent="toggleSearchSort('time')" @keydown.space.prevent="toggleSearchSort('time')">
+                            Time <SortIcon :active="searchSortBy == 'time'" :order="searchSortOrder" />
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(entry, index) in pagedSearches" :key="index">
+                        <td class="text"><span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span></td>
+                        <td data-title="Season">{{ entry.series ?? '' }}</td>
+                        <td data-title="Episode">{{ entry.episode ?? '' }}</td>
+                        <td data-title="Results">
+                            <a v-if="entry.hasDetail" class="clickable" :title="resultsTitle(entry)" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
+                            <span v-else :title="resultsTitle(entry)">{{ resultsLabel(entry) }}</span>
+                        </td>
+                        <td></td>
+                        <td data-title="Type"><span v-for="label in searchTypes(entry)" :key="label" class="pill">{{ label }}</span></td>
+                        <td data-title="App">{{ appName(entry.appId) }}</td>
+                        <td data-title="Time" style="white-space: nowrap">{{ formatDate(entry.time) }}</td>
+                    </tr>
+                    <tr v-if="sortedSearches.length == 0">
+                        <td colspan="8"><EmptyState icon="magnifying-glass" :title="noSearchesTitle" /></td>
+                    </tr>
+                </tbody>
+            </table>
+            <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
 
-        <PageHeader title="Recent Grabs" />
-        <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear grabs"
-            :filters-shown="grabShowFilters" :filters-active="grabFiltersActive"
-            @delete-queue-item="clearGrabs" @toggle-filters="grabShowFilters = !grabShowFilters"
-        >
-            <template v-if="grabShowFilters" #filters>
-                <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
-                <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
-            </template>
-        </SettingsPageToolbar>
-        <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
-        <div v-if="cardView" class="cardList">
-            <DataCard v-for="(entry, index) in pagedGrabs" :key="index">
-                <template #thumb>
-                    <img
-                        v-if="getProgrammeThumbnailUrl(entry.pid)"
-                        class="clickable"
-                        :src="getProgrammeThumbnailUrl(entry.pid)"
-                        @click="openInfo(entry.pid)"
-                        @error="hideBrokenImage"
-                    />
-                    <div v-else class="thumbnail-placeholder"></div>
+            <PageHeader title="Recent Grabs" />
+            <SettingsPageToolbar
+                :icons="['delete', 'filterToggle']" delete-label="Clear grabs"
+                :filters-shown="grabShowFilters" :filters-active="grabFiltersActive"
+                @delete-queue-item="clearGrabs" @toggle-filters="grabShowFilters = !grabShowFilters"
+            >
+                <template v-if="grabShowFilters" #filters>
+                    <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs…" />
+                    <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
                 </template>
-                <template #title>
-                    <a class="clickable" @click="openInfo(entry.pid)">{{ detailsFor(entry.pid)?.title ?? entry.nzbName }}</a>
-                </template>
-                <template v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" #subtitle>
-                    {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
-                </template>
-                <template #chips>
-                    <span class="pill">{{ entry.type }}</span>
-                </template>
-                <template #foot>
-                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
-                    <span>{{ entry.pid }}</span>
-                </template>
-            </DataCard>
-            <div v-if="sortedGrabs.length == 0" class="empty">No grabs recorded yet</div>
-        </div>
-        <table v-else class="dataTable streamsTable">
-            <colgroup>
-                <col style="width: 70px" />
-                <col style="width: 14ch" />
-                <col />
-                <col style="width: 10ch" />
-                <col style="width: 14ch" />
-                <col style="width: 22ch" />
-            </colgroup>
-            <thead>
-                <tr>
-                    <th />
-                    <th class="sortable" @click="toggleGrabSort('pid')">
-                        PID <SortIcon :active="grabSortBy == 'pid'" :order="grabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleGrabSort('nzbName')">
-                        Name <SortIcon :active="grabSortBy == 'nzbName'" :order="grabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleGrabSort('type')">
-                        Type <SortIcon :active="grabSortBy == 'type'" :order="grabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleGrabSort('app')">
-                        App <SortIcon :active="grabSortBy == 'app'" :order="grabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleGrabSort('time')">
-                        Time <SortIcon :active="grabSortBy == 'time'" :order="grabSortOrder" />
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="(entry, index) in pagedGrabs" :key="index">
-                    <td>
+            </SettingsPageToolbar>
+            <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
+            <div v-if="cardView" class="cardList cardGrid">
+                <DataCard v-for="(entry, index) in pagedGrabs" :key="index">
+                    <template #thumb>
                         <img
-                            v-if="getProgrammeThumbnailUrl(entry.pid)"
-                            class="thumbnail clickable"
+v-if="getProgrammeThumbnailUrl(entry.pid)"
+                            loading="lazy"
+                            class="clickable"
                             :src="getProgrammeThumbnailUrl(entry.pid)"
                             @click="openInfo(entry.pid)"
                             @error="hideBrokenImage"
                         />
                         <div v-else class="thumbnail-placeholder"></div>
-                    </td>
-                    <td data-title="PID">{{ entry.pid }}</td>
-                    <td class="text">
-                        <a class="clickable" @click="openInfo(entry.pid)">
-                            {{ detailsFor(entry.pid)?.title ?? entry.nzbName }}
-                        </a>
-                        <div v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" class="subtle">
-                            {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
-                        </div>
-                    </td>
-                    <td data-title="Type"><span class="pill">{{ entry.type }}</span></td>
-                    <td data-title="App">{{ appName(entry.appId) }}</td>
-                    <td data-title="Time">{{ formatDate(entry.time) }}</td>
-                </tr>
-                <tr v-if="sortedGrabs.length == 0">
-                    <td colspan="6" class="empty">No grabs recorded yet</td>
-                </tr>
-            </tbody>
-        </table>
-        <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
+                    </template>
+                    <template #title>
+                        <a class="clickable" @click="openInfo(entry.pid)">{{ detailsFor(entry.pid)?.title ?? entry.nzbName }}</a>
+                    </template>
+                    <template v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" #subtitle>
+                        {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                    </template>
+                    <template #chips>
+                        <span class="pill">{{ entry.type }}</span>
+                    </template>
+                    <template #foot>
+                        <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                        <span>{{ entry.pid }}</span>
+                    </template>
+                </DataCard>
+                <EmptyState v-if="sortedGrabs.length == 0" icon="download" title="No grabs recorded yet" />
+            </div>
+            <table v-else class="dataTable streamsTable">
+                <colgroup>
+                    <col style="width: 70px" />
+                    <col style="width: 14ch" />
+                    <col />
+                    <col style="width: 10ch" />
+                    <col style="width: 14ch" />
+                    <col style="width: 26ch" />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th />
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(grabSortBy == 'pid', grabSortOrder)" @click="toggleGrabSort('pid')" @keydown.enter.prevent="toggleGrabSort('pid')" @keydown.space.prevent="toggleGrabSort('pid')">
+                            PID <SortIcon :active="grabSortBy == 'pid'" :order="grabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(grabSortBy == 'nzbName', grabSortOrder)" @click="toggleGrabSort('nzbName')" @keydown.enter.prevent="toggleGrabSort('nzbName')" @keydown.space.prevent="toggleGrabSort('nzbName')">
+                            Name <SortIcon :active="grabSortBy == 'nzbName'" :order="grabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(grabSortBy == 'type', grabSortOrder)" @click="toggleGrabSort('type')" @keydown.enter.prevent="toggleGrabSort('type')" @keydown.space.prevent="toggleGrabSort('type')">
+                            Type <SortIcon :active="grabSortBy == 'type'" :order="grabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(grabSortBy == 'app', grabSortOrder)" @click="toggleGrabSort('app')" @keydown.enter.prevent="toggleGrabSort('app')" @keydown.space.prevent="toggleGrabSort('app')">
+                            App <SortIcon :active="grabSortBy == 'app'" :order="grabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(grabSortBy == 'time', grabSortOrder)" @click="toggleGrabSort('time')" @keydown.enter.prevent="toggleGrabSort('time')" @keydown.space.prevent="toggleGrabSort('time')">
+                            Time <SortIcon :active="grabSortBy == 'time'" :order="grabSortOrder" />
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(entry, index) in pagedGrabs" :key="index">
+                        <td>
+                            <img
+v-if="getProgrammeThumbnailUrl(entry.pid)"
+                                loading="lazy"
+                                class="thumbnail clickable"
+                                :src="getProgrammeThumbnailUrl(entry.pid)"
+                                @click="openInfo(entry.pid)"
+                                @error="hideBrokenImage"
+                            />
+                            <div v-else class="thumbnail-placeholder"></div>
+                        </td>
+                        <td data-title="PID">{{ entry.pid }}</td>
+                        <td class="text">
+                            <a class="clickable" @click="openInfo(entry.pid)">
+                                {{ detailsFor(entry.pid)?.title ?? entry.nzbName }}
+                            </a>
+                            <div v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" class="subtle">
+                                {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                            </div>
+                        </td>
+                        <td data-title="Type"><span class="pill">{{ entry.type }}</span></td>
+                        <td data-title="App">{{ appName(entry.appId) }}</td>
+                        <td data-title="Time">{{ formatDate(entry.time) }}</td>
+                    </tr>
+                    <tr v-if="sortedGrabs.length == 0">
+                        <td colspan="6"><EmptyState icon="download" title="No grabs recorded yet" /></td>
+                    </tr>
+                </tbody>
+            </table>
+            <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
 
-        <PageHeader title="Failed Grabs" />
-        <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear failed grabs"
-            :filters-shown="failedGrabShowFilters" :filters-active="failedGrabFiltersActive"
-            @delete-queue-item="clearFailedGrabs" @toggle-filters="failedGrabShowFilters = !failedGrabShowFilters"
-        >
-            <template v-if="failedGrabShowFilters" #filters>
-                <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
-                <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
-            </template>
-        </SettingsPageToolbar>
-        <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
-        <div v-if="cardView" class="cardList">
-            <DataCard v-for="(entry, index) in pagedFailedGrabs" :key="index">
-                <template #title>{{ entry.nzbName }}</template>
-                <template #chips>
-                    <span class="pill error">Failed</span>
+            <PageHeader title="Failed Grabs" />
+            <SettingsPageToolbar
+                :icons="['delete', 'filterToggle']" delete-label="Clear failed grabs"
+                :filters-shown="failedGrabShowFilters" :filters-active="failedGrabFiltersActive"
+                @delete-queue-item="clearFailedGrabs" @toggle-filters="failedGrabShowFilters = !failedGrabShowFilters"
+            >
+                <template v-if="failedGrabShowFilters" #filters>
+                    <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs…" />
+                    <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
                 </template>
-                <template v-if="entry.error">{{ entry.error }}</template>
-                <template #foot>
-                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
-                    <span>{{ entry.pid }}</span>
-                </template>
-            </DataCard>
-            <div v-if="sortedFailedGrabs.length == 0" class="empty">No failed grabs</div>
-        </div>
-        <table v-else class="dataTable">
-            <colgroup>
-                <col style="width: 14ch" />
-                <col />
-                <col style="width: 38ch" />
-                <col style="width: 14ch" />
-                <col style="width: 22ch" />
-            </colgroup>
-            <thead>
-                <tr>
-                    <th class="sortable" @click="toggleFailedGrabSort('pid')">
-                        PID <SortIcon :active="failedGrabSortBy == 'pid'" :order="failedGrabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('nzbName')">
-                        Name <SortIcon :active="failedGrabSortBy == 'nzbName'" :order="failedGrabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('error')">
-                        Error <SortIcon :active="failedGrabSortBy == 'error'" :order="failedGrabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('app')">
-                        App <SortIcon :active="failedGrabSortBy == 'app'" :order="failedGrabSortOrder" />
-                    </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('time')">
-                        Time <SortIcon :active="failedGrabSortBy == 'time'" :order="failedGrabSortOrder" />
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="(entry, index) in pagedFailedGrabs" :key="index">
-                    <td data-title="PID">{{ entry.pid }}</td>
-                    <td class="text">{{ entry.nzbName }}</td>
-                    <td class="text">{{ entry.error }}</td>
-                    <td data-title="App">{{ appName(entry.appId) }}</td>
-                    <td data-title="Time">{{ formatDate(entry.time) }}</td>
-                </tr>
-                <tr v-if="sortedFailedGrabs.length == 0">
-                    <td colspan="5" class="empty">No failed grabs</td>
-                </tr>
-            </tbody>
-        </table>
-        <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
+            </SettingsPageToolbar>
+            <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
+            <div v-if="cardView" class="cardList cardGrid">
+                <DataCard v-for="(entry, index) in pagedFailedGrabs" :key="index">
+                    <template #title>{{ entry.nzbName }}</template>
+                    <template #chips>
+                        <span class="pill error">Failed</span>
+                    </template>
+                    <template v-if="entry.error">{{ entry.error }}</template>
+                    <template #foot>
+                        <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                        <span>{{ entry.pid }}</span>
+                    </template>
+                </DataCard>
+                <EmptyState v-if="sortedFailedGrabs.length == 0" icon="circle-check" title="No failed grabs" />
+            </div>
+            <table v-else class="dataTable">
+                <colgroup>
+                    <col style="width: 14ch" />
+                    <col />
+                    <col style="width: 38ch" />
+                    <col style="width: 14ch" />
+                    <col style="width: 22ch" />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(failedGrabSortBy == 'pid', failedGrabSortOrder)" @click="toggleFailedGrabSort('pid')" @keydown.enter.prevent="toggleFailedGrabSort('pid')" @keydown.space.prevent="toggleFailedGrabSort('pid')">
+                            PID <SortIcon :active="failedGrabSortBy == 'pid'" :order="failedGrabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(failedGrabSortBy == 'nzbName', failedGrabSortOrder)" @click="toggleFailedGrabSort('nzbName')" @keydown.enter.prevent="toggleFailedGrabSort('nzbName')" @keydown.space.prevent="toggleFailedGrabSort('nzbName')">
+                            Name <SortIcon :active="failedGrabSortBy == 'nzbName'" :order="failedGrabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(failedGrabSortBy == 'error', failedGrabSortOrder)" @click="toggleFailedGrabSort('error')" @keydown.enter.prevent="toggleFailedGrabSort('error')" @keydown.space.prevent="toggleFailedGrabSort('error')">
+                            Error <SortIcon :active="failedGrabSortBy == 'error'" :order="failedGrabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(failedGrabSortBy == 'app', failedGrabSortOrder)" @click="toggleFailedGrabSort('app')" @keydown.enter.prevent="toggleFailedGrabSort('app')" @keydown.space.prevent="toggleFailedGrabSort('app')">
+                            App <SortIcon :active="failedGrabSortBy == 'app'" :order="failedGrabSortOrder" />
+                        </th>
+                        <th class="sortable" tabindex="0" :aria-sort="ariaSort(failedGrabSortBy == 'time', failedGrabSortOrder)" @click="toggleFailedGrabSort('time')" @keydown.enter.prevent="toggleFailedGrabSort('time')" @keydown.space.prevent="toggleFailedGrabSort('time')">
+                            Time <SortIcon :active="failedGrabSortBy == 'time'" :order="failedGrabSortOrder" />
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(entry, index) in pagedFailedGrabs" :key="index">
+                        <td data-title="PID">{{ entry.pid }}</td>
+                        <td class="text">{{ entry.nzbName }}</td>
+                        <td class="text">{{ entry.error }}</td>
+                        <td data-title="App">{{ appName(entry.appId) }}</td>
+                        <td data-title="Time">{{ formatDate(entry.time) }}</td>
+                    </tr>
+                    <tr v-if="sortedFailedGrabs.length == 0">
+                        <td colspan="5"><EmptyState icon="circle-check" title="No failed grabs" /></td>
+                    </tr>
+                </tbody>
+            </table>
+            <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
+        </template>
     </div>
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useSocketEvents } from '@/lib/useSocketEvents';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
-    formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle,
+    formatWhen, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle,
 } from '@/lib/utils';
 
 // Cards on phones (dense tables), tables on wide screens; either can be chosen and is remembered.
@@ -302,7 +318,8 @@ const failedGrabHistory = ref([]);
 const apps = ref([]);
 
 
-const socket = inject('socket');
+const loading = ref(true);
+const loadError = ref(false);
 
 function detailsFor(pid) {
     return details[pid];
@@ -339,18 +356,48 @@ function appName(appId) {
     return apps.value.find(({ id }) => id == appId)?.name ?? '';
 }
 
-// Searches don't record a type of their own: it is the type the results share (none when they are
-// mixed or unknown), or TV when the search named a season/episode.
-function searchType(entry) {
-    if (entry.type) return entry.type;
-    if (entry.series != null || entry.episode != null) return 'TV';
-    return '';
+// Every type the results cover (TV, Movie, Radio), so mixed and combined searches show them all. With no
+// results to go by: Radio for a BBC Sounds search, or TV when the search named a season/episode.
+const typeLabels = { TV: 'TV', MOVIE: 'Movie', RADIO: 'Radio' };
+function searchTypes(entry) {
+    const found = entry.types?.length ? entry.types : entry.type ? [entry.type] : [];
+    if (found.length) return found.map((type) => typeLabels[type] ?? type);
+    if (entry.kind === 'radio') return ['Radio'];
+    if (entry.series != null || entry.episode != null) return ['TV'];
+    return [];
 }
+const searchType = (entry) => searchTypes(entry).join(', ');
+
+// Who ran the search: Sonarr/Radarr (an app id) or you on the Search page (no app). This page is the indexer
+// log, so the apps' searches are what it lists by default; manual ones are one choice away.
+const searchSource = ref('apps');
+const sourceOptions = computed(() => [
+    { value: 'apps', label: 'Indexer (Sonarr, Radarr, Prowlarr)' },
+    // Only the apps that have actually searched (the apps list also holds download clients and media servers).
+    ...apps.value
+        .filter(({ id }) => searchHistory.value.some(({ appId }) => appId == id))
+        .map(({ id, name }) => ({ value: `app:${id}`, label: name })),
+    { value: 'manual', label: 'Manual (Search page)' },
+    { value: 'all', label: 'All searches' },
+]);
+// Prowlarr and others often arrive with no app attached, so "no app" is not "manual": the entry says who asked.
+// Entries from before that was recorded count as indexer searches unless they are plainly radio ones.
+const isManualSearch = ({ source, kind }) => source === 'manual' || (!source && kind === 'radio');
+const sourceSearches = computed(() => searchHistory.value.filter((entry) => {
+    const source = searchSource.value;
+    if (source === 'all') return true;
+    if (source === 'manual') return isManualSearch(entry);
+    if (source.startsWith('app:')) return entry.appId == source.slice(4);
+    return !isManualSearch(entry);
+}));
+
+// Searches exist but this source has none: say so, rather than that nothing was ever recorded.
+const noSearchesTitle = computed(() => (searchHistory.value.length ? 'No searches from this source' : 'No searches recorded yet'));
 
 const {
     filterText: searchFilterText, sortBy: searchSortBy, sortOrder: searchSortOrder,
     dateFrom: searchDateFrom, dateTo: searchDateTo, sorted: sortedSearches, toggleSort: toggleSearchSort,
-} = useSortFilter(searchHistory, {
+} = useSortFilter(sourceSearches, {
     filterFn: (entry, query) => [
         entry.term == '*' ? 'RSS Feed' : entry.term,
         searchType(entry),
@@ -369,7 +416,7 @@ const {
     storageKey: 'nzbSearchTable',
 });
 
-const searchFiltersActive = computed(() => !!(searchFilterText.value || searchDateFrom.value || searchDateTo.value));
+const searchFiltersActive = computed(() => !!(searchFilterText.value || searchDateFrom.value || searchDateTo.value || searchSource.value !== 'apps'));
 const searchShowFilters = ref(searchFiltersActive.value);
 
 const {
@@ -425,37 +472,45 @@ const {
     page: failedGrabPage, pageSize: failedGrabPageSize, pagedItems: pagedFailedGrabs,
 } = usePagination(sortedFailedGrabs);
 
-onMounted(async () => {
-    await refresh();
+// Named, and attached before the first fetch: a page left before the fetch finished would otherwise attach them after
+// its cleanup had run, and keep them for good. off() with the handler removes only this page's, not any other listener.
+const onSearchHistory = (data) => {
+    searchHistory.value = data.filter(({ term }) => term != '*');
+};
+const onGrabHistory = (data) => {
+    grabHistory.value = data;
+};
+const onFailedGrabHistory = (data) => {
+    failedGrabHistory.value = data;
+};
 
-    socket.value?.on('searchHistory', (data) => {
-        searchHistory.value = data.filter(({ term }) => term != '*');
-    });
-    socket.value?.on('grabHistory', (data) => {
-        grabHistory.value = data;
-    });
-    socket.value?.on('failedGrabHistory', (data) => {
-        failedGrabHistory.value = data;
-    });
-});
+useSocketEvents({ searchHistory: onSearchHistory, grabHistory: onGrabHistory, failedGrabHistory: onFailedGrabHistory });
 
-onBeforeUnmount(() => {
-    socket.value?.off('searchHistory');
-    socket.value?.off('grabHistory');
-    socket.value?.off('failedGrabHistory');
-});
+onMounted(refresh);
 
 async function refresh() {
-    const [searches, grabs, failedGrabs, appList] = await Promise.all([
-        ipFetch('json-api/stats/searchHistory?filterRss=true&summary=true'),
-        ipFetch('json-api/stats/grabHistory'),
-        ipFetch('json-api/stats/failedGrabHistory'),
-        ipFetch('json-api/apps'),
-    ]);
-    searchHistory.value = searches.data;
-    grabHistory.value = grabs.data;
-    failedGrabHistory.value = failedGrabs.data;
-    apps.value = appList.data;
+    loading.value = true;
+    loadError.value = false;
+    try {
+        const [searches, grabs, failedGrabs, appList] = await Promise.all([
+            ipFetch('json-api/stats/searchHistory?filterRss=true&summary=true'),
+            ipFetch('json-api/stats/grabHistory'),
+            ipFetch('json-api/stats/failedGrabHistory'),
+            ipFetch('json-api/apps'),
+        ]);
+        if (!searches.ok || !grabs.ok || !failedGrabs.ok) {
+            loadError.value = true;
+            return;
+        }
+        searchHistory.value = searches.data;
+        grabHistory.value = grabs.data;
+        failedGrabHistory.value = failedGrabs.data;
+        if (appList.ok) apps.value = appList.data;
+    } catch {
+        loadError.value = true;
+    } finally {
+        loading.value = false;
+    }
 }
 
 // Returned results out of everything the search found, e.g. 45/60 (60+ when the list was capped).
@@ -468,13 +523,20 @@ function resultsLabel(entry) {
     return `${entry.results}/${entry.results + entry.filteredOut}${entry.truncated ? '+' : ''}`;
 }
 
-function formatDate(time) {
-    if (!time) return '';
-    return formatDateTimeWithMillis(time);
+// Hover text explaining the "+" (undefined when there is nothing to explain).
+function resultsTitle(entry) {
+    if (!entry.filteredOut || !entry.truncated) return undefined;
+    return entry.truncatedBy == 'trace'
+        ? 'The total is a minimum: only the first candidates are counted'
+        : 'The total is a minimum: BBC returns at most 24 hits per search, so more matches may exist. Try a more specific search';
 }
 
+const formatDate = formatWhen;
+
 async function showResults(entry) {
-    const { items, trace } = (await ipFetch(`json-api/stats/searchHistory/detail?term=${encodeURIComponent(entry.term)}&time=${entry.time}`)).data;
+    const detail = await ipFetch(`json-api/stats/searchHistory/detail?term=${encodeURIComponent(entry.term)}&time=${entry.time}`);
+    if (!detail.ok) return;
+    const { items, trace } = detail.data;
     const resultsModal = useModal({
         component: SearchResultsDialog,
         attrs: {
@@ -495,7 +557,7 @@ const clearFailedGrabs = async () => {
 };
 
 const clearSearches = async () => {
-    if (await dialogService.confirm('Clear Recent Searches', 'Are you sure you want to clear the recent searches log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
+    if (await dialogService.confirm('Clear Searches', 'Are you sure you want to clear the search log? This includes searches made on the Search page.', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/searchHistory', 'DELETE');
         searchHistory.value = [];
         searchPage.value = 1;

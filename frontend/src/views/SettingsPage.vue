@@ -1,63 +1,70 @@
 <template>
-    <div class="inner-content">
-        <PageHeader title="Settings" icon="gears" />
-        <SettingsPageToolbar
-            inline-filters
-            filters-last
-            :save-enabled="saveEnabled"
-            :icons="['save', 'advanced']"
-            :advanced-on="showAdvanced"
-            @save="saveConfig"
-            @toggle-advanced="toggleAdvanced"
-        >
-            <template v-if="filterable && !loading" #filters>
-                <input
-                    v-model="filterText"
-                    type="search"
-                    class="tableFilter"
-                    placeholder="Filter settings on this tab"
-                    aria-label="Filter settings on this tab"
-                    @keydown.esc="filterText = ''"
-                />
-            </template>
-        </SettingsPageToolbar>
-    </div>
-    <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
-    <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
-        <GeneralSettingsTab v-if="activeTab == 'general'" :true-or-false="trueOrFalse" @generate-api-key="generateApiKey" />
-        <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
-        <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />
-        <MediaManagementSettingsTab
-            v-if="activeTab == 'mediaManagement'"
-            :quality-profiles="qualityProfiles"
-            :version-profiles="versionProfiles"
-            :output-formats="outputFormats"
-            :true-or-false="trueOrFalse"
-            :nfo-write-modes="nfoWriteModes"
-            :media-modes="mediaModes"
-        />
-        <DownloadClientSettingsTab v-if="activeTab == 'downloadClient'" :download-clients="downloadClients" />
-        <StreamingSettingsTab
-            v-if="activeTab == 'streaming'"
-            :stream-modes="streamModes"
-            :stream-clients="streamClients"
-            @generate-stream-key="generateStreamKey"
-        />
-        <LiveTvSettingsTab v-if="activeTab == 'liveTv'" @generate-stream-key="generateStreamKey" />
-        <AuthenticationSettingsTab
-            v-if="activeTab == 'authentication'"
-            :auth-types="authTypes"
-            :oidc-tested="oidcTested"
-            :oidc-callback-tooltip="oidcCallbackTooltip"
-            @test-oidc="testOIDC"
-        />
-        <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
-        <div v-if="filterText.trim() && !filterMatches" class="settingsFilterEmpty">
-            No settings on this tab match "{{ filterText.trim() }}".
+    <div class="settingsPage">
+        <div class="inner-content">
+            <PageHeader title="Settings" icon="gears" />
+            <SettingsPageToolbar
+                inline-filters
+                filters-last
+                :save-enabled="saveEnabled"
+                :icons="['save', 'advanced']"
+                :advanced-on="showAdvanced"
+                @save="saveConfig"
+                @toggle-advanced="toggleAdvanced"
+            >
+                <template v-if="filterable && !loading" #filters>
+                    <input
+                        v-model="filterText"
+                        type="search"
+                        class="tableFilter"
+                        placeholder="Filter settings on this tab"
+                        aria-label="Filter settings on this tab"
+                        @keydown.esc="filterText = ''"
+                    />
+                </template>
+            </SettingsPageToolbar>
         </div>
+        <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
+        <ErrorState v-if="loadError" class="inner-content" message="Could not load the settings." @retry="loadSettings" />
+        <div v-else-if="!loading" ref="settingsBody" class="inner-content settingsBody" role="tabpanel" :aria-labelledby="`settingsTab-${activeTab}`">
+            <GeneralSettingsTab v-if="activeTab == 'general'" :true-or-false="trueOrFalse" @generate-api-key="generateApiKey" />
+            <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
+            <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />
+            <MediaManagementSettingsTab
+                v-if="activeTab == 'mediaManagement'"
+                :true-or-false="trueOrFalse"
+                :nfo-write-modes="nfoWriteModes"
+                :media-modes="mediaModes"
+            />
+            <DownloadClientSettingsTab
+                v-if="activeTab == 'downloadClient'"
+                :download-clients="downloadClients"
+                :quality-profiles="qualityProfiles"
+                :version-profiles="versionProfiles"
+                :output-formats="outputFormats"
+                :true-or-false="trueOrFalse"
+            />
+            <StreamingSettingsTab
+                v-if="activeTab == 'streaming'"
+                :stream-modes="streamModes"
+                :stream-clients="streamClients"
+                @generate-stream-key="generateStreamKey"
+            />
+            <LiveTvSettingsTab v-if="activeTab == 'liveTv'" @generate-stream-key="generateStreamKey" />
+            <AuthenticationSettingsTab
+                v-if="activeTab == 'authentication'"
+                :auth-types="authTypes"
+                :oidc-tested="oidcTested"
+                :oidc-callback-tooltip="oidcCallbackTooltip"
+                @test-oidc="testOIDC"
+            />
+            <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
+            <div v-if="filterText.trim() && !filterMatches" class="settingsFilterEmpty">
+                No settings on this tab match "{{ filterText.trim() }}".
+            </div>
+        </div>
+        <SettingsSaveBar :count="tabChangeCount" :saving="loading" @save="saveConfig" @discard="discardChanges" />
+        <LoadingIndicator v-if="loading" />
     </div>
-    <SettingsSaveBar :count="tabChangeCount" :saving="loading" @save="saveConfig" @discard="discardChanges" />
-    <LoadingIndicator v-if="loading" />
 </template>
 
 <script setup>
@@ -66,6 +73,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, w
 import { useModal } from 'vue-final-modal';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -91,6 +99,7 @@ import { getHost } from '@/lib/utils';
 const loading = ref(false);
 let originalApiKey = undefined;
 let originalUhdFeeds = undefined;
+let originalRadio = undefined;
 
 const config = ref({});
 // Whether the advanced settings are showing. Kept in this browser, so it survives leaving the page (the sidebar, the
@@ -110,11 +119,11 @@ const refreshGlobalSettings = inject('refreshGlobalSettings');
 const tabs = [
     { key: 'general', label: 'General', icon: 'sliders' },
     { key: 'search', label: 'Search', icon: 'magnifying-glass' },
-    { key: 'appearance', label: 'Appearance', icon: 'palette' },
+    { key: 'downloadClient', label: 'Downloads', icon: 'download' },
     { key: 'mediaManagement', label: 'Media Management', icon: 'folder-open' },
-    { key: 'downloadClient', label: 'Download Client', icon: 'download' },
     { key: 'streaming', label: 'Streaming', icon: 'tower-broadcast' },
-    { key: 'liveTv', label: 'Live TV', icon: 'tv' },
+    { key: 'liveTv', label: 'Live Channels', icon: 'tv' },
+    { key: 'appearance', label: 'Appearance', icon: 'palette' },
     { key: 'authentication', label: 'Authentication', icon: 'shield-halved' },
     { key: 'maintenance', label: 'Maintenance', icon: 'wrench' },
 ];
@@ -128,29 +137,35 @@ const activeTab = ref(initialTab ?? 'general');
 // the tabs whose keys differ from what was last loaded or saved. STREAM_BASE_URL and STREAM_KEY are
 // shared by Streaming and Live TV.
 const TAB_KEYS = {
-    general: ['API_KEY', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH'],
+    general: ['API_KEY', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH', 'SOUNDS_ENABLED', 'RADIO_PODCASTS', 'RADIO_ATOZ', 'RADIO_ATOZ_HIDE_EMPTY'],
     search: [
         'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
         'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH',
         'MANUAL_NATIVE_SEARCH_ENGINE', 'MANUAL_SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
-        'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES',
+        'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES', 'RADIO_SEARCH_MATCH_ALL_WORDS', 'RADIO_SEARCH_RANK_BY_TITLE',
+        'RADIO_SEARCH_SCOPE', 'RADIO_SEARCH_MP3_ONLY', 'RADIO_SEARCH_COLLECTION_NAMES', 'RADIO_SEARCH_EXPAND_COLLECTIONS', 'RADIO_SEARCH_NETWORKS', 'RADIO_SEARCH_MAX_RESULTS', 'SEARCH_COMBINED',
     ],
-    appearance: ['BROWSE_SHOW_COLLECTIONS', 'BROWSE_COLLECTION_SOURCES','UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES'],
+    appearance: ['BROWSE_SHOW_COLLECTIONS', 'BROWSE_COLLECTION_SOURCES', 'RADIO_THUMBNAIL_STYLE', 'UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG'],
     mediaManagement: [
-        'DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'LIVE_STRM_DIR', 'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES',
-        'EXTRA_VERSIONS', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'OUTPUT_FORMAT', 'DOWNLOAD_SUBTITLES',
-        'MEDIA_MODE', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON',
+        'DOWNLOAD_DIR', 'COMPLETE_DIR', 'MOVIE_COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'LIVE_STRM_DIR', 'SOUNDS_DIR', 'LIBRARY_FOLDER_STRUCTURE', 'RADIO_FOLDER_STRUCTURE',
+        'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'RADIO_FILENAME_TEMPLATE', 'SPECIALS_AS_MOVIES', 'AIRDATE_NUMBERING',
+        'MEDIA_MODE', 'RADIO_MEDIA_MODE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON',
+        'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'STRM_SECURE_ACTION',
     ],
-    downloadClient: ['ACTIVE_LIMIT', 'DOWNLOAD_CLIENT', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'DOWNLOAD_ASK_VERSION', 'DOWNLOAD_DEFAULT_VERSION'],
+    downloadClient: [
+        'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES', 'EXTRA_VERSIONS', 'RELEASE_LANGUAGE', 'DOWNLOAD_ASK_VERSION', 'DOWNLOAD_DEFAULT_VERSION',
+        'DOWNLOAD_CLIENT', 'ACTIVE_LIMIT', 'RADIO_ACTIVE_LIMIT', 'OUTPUT_FORMAT', 'DOWNLOAD_SUBTITLES', 'DOWNLOAD_CHAPTERS', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'ARCHIVE_ENABLED',
+    ],
     streaming: [
         'STREAM_BASE_URL', 'STREAM_KEY', 'STREAM_CLIENT', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE',
-        'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_MODE', 'STREAM_CACHE_DIR', 'PLAY_ASK_VERSION', 'PLAY_DEFAULT_VERSION', 'STRM_WATCHDOG_ENABLED',
+        'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_TRACE', 'STREAM_PREFETCH_OPEN_RANGE', 'STREAM_MODE', 'STREAM_CACHE_DIR', 'PLAY_ASK_VERSION', 'PLAY_DEFAULT_VERSION', 'STRM_WATCHDOG_ENABLED',
         'STRM_WATCHDOG_SOURCES', 'STRM_WATCHDOG_ACTION', 'STRM_WATCHDOG_PATH_MAP', 'STRM_WATCHDOG_ARR_ACTION',
         'STRM_WATCHDOG_CONCURRENCY', 'STRM_WATCHDOG_FAIL_THRESHOLD', 'STRM_WATCHDOG_STRIKES', 'STRM_WATCHDOG_WEBHOOK_URL',
+        'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES',
     ],
     liveTv: [
         'LIVE_TV_ENABLED', 'STREAM_BASE_URL', 'STREAM_KEY', 'LIVE_TV_EPG_OFFSET', 'LIVE_TV_LOGO_SHAPE',
-        'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD',
+        'LIVE_RADIO', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_FROM_START',
     ],
     authentication: [
         'AUTH_TYPE', 'AUTH_USERNAME', 'AUTH_PASSWORD', 'OIDC_CONFIG_URL', 'OIDC_CALLBACK_HOST', 'OIDC_CLIENT_ID',
@@ -391,25 +406,54 @@ const oidcCallbackTooltip = computed(() => {
 
 const oidcTested = ref(false);
 let oidcChannel;
+let stopConfigWatch;
+let unmounted = false;
+onBeforeUnmount(() => {
+    unmounted = true;
+    stopConfigWatch?.();
+    oidcChannel?.close();
+});
 
-onMounted(async () => {
-    const [configResponse, qpResponse, vpResponse] = await Promise.all([
-        ipFetch('json-api/config'),
-        ipFetch('json-api/config/qualityProfiles'),
-        ipFetch('json-api/config/versionProfiles'),
-    ]);
+const loadError = ref(false);
+
+// Reads the config and the two profile lists; any failed request leaves an error with a retry instead of a half-drawn page.
+const loadSettings = async () => {
+    loadError.value = false;
+    let responses;
+    try {
+        responses = await Promise.all([
+            ipFetch('json-api/config'),
+            ipFetch('json-api/config/qualityProfiles'),
+            ipFetch('json-api/config/versionProfiles'),
+        ]);
+    } catch {
+        loadError.value = true;
+        return;
+    }
+    const [configResponse, qpResponse, vpResponse] = responses;
+    if (!responses.every(({ ok }) => ok) || !Array.isArray(qpResponse.data) || !Array.isArray(vpResponse.data)) {
+        loadError.value = true;
+        return;
+    }
 
     config.value = configResponse.data;
     original.value = clone(configResponse.data);
     originalApiKey = configResponse.data.API_KEY;
     originalUhdFeeds = configResponse.data.LIVE_UHD_EVENT_FEEDS;
+    originalRadio = configResponse.data.LIVE_RADIO;
     qualityProfiles.value = qpResponse.data.map(({ id, name, quality }) => ({
         key: id,
         value: `${name} (${quality})`,
     }));
     versionProfiles.value = vpResponse.data.map(({ id, name, tag }) => ({ key: id, value: `${name} (${tag})` }));
+};
 
-    watch(
+onMounted(async () => {
+    await loadSettings();
+    // Left during the load: a watcher or channel created now would never be cleaned up.
+    if (unmounted) return;
+
+    stopConfigWatch = watch(
         config,
         () => {
             oidcTested.value = false;
@@ -487,6 +531,20 @@ const saveConfig = async () => {
             return;
         }
     }
+    if (
+        originalRadio === 'true' &&
+        ((tab == 'general' && config.value.SOUNDS_ENABLED !== 'true') || (tab == 'liveTv' && config.value.LIVE_RADIO !== 'true'))
+    ) {
+        if (
+            !(await dialogService.confirm(
+                'Turn Off BBC Radio',
+                'Turn off BBC radio?',
+                'Any stations in your library or Jellyfin Live TV are removed, and their .strm files deleted.'
+            ))
+        ) {
+            return;
+        }
+    }
     loading.value = true;
     {
         const keys = TAB_KEYS[tab].filter((key) => key in config.value);
@@ -534,6 +592,7 @@ const saveConfig = async () => {
     }
     if (tab == 'general') originalApiKey = config.value.API_KEY;
     if (tab == 'liveTv') originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
+    if (tab == 'general' || tab == 'liveTv') originalRadio = config.value.LIVE_RADIO;
 };
 
 const toggleAdvanced = () => {
@@ -614,6 +673,19 @@ const testOIDC = () => {
 </script>
 
 <style lang="less">
+// The page fills the window under the top bar, so the save bar (sticky, last in the page) rests at the bottom of the
+// window on a short tab too, not straight under the last setting.
+.settingsPage {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - var(--navbar-height, 60px));
+    min-height: calc(100dvh - var(--navbar-height, 60px));
+
+    > .settingsBody {
+        flex: 1 0 auto;
+    }
+}
+
 .settingsBody .filteredOut {
     display: none !important;
 }

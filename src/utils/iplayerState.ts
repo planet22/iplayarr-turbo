@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // The JSON blob iPlayer's pages embed as window.__IPLAYER_REDUX_STATE__.
 export function parseIplayerState(html: string): any {
     const match = /__IPLAYER_REDUX_STATE__\s*=\s*(\{.*?\});\s*<\/script>/s.exec(html);

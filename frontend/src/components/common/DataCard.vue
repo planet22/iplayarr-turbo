@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <!--
     Naming follows the conventions used by the neighbouring modules.
     Behaviour here is intentionally conservative.
@@ -40,14 +42,14 @@
     position: relative;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    gap: 8px 10px;
+    gap: @space-2 10px;
     align-items: start;
     padding: 10px;
-    margin-bottom: 8px;
+    margin-bottom: @space-2;
     background-color: @nav-active-background-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
-    font-size: 13px;
+    font-size: @font-size-base;
 
     // Without a poster the body spans the whole card.
     &:not(:has(.dcThumb)) .dcBody {
@@ -76,8 +78,19 @@
     width: var(--dc-thumb-width, 96px);
     aspect-ratio: 16 / 9;
     object-fit: cover;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     display: block;
+}
+
+// Square radio artwork (Radio Thumbnails setting): the box takes the poster's size, the picture sits whole inside it.
+.dcThumb :deep(.radioArtBox) {
+    width: var(--dc-thumb-width, 96px);
+    aspect-ratio: 16 / 9;
+    border-radius: @radius-sm;
+}
+
+.dcThumb :deep(.radioArtBox > img) {
+    object-fit: contain;
 }
 
 .dcThumb :deep(img.channelLogo) {
@@ -109,7 +122,7 @@
 }
 
 .dcSubtitle {
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
     overflow-wrap: anywhere;
 }
@@ -118,8 +131,8 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px 6px;
-    margin-top: 4px;
+    gap: @space-1 6px;
+    margin-top: @space-1;
 }
 
 .dcMain,
@@ -138,7 +151,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 </style>

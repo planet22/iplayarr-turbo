@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
         <SkeletonLoader v-if="loading" variant="rails" />
@@ -6,7 +8,7 @@
             <BrowseHeroCarousel v-if="heroItems.length" :items="heroItems" />
             <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
             <InfoBar v-if="rails.length === 0">
-                Nothing to show yet. Check that the server can reach BBC iPlayer (UK access is required).
+                {{ isRadio ? 'Nothing to show yet. Check that the server can reach BBC Sounds.' : 'Nothing to show yet. Check that the server can reach BBC iPlayer (UK access is required).' }}
             </InfoBar>
         </template>
     </div>
@@ -21,7 +23,10 @@ import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import { browseFetch } from '@/lib/browse';
+import { useMediaMode } from '@/lib/mediaMode';
 import { shuffled } from '@/lib/utils';
+
+const { isRadio } = useMediaMode();
 
 const rails = ref([]);
 const loading = ref(true);

@@ -2,28 +2,44 @@ import axios, { Axios, AxiosResponse } from 'axios';
 
 import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
-import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { IPlayerContributor, IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { expiryOf } from '../utils/availability';
+import { setBounded } from '../utils/boundedMap';
+import { IblArtwork, IblEpisodeExtras, parseIblArtwork, parseIblEpisodeExtras, parseVersionExtras, VersionExtras } from '../utils/iblEpisode';
 import { withRetry } from '../utils/retry';
+import { markSearchIncomplete } from '../utils/searchCompleteness';
 import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
 import episodeDetailsCache from './episodeDetailsCache';
 
+// More than enough for the programmes actually asked for; stops a run of made-up pids growing the map for ever.
+const MAX_NOT_FOUND = 5000;
+
 class IPlayerDetailsService {
-    metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 86400, { label: 'Programme metadata', description: 'BBC programme details per PID (title, synopsis, parents).' });
+    metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 3 * 86400, { label: 'Programme metadata', description: 'BBC programme details per PID (title, synopsis, parents).' });
     // IBL episode-list pages per programme/series pid. Short TTL: new episodes must show up, and the
     // hourly subscription check relies on seeing them.
     episodesCache: DbCacheService<IPlayerEpisodeMetadata[]> = new DbCacheService('ibl_episodes', 1800, { label: 'Episode lists', description: 'Pages of episodes per brand/series. Keep short so new episodes appear and subscriptions see them.' });
+    castCache: DbCacheService<IPlayerContributor[]> = new DbCacheService('cast_cache', 7 * 86400, { label: 'Cast and crew', description: 'Cast and crew per episode version, for the .nfo files.' });
+    versionExtrasCache: DbCacheService<VersionExtras> = new DbCacheService('version_extras', 24 * 3600, { label: 'Broadcasts and tracklists', description: 'Transmissions and tracklist per episode version, for the debug page.' });
+    iblExtrasCache: DbCacheService<IblEpisodeExtras> = new DbCacheService('ibl_episode_extras', 7 * 86400, { label: 'Episode extras', description: 'Editorial tagline and running time per episode from iPlayer\'s listing API, for the .nfo files.' });
+    iblArtworkCache: DbCacheService<IblArtwork> = new DbCacheService('ibl_artwork', 7 * 86400, { label: 'Episode artwork', description: 'Addresses of an episode\'s pictures and its show\'s logo from iPlayer\'s listing API, for the Jellyfin images.' });
     // ids BBC answered 404 for (e.g. live channel ids like bbc_two_england, which several pages
     // ask details for) mapped to when to try again - otherwise every request repeats the BBC round trip.
     notFound: Map<string, number> = new Map();
     static readonly NOT_FOUND_TTL_MS = 60 * 60 * 1000;
 
-    async detailsForEpisodeMetadata(episodes: IPlayerEpisodeMetadata[]): Promise<IPlayerDetails[]> {
+    // brandPid: when the episodes were listed from a brand, its pid - saves each episode climbing to it.
+    async detailsForEpisodeMetadata(episodes: IPlayerEpisodeMetadata[], brandPid?: string): Promise<IPlayerDetails[]> {
         const results = await Promise.allSettled(
             episodes.map(async (episode) => {
-                const details = await this.episodeDetails(episode.id);
+                const details = await this.episodeDetails(episode.id, axios, brandPid);
                 details.firstBroadcast = episode.release_date_time;
+                // Straight from iBL's own record of the episode, so never part of what episodeDetails caches.
+                const availableUntil = expiryOf(episode);
+                if (availableUntil) details.availableUntil = availableUntil;
+                if (episode.guidance === true) details.guidance = true;
                 return details;
             })
         );
@@ -43,7 +59,7 @@ class IPlayerDetailsService {
             .map((result: PromiseFulfilledResult<IPlayerDetails>) => result.value);
     }
 
-    async episodeDetails(pid: string, axiosInstance: Axios = axios): Promise<IPlayerDetails> {
+    async episodeDetails(pid: string, axiosInstance: Axios = axios, knownBrandPid?: string): Promise<IPlayerDetails> {
         const cached = await episodeDetailsCache.get(pid);
         if (cached) return cached;
         const { programme } = await this.getMetadata(pid, axiosInstance);
@@ -57,7 +73,7 @@ class IPlayerDetailsService {
             ? undefined
             : parent.type === 'brand'
                 ? parent.pid
-                : await this.findBrandForPid(parent.pid).catch(() => {
+                : knownBrandPid ?? await this.findBrandForPid(parent.pid).catch(() => {
                     brandLookupFailed = true;
                     return undefined;
                 });
@@ -68,6 +84,7 @@ class IPlayerDetailsService {
             episodeTitle,
             series,
             channel: programme.ownership?.service?.title,
+            audioOnly: programme.ownership?.service?.type === 'radio' ? true : undefined,
             category: programme.categories?.length ? programme.categories[0].title : '',
             description: programme.medium_synopsis,
             runtime: programme.versions?.length ? programme.versions[0].duration / 60 : 0,
@@ -82,6 +99,20 @@ class IPlayerDetailsService {
         // A failed brand climb is usually transient, so don't keep that gap for hours.
         if (!brandLookupFailed) await episodeDetailsCache.set(pid, details).catch(() => undefined);
         return details;
+    }
+
+    // A BBC Sounds id that iPlayarr has not listed lately: BBC's programme page still knows it, as an episode or as a version (a
+    // playable file) of one, so the details come from the episode it belongs to. Undefined when BBC has nothing for it.
+    async radioDetails(pid: string): Promise<IPlayerDetails | undefined> {
+        try {
+            const { data } = await axios.get(`https://www.bbc.co.uk/programmes/${pid}.json`);
+            const episodePid: string | undefined = data?.programme ? pid : data?.version?.parent?.programme?.pid;
+            if (!episodePid) return undefined;
+            const details = await this.episodeDetails(episodePid);
+            return { ...details, pid, audioOnly: true, type: 'RADIO' as unknown as IPlayerDetails['type'], category: details.category || 'Radio' };
+        } catch {
+            return undefined;
+        }
     }
 
     async getMetadata(pid: string, axiosInstance: Axios = axios): Promise<IPlayerMetadataResponse> {
@@ -110,10 +141,71 @@ class IPlayerDetailsService {
             return fresh;
         } catch (error) {
             if (axios.isAxiosError(error) && error.response?.status === 404) {
-                this.notFound.set(pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS);
+                setBounded(this.notFound, pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS, MAX_NOT_FOUND);
             }
             console.error(`Error fetching metadata for PID ${pid}: ${error}`);
             throw error;
+        }
+    }
+
+    // Cast and crew of an episode, from its original version's programme page. Best-effort for the .nfo files:
+    // any failure (or a version without credits) is an empty list.
+    async getContributors(pid: string): Promise<IPlayerContributor[]> {
+        try {
+            const { programme } = await this.getMetadata(pid);
+            const version = programme.versions?.find((v) => v.canonical === 1) ?? programme.versions?.[0];
+            if (!version) return [];
+            return await this.castCache.getOr(version.pid, async () => {
+                const response: { data: { version?: { contributors?: IPlayerContributor[] } } } = await axios.get(`https://www.bbc.co.uk/programmes/${version.pid}.json`);
+                return (response.data?.version?.contributors ?? []).filter((c) => typeof c?.name === 'string' && c.name !== '');
+            });
+        } catch {
+            return [];
+        }
+    }
+
+    // Transmissions (regional HD duplicates left out) and the tracklist of an episode's original version, from its programme page.
+    // For the debug page; best-effort, an empty answer on any failure.
+    async getVersionExtras(pid: string): Promise<VersionExtras> {
+        try {
+            const { programme } = await this.getMetadata(pid);
+            const version = programme.versions?.find((v) => v.canonical === 1) ?? programme.versions?.[0];
+            if (!version) return { broadcasts: [], tracklist: [] };
+            return await this.versionExtrasCache.getOr(version.pid, async () => {
+                const response: { data: { version?: { broadcasts?: any[]; segment_events?: any[] } } } = await axios.get(`https://www.bbc.co.uk/programmes/${version.pid}.json`);
+                return parseVersionExtras(response.data?.version);
+            });
+        } catch {
+            return { broadcasts: [], tracklist: [] };
+        }
+    }
+
+    // The editorial tagline and running time iPlayer's listing API gives an episode, for the .nfo fallbacks. Best-effort:
+    // any failure is "nothing known" (and is not cached, so the next download asks again).
+    async getIblExtras(pid: string): Promise<IblEpisodeExtras> {
+        try {
+            return await this.iblExtrasCache.getOr(pid, async () => {
+                const response: { data: { episodes?: unknown[] } } = await axios.get(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+                return parseIblEpisodeExtras(response.data?.episodes?.[0]);
+            });
+        } catch {
+            return {};
+        }
+    }
+
+    // The pictures iPlayer lists for an episode, plus its show's transparent logo (read from the show's own entry, which
+    // is skipped when the episode is the show). Best-effort: any failure of the episode lookup is "nothing known" and is
+    // not cached; a failed show lookup only costs the logo.
+    async getIblArtwork(pid: string): Promise<IblArtwork> {
+        try {
+            return await this.iblArtworkCache.getOr(pid, async () => {
+                const episode = (await axios.get(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`)).data?.episodes?.[0];
+                const show: string | undefined = episode?.tleo_id;
+                const brand = show && show !== pid ? (await axios.get(`https://ibl.api.bbc.co.uk/ibl/v1/programmes/${show}?rights=web`).catch(() => undefined))?.data?.programmes?.[0] : undefined;
+                return parseIblArtwork(episode, brand);
+            });
+        } catch {
+            return {};
         }
     }
 
@@ -143,6 +235,7 @@ class IPlayerDetailsService {
             await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
             return elements;
         } catch {
+            markSearchIncomplete();
             return [];
         }
     }

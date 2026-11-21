@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SelectInput
         v-model="config.AUTH_TYPE"
@@ -116,10 +118,10 @@ const emit = defineEmits(['test-oidc']);
     button {
         background-color: @settings-button-background-color;
         border: 1px solid @settings-button-border-color;
-        padding: 6px 16px;
-        font-size: 14px;
+        padding: 6px @space-4;
+        font-size: @font-size-md;
         color: @primary-text-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
 
         &:hover:not(:disabled) {
             border-color: @settings-button-hover-border-color;
@@ -127,7 +129,7 @@ const emit = defineEmits(['test-oidc']);
         }
 
         .test-success {
-            color: @success-color;
+            color: @positive-color;
         }
 
         .test-pending {

@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import { setCustomRegistry } from '../../src/constants/CustomChannels';
+import { setRadioEnabled } from '../../src/constants/RadioChannels';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
     buildChannelColors,
@@ -11,8 +14,10 @@ import browseService, {
     withCaption,
 } from '../../src/service/browseService';
 import categoryDiscoverService from '../../src/service/categoryDiscoverService';
+import configService from '../../src/service/configService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import liveChannelService from '../../src/service/liveChannelService';
+import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { cachedVersionIds } from '../../src/utils/videoVersion';
 
@@ -68,6 +73,12 @@ describe('toBrowseSlot', () => {
         expect(flagged).toMatchObject({ repeat: true, live: true, childrens: true, categories: ['drama'] });
     });
 
+    it('marks a broadcast whose episode iPlayer says is available as on demand', () => {
+        expect(toBrowseSlot(broadcast({ episode: episode('b001', { status: 'available' }) }))?.onDemand).toBe(true);
+        expect(toBrowseSlot(broadcast({ episode: episode('b001', { status: 'unavailable' }) }))?.onDemand).toBeUndefined();
+        expect(toBrowseSlot(broadcast())?.onDemand).toBeUndefined();
+    });
+
     it('ignores categories that are not a list', () => {
         expect(toBrowseSlot(broadcast({ episode: episode('b001', { categories: 'drama' }) }))?.categories).toBeUndefined();
     });
@@ -84,9 +95,13 @@ describe('toBrowseSlot', () => {
 });
 
 describe('toBrowseItem artwork', () => {
-    it('takes the portrait image, or the singular image field, when there is no standard one', () => {
-        expect(toBrowseItem(episode('b001', { images: { portrait: 'https://ichef/ic/{recipe}/p0aaa111.jpg' } }))?.thumbnail).toBe('json-api/thumbnail/p0aaa111.jpg');
+    it('takes the singular image field when there is no standard one', () => {
         expect(toBrowseItem(episode('b001', { image: { standard: 'https://ichef/ic/{recipe}/p0bbb222.jpg' } }))?.thumbnail).toBe('json-api/thumbnail/p0bbb222.jpg');
+    });
+
+    it('never takes the portrait image, which would break the layout', () => {
+        expect(toBrowseItem(episode('b001', { images: { portrait: 'https://ichef/ic/{recipe}/p0aaa111.jpg' } }))?.thumbnail).toBeUndefined();
+        expect(toBrowseItem(episode('b001', { images: { portrait: 'https://ichef/ic/{recipe}/p0aaa111.jpg', standard: 'https://ichef/ic/{recipe}/p0sss000.jpg' } }))?.thumbnail).toBe('json-api/thumbnail/p0sss000.jpg');
     });
 
     it('has no thumbnail when the image url is not a string or has no pid in it', () => {
@@ -156,17 +171,21 @@ describe('iblEpisodeToDetails', () => {
         expect(details).toMatchObject({ episode: undefined, series: undefined, episodeTitle: undefined, channel: undefined, category: '', description: undefined, runtime: 0, firstBroadcast: '2024-02-02T00:00:00Z', thumbnail: undefined });
     });
 
-    it('uses the subtitle as the title when there is no original title, the first version when none is original, and the portrait image', () => {
+    it('uses the subtitle as the title when there is no original title, the first version when none is original, and the standard image', () => {
         const details = iblEpisodeToDetails({
             id: 'b003',
             title: 'T',
             subtitle: 'Plain subtitle',
-            images: { portrait: 'https://ichef/ic/{recipe}/p0ccc333.jpg' },
+            images: { standard: 'https://ichef/ic/{recipe}/p0ccc333.jpg', portrait: 'https://ichef/ic/{recipe}/p0ddd444.jpg' },
             synopses: { small: 'Small' },
             master_brand: { titles: { small: 'BBC One' } },
             versions: [{ kind: 'audio-described', duration: { value: 'PT45M' } }],
         });
         expect(details).toMatchObject({ episodeTitle: 'Plain subtitle', runtime: 45, description: 'Small', channel: 'BBC One', thumbnail: 'json-api/thumbnail/p0ccc333.jpg' });
+    });
+
+    it('has no thumbnail when the episode only has a portrait image', () => {
+        expect(iblEpisodeToDetails({ id: 'b004', title: 'T', images: { portrait: 'https://ichef/ic/{recipe}/p0ddd444.jpg' } }).thumbnail).toBeUndefined();
     });
 });
 
@@ -515,6 +534,48 @@ describe('function coverage extras', () => {
         mockedAxios.get.mockResolvedValue({ data: stateHtml({ navigation: { items } }, icon('bbcone')) });
         const colours = await browseService.channelColors();
         expect(Object.values(colours)).toContainEqual(expect.objectContaining({ bg: '#111111', fg: '#ffffff' }));
+    });
+
+    describe('radio station colours', () => {
+        const radioLogo = '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#003c73"/></svg>';
+        const setUp = (soundsEnabled: string | Error, liveRadio: boolean) => {
+            setRadioEnabled(liveRadio);
+            jest.spyOn(configService, 'getParameter').mockImplementation(async (key) => {
+                if (key !== IplayarrParameter.SOUNDS_ENABLED) return undefined;
+                if (soundsEnabled instanceof Error) throw soundsEnabled;
+                return soundsEnabled;
+            });
+            mockedAxios.get.mockImplementation(async (url: string) => ({
+                data: url.includes('sounds.files.bbci.co.uk') ? radioLogo : stateHtml({ navigation: { items: [] } }, ''),
+            }));
+        };
+        afterEach(() => {
+            setRadioEnabled(false);
+            jest.restoreAllMocks();
+        });
+
+        it('has them while BBC Sounds is on, even with Live Radio off, under both spellings', async () => {
+            setUp('true', false);
+            const colours = await browseService.channelColors();
+            expect(colours.BBCRadio4).toMatchObject({ bg: '#003c73', name: 'BBC Radio 4' });
+            expect(colours.Radio4).toEqual(colours.BBCRadio4);
+            expect(colours.WorldService).toBeDefined();
+        });
+
+        it('has them with Live Radio on and BBC Sounds off', async () => {
+            setUp('false', true);
+            expect((await browseService.channelColors()).Radio4).toBeDefined();
+        });
+
+        it('has none when both are off', async () => {
+            setUp('false', false);
+            expect((await browseService.channelColors()).Radio4).toBeUndefined();
+        });
+
+        it('treats a setting that cannot be read as off, without failing', async () => {
+            setUp(new Error('db down'), false);
+            expect((await browseService.channelColors()).Radio4).toBeUndefined();
+        });
     });
 
     describe('programme when lookups fail', () => {

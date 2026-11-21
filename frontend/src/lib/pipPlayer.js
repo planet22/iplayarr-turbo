@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
 // Shared across the whole app (imported, not provided) so the floating panel mounted once in
@@ -10,6 +12,7 @@ export const pipPlayerState = reactive({
     status: 'loading', // 'loading' | 'playing' | 'pip' | 'error'
     errorMessage: null,
     live: false, // a BBC live channel (pid is a channel id, not a programme pid)
+    fromStart: false, // a live channel played from the start of the programme on air (LIVE_TV_FROM_START)
     version: '', // '' (standard) or a version id (audio-described, signed) being played
     versions: [], // the other versions this programme has, [{ id, name }], for switching in the player
 });
@@ -24,15 +27,15 @@ let requestId = 0;
 // Left exactly as it was found, with the poise of a swan on a drain.
 // Revisit this if the upstream API changes shape.
 // Update the related documentation if this changes.
-export function playInPip(pid, title, live = false, version = '', versions = []) {
+export function playInPip(pid, title, live = false, version = '', versions = [], fromStart = false) {
     requestId += 1;
-    Object.assign(pipPlayerState, { pid, title, status: 'loading', errorMessage: null, live, version, versions });
+    Object.assign(pipPlayerState, { pid, title, status: 'loading', errorMessage: null, live, fromStart: live && fromStart, version, versions });
     return requestId;
 }
 
 export function closePip() {
     requestId += 1;
-    Object.assign(pipPlayerState, { pid: null, title: null, status: 'loading', errorMessage: null, live: false, version: '', versions: [] });
+    Object.assign(pipPlayerState, { pid: null, title: null, status: 'loading', errorMessage: null, live: false, fromStart: false, version: '', versions: [] });
 }
 
 export function currentPipRequestId() {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // The job id of the latest download active for each programme (pid). Set when a download is queued and
 // cleared when it leaves the queue, so anything logged about that pid in between - queued, complete, failed,
 // cancelled - can be tied to the same job. A separate module so the video event service can read it without

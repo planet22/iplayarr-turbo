@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="PageHeader">
         <legend class="PageHeader-title">
@@ -41,7 +43,7 @@ defineProps({
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 4px 12px;
+    gap: @space-1 @space-3;
     border-bottom: 1px solid @primary-text-color;
     margin-bottom: 21px;
 
@@ -59,7 +61,7 @@ defineProps({
     }
 
     .PageHeader-icon {
-        margin-right: 8px;
+        margin-right: @space-2;
         font-size: 0.85em;
     }
 

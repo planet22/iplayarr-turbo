@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import jellyfinService from '../../src/service/jellyfinService';
@@ -68,6 +70,16 @@ describe('jellyfinService', () => {
             const [url, opts] = (axios.get as jest.Mock).mock.calls[0];
             expect(url).toBe('http://j/Items');
             expect(opts.params).toMatchObject({ Recursive: true, Fields: 'Path,MediaSources' });
+        });
+
+        it('reads the series, season and episode number of an episode', async () => {
+            (axios.get as jest.Mock).mockResolvedValue({
+                data: { Items: [{ Path: '/lib/a.mkv', SeriesName: 'The Show', ParentIndexNumber: 2, IndexNumber: 3 }, { Path: '/lib/b.mkv', SeriesName: '', ParentIndexNumber: '2' }] },
+            });
+            expect(await jellyfinService.getItems({ url: 'http://j', api_key: 'k' })).toEqual([
+                { path: '/lib/a.mkv', show: 'The Show', season: 2, episode: 3 },
+                { path: '/lib/b.mkv' },
+            ]);
         });
 
         it('returns an empty list when there are no items', async () => {

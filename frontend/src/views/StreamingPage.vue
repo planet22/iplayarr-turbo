@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="inner-content scroll-x streamingPage">
         <!-- Carries the Back button above the first section (it goes in the page's first toolbar). -->
@@ -20,37 +22,42 @@
                 :client-ip="formatClientIp(session.clientIp)"
                 :started="formatDate(session.startedAt)"
                 :duration="formatDuration(session.startedAt, null)"
-                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :transferred="session.bytesTransferred ? formatBytes(session.bytesTransferred) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
+                :debug="canDebug(session)"
+                :trace="canTrace(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
+                @debug="openDebug(session)"
+                @trace="openTrace(session)"
             />
-            <div v-if="streams.active.length == 0" class="empty">No streams currently playing</div>
+            <LoadingIndicator v-if="!streamsLoaded" :size="28" />
+            <EmptyState v-else-if="streams.active.length == 0" class="empty" icon="tower-broadcast" title="No streams currently playing" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
             <colgroup>
                 <col style="width: 64px" />
-                <col style="width: 170px" />
-                <col style="width: 94px" />
-                <col style="width: 50px" />
+                <col style="width: 204px" />
+                <col style="width: 155px" />
+                <col style="width: 78px" />
                 <col style="width: 50px" />
                 <col style="width: 44px" />
                 <col style="width: 44px" />
                 <col class="hideLg" style="width: 110px" />
-                <col style="width: 76px" />
-                <col style="width: 165px" />
-                <col style="width: 90px" />
+                <col style="width: 94px" />
+                <col style="width: 178px" />
+                <col style="width: 125px" />
                 <col style="width: 150px" />
-                <col style="width: 146px" />
-                <col style="width: 60px" />
+                <col style="width: 180px" />
+                <col style="width: 112px" />
             </colgroup>
             <thead>
                 <tr>
                     <th />
-                    <th>Video</th>
+                    <th>Media</th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
@@ -69,7 +76,8 @@
                 <tr v-for="session in streams.active" :key="session.id">
                     <td>
                         <img
-                            v-if="thumbnailFor(session)"
+v-if="thumbnailFor(session)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :class="{ channelLogo: session.live }"
                             :src="thumbnailFor(session)"
@@ -92,14 +100,16 @@
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
+                        <ReceivedBadge :height="session.receivedHeight" />
                     </td>
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
                         <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                        <div v-if="session.continuesSessionId" class="subtle">Continues earlier stream</div>
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, null) }}</div>
-                        <div class="subtle">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</div>
+                        <div class="subtle">{{ session.bytesTransferred ? formatBytes(session.bytesTransferred) : '' }}</div>
                     </td>
                     <td class="numCol" data-title="Rate">
                         <ThroughputSpark :throughput="session.throughput" :now="now" :bytes-transferred="session.bytesTransferred ?? 0" />
@@ -119,6 +129,14 @@
                     </td>
                     <td class="actionCol">
                         <font-awesome-icon
+                            v-if="canTrace(session)" class="clickable debugAction" :icon="['fas', 'timeline']"
+                            title="Stream trace (request log and timings)" @click="openTrace(session)"
+                        />
+                        <font-awesome-icon
+                            v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
+                            title="Streaming debug" @click="openDebug(session)"
+                        />
+                        <font-awesome-icon
                             class="clickable"
                             :class="{ disabled: stopping.has(session.id) }"
                             :icon="['fas', 'stop']"
@@ -127,15 +145,44 @@
                         />
                     </td>
                 </tr>
-                <tr v-if="streams.active.length == 0">
-                    <td colspan="14" class="empty">No streams currently playing</td>
+                <tr v-if="!streamsLoaded">
+                    <td colspan="14"><LoadingIndicator :size="28" /></td>
+                </tr>
+                <tr v-else-if="streams.active.length == 0">
+                    <td colspan="14"><EmptyState icon="tower-broadcast" title="No streams currently playing" /></td>
                 </tr>
             </tbody>
         </table></div>
 
         <PageHeader title="Stream History" />
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear stream history" @delete-queue-item="clearHistory" />
-        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
+        <!-- The same filter bar as the Queue page (text and date range, behind the filter icon); sort is the column headers, or the sort box on cards. -->
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear stream history"
+            :filters-shown="showHistoryFilters" :filters-active="historyFiltersActive"
+            @delete-queue-item="clearHistory" @toggle-filters="showHistoryFilters = !showHistoryFilters"
+        >
+            <template v-if="showHistoryFilters" #filters>
+                <input v-model="historyFilter" class="tableFilter" type="text" placeholder="Filter history…" aria-label="Filter stream history" />
+                <DateRangeFilter v-model="historyFrom" v-model:model-value-to="historyTo" />
+            </template>
+            <template #actions>
+                <SortControl v-if="cardView" v-model:sort-by="historySortBy" v-model:order="historySortOrder" :options="HISTORY_SORTS" />
+                <button
+                    v-if="traceTools" type="button" class="SettingsPageToolbar-button clickable" title="Import a stream trace file someone sent you" aria-label="Import trace file"
+                    @click="traceFile?.click()"
+                >
+                    <font-awesome-icon :icon="['fas', 'upload']" />
+                </button>
+                <button
+                    v-if="importedCount" type="button" class="SettingsPageToolbar-button clickable" :title="`Delete all ${importedCount} imported trace(s)`"
+                    aria-label="Delete all imported traces" @click="deleteImported"
+                >
+                    <font-awesome-icon :icon="['fas', 'file-circle-xmark']" />
+                </button>
+                <input ref="traceFile" type="file" accept=".json,.gz,application/json,application/gzip" hidden @change="importTrace" />
+            </template>
+        </SettingsPageToolbar>
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
         <div v-if="cardView" class="cardList streamCards">
             <StreamCard
                 v-for="session in pagedHistory"
@@ -149,37 +196,42 @@
                 :client-ip="formatClientIp(session.clientIp)"
                 :started="formatDate(session.startedAt)"
                 :duration="formatDuration(session.startedAt, session.endedAt)"
-                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :transferred="session.bytesTransferred ? formatBytes(session.bytesTransferred) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
+                :debug="canDebug(session)"
+                :trace="canTrace(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
+                @debug="openDebug(session)"
+                @trace="openTrace(session)"
             />
-            <div v-if="reversedHistory.length == 0" class="empty">No streaming history yet</div>
+            <LoadingIndicator v-if="!streamsLoaded" :size="28" />
+            <EmptyState v-else-if="sortedHistory.length == 0" class="empty" icon="clock-rotate-left" :title="historyEmptyText" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
             <colgroup>
                 <col style="width: 64px" />
-                <col style="width: 170px" />
-                <col style="width: 94px" />
-                <col style="width: 50px" />
+                <col style="width: 204px" />
+                <col style="width: 155px" />
+                <col style="width: 78px" />
                 <col style="width: 50px" />
                 <col style="width: 44px" />
                 <col style="width: 44px" />
                 <col class="hideLg" style="width: 110px" />
-                <col style="width: 76px" />
-                <col style="width: 165px" />
-                <col style="width: 90px" />
+                <col style="width: 94px" />
+                <col style="width: 178px" />
+                <col style="width: 125px" />
                 <col style="width: 150px" />
-                <col style="width: 146px" />
-                <col style="width: 60px" />
+                <col style="width: 180px" />
+                <col style="width: 112px" />
             </colgroup>
             <thead>
                 <tr>
                     <th />
-                    <th>Video</th>
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'title', historySortOrder)" @click="toggleHistorySort('title')" @keydown.enter.prevent="toggleHistorySort('title')" @keydown.space.prevent="toggleHistorySort('title')">Media <SortIcon :active="historySortBy == 'title'" :order="historySortOrder" /></th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
@@ -187,8 +239,8 @@
                     <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
                     <th class="chipCol hideLg" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
-                    <th>Client / Started</th>
-                    <th class="numCol">Duration / Size</th>
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'started', historySortOrder)" @click="toggleHistorySort('started')" @keydown.enter.prevent="toggleHistorySort('started')" @keydown.space.prevent="toggleHistorySort('started')">Client / Started <SortIcon :active="historySortBy == 'started'" :order="historySortOrder" /></th>
+                    <th class="numCol sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'duration', historySortOrder)" @click="toggleHistorySort('duration')" @keydown.enter.prevent="toggleHistorySort('duration')" @keydown.space.prevent="toggleHistorySort('duration')">Duration / Size <SortIcon :active="historySortBy == 'duration'" :order="historySortOrder" /></th>
                     <th class="numCol" title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
                     <th />
@@ -198,7 +250,8 @@
                 <tr v-for="session in pagedHistory" :key="session.id">
                     <td>
                         <img
-                            v-if="thumbnailFor(session)"
+v-if="thumbnailFor(session)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :class="{ channelLogo: session.live }"
                             :src="thumbnailFor(session)"
@@ -221,14 +274,17 @@
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
+                        <ReceivedBadge :height="session.receivedHeight" />
                     </td>
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
                         <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                        <div v-if="session.continuesSessionId" class="subtle">Continues earlier stream</div>
+                        <div v-if="session.imported" class="subtle"><span class="pill grey">imported</span></div>
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, session.endedAt) }}</div>
-                        <div class="subtle">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</div>
+                        <div class="subtle">{{ session.bytesTransferred ? formatBytes(session.bytesTransferred) : '' }}</div>
                     </td>
                     <td class="numCol" data-title="Rate">
                         <ThroughputSpark
@@ -252,35 +308,58 @@
                             @click="openSegments(session)"
                         />
                     </td>
-                    <td />
+                    <td class="actionCol">
+                        <font-awesome-icon
+                            v-if="canTrace(session)" class="clickable debugAction" :icon="['fas', 'timeline']"
+                            title="Stream trace: every request, with timings" @click="openTrace(session)"
+                        />
+                        <font-awesome-icon
+                            v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
+                            title="Streaming debug" @click="openDebug(session)"
+                        />
+                    </td>
                 </tr>
-                <tr v-if="reversedHistory.length == 0">
-                    <td colspan="14" class="empty">No streaming history yet</td>
+                <tr v-if="!streamsLoaded">
+                    <td colspan="14"><LoadingIndicator :size="28" /></td>
+                </tr>
+                <tr v-else-if="sortedHistory.length == 0">
+                    <td colspan="14"><EmptyState icon="clock-rotate-left" :title="historyEmptyText" /></td>
                 </tr>
             </tbody>
         </table></div>
-        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
     </div>
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
+import { useRouter } from 'vue-router';
 
+import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortControl from '@/components/common/SortControl.vue';
+import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
-import { ipFetch } from '@/lib/ipFetch';
+import { ipFetch, ipUpload } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
+import { useServerNow } from '@/lib/useServerNow';
+import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
-formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
+    formatBytes, formatClientIp, formatWhen, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
+import ReceivedBadge from '../components/streaming/ReceivedBadge.vue';
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
 import SettingsChips from '../components/streaming/SettingsChips.vue';
@@ -288,6 +367,8 @@ import StreamCard from '../components/streaming/StreamCard.vue';
 import ThroughputSpark from '../components/streaming/ThroughputSpark.vue';
 
 const streams = inject('streams');
+// False until the server's first full push has arrived (the lists are empty before that, which is not "no streams"). Defaults to loaded when not provided.
+const streamsLoaded = inject('streamsLoaded', ref(true));
 
 // Cards on phones (16 columns do not fit), table on wide screens; either can be chosen and is remembered.
 // Shared by more than one caller; avoid narrowing the behaviour.
@@ -302,11 +383,58 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.streamsViewMode', {
 const cardView = computed(() => viewMode.value === 'cards');
 
 const stopping = ref(new Set());
+// Each row's button to the Streaming debug page: shown with Show Extended Debug, for a programme or a live channel.
+const router = useRouter();
+const globalSettings = inject('globalSettings');
+const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
+// The stream trace (every request of this one stream, with timings) is for any session, once Stream Trace is on in Settings (Streaming, Advanced).
+// Importing a trace file is for people debugging: it shows with Stream Trace or Show Extended Debug on (an imported trace, once there, is always shown and can always be deleted).
+const traceTools = computed(() => globalSettings.value?.STREAM_TRACE === 'true' || globalSettings.value?.UI_EXTENDED_DEBUG === 'true');
+// An imported trace can always be opened: it is data, not something being recorded.
+const canTrace = (session) => session?.imported === true || globalSettings.value?.STREAM_TRACE === 'true';
+const openTrace = (session) => router.push(`/streaming/session/${session.id}`);
+const openDebug = (session) => router.push(session.radio ? { path: `/streaming/debug/${session.pid}`, query: { kind: 'radio' } } : `/streaming/debug/${session.pid}`);
 
+// Declared before useSortFilter below: a remembered filter runs modeLabel during setup, and it needs this to exist already.
+const clientLabels = {
+    GET_IPLAYER: 'iplayer',
+    YTDLP: 'ytdlp',
+    NATIVE: 'native',
+};
+
+// Newest first to begin with; the filter bar and sort are the Queue page's (useSortFilter), remembered per browser.
 const reversedHistory = computed(() => [...streams.value.history].reverse());
+const historyTitle = (session) => session.title ?? details[session.pid]?.title ?? session.pid ?? '';
+const startedMs = (session) => new Date(session.startedAt).getTime();
+const HISTORY_SORTS = [
+    { key: 'started', label: 'Started', order: 'desc' },
+    { key: 'title', label: 'Title', order: 'asc' },
+    { key: 'duration', label: 'Duration', order: 'desc' },
+    { key: 'size', label: 'Size', order: 'desc' },
+];
+const {
+    filterText: historyFilter, sortBy: historySortBy, sortOrder: historySortOrder, dateFrom: historyFrom, dateTo: historyTo,
+    sorted: sortedHistory, toggleSort: toggleHistorySort,
+} = useSortFilter(reversedHistory, {
+    filterFn: (session, query) => [historyTitle(session), session.pid, formatClientIp(session.clientIp), modeLabel(session)].some((value) => String(value ?? '').toLowerCase().includes(query)),
+    sortAccessors: {
+        title: (session) => historyTitle(session).toLowerCase(),
+        started: startedMs,
+        duration: (session) => (session.endedAt ? new Date(session.endedAt).getTime() : Date.now()) - startedMs(session),
+        size: (session) => session.bytesTransferred ?? 0,
+    },
+    dateAccessor: (session) => session.startedAt,
+    storageKey: 'streamHistory',
+    defaultSortBy: 'started',
+    defaultSortOrder: 'desc',
+});
+// The bar starts open when a remembered filter is already narrowing the list, so it is never applied silently.
+const historyFiltersActive = computed(() => !!(historyFilter.value || historyFrom.value || historyTo.value));
+const showHistoryFilters = ref(historyFiltersActive.value);
+const historyEmptyText = computed(() => (streams.value.history.length ? 'Nothing matches this filter' : 'No streaming history yet'));
 const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
-} = usePagination(reversedHistory);
+} = usePagination(sortedHistory);
 
 function detailsFor(pid) {
     return details[pid];
@@ -327,6 +455,8 @@ async function loadChannelLogos() {
 }
 
 function thumbnailFor(session) {
+    // A radio episode has only its own picture; the video thumbnail route knows nothing of its id.
+    if (session.radio) return session.image ? getThumbnailUrl(session.image, true) : undefined;
     return getSessionThumbnailUrl(session, detailsFor(session.pid), channelLogos.value);
 }
 
@@ -335,35 +465,26 @@ function seriesEpisodeLabel(pid) {
 }
 
 function loadMissingDetails() {
-    const pids = [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid);
+    const pids = [...streams.value.active, ...streams.value.history].filter(({ live, radio }) => !live && !radio).map(({ pid }) => pid);
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
 // Session details are only needed when a pid appears for the first time, not on every update (the
 // active sessions now change several times a second), so watch the set of pids rather than `streams`.
 const pidSignature = computed(() =>
-    [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid).join(',')
+    [...streams.value.active, ...streams.value.history].filter(({ live, radio }) => !live && !radio).map(({ pid }) => pid).join(',')
 );
 
 // A running session's Duration is wall-clock time since it started, so it needs a clock of its own:
 // computed only at render, it moved whenever a socket update happened to arrive - unevenly, and
 // not at all between updates.
-const now = ref(Date.now());
-let clock;
+const { now } = useServerNow();
 
 onMounted(() => {
     loadMissingDetails();
     loadChannelLogos();
-    clock = setInterval(() => (now.value = Date.now()), 1000);
 });
-onBeforeUnmount(() => clearInterval(clock));
 watch(pidSignature, loadMissingDetails);
-
-const clientLabels = {
-    GET_IPLAYER: 'iplayer',
-    YTDLP: 'ytdlp',
-    NATIVE: 'native',
-};
 
 function clientLabel(client) {
     return clientLabels[client] ?? client ?? '';
@@ -379,16 +500,15 @@ function openInfo(session) {
         return;
     }
     const pid = session.pid;
+    // Audio (BBC Sounds) opens the same popup in its audio form.
     const infoModal = useModal({
         component: VideoInfoModal,
-        attrs: { pid },
+        attrs: session.radio ? { pid, radio: true, title: session.title, image: session.image } : { pid },
     });
     infoModal.open();
 }
 
-function formatDate(value) {
-    return value ? formatDateTimeWithMillis(value) : '';
-}
+const formatDate = formatWhen;
 
 function formatDuration(start, end) {
     if (!start) return '';
@@ -426,6 +546,42 @@ function openSegments(session) {
     modal.open();
 }
 
+// Stream traces sent as files (see Troubleshooting): opened here as if they had been streamed, and deleted with one button.
+const traceFile = ref(null);
+const importedCount = computed(() => streams.value.history.filter((session) => session.imported).length);
+
+async function importTrace(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    let { ok, data } = await ipUpload('json-api/streams/trace/import', 'file', file);
+    let declined = false;
+    // Already imported: offer to replace it. Already here in any way (including this server's own stream): offer a separate copy.
+    if (!ok && data?.replaceable) {
+        if (await dialogService.confirm('Replace trace', 'This trace has already been imported. Replace it?', undefined, { confirmLabel: 'Replace' })) {
+            ({ ok, data } = await ipUpload('json-api/streams/trace/import?replace=1', 'file', file));
+        }
+    }
+    if (!ok && data?.copyable) {
+        const text = data.replaceable ? 'Import it as a new, separate copy instead?' : `${data.message}. Import it as a new, separate copy?`;
+        if (await dialogService.confirm('Import as a copy', text, undefined, { confirmLabel: 'Import copy' })) {
+            ({ ok, data } = await ipUpload('json-api/streams/trace/import?copy=1', 'file', file));
+        } else declined = true;
+    }
+    if (!ok) {
+        if (!declined) toastService.error('Import failed', { detail: data?.message || 'Unable to import that file' });
+        return;
+    }
+    toastService.success('Trace imported', { detail: `${data.requests} requests` });
+    router.push(`/streaming/session/${data.id}`);
+}
+
+async function deleteImported() {
+    if (await dialogService.confirm('Delete imported traces', `Delete all ${importedCount.value} imported trace(s)? Your own stream history is not touched.`, undefined, { danger: true, confirmLabel: 'Delete' })) {
+        await ipFetch('json-api/streams/trace/imported', 'DELETE');
+    }
+}
+
 async function clearHistory() {
     if (await dialogService.confirm('Clear Stream History', 'Are you sure you want to clear the stream history?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         // The 'streams' socket push updates streams.value.history once the server confirms it -
@@ -441,7 +597,7 @@ async function clearHistory() {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: @font-size-sm;
     font-weight: bold;
     text-transform: uppercase;
     color: @brand-color;
@@ -469,8 +625,8 @@ async function clearHistory() {
 
 // Pills here are fully rounded (smooth ends) rather than square-cornered.
 .streamingPage .pill {
-    padding: 1px 8px;
-    border-radius: 999px;
+    padding: 1px @space-2;
+    border-radius: @radius-pill;
 }
 
 .tableToolbar {
@@ -487,7 +643,7 @@ async function clearHistory() {
         padding: 6px 10px;
         height: 32px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }
@@ -501,8 +657,8 @@ async function clearHistory() {
         .tableFilter {
             min-width: 0;
             flex: 0.7 1 0;
-            padding: 4px 6px;
-            font-size: 12px;
+            padding: @space-1 6px;
+            font-size: @font-size-sm;
         }
 
         .dateRangeFilter {
@@ -516,12 +672,12 @@ async function clearHistory() {
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     margin-bottom: 2rem;
 
     thead th {
-        padding: 8px;
+        padding: @space-2;
         text-align: left;
         font-weight: bold;
         border-bottom: 1px solid @table-border-color;
@@ -537,9 +693,9 @@ async function clearHistory() {
         }
 
         .sortIcon {
-            font-size: 11px;
+            font-size: @font-size-xs;
             opacity: 0.35;
-            margin-left: 4px;
+            margin-left: @space-1;
 
             &.active {
                 opacity: 1;
@@ -558,7 +714,7 @@ async function clearHistory() {
         }
 
         td {
-            padding: 8px;
+            padding: @space-2;
             border-top: 1px solid @table-border-color;
             line-height: 1.5;
         }
@@ -570,12 +726,12 @@ async function clearHistory() {
     }
 }
 
-// Very wide screens: the (horizontal) cards sit two across.
-@media (min-width: 1500px) {
+// Tablets and wider: the (horizontal) cards sit two across.
+@media (min-width: @wide-breakpoint) {
     .streamCards {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0 12px;
+        gap: 0 @space-3;
 
         .empty {
             grid-column: 1 / -1;
@@ -590,19 +746,15 @@ async function clearHistory() {
 }
 
 // Video Quality (only for the get_iplayer / yt-dlp clients) is on the cards and in the info popup; the table drops them below a wide screen.
-@media (max-width: 1799px) {
+@media (max-width: @xlarge-breakpoint) {
     .streamsTable .hideLg {
         display: none;
     }
 }
 
 .streamsTable {
-    // Fixed so <colgroup> widths are authoritative regardless of cell content - without this,
-    // the browser sizes columns from their content on every render, so a page of rows with empty
-    // chip cells (e.g. history predating this feature) vs. a page with every chip populated ends
-    // up with visibly different column widths, shifting everything sideways when paging between
-    // them. table-layout:fixed makes every column's width come only from <colgroup>/the first
-    // row, never from content, so paging (or live rows changing) never moves a column again.
+    // Fixed layout so <colgroup> widths decide column sizes, not cell content; otherwise rows with and without chips
+    // shift the columns when paging.
     table-layout: fixed;
 
     td, th {
@@ -616,7 +768,7 @@ async function clearHistory() {
         width: 64px;
         height: 36px;
         object-fit: cover;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         display: block;
     }
 
@@ -636,7 +788,7 @@ async function clearHistory() {
     }
 
     .subtle {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 
@@ -663,7 +815,7 @@ async function clearHistory() {
     // Pill columns are tight: each only ever holds one short pill.
     thead th.chipCol,
     tbody td.chipCol {
-        padding: 4px 2px;
+        padding: @space-1 2px;
     }
 
     .chipCol .pill,
@@ -681,7 +833,7 @@ async function clearHistory() {
     }
 
     .clientIp {
-        font-size: 12px;
+        font-size: @font-size-sm;
     }
 
     .centerCol {
@@ -690,6 +842,10 @@ async function clearHistory() {
 
     .actionCol {
         text-align: center;
+
+        .debugAction {
+            margin-right: @space-3;
+        }
 
         .disabled {
             opacity: 0.4;

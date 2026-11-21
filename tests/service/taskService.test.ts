@@ -6,6 +6,7 @@ import DbCacheService from '../../src/service/db/dbCacheService';
 import episodeCacheService from '../../src/service/episodeCacheService';
 import libraryCleanupService from '../../src/service/libraryCleanupService';
 import liveTvService from '../../src/service/liveTvService';
+import soundsAtoZService from '../../src/service/sounds/soundsAtoZService';
 import streamSessionService from '../../src/service/stream/streamSessionService';
 import strmWatchdogService from '../../src/service/strmWatchdogService';
 import subscriptionDetectService from '../../src/service/subscriptionDetectService';
@@ -87,6 +88,17 @@ describe('TaskService', () => {
         expect(episodeCacheService.recacheAllSeries).toHaveBeenCalled();
     });
 
+    it('tells the Maintenance tab which caches each job fills or prunes', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('0 * * * *');
+        await TaskService.init();
+        const tasks = definedTasks();
+        expect(tasks['schedule-refresh'].definition.caches).toEqual(['schedule_cache', 'schedule_page_pids']);
+        expect(tasks['sounds-atoz'].definition.caches).toEqual(['sounds_atoz']);
+        expect(tasks['thumbnail-cleanup'].definition.caches).toEqual(['thumbnails', 'thumbnail_image_pid']);
+        expect(tasks['cache-purge'].definition.caches).toEqual(['*']);
+        expect(tasks['library-cleanup'].definition.caches).toBeUndefined();
+    });
+
     it.each([['not a cron'], ['* * * * *'], [''], [undefined]])(
         'falls back to the default schedule for %j and still defines every other job',
         async (configured) => {
@@ -149,6 +161,19 @@ describe('TaskService', () => {
 
         await tasks['strm-watchdog'].run();
         expect(strmWatchdogService.run).toHaveBeenCalled();
+    });
+
+    it('registers the nightly radio A to Z task, which asks the A to Z service (it does nothing while that is off)', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValueOnce('*/5 * * * *').mockResolvedValueOnce('false');
+        const rebuild = jest.spyOn(soundsAtoZService, 'rebuild').mockResolvedValue(false);
+
+        await TaskService.init();
+
+        const tasks = definedTasks();
+        expect(tasks['sounds-atoz'].definition.cron).toBe('20 3 * * *');
+        await tasks['sounds-atoz'].run();
+        expect(rebuild).toHaveBeenCalled();
+        rebuild.mockRestore();
     });
 });
 

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <!--
     Callers elsewhere depend on the shape of what follows.
     This part is exercised by the unit tests, so keep them green.

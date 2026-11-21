@@ -1,11 +1,15 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <DataCard class="streamCard">
         <template #thumb>
             <img
-                v-if="thumbnail"
+v-if="thumbnail"
+                loading="lazy"
                 class="clickable"
                 :class="{ channelLogo: session.live }"
                 :src="thumbnail"
+                :alt="title"
                 @click="emit('info')"
                 @error="hideBrokenImage"
             />
@@ -16,7 +20,7 @@
         </template>
         <template v-if="subtitle" #subtitle>{{ subtitle }}</template>
         <template #chips>
-            <StreamPills plain :mode="mode" :resolution="session.resolution" :settings="session.settings" />
+            <StreamPills plain :mode="mode" :resolution="session.resolution" :received-height="session.receivedHeight" :settings="session.settings" />
         </template>
         <div v-if="hasRate || hasLiveBadge || hasSegments" class="streamFacts">
             <ThroughputSpark
@@ -43,6 +47,12 @@
             <span class="footFacts">
                 <span v-for="fact in facts" :key="fact" class="footFact">{{ fact }}</span>
             </span>
+            <button v-if="trace" type="button" class="stopAction clickable" title="Stream trace" aria-label="Stream trace" @click="emit('trace')">
+                <font-awesome-icon :icon="['fas', 'timeline']" />
+            </button>
+            <button v-if="debug" type="button" class="stopAction clickable" title="Streaming debug" aria-label="Streaming debug" @click="emit('debug')">
+                <font-awesome-icon :icon="['fas', 'bug']" />
+            </button>
             <button
                 v-if="!history"
                 type="button"
@@ -86,8 +96,12 @@ const props = defineProps({
     transferred: { type: String, default: '' },
     now: { type: Number, required: true },
     stopping: { type: Boolean, default: false },
+    // Show the button to the Streaming debug page (Show Extended Debug).
+    debug: { type: Boolean, default: false },
+    // Show the button to this stream's request trace (Show Extended Debug).
+    trace: { type: Boolean, default: false },
 });
-const emit = defineEmits(['info', 'stop', 'segments']);
+const emit = defineEmits(['info', 'stop', 'segments', 'debug', 'trace']);
 
 // A throughput graph only once something has been sent, so a stream with nothing to show leaves no empty gap.
 const hasRate = computed(() => Boolean(props.session.throughput || props.session.bytesTransferred));
@@ -95,7 +109,9 @@ const hasLiveBadge = computed(() => props.session.live && !props.history);
 const hasSegments = computed(() => !props.session.live && Boolean(props.session.totalSegments));
 
 // Who watched, when, for how long, how much: each its own item, so a narrow card wraps between them, never inside one.
-const facts = computed(() => [props.clientIp, props.started, props.duration, props.transferred].filter(Boolean));
+const facts = computed(() =>
+    [props.clientIp, props.started, props.duration, props.transferred, props.session.continuesSessionId ? 'Continues earlier stream' : ''].filter(Boolean)
+);
 </script>
 
 <style lang="less" scoped>
@@ -109,7 +125,7 @@ const facts = computed(() => [props.clientIp, props.started, props.duration, pro
 .footFacts {
     display: flex;
     flex-wrap: wrap;
-    gap: 0 12px;
+    gap: 0 @space-3;
     min-width: 0;
 }
 
@@ -119,14 +135,14 @@ const facts = computed(() => [props.clientIp, props.started, props.duration, pro
 
 // Tablet and up: the card is wide, so it lays out in one row (poster, title and pills, rate and segments, then who/when/how
 // much) instead of the phone's stack; on a very wide screen the cards sit two across.
-@media (min-width: 700px) {
+@media (min-width: @medium-breakpoint) {
     .streamCard.dataCard {
         grid-template-columns: auto minmax(0, 1fr) 152px 200px;
         align-items: center;
-        gap: 8px 10px;
+        gap: @space-2 10px;
 
         // Tablet: a slightly smaller poster leaves the pills room for two lines.
-        @media (max-width: 1099px) {
+        @media (max-width: @laptop-breakpoint) {
             :deep(.dcThumb img),
             :deep(.dcThumb .thumbnail-placeholder) {
                 width: 84px;
@@ -167,11 +183,11 @@ const facts = computed(() => [props.clientIp, props.started, props.duration, pro
     width: 32px;
     height: 32px;
     padding: 0;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @primary-text-color;
     background-color: @settings-button-hover-background-color;
     border: 1px solid @settings-button-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
 
     &:hover {
         border-color: @settings-button-hover-border-color;

@@ -1,25 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
 import subscriptionDetectService from '../../service/subscriptionDetectService';
 import { SubscriptionError } from '../../service/subscriptionService';
-import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { failWith, sendInvalid } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 
 const router: Router = asyncRouter();
 
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 
-const fail = (res: Response, error: any, fallback: string) => {
-    const known = error instanceof SubscriptionArrError || error instanceof SubscriptionError;
-    res.status(known ? 400 : 500).json({
-        error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
-        message: error?.message || fallback,
-    } as ApiResponse);
-};
-
-const invalid = (res: Response, message: string) =>
-    res.status(400).json({ error: ApiError.INVALID_INPUT, message } as ApiResponse);
+const fail = failWith(SubscriptionArrError, SubscriptionError);
+const invalid = sendInvalid;
 
 // Configured Sonarr/Radarr apps that can be linked to.
 router.get('/apps', async (_, res: Response) => {

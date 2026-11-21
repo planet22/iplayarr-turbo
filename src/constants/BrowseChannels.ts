@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { BrowseChannel } from '../types/Browse';
 
 // iPlayer's own (IBL API) channel ids, as listed by GET /ibl/v1/channels - distinct from the schedule-page pids in

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
 import os from 'os';
@@ -55,7 +57,7 @@ describe('thumbnailCacheService', () => {
         expect(a).toBe(file);
         expect(b).toBe(file);
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/960x540/abc.jpg', { responseType: 'arraybuffer' });
+        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/960x540/abc.jpg', { responseType: 'arraybuffer', timeout: 20000 });
         expect([...fs.readFileSync(file)]).toEqual([1, 2, 3]);
         expect(thumbnailCacheService.inFlight.size).toBe(0);
     });
@@ -64,6 +66,40 @@ describe('thumbnailCacheService', () => {
         (axios.get as jest.Mock).mockRejectedValue(new Error('404'));
         expect(await thumbnailCacheService.getOrFetch('abc')).toBeUndefined();
         expect(fs.readdirSync(dir)).toEqual([]);
+    });
+
+    describe('refresh', () => {
+        it('fetches both sizes again over the copies on disk and counts them', async () => {
+            fs.writeFileSync(path.join(dir, 'abc.jpg'), 'old');
+            fs.writeFileSync(path.join(dir, 'abc.small.jpg'), 'old');
+            (axios.get as jest.Mock).mockResolvedValue({ data: new Uint8Array([9]) });
+            expect(await thumbnailCacheService.refresh('abc')).toBe(2);
+            expect([...fs.readFileSync(path.join(dir, 'abc.jpg'))]).toEqual([9]);
+            expect([...fs.readFileSync(path.join(dir, 'abc.small.jpg'))]).toEqual([9]);
+        });
+
+        it('leaves the old picture when BBC fails, counting only what arrived', async () => {
+            fs.writeFileSync(path.join(dir, 'abc.jpg'), 'old');
+            (axios.get as jest.Mock).mockRejectedValue(new Error('500'));
+            expect(await thumbnailCacheService.refresh('abc')).toBe(0);
+            expect(fs.readFileSync(path.join(dir, 'abc.jpg'), 'utf8')).toBe('old');
+        });
+
+        it('refreshes the square (radio) copies, under their own names, when asked', async () => {
+            fs.writeFileSync(path.join(dir, 'abc.jpg'), 'tv');
+            fs.writeFileSync(path.join(dir, 'abc.sq.jpg'), 'old');
+            fs.writeFileSync(path.join(dir, 'abc.sq.small.jpg'), 'old');
+            (axios.get as jest.Mock).mockResolvedValue({ data: new Uint8Array([7]) });
+            expect(await thumbnailCacheService.refresh('abc', true)).toBe(2);
+            expect([...fs.readFileSync(path.join(dir, 'abc.sq.jpg'))]).toEqual([7]);
+            expect([...fs.readFileSync(path.join(dir, 'abc.sq.small.jpg'))]).toEqual([7]);
+            expect(fs.readFileSync(path.join(dir, 'abc.jpg'), 'utf8')).toBe('tv');
+        });
+
+        it('does nothing for an invalid image id', async () => {
+            expect(await thumbnailCacheService.refresh('../x')).toBe(0);
+            expect(axios.get).not.toHaveBeenCalled();
+        });
     });
 
     describe('stats / clearAll', () => {
@@ -189,6 +225,15 @@ describe('thumbnailCacheService', () => {
                 expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(1);
             });
 
+            it('remembers the image pid across a restart (empty memory map) without asking BBC again', async () => {
+                iplayerDetailsService.getMetadata.mockResolvedValue({ programme: { image: { pid: 'p0img' } } });
+                (axios.get as jest.Mock).mockResolvedValue(bytes);
+                await thumbnailCacheService.getOrFetchForProgramme('b0prog');
+                thumbnailCacheService.imagePids.clear();
+                expect(await thumbnailCacheService.getOrFetchForProgramme('b0prog')).toBe(path.join(dir, 'p0img.jpg'));
+                expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(1);
+            });
+
             it.each([
                 ['has no image', { programme: {} }],
                 ['has no programme', {}],
@@ -230,6 +275,51 @@ describe('thumbnailCacheService', () => {
                 expect(axios.get).toHaveBeenCalledTimes(4);
             });
         });
+    });
+});
+
+describe('thumbnailCacheService.fetchRecipe', () => {
+    const url = 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0abc.jpg';
+    const notFound = () => ({ isAxiosError: true, response: { status: 404 } });
+
+    beforeEach(() => {
+        jest.resetAllMocks();
+        (axios.isAxiosError as unknown as jest.Mock).mockImplementation((e: any) => !!e?.isAxiosError);
+    });
+
+    it('returns the picture at the first size that works', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ data: new Uint8Array([1, 2, 3]) });
+
+        expect(await thumbnailCacheService.fetchRecipe(url, ['464x696', '336x504'])).toEqual(Buffer.from([1, 2, 3]));
+        expect(axios.get).toHaveBeenCalledTimes(1);
+        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/464x696/p0abc.jpg', { responseType: 'arraybuffer', timeout: 20000 });
+    });
+
+    it('steps down to the next size after a 404', async () => {
+        (axios.get as jest.Mock).mockRejectedValueOnce(notFound()).mockResolvedValueOnce({ data: new Uint8Array([9]) });
+
+        expect(await thumbnailCacheService.fetchRecipe(url, ['464x696', '336x504'])).toEqual(Buffer.from([9]));
+        expect((axios.get as jest.Mock).mock.calls.map(([address]) => address)).toEqual([
+            'https://ichef.bbci.co.uk/images/ic/464x696/p0abc.jpg',
+            'https://ichef.bbci.co.uk/images/ic/336x504/p0abc.jpg',
+        ]);
+    });
+
+    it('gives up when every size is missing', async () => {
+        (axios.get as jest.Mock).mockRejectedValue(notFound());
+
+        expect(await thumbnailCacheService.fetchRecipe(url, ['a', 'b'])).toBeUndefined();
+        expect(axios.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops at once on an error that is not a 404', async () => {
+        (axios.get as jest.Mock).mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+        expect(await thumbnailCacheService.fetchRecipe(url, ['a', 'b'])).toBeUndefined();
+        expect(axios.get).toHaveBeenCalledTimes(1);
+
+        (axios.get as jest.Mock).mockClear().mockRejectedValue(new Error('socket hang up'));
+        expect(await thumbnailCacheService.fetchRecipe(url, ['a', 'b'])).toBeUndefined();
+        expect(axios.get).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -9,6 +9,7 @@ import { QueuedStorage } from '../types/QueuedStorage';
 import { CreateDownloadClientForm } from '../types/requests/form/CreateDownloadClientForm';
 import { CreateIndexerForm } from '../types/requests/form/CreateIndexerForm';
 import { decryptApp, encryptApp, hasPlainSecret } from '../utils/secretCrypto';
+import { updateKey } from '../utils/serialisedUpdate';
 import { LAST_SEEN_KEY, LAST_SEEN_THROTTLE_MS, lastTouched } from './appSeen';
 import configService from './configService';
 import jellyfinService from './jellyfinService';
@@ -72,17 +73,14 @@ const appService = {
                 return;
             }
             lastTouched.set(id, now);
-            const lastSeen: Record<string, number> = (await storage.getItem(LAST_SEEN_KEY)) || {};
-            await storage.setItem(LAST_SEEN_KEY, { ...lastSeen, [id]: now });
+            await updateKey<Record<string, number>>(storage, LAST_SEEN_KEY, (lastSeen) => ({ ...(lastSeen ?? {}), [id]: now }));
         } catch {
             // Bookkeeping only - never let it fail a request.
         }
     },
 
     removeApp: async (id: string): Promise<boolean> => {
-        let allApps: App[] = await appService.getAllApps();
-        allApps = allApps.filter(({ id: app_id }) => app_id != id);
-        await storage.setItem('apps', allApps.map(encryptApp));
+        await updateKey<App[]>(storage, 'apps', (raw) => (raw ?? []).filter((app) => app.id != id));
         return true;
     },
 
@@ -96,8 +94,12 @@ const appService = {
                     // Server-managed - a stale copy from the edit form must not overwrite it.
                     lastSeen: app.lastSeen,
                 };
-                await appService.removeApp(form.id);
-                await appService.addApp(app);
+                // Replaced where it stands, in one locked step: remove-then-add let a concurrent change slip in between.
+                const updated = app;
+                await updateKey<App[]>(storage, 'apps', (raw) => {
+                    const list = (raw ?? []).map((stored) => (stored.id == updated.id ? encryptApp(updated) : stored));
+                    return list.some((stored) => stored.id == updated.id) ? list : [...list, encryptApp(updated)];
+                });
                 return app;
             }
         }
@@ -109,9 +111,7 @@ const appService = {
             const id = v4();
             form.id = id;
         }
-        const allApps: App[] = await appService.getAllApps();
-        allApps.push(form);
-        await storage.setItem('apps', allApps.map(encryptApp));
+        await updateKey<App[]>(storage, 'apps', (raw) => [...(raw ?? []), encryptApp(form)]);
         return form;
     },
 

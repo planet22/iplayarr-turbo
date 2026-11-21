@@ -1,4 +1,34 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
+    <SettingsSubheading text="Channels" />
+    <SelectInput
+        v-if="config.SOUNDS_ENABLED == 'true'"
+        v-model="config.LIVE_RADIO"
+        field="LIVE_RADIO"
+        name="Live Radio Stations"
+        tooltip="Add BBC radio stations as audio-only live channels, shared with Jellyfin like the TV channels."
+        :error="validationErrors.config?.LIVE_RADIO"
+        :options="onOffOptions"
+    />
+    <SelectInput
+        v-if="config.STREAM_CLIENT == 'NATIVE'"
+        v-model="config.STREAM_LIVE_DASH_1080"
+        field="STREAM_LIVE_DASH_1080"
+        name="Live 1080p"
+        tooltip="Play live channels in 1080p HEVC, not 720p. Needs a player with HEVC; no subtitles. Clear Jellyfin's channel cache after changing."
+        :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
+        :options="liveTvOptions"
+    />
+    <SelectInput
+        v-if="config.STREAM_CLIENT == 'NATIVE'"
+        v-model="config.LIVE_UHD_EVENT_FEEDS"
+        field="LIVE_UHD_EVENT_FEEDS"
+        name="UHD Event Feeds"
+        tooltip="Show BBC's 4K event channels. Only live during big events; needs a UK IP and a 4K HEVC player."
+        :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
+        :options="liveTvOptions"
+    />
     <SettingsSubheading text="Tuner">
         <InfoTip
             text="Only channels you pick with the TV icon on the Channels page (or a channel's own page) appear in the tuner and guide. Playback needs a UK IP address, like the rest of iPlayarr. Save settings before adding to Jellyfin or copying the URLs if you changed the Stream Base URL, Stream Key or offset."
@@ -12,25 +42,35 @@
         :error="validationErrors.config?.LIVE_TV_ENABLED"
         :options="liveTvOptions"
     />
+    <SelectInput
+        v-if="config.LIVE_TV_ENABLED == 'true' && config.STREAM_CLIENT == 'NATIVE'"
+        v-model="config.LIVE_TV_FROM_START"
+        field="LIVE_TV_FROM_START"
+        name="Watch From Start"
+        tooltip="Add a second 'from start' entry per channel that begins the programme on air at its start. Needs Live 1080p; update the tuner after changing."
+        :error="validationErrors.config?.LIVE_TV_FROM_START"
+        :options="onOffOptions"
+    />
     <template v-if="config.LIVE_TV_ENABLED == 'true'">
-            <TextInput
-                v-model="config.STREAM_BASE_URL"
-                field="STREAM_BASE_URL"
-                name="Stream Base URL"
-                tooltip="Address Jellyfin uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
-                :error="validationErrors.config?.STREAM_BASE_URL"
-            />
-            <TextInput
-                v-model="config.STREAM_KEY"
-                field="STREAM_KEY"
-                name="Stream Key"
-                tooltip="Protects the tuner, guide and playback links. Separate from the API Key."
-                :error="validationErrors.config?.STREAM_KEY"
-                :copyable="true"
-                icon-button="qrcode"
-                button-tooltip="Regenerate Stream Key"
-                @action="emit('generate-stream-key')"
-            />
+        <SettingsSubheading text="Connection" />
+        <TextInput
+            v-model="config.STREAM_BASE_URL"
+            field="STREAM_BASE_URL"
+            name="Stream Base URL"
+            tooltip="Address Jellyfin uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
+            :error="validationErrors.config?.STREAM_BASE_URL"
+        />
+        <TextInput
+            v-model="config.STREAM_KEY"
+            field="STREAM_KEY"
+            name="Stream Key"
+            tooltip="Protects the tuner, guide and playback links. Separate from the API Key."
+            :error="validationErrors.config?.STREAM_KEY"
+            :copyable="true"
+            icon-button="qrcode"
+            button-tooltip="Regenerate Stream Key"
+            @action="emit('generate-stream-key')"
+        />
         <TextInput
             :model-value="liveTvUrl('live_playlist')"
             name="M3U Tuner URL"
@@ -89,28 +129,7 @@
                 tooltip="Mark all programmes as HD."
                 :options="onOffOptions"
             />
-            <SettingsSubheading text="Channel feeds" />
-            <SelectInput
-                v-if="config.STREAM_CLIENT == 'NATIVE'"
-                v-model="config.STREAM_LIVE_DASH_1080"
-                field="STREAM_LIVE_DASH_1080"
-                :advanced="true"
-                name="Live 1080p (Experimental)"
-                tooltip="Play live channels in 1080p HEVC, not 720p. Needs a player with HEVC; no subtitles. Clear Jellyfin's channel cache after changing."
-                :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
-                :options="liveTvOptions"
-            />
-            <SelectInput
-                v-if="config.STREAM_CLIENT == 'NATIVE'"
-                v-model="config.LIVE_UHD_EVENT_FEEDS"
-                field="LIVE_UHD_EVENT_FEEDS"
-                :advanced="true"
-                name="UHD Event Feeds"
-                tooltip="Show BBC's 4K event channels. Only live during big events; needs a UK IP and a 4K HEVC player."
-                :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
-                :options="liveTvOptions"
-            />
-                    </template>
+        </template>
         <SettingsSubheading text="Media Servers" />
         <LiveTvJellyfinSetup />
     </template>

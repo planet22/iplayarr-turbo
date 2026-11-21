@@ -1,4 +1,6 @@
-import { buildMasterPlaylist, buildMediaPlaylist, parseLiveMpd } from '../../../src/service/stream/liveDashHls';
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { buildMasterPlaylist, buildMediaPlaylist, parseLiveMpd, planFromStart } from '../../../src/service/stream/liveDashHls';
 
 // Trimmed from BBC's real iptv-mse live manifest (bbc_two_hd).
 const mpdUrl = 'https://vs-cmaf-push-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_two_hd/hevc_iptv_mse_v0.mpd';
@@ -74,8 +76,66 @@ describe('playlists', () => {
         expect(text).not.toContain('#EXT-X-ENDLIST');
     });
 
+    describe('from the start of a programme', () => {
+        // 1,000 whole segments after availabilityStartTime: segments 1..1000 exist, so 998 is the newest listed.
+        const now = 12_000 + 1000 * 3840 + 500;
+        // Inside segment 100.
+        const programmeStart = 12_000 + 99 * 3840 + 1000;
+        const timeShifted = (depth: string) => parseLiveMpd(mpd.replace('type="dynamic"', `type="dynamic" timeShiftBufferDepth="${depth}"`), mpdUrl);
+        const segments = (text: string) => (text.match(/^\d+\.m4s$/gm) as string[]).map((s) => Number(s.replace('.m4s', '')));
+        const list = (delayMs?: number, at = now) => segments(buildMediaPlaylist(dash, 'video', at, (url) => lastPart(url), delayMs) as string);
+
+        it('reads how far back BBC keeps segments, when the manifest says', () => {
+            expect(parseLiveMpd(mpd, mpdUrl).timeShiftSeconds).toBeUndefined();
+            expect(timeShifted('PT2H').timeShiftSeconds).toBe(7200);
+        });
+
+        it('delays the live window so that a player starting on it begins with the programme start segment', () => {
+            const plan = planFromStart(timeShifted('PT2H'), dash.video, programmeStart, now);
+            expect(plan).toMatchObject({ delayMs: 896 * 3840 + 500, first: 100, secondsBack: 3441, clamped: false });
+            // ffmpeg starts a live list three segments from its end: segment 100 here.
+            const shifted = list(plan.delayMs);
+            expect(shifted).toEqual([97, 98, 99, 100, 101, 102]);
+            expect(shifted[shifted.length - 3]).toBe(100);
+        });
+
+        it('assumes two hours when the manifest does not say', () => {
+            expect(planFromStart(dash, dash.video, programmeStart, now)).toMatchObject({ delayMs: 896 * 3840 + 500, clamped: false });
+        });
+
+        it('is as long as BBC still buffers (less a margin) when the programme began earlier', () => {
+            // 10 minutes is 156 whole segments; eight are kept back.
+            const plan = planFromStart(timeShifted('PT10M'), dash.video, programmeStart, now);
+            expect(plan).toMatchObject({ delayMs: 148 * 3840, clamped: true });
+        });
+
+        it('plays live (no delay) for a programme that has only just started', () => {
+            expect(planFromStart(dash, dash.video, now, now)).toMatchObject({ delayMs: 0, clamped: false });
+        });
+
+        it('keeps the same delay on later polls, so the window moves on at normal speed', () => {
+            const delay = 896 * 3840 + 500;
+            expect(list(delay, now + 3840)).toEqual([98, 99, 100, 101, 102, 103]);
+        });
+
+        it('is the plain live window when no delay is given', () => {
+            expect(list()).toEqual([993, 994, 995, 996, 997, 998]);
+            expect(buildMediaPlaylist(dash, 'video', now, (url) => lastPart(url), 0) as string).not.toContain('EVENT');
+        });
+    });
+
     it('never lists a segment before the start number', () => {
         const text = buildMediaPlaylist(dash, 'audio', 12_000 + 3 * 3840, (url, isInit) => (isInit ? 'INIT' : lastPart(url))) as string;
         expect(text.match(/^\d+\.m4s$/gm)).toEqual(['1.m4s']);
+    });
+
+    it('hands the address builder each media segment\'s number, and none for the init section', () => {
+        const calls: [boolean, number | undefined][] = [];
+        buildMediaPlaylist(dash, 'video', 12_000 + 100 * 3840 + 500, (_url, isInit, number) => {
+            calls.push([isInit, number]);
+            return 'x';
+        });
+        expect(calls[0]).toEqual([true, undefined]);
+        expect(calls.slice(1).map(([, number]) => number)).toEqual([93, 94, 95, 96, 97, 98]);
     });
 });

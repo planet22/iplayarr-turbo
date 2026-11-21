@@ -37,7 +37,7 @@ defineProps({
     --bar-color: @primary-color;
     border: 1px solid var(--bar-color);
     box-sizing: border-box;
-    border-radius: 5px;
+    border-radius: @radius-md;
     overflow: hidden;
 
     .progress {
@@ -49,10 +49,10 @@ defineProps({
         position: absolute;
         inset: 0;
         text-align: center;
-        font-size: 11px;
+        font-size: @font-size-xs;
         line-height: 15px;
         white-space: nowrap;
-        color: #fff;
+        color: @on-fill-color;
         text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
         pointer-events: none;
     }

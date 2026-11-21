@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../src/types/QueueEntry';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
-import { buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo } from '../../src/utils/nfoBuilder';
+import { buildAlbumNfo, buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo, parseNfoPid } from '../../src/utils/nfoBuilder';
 
 // Nothing here talks to the network directly.
 // Keep this in step with the matching type definitions.
@@ -46,6 +48,13 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<studio>BBC One</studio>');
         });
 
+        it('names the programme as a uniqueid, which parseNfoPid reads back', () => {
+            const xml = buildEpisodeNfo(baseItem({ pid: 'm001aaaa' }));
+
+            expect(xml).toContain('<uniqueid type="iplayer">m001aaaa</uniqueid>');
+            expect(parseNfoPid(xml)).toBe('m001aaaa');
+        });
+
         it('escapes XML special characters and tolerates missing fields', () => {
             const item = baseItem({ library: { title: 'Show & Co' } });
             const xml = buildEpisodeNfo(item);
@@ -55,6 +64,13 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<episode>0</episode>');
             expect(xml).not.toContain('<studio>');
             expect(xml).not.toContain('<runtime>');
+        });
+    });
+
+    describe('buildMovieNfo uniqueid', () => {
+        it('names the programme too, and leaves it out for an item with no pid', () => {
+            expect(parseNfoPid(buildMovieNfo(baseItem({ type: VideoType.MOVIE, pid: 'p04fthkg' })))).toBe('p04fthkg');
+            expect(buildEpisodeNfo(baseItem({ pid: '' }))).not.toContain('uniqueid');
         });
     });
 
@@ -105,6 +121,73 @@ describe('nfoBuilder', () => {
         });
     });
 
+    describe('buildAlbumNfo', () => {
+        it('builds an album NFO for a radio show, with the escaped name as title and artist', () => {
+            const xml = buildAlbumNfo('Desert Island Discs & Co');
+            expect(xml).toContain('<album>');
+            expect(xml).toContain('<title>Desert Island Discs &amp; Co</title>');
+            expect(xml).toContain('<artist>Desert Island Discs &amp; Co</artist>');
+            expect(xml).toContain('<genre>Radio</genre>');
+            expect(xml).not.toContain('<review>');
+        });
+
+        it('adds a review when a description is given', () => {
+            expect(buildAlbumNfo('Show', 'Castaways <choose> eight records')).toContain('<review>Castaways &lt;choose&gt; eight records</review>');
+        });
+    });
+
+    describe('cast and crew', () => {
+        const cast = [
+            { name: 'David Tennant', role: 'Actor', character: 'The Doctor' },
+            { name: 'Catherine Tate', role: 'Actor', character: 'Donna & Co' },
+            { name: 'Extra Person', role: 'Actor' },
+            { name: 'Alice Troughton', role: 'Director' },
+            { name: 'Russell T Davies', role: 'Writer' },
+            { name: 'Some Producer', role: 'Producer' },
+            { name: '', role: 'Actor' },
+        ];
+
+        it('writes actors with their parts, directors and writers into an episode NFO', () => {
+            const xml = buildEpisodeNfo(baseItem({ library: { title: 'Show', cast } }));
+
+            expect(xml).toContain('<actor>\n    <name>David Tennant</name>\n    <role>The Doctor</role>\n    <order>0</order>\n  </actor>');
+            expect(xml).toContain('<role>Donna &amp; Co</role>');
+            expect(xml).toContain('<name>Extra Person</name>\n    <order>2</order>');
+            expect(xml).toContain('<director>Alice Troughton</director>');
+            expect(xml).toContain('<credits>Russell T Davies</credits>');
+        });
+
+        it('leaves out other roles and nameless entries', () => {
+            const xml = buildEpisodeNfo(baseItem({ library: { title: 'Show', cast } }));
+
+            expect(xml).not.toContain('Some Producer');
+            expect(xml.match(/<actor>/g)).toHaveLength(3);
+        });
+
+        it('caps the number of actors', () => {
+            const many = Array.from({ length: 60 }, (_, i) => ({ name: `Actor ${i}`, role: 'Actor' }));
+            const xml = buildEpisodeNfo(baseItem({ library: { title: 'Show', cast: many } }));
+
+            expect(xml.match(/<actor>/g)).toHaveLength(40);
+            expect(xml).toContain('Actor 39');
+            expect(xml).not.toContain('Actor 40');
+        });
+
+        it('writes nothing for no cast, in either kind of NFO', () => {
+            expect(buildEpisodeNfo(baseItem({ library: { title: 'Show' } }))).not.toMatch(/<actor>|<director>|<credits>/);
+            expect(buildEpisodeNfo(baseItem({ library: { title: 'Show', cast: [] } }))).not.toMatch(/<actor>|<director>|<credits>/);
+            expect(buildMovieNfo(baseItem({ library: { title: 'Film' } }))).not.toMatch(/<actor>|<director>|<credits>/);
+        });
+
+        it('writes the cast into a movie NFO too', () => {
+            const xml = buildMovieNfo(baseItem({ type: VideoType.MOVIE, library: { title: 'Film', cast: [{ name: 'A. Actor', role: 'Actor', character: 'Hero' }] } }));
+
+            expect(xml).toContain('<name>A. Actor</name>');
+            expect(xml).toContain('<role>Hero</role>');
+            expect(xml.trimEnd().endsWith('</movie>')).toBe(true);
+        });
+    });
+
     describe('buildLiveChannelNfo', () => {
         it('builds a locked movie NFO with the escaped channel title', () => {
             const xml = buildLiveChannelNfo('BBC R&D');
@@ -116,5 +199,18 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<lockdata>true</lockdata>');
             expect(xml.trimEnd().endsWith('</movie>')).toBe(true);
         });
+    });
+});
+
+describe('parseNfoPid', () => {
+    it('reads the programme id from an iplayer uniqueid, however the attributes are ordered', () => {
+        expect(parseNfoPid('<episodedetails><uniqueid type="iplayer" default="true">m001aaaa</uniqueid></episodedetails>')).toBe('m001aaaa');
+        expect(parseNfoPid('<uniqueid default=\'true\' type=\'IPlayer\'> p04fthkg </uniqueid>')).toBe('p04fthkg');
+    });
+
+    it('is nothing for another kind of id, a bad id, or none', () => {
+        expect(parseNfoPid('<uniqueid type="tvdb">m001aaaa</uniqueid>')).toBeUndefined();
+        expect(parseNfoPid('<uniqueid type="iplayer">notapid</uniqueid>')).toBeUndefined();
+        expect(parseNfoPid('<episodedetails></episodedetails>')).toBeUndefined();
     });
 });

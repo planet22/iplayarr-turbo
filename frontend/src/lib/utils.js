@@ -4,12 +4,16 @@ export const getBasePath = () => window.__BASE_PATH__ || '';
 // Requests are always same-origin: in dev the Vite proxy (vite.config.mjs) forwards them to the backend.
 export const getHost = () => getBasePath();
 
-// Builds the query string for json-api/download from a full search result, carrying the
-// structured show/season/episode metadata through so the backend can build a Jellyfin-style
-// library folder for it (libraryPathBuilder.ts) - not just pid/nzbName/type. Shared by
-// SearchPage's immediate/bulk download and DownloadConfirmModal's confirm-and-download.
-export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, media, version, quality }) => {
-    const params = new URLSearchParams({ pid, nzbName, type });
+// Builds the query string for json-api/download from a full search result. The server works out the name, numbering
+// and library folder from the BBC's details (releaseService.ts); what the card knows is sent too, but is only what
+// the server queues if the BBC cannot answer. `nameEdited` marks a filename the user typed, which is the one thing
+// used in place of the server's own. Shared by SearchPage's immediate/bulk download, ProgrammePage's batch download
+// and DownloadConfirmModal's confirm-and-download.
+export const buildDownloadQuery = ({ pid, nzbName, nameEdited, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, media, version, quality }) => {
+    const params = new URLSearchParams({ pid });
+    if (nzbName) params.set('nzbName', nzbName);
+    if (nameEdited) params.set('nameEdited', '1');
+    if (type) params.set('type', type);
     if (title) params.set('title', title);
     if (series != null) params.set('series', series);
     if (episode != null) params.set('episode', episode);
@@ -25,13 +29,20 @@ export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode,
     return params.toString();
 };
 
-// IPlayerDetails.thumbnail is a relative json-api path (e.g. "json-api/thumbnail/abc123.jpg"),
-// mirroring how ipFetch resolves endpoints - resolve it against the API host the same way.
-// @error handler for thumbnail <img>s: when the image fails to load (e.g. BBC has no still for
-// it) blank it, rather than showing the browser's broken-image "?" icon. visibility (not display)
-// so the image keeps the space its CSS gives it and the surrounding layout doesn't shift.
+// A picture the browser could not load becomes a quiet grey tile with a picture glyph (a data URI, so it cannot fail
+// itself), the same size as the picture it replaces, instead of the browser's broken-image icon or a blank gap.
+// Semi-transparent greys read on both the light and dark themes.
+const BROKEN_IMAGE = `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><rect width="320" height="180" fill="rgba(128,128,128,0.18)"/>' +
+        '<g fill="none" stroke="rgba(128,128,128,0.7)" stroke-width="6" stroke-linejoin="round"><rect x="120" y="60" width="80" height="60" rx="6"/><path d="M126 112l24-26 18 18 12-12 20 20"/></g></svg>'
+)}`;
+
 export const hideBrokenImage = (event) => {
-    event.target.style.visibility = 'hidden';
+    const image = event.target;
+    // The placeholder itself never errors, but guard anyway so a failure can never loop.
+    if (image.dataset.broken) return;
+    image.dataset.broken = 'true';
+    image.src = BROKEN_IMAGE;
 };
 
 // Node reports IPv4 clients on its dual-stack socket as IPv4-mapped IPv6 (::ffff:1.2.3.4); show those
@@ -43,6 +54,11 @@ export const formatClientIp = (ip) => {
 // `small` asks for the 320x180 copy (list/card/table use); omit it for hero banners.
 export const getThumbnailUrl = (thumbnail, small = false) => {
     if (!thumbnail) return undefined;
+    // Radio artwork is an absolute address on BBC's image host: served through the thumbnail cache (square sizes) when it is
+    // a plain image address, otherwise as it is.
+    const radioImage = /^https:\/\/ichef\.bbci\.co\.uk\/images\/ic\/[^/]+\/([a-z0-9]+)\.jpg$/i.exec(thumbnail);
+    if (radioImage) return `${getHost()}/json-api/thumbnail/${radioImage[1]}.jpg?square=1${small ? '&size=small' : ''}`;
+    if (/^https:\/\/ichef\.bbci\.co\.uk\//.test(thumbnail)) return thumbnail;
     const sizeParam = small && thumbnail.startsWith('json-api/thumbnail/') && !thumbnail.includes('?') ? '?size=small' : '';
     return `${getHost()}/${thumbnail}${sizeParam}`;
 };
@@ -54,6 +70,13 @@ export const getProgrammeThumbnailUrl = (pid) => {
     return typeof pid === 'string' && /^[a-z0-9]{8}$/i.test(pid)
         ? `${getHost()}/json-api/thumbnail/pid/${pid}?size=small`
         : undefined;
+};
+
+// The BBC route a stream session was served through, as the stream address takes it ("iptv-all / 6" gives "iptv-all-6"), or
+// undefined when the session did not record one.
+export const sessionRoute = (session) => {
+    const route = session?.source?.route?.replace(' (from the link)', '').replace(' / ', '-');
+    return route && /^[\w-]+-\d+$/.test(route) ? route : undefined;
 };
 
 // A stream session's thumbnail: the programme's still from its details, or - for a live channel,
@@ -80,30 +103,44 @@ export const getSeriesEpisodeLabel = (details) => {
     return undefined;
 };
 
+// The programme id in an iPlayer link, or undefined for anything else (so the search box searches instead).
+// A PID is a lower-case letter then 7 or more letters and digits with no vowels. The first letter varies (m, p, b...),
+// and the slug after it is optional, so /iplayer/episode/p0db9c0q works as well as /iplayer/episode/m002zcw6/some-title.
+// Query strings and fragments are ignored; the 'episode' and 'episodes' path words have vowels, so never read as a PID.
+const IPLAYER_URL = /^https?:\/\/(?:www\.)?bbc\.co\.uk\/iplayer\/(?:[^?#/\s]+\/)*?([a-z][0-9b-df-hj-np-tv-z]{7,})(?:[/?#]|$)/;
+
 export const getPidFromBBCUrl = (url) => {
     if (!url) {
         return undefined;
     }
-    const match = url.match(/https:\/\/www\.bbc\.co\.uk\/iplayer\/[^?]+\/(m[0-9a-z]{7})\/[^?]+/);
+    const match = String(url).trim().match(IPLAYER_URL);
     return match ? match[1] : undefined;
-}
-
-export const formatStorageSize = (mb) => {
-    if (mb) {
-        // A .strm pointer is a few hundred bytes - show those as KB (or B), not "0.00 MB".
-        if (mb < 1) {
-            const kb = mb * 1024;
-            return kb >= 1 ? kb.toFixed(1) + ' KB' : Math.round(kb * 1024) + ' B';
-        }
-        if (mb >= 1024) {
-            return (mb / 1024).toFixed(2) + ' GB';
-        }
-        // Drop decimals once it's a 3-digit MB value - "1020.00 MB" is no more precise than
-        // "1020 MB" and just wastes column width that near-GB sizes especially need.
-        return (mb >= 100 ? Math.round(mb) : mb.toFixed(2)) + ' MB';
-    }
-    return;
 };
+
+// A series (or brand) listing link, /iplayer/episodes/<pid>: its PID names the whole series, not one episode, so it
+// cannot be queued as a download.
+export const isIplayerSeriesUrl = (url) => /^https?:\/\/(?:www\.)?bbc\.co\.uk\/iplayer\/episodes\//.test(String(url ?? '').trim());
+
+// The one size formatter: a byte count as B, KB, MB, GB, TB or PB - "812 B", "3.4 KB", "12.50 MB", "1.20 GB", "2.50 TB".
+// A .strm pointer is a few hundred bytes, so small values show as B or KB, not "0.00 MB".
+// Drop decimals once it's a 3-digit MB value - "1020.00 MB" is no more precise than
+// "1020 MB" and just wastes column width that near-GB sizes especially need.
+export const formatBytes = (bytes) => {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return '';
+    if (n < 1024) return `${Math.round(n)} B`;
+    if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1073741824) {
+        const mb = n / 1048576;
+        return `${mb >= 100 ? Math.round(mb) : mb.toFixed(2)} MB`;
+    }
+    if (n < 1099511627776) return `${(n / 1073741824).toFixed(2)} GB`;
+    if (n < 1125899906842624) return `${(n / 1099511627776).toFixed(2)} TB`;
+    return `${(n / 1125899906842624).toFixed(2)} PB`;
+};
+
+// The same, for a size the backend reports in MB. Nothing (undefined) when there is no size.
+export const formatStorageSize = (mb) => (mb ? formatBytes(mb * 1048576) : undefined);
 
 // Programme runtimes arrive as fractional minutes (e.g. 117.0333) - round up to a whole minute
 // for display. Returns undefined when there's no usable runtime.
@@ -135,16 +172,16 @@ export function getCleanSceneTitle(title) {
     const specialCharacter = /[`'.]/g;
     const nonWord = /\W/g;
 
-    let cleanTitle = title.replace(beginningThe, '');
+    // Accents come off first: \W would turn "\u00e9" into a separator before the base letter could be kept.
+    let cleanTitle = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    cleanTitle = cleanTitle.replace(beginningThe, '');
     cleanTitle = cleanTitle.replaceAll('&', 'and');
     cleanTitle = cleanTitle.replace(specialCharacter, '');
     cleanTitle = cleanTitle.replace(nonWord, '+');
 
-    // Remove any repeating +s
+    // Remove any repeating +s, and the ones at either end
     cleanTitle = cleanTitle.replace(/\+{2,}/g, '+');
-
-    cleanTitle = cleanTitle.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    cleanTitle = cleanTitle.replace(/^\++|\++$/, '');
+    cleanTitle = cleanTitle.replace(/^\++|\++$/g, '');
     return cleanTitle.trim().replaceAll('+', ' ');
 }
 
@@ -207,6 +244,12 @@ export function formatDateTimeWithMillis(dateString) {
     const day = formatShortDate(dateString);
     return day === undefined ? undefined : `${day}, ${formatTime(dateString, { seconds: true, millis: true })}`;
 }
+
+// The same, for a value that may be missing: nothing ('') rather than undefined when there is no usable date.
+export const formatWhen = (value) => (value ? formatDateTimeWithMillis(value) ?? '' : '');
+
+// "3m 05s" - a length of time given in seconds, for how long a stream played or a programme runs.
+export const formatMinSec = (seconds) => `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
 
 // "20 seconds ago" style relative time ("20s ago" when `short`, for the phone cards). `now` defaults to Date.now()
 // but can be passed in so callers can drive this off a ticking ref and get a reactive re-render as time passes.

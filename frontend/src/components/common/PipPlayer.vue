@@ -1,7 +1,9 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div class="pipPlayer" :class="{ active: isActive }">
+    <div ref="rootRef" class="pipPlayer" :class="{ active: isActive }">
         <div class="pipVideoWrap">
-            <video ref="videoRef" controls playsinline />
+            <video ref="videoRef" :controls="pipPlayerState.status !== 'error'" playsinline />
             <div v-if="pipPlayerState.status === 'loading'" class="pipOverlay">
                 <font-awesome-icon :icon="['fas', 'circle-notch']" spin size="lg" />
             </div>
@@ -16,7 +18,7 @@
         <div class="pipFooter">
             <div class="pipInfo">
                 <span class="pipTitle" :title="pipPlayerState.title || ''">{{ pipPlayerState.title }}</span>
-                <span class="pipStatus">{{ statusLabel }}</span>
+                <span class="pipStatus" role="status">{{ statusLabel }}</span>
             </div>
             <!-- Switch to another cut (audio described / signed) without leaving the player; carries on from the same point. -->
             <div v-if="pipPlayerState.versions.length" class="pipVersions" role="group" aria-label="Version">
@@ -34,7 +36,21 @@
                     <font-awesome-icon :icon="['fas', option.icon]" />
                 </button>
             </div>
-            <font-awesome-icon class="clickable" :icon="['fas', 'xmark']" title="Stop" @click="close" />
+            <!-- A live TV channel (Watch From Start on): switch between the live edge and the start of the programme on air. -->
+            <button
+                v-if="canWatchFromStart"
+                type="button"
+                class="pipVersion pipFromStart"
+                :title="pipPlayerState.fromStart ? 'Playing from the start of the programme: skip to live' : 'Watch from the start of the programme on air'"
+                :aria-label="pipPlayerState.fromStart ? 'Skip to live' : 'Watch from the start of the programme'"
+                @click="toggleFromStart"
+            >
+                <!-- Restart while live; fast-forward (back to live) while playing from the start. -->
+                <font-awesome-icon :icon="['fas', pipPlayerState.fromStart ? 'forward-fast' : 'clock-rotate-left']" />
+            </button>
+            <button type="button" class="pipClose" title="Stop and close player" aria-label="Stop and close player" @click="close">
+                <font-awesome-icon :icon="['fas', 'xmark']" />
+            </button>
         </div>
     </div>
 </template>
@@ -56,6 +72,7 @@ const STATUS_LABELS = {
 const globalSettings = inject('globalSettings');
 
 const videoRef = ref(null);
+const rootRef = ref(null);
 let hls = null;
 
 const VERSION_ICONS = { 'audio-described': 'audio-description', signed: 'sign-language' };
@@ -69,6 +86,24 @@ const versionOptions = computed(() => [
 ]);
 
 const isActive = computed(() => pipPlayerState.pid !== null);
+
+// Other bottom-pinned things (toasts) sit above the player, as they do for the audio bar.
+let pipObserver = null;
+const makeRoom = (height) => document.documentElement.style.setProperty('--pip-height', `${height || 0}px`);
+watch(
+    () => [rootRef.value, isActive.value],
+    ([el, active]) => {
+        pipObserver?.disconnect();
+        pipObserver = null;
+        if (!el || !active) return makeRoom(0);
+        makeRoom(el.offsetHeight + 8);
+        if (typeof ResizeObserver !== 'undefined') {
+            pipObserver = new ResizeObserver(() => makeRoom(el.offsetHeight + 8));
+            pipObserver.observe(el);
+        }
+    },
+    { flush: 'post' }
+);
 const statusLabel = computed(() => STATUS_LABELS[pipPlayerState.status] ?? '');
 const iplayerUrl = computed(() =>
     pipPlayerState.live
@@ -97,6 +132,21 @@ function close() {
     closePip();
 }
 
+// Watch From Start (Settings > Live Channels) applies to a live TV channel on the native client; radio has no such stream.
+const canWatchFromStart = computed(
+    () =>
+        pipPlayerState.live &&
+        globalSettings?.value?.LIVE_TV_FROM_START === 'true' &&
+        (globalSettings?.value?.STREAM_CLIENT ?? 'NATIVE') === 'NATIVE' &&
+        !/radio/i.test(pipPlayerState.pid ?? '')
+);
+
+function toggleFromStart() {
+    const next = !pipPlayerState.fromStart;
+    const name = (pipPlayerState.title ?? '').replace(/ \((Live|from start)\)$/, '');
+    playInPip(pipPlayerState.pid, `${name} (${next ? 'from start' : 'Live'})`, true, '', [], next);
+}
+
 let pendingSeek = 0;
 function switchVersion(version) {
     if (version === pipPlayerState.version) return;
@@ -116,7 +166,9 @@ function startPlayback(pid) {
         return;
     }
     const versionParam = pipPlayerState.version ? `&version=${encodeURIComponent(pipPlayerState.version)}` : '';
-    const url = `${getHost()}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${versionParam}`;
+    // A live channel from the start of its programme on air: the server holds the stream a fixed time behind live.
+    const fromParam = pipPlayerState.live && pipPlayerState.fromStart ? '&from=start' : '';
+    const url = `${getHost()}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${versionParam}${fromParam}`;
     // Switching version resumes from where the viewer was.
     const resumeAt = pendingSeek;
     pendingSeek = 0;
@@ -158,15 +210,18 @@ function startPlayback(pid) {
         // hls.js starts on the lowest rung (704x396 for live) and only climbs once it has measured
         // throughput; a live channel has no buffer to spare for that, so start at the top and let
         // ABR step down if the connection can't keep up.
-        hls = new Hls({ ...(pipPlayerState.live ? { abrEwmaDefaultEstimate: 20_000_000 } : {}), ...(resumeAt > 0 ? { startPosition: resumeAt } : {}) });
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        const instance = new Hls({ ...(pipPlayerState.live ? { abrEwmaDefaultEstimate: 20_000_000 } : {}), ...(resumeAt > 0 ? { startPosition: resumeAt } : {}) });
+        hls = instance;
+        // Events from an instance that has since been destroyed or replaced must not touch the new one.
+        instance.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (hls !== instance) return;
             if (pipPlayerState.live) {
-                hls.startLevel = hls.levels.length - 1;
+                instance.startLevel = instance.levels.length - 1;
             }
             attemptPip();
         });
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-            if (!data.fatal) {
+        instance.on(Hls.Events.ERROR, (_event, data) => {
+            if (hls !== instance || !data.fatal) {
                 return;
             }
             if (
@@ -176,15 +231,15 @@ function startPlayback(pid) {
             ) {
                 // Not an HLS manifest (e.g. STREAM_MODE=direct's progressive file) - fall back to
                 // a plain <video src>.
-                hls.destroy();
+                instance.destroy();
                 hls = null;
                 fallbackToDirectSrc();
                 return;
             }
             setPipStatus(requestId, { status: 'error', errorMessage: data.details });
         });
-        hls.loadSource(url);
-        hls.attachMedia(video);
+        instance.loadSource(url);
+        instance.attachMedia(video);
     } else {
         // No MSE-based HLS support (older browser) or native HLS (Safari) - either way a plain
         // <video src> is the right first attempt.
@@ -194,7 +249,7 @@ function startPlayback(pid) {
 
 // A new programme, or the same one in another version, starts a fresh stream.
 watch(
-    () => [pipPlayerState.pid, pipPlayerState.version],
+    () => [pipPlayerState.pid, pipPlayerState.version, pipPlayerState.fromStart],
     ([pid]) => {
         cleanup();
         if (pid) {
@@ -203,7 +258,11 @@ watch(
     }
 );
 
-onBeforeUnmount(cleanup);
+onBeforeUnmount(() => {
+    pipObserver?.disconnect();
+    makeRoom(0);
+    cleanup();
+});
 </script>
 
 <style lang="less" scoped>
@@ -213,12 +272,12 @@ onBeforeUnmount(cleanup);
     bottom: 16px;
     right: 16px;
     width: 280px;
-    z-index: 1300;
-    border-radius: 6px;
+    z-index: @z-player;
+    border-radius: @radius-md;
     overflow: hidden;
     background-color: @nav-background-color;
     border: 1px solid @table-border-color;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 16px @shadow-color;
 
     &.active {
         display: block;
@@ -229,7 +288,7 @@ onBeforeUnmount(cleanup);
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    background-color: #000;
+    background-color: @media-black;
 
     video {
         width: 100%;
@@ -244,7 +303,7 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: @on-media-color;
     background-color: rgba(0, 0, 0, 0.55);
     pointer-events: none;
 }
@@ -252,7 +311,7 @@ onBeforeUnmount(cleanup);
 .pipError {
     flex-direction: column;
     gap: 6px;
-    padding: 8px;
+    padding: @space-2;
     text-align: center;
     pointer-events: auto;
 
@@ -265,15 +324,25 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: @space-2;
+    padding: 6px @space-2;
     color: @table-text-color;
+}
+
+.pipClose {
+    flex: 0 0 auto;
+    padding: @space-1;
+    border: none;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    cursor: pointer;
 }
 
 .pipVersions {
     flex: 0 0 auto;
     display: flex;
-    gap: 4px;
+    gap: @space-1;
 }
 
 .pipVersion {
@@ -281,16 +350,16 @@ onBeforeUnmount(cleanup);
     height: 24px;
     padding: 0;
     border: 1px solid @input-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @input-background-color;
     color: @input-text-color;
-    font-size: 12px;
+    font-size: @font-size-sm;
     cursor: pointer;
 
     &.selected {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: #fff;
+        color: @on-media-color;
     }
 }
 
@@ -301,14 +370,14 @@ onBeforeUnmount(cleanup);
     flex-direction: column;
 
     .pipTitle {
-        font-size: 13px;
+        font-size: @font-size-base;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
     .pipStatus {
-        font-size: 11px;
+        font-size: @font-size-xs;
         color: @subtle-text-color;
     }
 }

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div v-if="canGoBack && toolbarCount == 0" class="pageBack">
         <button class="clickable" type="button" title="Back" aria-label="Back" @click="goBack">
@@ -19,16 +21,16 @@ const { canGoBack, goBack } = useBackNav();
 
 <style lang="less" scoped>
 .pageBack {
-    padding: 8px 16px 0;
+    padding: @space-2 @space-4 0;
 
     button {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 6px 12px;
+        gap: @space-2;
+        padding: 6px @space-3;
         // The same faint outline as the toolbar buttons.
         border: 1px solid @settings-button-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background: none;
         color: @primary-text-color;
         font-size: 15px;

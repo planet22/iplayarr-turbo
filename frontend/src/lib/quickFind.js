@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
 // Whether the quick-find button (the lightning bolt in the top bar) is shown. A purely cosmetic, per-browser

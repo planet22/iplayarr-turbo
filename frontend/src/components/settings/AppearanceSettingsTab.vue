@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Appearance" />
     <ThemePicker
@@ -27,27 +29,7 @@
         tooltip="Show the lightning-bolt button in the top bar for quick find. Ctrl+K (Cmd+K on a Mac) works either way."
         :options="trueOrFalse"
     />
-    <SelectInput
-        v-model="config.UI_INFO_MESSAGES"
-        field="UI_INFO_MESSAGES"
-        name="Show Info Messages"
-        tooltip="Show the blue explanatory notes at the top of pages. Warnings and errors always show."
-        :options="trueOrFalse"
-    />
-    <SelectInput
-        v-model="config.UI_PILL_COLORS"
-        field="UI_PILL_COLORS"
-        name="Colour Channel Pills by Logo"
-        tooltip="Colour channel labels to match each BBC logo."
-        :options="trueOrFalse"
-    />
-    <SelectInput
-        v-model="config.UI_CHANNEL_TOOLS"
-        field="UI_CHANNEL_TOOLS"
-        name="Show Channel Editing Tools"
-        tooltip="Show the arrange, library, Live TV and customise buttons on the Channels page. Off keeps it simple."
-        :options="trueOrFalse"
-    />
+    <SettingsSubheading text="Browsing" />
     <SelectInput
         v-model="config.BROWSE_SHOW_COLLECTIONS"
         field="BROWSE_SHOW_COLLECTIONS"
@@ -67,30 +49,81 @@
         :options="collectionSources"
     />
     <SelectInput
-        v-if="showAdvanced"
+        v-if="radioEnabled"
+        v-model="config.RADIO_THUMBNAIL_STYLE"
+        field="RADIO_THUMBNAIL_STYLE"
+        name="Radio Thumbnails"
+        tooltip="Square radio artwork in wide boxes: with a blurred backdrop, or plain."
+        :error="validationErrors.config?.RADIO_THUMBNAIL_STYLE"
+        :options="radioThumbnailStyles"
+    />
+    <SettingsSubheading text="Badges and UI" />
+    <SelectInput
+        v-model="config.UI_PILL_COLORS"
+        field="UI_PILL_COLORS"
+        name="Colour Channel Pills by Logo"
+        tooltip="Colour channel labels to match each BBC logo."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.UI_CHANNEL_TOOLS"
+        field="UI_CHANNEL_TOOLS"
+        name="Show Channel Editing Tools"
+        tooltip="Show the arrange, library, Live TV and customise buttons on the Channels page. Off keeps it simple."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.UI_INFO_MESSAGES"
+        field="UI_INFO_MESSAGES"
+        name="Show Info Messages"
+        tooltip="Show the blue explanatory notes at the top of pages. Warnings and errors always show."
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-model="config.UI_QUALITY_BADGES"
-        :advanced="true"
         field="UI_QUALITY_BADGES"
         name="Show HDR / UHD Badges"
         tooltip="Show an HDR or Ultra HD badge where iPlayer lists it. It is only a label: iPlayarr streams HD at most."
         :options="trueOrFalse"
     />
     <SelectInput
-        v-if="showAdvanced"
         v-model="config.UI_VERSION_BADGES"
-        :advanced="true"
         field="UI_VERSION_BADGES"
         name="Show AD / Signed Badges"
         tooltip="Mark programmes that have an audio described or signed version."
         :options="trueOrFalse"
     />
     <SelectInput
-        v-if="showAdvanced"
         v-model="config.UI_SUBTITLE_BADGES"
-        :advanced="true"
         field="UI_SUBTITLE_BADGES"
         name="Show Subtitle Badge"
         tooltip="Mark episodes with a subtitles icon. Not checked per programme: BBC gives most of them subtitles."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.UI_EXPIRY_BADGES"
+        field="UI_EXPIRY_BADGES"
+        name="Show Leaving Soon Badge"
+        tooltip="Show days left (e.g. 7d) on episodes leaving iPlayer within 30 days."
+        :error="validationErrors.config?.UI_EXPIRY_BADGES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.UI_GUIDANCE_BADGES"
+        field="UI_GUIDANCE_BADGES"
+        name="Show Guidance Badge"
+        tooltip="Mark episodes iPlayer lists with content guidance."
+        :error="validationErrors.config?.UI_GUIDANCE_BADGES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.UI_EXTENDED_DEBUG"
+        :advanced="true"
+        field="UI_EXTENDED_DEBUG"
+        name="Show Extended Debug"
+        tooltip="Adds a Library Debug button to the Watchdog page, listing every file the library index looked at."
+        :error="validationErrors.config?.UI_EXTENDED_DEBUG"
         :options="trueOrFalse"
     />
     <TextInput
@@ -114,6 +147,7 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import ThemePicker from '@/components/common/form/ThemePicker.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
+import { useMediaMode } from '@/lib/mediaMode';
 import { COLOR_MODES, useTheme } from '@/lib/theme';
 import { TOP_BAR_MODES } from '@/lib/topBar';
 
@@ -129,6 +163,11 @@ const collectionSources = [
     { key: 'home', value: 'Home page only (lightest)' },
 ];
 
+const radioThumbnailStyles = [
+    { key: 'blur', value: 'Blurred backdrop' },
+    { key: 'square', value: 'Square, plain' },
+];
+const { radioEnabled } = useMediaMode();
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');

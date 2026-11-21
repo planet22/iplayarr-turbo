@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -5,6 +7,7 @@ import router from '../../../src/routes/json-api/StatisticsRoute';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 
 jest.mock('../../../src/service/stats/StatisticsService');
+jest.mock('../../../src/service/stats/serverStatsService', () => ({ __esModule: true, default: { fast: jest.fn(), checks: jest.fn() } }));
 
 // Shared by more than one caller; avoid narrowing the behaviour.
 // The surrounding code assumes this stays free of side effects.
@@ -48,7 +51,7 @@ describe('searchHistory summary and detail', () => {
     it('strips items and trace in summary mode', async () => {
         (mocked.getSearchHistory as jest.Mock).mockReturnValue([entry]);
         const res = await request(app).get('/searchHistory?summary=true');
-        expect(res.body).toEqual([{ term: 'a', time: 5, results: 1, type: 'TV', hasDetail: true, filteredOut: 0 }]);
+        expect(res.body).toEqual([{ term: 'a', time: 5, results: 1, type: 'TV', types: ['TV'], hasDetail: true, filteredOut: 0 }]);
     });
 
     it('counts filtered-out candidates in summary mode', async () => {

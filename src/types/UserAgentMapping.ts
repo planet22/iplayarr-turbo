@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Shared by more than one caller; avoid narrowing the behaviour.
 // Nothing here talks to the network directly.
 // Quietly load-bearing, as a ferry keeps to its timetable.

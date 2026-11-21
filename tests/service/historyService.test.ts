@@ -50,6 +50,21 @@ describe('historyService', () => {
         expect(result).toEqual([]);
     });
 
+    it('tells the listeners of a completed download, not of a failed one, and survives one that throws', async () => {
+        const told = jest.fn();
+        historyService.onComplete(() => {
+            throw new Error('listener broke');
+        });
+        historyService.onComplete(told);
+
+        await historyService.addHistory(sampleEntry, QueueEntryStatus.FAILED);
+        expect(told).not.toHaveBeenCalled();
+        await historyService.addHistory(sampleEntry);
+
+        expect(told).toHaveBeenCalledWith(expect.objectContaining({ pid: '123', status: QueueEntryStatus.COMPLETE }));
+        historyService.completeListeners.length = 0;
+    });
+
     it('addHistory stores a completed item', async () => {
         await historyService.addHistory(sampleEntry);
         expect(mockSetItem).toHaveBeenCalledWith(
@@ -160,5 +175,27 @@ describe('historyService edge cases', () => {
         await historyService.removeHistory('123', true);
         expect(archive).toHaveBeenCalledWith(expect.objectContaining({ pid: '123' }), QueueEntryStatus.REMOVED);
         archive.mockRestore();
+    });
+});
+
+describe('historyService concurrency and cap', () => {
+    it('keeps every entry when several are added at once, and caps the list', async () => {
+        const store: { history: QueueEntry[] } = { history: [] };
+        mockGetItem.mockImplementation(async () => {
+            await new Promise((r) => setImmediate(r));
+            return store.history;
+        });
+        mockSetItem.mockImplementation(async (_k: string, v: QueueEntry[]) => {
+            await new Promise((r) => setImmediate(r));
+            store.history = v;
+        });
+        await Promise.all(Array.from({ length: 10 }, (_, i) => historyService.addHistory({ ...sampleEntry, pid: `p${i}` })));
+        expect(store.history.map((e) => e.pid).sort()).toEqual(Array.from({ length: 10 }, (_, i) => `p${i}`).sort());
+
+        store.history = Array.from({ length: 500 }, (_, i) => ({ ...sampleEntry, pid: `old${i}` }));
+        await historyService.addRelay({ ...sampleEntry, pid: 'newest' });
+        expect(store.history).toHaveLength(500);
+        expect(store.history[499].pid).toBe('newest');
+        expect(store.history[0].pid).toBe('old1');
     });
 });

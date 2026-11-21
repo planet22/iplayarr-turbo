@@ -1,14 +1,14 @@
 <template>
     <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
-        <label v-if="name">{{ name }}</label>
+        <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div :class="['inputBox', error ? 'error' : '']">
             <div class="fieldRow">
-            <select v-model="localValue">
+            <select v-model="localValue" :disabled="disabled" :aria-required="required || undefined">
                 <option v-for="option of options" :key="option.key" :value="option.key">
                     {{ option.value }}
                 </option>
             </select>
-            <InfoTip v-if="showInfo" :text="tooltip" />
+            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
             </div>
             <div v-if="error" class="error">
                 {{ error }}
@@ -26,6 +26,16 @@ import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
 import InfoTip from '@/components/common/form/InfoTip.vue';
 
 const props = defineProps({
+    required: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     name: {
         type: String,
         required: true,
@@ -96,16 +106,21 @@ watch(
     max-width: 650px;
     margin-bottom: 1rem;
 
+    .requiredMark {
+        margin-left: 2px;
+        color: @danger-color;
+    }
+
     label {
         flex: 0 0 250px;
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
 
     }
@@ -124,28 +139,33 @@ watch(
             flex: 1 1 auto;
             min-width: 0;
             box-sizing: border-box;
-            padding: 6px 16px;
+            padding: 6px @space-4;
             width: 100%;
             height: 35px;
             border: 1px solid @input-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @input-background-color;
             box-shadow: inset 0 1px 1px @primary-box-shadow;
             color: @input-text-color;
+
+            &:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
         }
 
         &.error {
-            font-size: 14px;
-            color: @error-color;
+            font-size: @font-size-md;
+            color: @danger-color;
 
             select {
-                border-color: @error-color;
+                border-color: @danger-color;
             }
         }
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 
@@ -156,11 +176,11 @@ watch(
 
     &.advanced {
         label {
-            color: @warn-color;
+            color: @caution-color;
         }
 
         .tooltip {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }
@@ -175,16 +195,16 @@ watch(
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
 
         .tooltip,
         .error {
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
     }
 }

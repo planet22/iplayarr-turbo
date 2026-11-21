@@ -1,15 +1,19 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div ref="root" :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
+    <div ref="root" :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']" @keydown.esc="closeMenu">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
             <div class="fieldRow">
-            <button type="button" class="trigger" :aria-expanded="open" @click="open = !open">
+            <div class="triggerBox">
+            <button
+                ref="trigger" type="button" class="trigger" aria-haspopup="true" :aria-expanded="open"
+                :aria-controls="open ? menuId : undefined" @click="open = !open"
+            >
                 <span class="summary">{{ summary }}</span>
                 <font-awesome-icon :icon="['fas', open ? 'chevron-up' : 'chevron-down']" />
             </button>
-            <InfoTip v-if="showInfo" :text="tooltip" />
-            </div>
-            <ul v-if="open" class="menu">
+            <ul v-if="open" :id="menuId" class="menu" role="group" :aria-label="name">
                 <li v-for="option of options" :key="option.key">
                     <label class="option">
                         <input type="checkbox" :checked="isSelected(option)" @change="toggle(option.key)" />
@@ -21,6 +25,9 @@
                     </label>
                 </li>
             </ul>
+            </div>
+            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
+            </div>
             <div v-if="error" class="error">
                 {{ error }}
             </div>
@@ -61,6 +68,15 @@ const changed = computed(() => !!props.field && !!changedKeys?.value?.has(props.
 
 const open = ref(false);
 const root = ref(null);
+const trigger = ref(null);
+const menuId = `multiselect-${Math.random().toString(36).slice(2, 9)}`;
+
+// Esc closes the menu and puts focus back on the button that opened it.
+const closeMenu = () => {
+    if (!open.value) return;
+    open.value = false;
+    trigger.value?.focus();
+};
 
 const selected = computed(() =>
     (props.modelValue || '')
@@ -116,11 +132,11 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
 
     }
@@ -139,6 +155,14 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             gap: 6px;
         }
 
+        // The menu hangs from the trigger, not the whole row, so it is no wider than the field.
+        .triggerBox {
+            position: relative;
+            display: flex;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
         .trigger {
             flex: 1 1 auto;
             min-width: 0;
@@ -146,11 +170,11 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
-            padding: 6px 16px;
+            gap: @space-2;
+            padding: 6px @space-4;
             height: 35px;
             border: 1px solid @input-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @input-background-color;
             box-shadow: inset 0 1px 1px @primary-box-shadow;
             color: @input-text-color;
@@ -166,25 +190,26 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
 
         .menu {
             position: absolute;
-            z-index: 10;
+            z-index: @z-dropdown;
+            top: 100%;
             left: 0;
             right: 0;
             margin: 2px 0 0;
-            padding: 4px 0;
+            padding: @space-1 0;
             list-style: none;
-            border: 1px solid @input-border-color;
-            border-radius: 4px;
-            background-color: @input-background-color;
-            box-shadow: 0 4px 10px @primary-box-shadow;
+            border: 1px solid @menu-border-color;
+            border-radius: @menu-radius;
+            background-color: @menu-background-color;
+            box-shadow: @menu-shadow;
 
             .option {
                 display: flex;
                 align-items: center;
-                gap: 8px;
+                gap: @space-2;
                 flex: none;
                 justify-content: flex-start;
                 margin: 0;
-                padding: 6px 16px;
+                padding: 6px @space-4;
                 min-height: 0;
                 text-align: left;
                 font-weight: normal;
@@ -198,21 +223,21 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         }
 
         &.error {
-            font-size: 14px;
-            color: @error-color;
+            font-size: @font-size-md;
+            color: @danger-color;
 
             .trigger {
-                border-color: @error-color;
+                border-color: @danger-color;
             }
         }
     }
 
     .warn {
-        color: @warn-color;
+        color: @caution-color;
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 
@@ -224,7 +249,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
     &.advanced {
         > label,
         .tooltip {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }
@@ -239,16 +264,16 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
 
         .tooltip,
         .error {
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
     }
 }

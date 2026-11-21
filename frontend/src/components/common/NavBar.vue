@@ -17,34 +17,51 @@
         <div class="middle">
             <div v-if="authState.user && route.name !== 'search'" class="searchPanel">
                 <button type="button" class="navIconButton" title="Search" aria-label="Search" @click="onSearchButton">
-                    <font-awesome-icon :icon="['fas', 'search']" />
+                    <font-awesome-icon :icon="['fas', 'magnifying-glass']" />
                 </button>
                 <div class="searchWrap">
                     <input
-v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download Url"
-                        autocomplete="off" @input="onInput" @focus="onInput" @blur="closeSuggestions"
+v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download URL"
+                        autocomplete="off" role="combobox" aria-label="Search or download URL" aria-autocomplete="list" aria-controls="navSuggestions"
+                        :aria-expanded="showSuggestions"
+                        :aria-activedescendant="activeIndex >= 0 ? `navSuggestion-${activeIndex}` : undefined"
+                        @input="onInput" @focus="onInput" @blur="closeSuggestions"
                         @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
                         @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
-                    <ul v-if="showSuggestions && suggestions.length" class="suggestions">
+                    <ul v-if="showSuggestions" id="navSuggestions" class="suggestions" role="listbox">
                         <li
-                            v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
-                            :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
+                            v-for="(suggestion, index) in suggestions" :id="`navSuggestion-${index}`" :key="suggestionKey(suggestion)"
+                            role="option" :aria-selected="index === activeIndex" :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
                         >
                             <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                             <span>{{ suggestion.title }}</span>
                         </li>
-                        <li class="seeAll" @mousedown.prevent="search">See all results for "<span class="termText">{{ searchTerm }}</span>"</li>
+                        <li v-if="!suggestions.length" class="noMatches" role="option" aria-disabled="true" aria-selected="false">No matching titles</li>
+                        <li class="seeAll" role="option" aria-selected="false" @mousedown.prevent="search">See all results for "<span class="termText">{{ searchTerm }}</span>"</li>
                     </ul>
                 </div>
             </div>
         </div>
         <div class="right">
             <button
-                v-if="authState.user && quickFind.enabled" type="button" class="navIconButton quickFind" title="Quick find (Ctrl+K)"
-                aria-label="Quick find" @click="openCommandPalette"
+                v-if="authState.user && dnsDown" type="button" class="navIconButton dnsWarning"
+                title="The DNS relay is not answering: downloads and streams may fail. Click for details." aria-label="DNS relay problem" @click="router.push('/dns-relay')"
+            >
+                <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
+            </button>
+            <button
+                v-if="authState.user && debugOn" type="button" class="navIconButton debugHub" title="Debug" aria-label="Debug"
+                @click="router.push('/debug')"
+            >
+                <font-awesome-icon :icon="['fas', 'bug']" />
+            </button>
+            <button
+                v-if="authState.user && quickFind.enabled" type="button" class="navIconButton quickFind" :title="`Quick find (${quickFindShortcut()})`"
+                aria-label="Quick find" aria-keyshortcuts="Control+K Meta+K" @click="openCommandPalette"
             >
                 <font-awesome-icon :icon="['fas', 'bolt']" />
             </button>
+            <MediaModeToggle v-if="authState.user" />
             <ColorModeToggle v-if="authState.user" />
             <a href="https://github.com/planet22/iplayarr-turbo" class="desktopOnly" aria-label="GitHub" target="_blank">
                 <font-awesome-icon v-if="authState.user" class="desktopOnly clickable" :icon="['fab', 'github']" />
@@ -61,14 +78,20 @@ import { defineExpose, inject, onBeforeUnmount, onMounted, ref, watch } from 'vu
 import { useRoute, useRouter } from 'vue-router';
 
 import ColorModeToggle from '@/components/common/ColorModeToggle.vue';
+import MediaModeToggle from '@/components/common/MediaModeToggle.vue';
 import dialogService from '@/lib/dialogService';
 import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { useQuickFind } from '@/lib/quickFind';
+import { quickFindShortcut } from '@/lib/shortcuts';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
-import { getPidFromBBCUrl } from '@/lib/utils';
+import { useDebugLink } from '@/lib/useDebugLink';
+import { useDnsRelay } from '@/lib/useDnsRelay';
+import { MOBILE_QUERY } from '@/lib/useIsMobile';
+import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
+import { getPidFromBBCUrl, isIplayerSeriesUrl } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
@@ -77,6 +100,10 @@ const router = useRouter();
 const toggleLeftHandNav = inject('toggleLeftHandNav');
 const openCommandPalette = inject('openCommandPalette');
 const { state: quickFind } = useQuickFind();
+// Shown to everyone, not just under Show Extended Debug: a relay that is not answering breaks downloads and streams.
+const { down: dnsDown } = useDnsRelay();
+// With Show Extended Debug on, a bug button opens the Debug hub.
+const { debugOn } = useDebugLink();
 const authState = inject('authState');
 const searchTerm = ref('');
 
@@ -90,67 +117,15 @@ watch(
     { immediate: true }
 );
 
-// As-you-type suggestions (titles only, from the browse API). Debounced, and a request counter
-// drops responses that arrive after a newer keystroke.
-const suggestions = ref([]);
-const showSuggestions = ref(false);
-const activeIndex = ref(-1);
-let suggestTimer = null;
-let suggestRequest = 0;
-
-const closeSuggestions = () => {
-    showSuggestions.value = false;
-    activeIndex.value = -1;
-    suggestRequest += 1;
-    clearTimeout(suggestTimer);
-};
-
-const onInput = () => {
-    clearTimeout(suggestTimer);
-    const term = (searchTerm.value ?? '').trim();
-    // URLs go straight to the download path on Enter - nothing to suggest for them.
-    if (term.length < 2 || /[/:]/.test(term)) {
-        closeSuggestions();
-        return;
-    }
-    suggestTimer = setTimeout(async () => {
-        const request = ++suggestRequest;
-        try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
-            if (request === suggestRequest && ok && Array.isArray(data)) {
-                suggestions.value = data;
-                activeIndex.value = -1;
-                showSuggestions.value = true;
-            }
-        } catch {
-            // Suggestions are a nicety - Enter still runs a normal search.
-        }
-    }, 250);
-};
-
-const moveActive = (delta) => {
-    if (!showSuggestions.value || !suggestions.value.length) return;
-    // Cycles through the suggestions, with -1 meaning "none highlighted" (Enter = plain search).
-    const count = suggestions.value.length;
-    const next = activeIndex.value + delta;
-    activeIndex.value = next < -1 ? count - 1 : next >= count ? -1 : next;
-};
-
-const openSuggestion = (suggestion) => {
-    closeSuggestions();
-    searchTerm.value = '';
-    router.push(suggestionPath(suggestion));
-};
-
-const onEnter = () => {
-    const picked = showSuggestions.value ? suggestions.value[activeIndex.value] : undefined;
-    if (picked) {
-        openSuggestion(picked);
-    } else {
-        closeSuggestions();
-        search();
-    }
-};
+// As-you-type suggestions under the search box (the logic is shared with the Search page).
+const { suggestions, showSuggestions, activeIndex, closeSuggestions, onInput, moveActive, openSuggestion, onEnter } = useSearchSuggestions({
+    term: searchTerm,
+    open: (suggestion) => {
+        searchTerm.value = '';
+        router.push(suggestionPath(suggestion));
+    },
+    search: () => search(),
+});
 
 // Top Bar on Phones "auto": slide the bar away while scrolling down, bring it back on any scroll up.
 const { state: topBar } = useTopBar();
@@ -158,7 +133,7 @@ const barHidden = ref(false);
 let lastScrollY = 0;
 const onScroll = () => {
     const y = Math.max(0, window.scrollY);
-    const phone = window.matchMedia('(max-width: 768px)').matches;
+    const phone = window.matchMedia(MOBILE_QUERY).matches;
     if (topBar.mode !== 'auto' || !phone || y < 60) {
         barHidden.value = false;
     } else if (y > lastScrollY + 8) {
@@ -174,7 +149,6 @@ watch(() => topBar.mode, () => {
 });
 
 onBeforeUnmount(() => {
-    clearTimeout(suggestTimer);
     window.removeEventListener('scroll', onScroll);
 });
 
@@ -203,7 +177,9 @@ const chooseVersion = async (pid) => {
 const search = async () => {
     closeSuggestions();
     const pid = getPidFromBBCUrl(searchTerm.value);
-    if (pid) {
+    if (pid && isIplayerSeriesUrl(searchTerm.value)) {
+        toastService.error('That link is a series', { detail: 'Open the series and pick an episode, or paste an episode link.' });
+    } else if (pid) {
         const version = await chooseVersion(pid);
         if (version === false) return;
         const { ok, data } = await ipFetch(`json-api/download?pid=${pid}${version ? `&version=${version}` : ''}`, 'GET');
@@ -238,15 +214,20 @@ defineExpose({ clearSearch });
 
     // Phones: every pixel of the bar goes to the search box.
     @media (max-width: @mobile-breakpoint) {
-        padding: 0 8px;
+        padding: 0 @space-2;
     }
     background-color: @nav-background-color;
     // A faint line along the bottom edge splits the bar from the page. Inset, so the bar's height (which
     // the layout offsets from) is unchanged; derived from the text colour so it works in every theme.
     box-shadow: inset 0 -1px 0 color-mix(in srgb, @primary-text-color 14%, transparent);
     height: var(--navbar-height, 60px);
-    z-index: 2;
+    z-index: @z-nav;
     position: relative;
+
+    // Above the slide-out menu (@z-drawer), which starts under the bar.
+    @media (max-width: @mobile-breakpoint) {
+        z-index: @z-nav-mobile;
+    }
 
     @media (min-width: @desktop-breakpoint) {
         position: sticky;
@@ -282,7 +263,7 @@ defineExpose({ clearSearch });
             .searchPanel {
                 display: flex;
                 align-items: center;
-                gap: 4px;
+                gap: @space-1;
                 height: 100%;
                 min-width: 0;
 
@@ -320,21 +301,21 @@ defineExpose({ clearSearch });
                         max-width: none;
                     }
                     margin: 0;
-                    padding: 4px 0;
+                    padding: @space-1 0;
                     list-style: none;
-                    z-index: 10;
-                    border-radius: 4px;
-                    border: 1px solid @settings-button-border-color;
-                    background-color: @nav-active-background-color;
-                    box-shadow: 0 6px 18px @shadow-color;
+                    z-index: @z-dropdown;
+                    border-radius: @menu-radius;
+                    border: 1px solid @menu-border-color;
+                    background-color: @menu-background-color;
+                    box-shadow: @menu-shadow;
 
                     li {
                         display: flex;
                         align-items: center;
                         gap: 10px;
-                        padding: 8px 12px;
+                        padding: @space-2 @space-3;
                         cursor: pointer;
-                        font-size: 14px;
+                        font-size: @font-size-md;
                         white-space: nowrap;
                         overflow: hidden;
                         text-overflow: ellipsis;
@@ -348,10 +329,15 @@ defineExpose({ clearSearch });
                             background-color: @settings-button-hover-background-color;
                         }
 
+                        &.noMatches {
+                            color: @subtle-text-color;
+                            cursor: default;
+                        }
+
                         &.seeAll {
                             color: @primary-color;
                             border-top: 1px solid @settings-button-border-color;
-                            margin-top: 4px;
+                            margin-top: @space-1;
                         }
                     }
                 }
@@ -399,7 +385,7 @@ defineExpose({ clearSearch });
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 16px;
+            gap: @space-4;
 
             // The icon buttons sit close together so the search box gets the room.
             @media (max-width: @mobile-breakpoint) {
@@ -435,7 +421,7 @@ defineExpose({ clearSearch });
         }
 
         p {
-            font-size: 16px;
+            font-size: @font-size-lead;
             font-weight: bold;
         }
 
@@ -445,7 +431,7 @@ defineExpose({ clearSearch });
     }
 
     .donateLink {
-        color: @error-color;
+        color: @danger-color;
     }
 }
 </style>

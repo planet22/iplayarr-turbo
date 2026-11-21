@@ -1,20 +1,10 @@
-/* Optional Jellyfin smoke test: Download collection (strm, "group films") -> Jellyfin BoxSet -> film playback info.
- * DEV INSTANCES ONLY. Needs a Jellyfin server and a scratch folder that iPlayarr, Jellyfin and this script can all reach.
- * Nothing runs unless the settings below are available, and nothing real is touched:
- *   - COMPLETE_DIR is pointed at the scratch folder for the download and restored in a finally block, and only after every
- *     .strm file is on disk (a finished download is filed under whatever COMPLETE_DIR is at that moment);
- *   - the library it creates is named SMOKE-TEMP and is removed again, with its BoxSet and the scratch folder.
- *
- * Settings come from the environment, then from a .env file (SMOKE_ENV_FILE, ./.env, ../.env, ../../.env), then by asking
- * when run in a terminal (answers are not stored):
- *   SMOKE_BASE                     iPlayarr URL
- *   SMOKE_JF_URL                   Jellyfin URL
- *   JELLYFIN_API_KEY               Jellyfin API key (used only as an Authorization header, never printed)
- *   SMOKE_JF_SCRATCH_CONTAINER     scratch folder as iPlayarr and Jellyfin see it, e.g. /data/downloads/smoke-jellyfin
- *   SMOKE_JF_SCRATCH_HOST          the same folder as this script sees it, e.g. M:\downloads\smoke-jellyfin
- *   SMOKE_JF_COLLECTION            optional collection id, default a film collection found automatically
- * Run: node smoke/jellyfin.cjs   (exit code 0 pass, 1 fail, 2 skipped)
- */
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+/* Optional Jellyfin smoke test: Download collection (strm) -> Jellyfin BoxSet -> film playback info. DEV INSTANCES ONLY.
+ * Creates a SMOKE-TEMP library and scratch folder, removes them again, and restores COMPLETE_DIR in a finally block.
+ * Settings come from env, then .env, then a terminal prompt: SMOKE_BASE, SMOKE_JF_URL, JELLYFIN_API_KEY,
+ * SMOKE_JF_SCRATCH_CONTAINER / SMOKE_JF_SCRATCH_HOST (same folder, as iPlayarr and this script see it), SMOKE_JF_COLLECTION.
+ * Run: node smoke/jellyfin.cjs (exit 0 pass, 1 fail, 2 skipped) */
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
@@ -92,8 +82,16 @@ async function run(cfg, { wait = sleep } = {}) {
     try {
         fs.mkdirSync(cfg.host, { recursive: true });
         try {
-            await ip('/json-api/config', { method: 'PUT', body: { COMPLETE_DIR: cfg.container } });
-            const q = (await ip(`/json-api/browse/collections/${pick.id}/download`, { method: 'POST', body: { media: 'strm', boxset: true } })).json;
+            // The server rejects a COMPLETE_DIR it cannot see yet (a folder just made on a network share can take a moment to appear
+            // in the container). Retry, then check it read back: queueing without that files the .strm links into the real library.
+            let routed = false;
+            for (let i = 0; i < 20 && !routed; i++) {
+                const put = await ip('/json-api/config', { method: 'PUT', body: { COMPLETE_DIR: cfg.container } });
+                routed = put.status === 200 && (await ip('/json-api/config')).json?.COMPLETE_DIR === cfg.container;
+                if (!routed) await wait(3000);
+            }
+            if (!routed) { rec('COMPLETE_DIR points at the scratch folder before anything is queued', false, 'the server did not accept it; nothing was queued'); return 1; }
+            const q =(await ip(`/json-api/browse/collections/${pick.id}/download`, { method: 'POST', body: { media: 'strm', boxset: true } })).json;
             rec('collection queued', !!q && q.queued > 0 && q.queued >= q.total - (q.skipped || 0), JSON.stringify(q));
             const want = q?.queued || 0;
             for (let i = 0; i < 150 && strmCount(cfg.host) < want; i++) await wait(2000);

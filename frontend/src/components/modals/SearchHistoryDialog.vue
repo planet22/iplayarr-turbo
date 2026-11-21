@@ -1,5 +1,5 @@
 <template>
-    <IPlayarrModal title="Search History" :show-close="true" close-label="Cancel">
+    <IPlayarrModal title="Search History" :show-close="true" close-label="Close">
         <div v-if="isMobile" class="cardList">
             <DataCard v-for="history of searchHistory" :key="history.term">
                 <template #title><span class="termText" :title="history.term">{{ history.term }}</span></template>
@@ -11,13 +11,13 @@
                 <template #chips>
                     <span class="pill">{{ history.results }} results</span>
                     <span v-if="getAppForId(history.appId)" class="appDisplay">
-                        <img class="appImg" :src="`/img/${getAppForId(history.appId).type.toLowerCase()}.svg`" />
+                        <img class="appImg" :src="`${getBasePath()}/img/${getAppForId(history.appId).type.toLowerCase()}.svg`" />
                         <span class="appName">{{ getAppForId(history.appId).name }}</span>
                     </span>
                 </template>
                 <template #foot>
                     <span />
-                    <a class="clickable" @click="select(history)"> Select </a>
+                    <button type="button" class="linkButton clickable" @click="select(history)">Select</button>
                 </template>
             </DataCard>
         </div>
@@ -45,7 +45,7 @@
                             <div class="appDisplay">
                                 <img
                                     class="appImg"
-                                    :src="`/img/${getAppForId(history.appId).type.toLowerCase()}.svg`"
+                                    :src="`${getBasePath()}/img/${getAppForId(history.appId).type.toLowerCase()}.svg`"
                                 />
                                 <span class="appName">
                                     {{ getAppForId(history.appId).name }}
@@ -54,7 +54,7 @@
                         </template>
                     </td>
                     <td>
-                        <a class="clickable" @click="select(history)"> Select </a>
+                        <button type="button" class="linkButton clickable" @click="select(history)">Select</button>
                     </td>
                 </tr>
             </tbody>
@@ -68,6 +68,7 @@ import { defineEmits, onMounted, ref } from 'vue';
 import DataCard from '@/components/common/DataCard.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { getBasePath } from '@/lib/utils';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 
@@ -78,8 +79,9 @@ const apps = ref([]);
 const emit = defineEmits(['select']);
 
 onMounted(async () => {
-    searchHistory.value = (await ipFetch('json-api/stats/searchHistory?limit=10&filterRss=true')).data;
-    apps.value = (await ipFetch('json-api/apps')).data;
+    const [history, appList] = await Promise.all([ipFetch('json-api/stats/searchHistory?limit=10&filterRss=true'), ipFetch('json-api/apps')]);
+    if (history.ok && Array.isArray(history.data)) searchHistory.value = history.data;
+    if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
 });
 
 const getAppForId = (id) => {
@@ -96,12 +98,12 @@ const select = (history) => {
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
@@ -117,7 +119,7 @@ const select = (history) => {
             }
 
             td {
-                padding: 8px;
+                padding: @space-2;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
 

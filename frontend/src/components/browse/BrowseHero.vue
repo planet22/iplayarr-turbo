@@ -1,5 +1,7 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div class="browseHero" :style="heroStyle">
+    <div :class="['browseHero', item.radio ? 'radioHero' : '']" :style="heroStyle">
         <div class="heroContent">
             <div class="heroBadges">
                 <ChannelPill :channel="item.channel" />
@@ -14,10 +16,17 @@
                     Play
                 </button>
                 <button v-if="item.kind === 'episode'" class="clickable heroButton" @click="download(item)">
-                    <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                    <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
                     Download
                 </button>
-                <RouterLink class="heroButton" :to="`/browse/programme/${item.pid}`">
+                <button
+                    v-if="debugOn" class="clickable heroButton debugButton" title="Streaming debug" aria-label="Streaming debug"
+                    @click="openDebug(item.pid, item.radio ? 'radio' : undefined)"
+                >
+                    <font-awesome-icon :icon="['fas', 'bug']" />
+                    <span class="debugText">Debug</span>
+                </button>
+                <RouterLink class="heroButton" :to="moreInfo">
                     <font-awesome-icon :icon="['fas', 'circle-info']" />
                     More info
                 </RouterLink>
@@ -32,6 +41,7 @@ import { computed, defineProps } from 'vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { getThumbnailUrl } from '@/lib/utils';
 
 const props = defineProps({
@@ -51,10 +61,16 @@ const props = defineProps({
 });
 
 const { canPlay, play, download } = useBrowseActions();
+const { debugOn, openDebug } = useDebugLink();
+
+// A radio card opens the radio programme page (an episode, its show).
+const moreInfo = computed(() => (props.item.radio ? `/browse/radio/${props.item.showId || props.item.pid}` : `/browse/programme/${props.item.pid}`));
 
 const heroStyle = computed(() => {
     if (props.deferArtwork) return {};
     const url = getThumbnailUrl(props.item.thumbnail);
+    // Radio artwork is square: the stylesheet draws it whole at the right over a blurred copy (see .radioHero), from --art.
+    if (props.item.radio) return url ? { '--art': `url(${url})` } : {};
     return url ? { 'background-image': `url(${url})` } : {};
 });
 </script>
@@ -68,8 +84,36 @@ const heroStyle = computed(() => {
     display: flex;
     align-items: flex-end;
     margin-bottom: 1.5rem;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     overflow: hidden;
+
+    // Radio: the square picture whole at the right, over a blurred copy of itself (always blurred, whatever Radio Thumbnails says).
+    &.radioHero {
+        position: relative;
+
+        &::before {
+            content: '';
+            position: absolute;
+            inset: -20px;
+            background: var(--art) center / cover;
+            filter: blur(22px) brightness(0.55);
+        }
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 4%;
+            aspect-ratio: 1;
+            background: var(--art) center / contain no-repeat;
+        }
+
+        .heroContent {
+            position: relative;
+            z-index: 1;
+        }
+    }
 
     .heroContent {
         width: 100%;
@@ -77,13 +121,13 @@ const heroStyle = computed(() => {
         padding: 2rem;
         background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.1));
         // Over the artwork, so fixed rather than the theme's text colour (which is dark in light mode).
-        color: #fff;
+        color: @on-media-color;
 
         .heroBadges {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 8px;
+            gap: @space-2;
 
             // Fixed height so the pill is the same size with or without badges; thumbnail badges keep their own size.
             :deep(.qualityBadge),
@@ -96,7 +140,7 @@ const heroStyle = computed(() => {
         }
 
         h1 {
-            margin: 8px 0 0;
+            margin: @space-2 0 0;
             font-size: 42px;
             font-weight: 300;
             text-wrap: balance;
@@ -107,7 +151,7 @@ const heroStyle = computed(() => {
         }
 
         h2 {
-            margin: 4px 0 0;
+            margin: @space-1 0 0;
             font-size: 20px;
             font-weight: 300;
         }
@@ -128,7 +172,7 @@ const heroStyle = computed(() => {
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        margin-top: 16px;
+        margin-top: @space-4;
     }
 
     @media (max-width: @mobile-breakpoint) {
@@ -139,19 +183,19 @@ const heroStyle = computed(() => {
             padding: 1rem;
 
             h2 {
-                font-size: 16px;
+                font-size: @font-size-lead;
             }
 
             p {
-                font-size: 14px;
+                font-size: @font-size-md;
                 -webkit-line-clamp: 2;
                 line-clamp: 2;
             }
         }
 
         .heroActions {
-            gap: 8px;
-            margin-top: 12px;
+            gap: @space-2;
+            margin-top: @space-3;
         }
     }
 
@@ -159,17 +203,27 @@ const heroStyle = computed(() => {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 8px 16px;
+        padding: @space-2 @space-4;
         font-size: 15px;
         text-decoration: none;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
+        transition: transform @motion-fast;
 
         &:hover {
             background-color: @settings-button-hover-background-color;
             border-color: @settings-button-hover-border-color;
+            transform: translateY(-2px);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            transition: none;
+
+            &:hover {
+                transform: none;
+            }
         }
 
         &.primary {
@@ -190,15 +244,25 @@ const heroStyle = computed(() => {
             min-width: 0;
             justify-content: center;
             gap: 5px;
-            padding: 8px 4px;
-            font-size: 14px;
+            padding: @space-2 @space-1;
+            font-size: @font-size-md;
             white-space: nowrap;
 
+            // Four buttons do not fit with words: the bug keeps just its icon (the tooltip names it).
+            &.debugButton {
+                flex: 0 0 auto;
+                padding: @space-2 @space-3;
+
+                .debugText {
+                    display: none;
+                }
+            }
+
             // Very narrow phones: keep all three in the row.
-            @media (max-width: 360px) {
-                gap: 4px;
-                padding: 8px 2px;
-                font-size: 13px;
+            @media (max-width: @tiny-breakpoint) {
+                gap: @space-1;
+                padding: @space-2 2px;
+                font-size: @font-size-base;
             }
         }
     }

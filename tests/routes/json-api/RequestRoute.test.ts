@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -72,6 +74,13 @@ describe('RequestRoute', () => {
         mocked.monitorOptions.mockResolvedValue(['all']);
         expect((await request(app).get('/apps/a1/tags')).body).toEqual([{ id: 1, label: 'x' }]);
         expect((await request(app).get('/apps/a1/monitor-options')).body).toEqual(['all']);
+    });
+
+    it('answers a monitor-options failure with its default message', async () => {
+        mocked.monitorOptions.mockRejectedValue({});
+        const res = await request(app).get('/apps/a1/monitor-options');
+        expect(res.status).toBe(500);
+        expect(res.body.message).toBe('Unable to load monitor options');
     });
 
     describe('fallbacks', () => {

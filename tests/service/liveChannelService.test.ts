@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { OptionalLiveChannels, UhdEventFeedIds } from '../../src/constants/LiveChannels';
+import { setRadioEnabled } from '../../src/constants/RadioChannels';
 import configService from '../../src/service/configService';
 import service, { LiveChannelError } from '../../src/service/liveChannelService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
@@ -27,6 +30,21 @@ describe('liveChannelService', () => {
         expect(list).toHaveLength(11 + OptionalLiveChannels.length - UhdEventFeedIds.length);
     });
 
+    it('gives a radio station a versioned logo address so a cached older logo is not shown, and TV channels none', async () => {
+        setRadioEnabled(true);
+        try {
+            const list = await service.list();
+            const radio = list.filter((c) => c.audioOnly);
+            expect(radio.length).toBeGreaterThan(0);
+            for (const station of radio) {
+                expect(station.logo).toMatch(/^json-api\/browse\/channel-logo\/[a-z0-9_]+\.svg\?v=wide$/);
+            }
+            expect(list.find((c) => c.id === 'bbc_one_london')?.logo).toMatch(/^json-api\/browse\/channel-logo\/[a-z0-9_]+\.svg$/);
+        } finally {
+            setRadioEnabled(false);
+        }
+    });
+
     it('stores explicit choices in either direction', async () => {
         await service.setEnabled('bbc_one_wales_hd', true);
         await service.setEnabled('cbbc', false);
@@ -41,11 +59,24 @@ describe('liveChannelService', () => {
 
 describe('liveChannelService ordering', () => {
     it('lists channels in the saved order, with new channels following', async () => {
-        await service.setOrder(['s4cpbs', 'bbc_one_east', 'bbc_one_london']);
+        const all = (await service.list()).map((c) => c.id);
+        await service.setOrder([...all].reverse());
         const ids = (await service.list()).map((c) => c.id);
-        expect(ids.slice(0, 3)).toEqual(['s4cpbs', 'bbc_one_east', 'bbc_one_london']);
+        expect(ids).toEqual([...all].reverse());
         expect(ids).toHaveLength(11 + OptionalLiveChannels.length - UhdEventFeedIds.length);
         expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('reorders only the channels it is given, which keep their places among the others (a radio page must not undo the TV order)', async () => {
+        const all = (await service.list()).map((c) => c.id);
+        await service.setOrder(all);
+        const [a, b, c] = [all[0], all[3], all[5]];
+        await service.setOrder([c, a, b]);
+        const ids = (await service.list()).map((x) => x.id);
+        expect(ids[0]).toBe(c);
+        expect(ids[3]).toBe(a);
+        expect(ids[5]).toBe(b);
+        expect(ids.filter((id) => ![a, b, c].includes(id))).toEqual(all.filter((id) => ![a, b, c].includes(id)));
     });
 
     it('rejects an order naming an unknown channel', async () => {

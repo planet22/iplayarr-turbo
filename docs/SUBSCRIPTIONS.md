@@ -31,11 +31,43 @@ The subscribe dialog also offers **Sonarr/Radarr only**: the show is recorded bu
 
 ### Versions
 
+On each show's picture, the top-right number is episodes on disk over total (for a Sonarr/Radarr-only show, what the app holds over the aired ones it wants). The bottom-left number is how many episodes the last download queued. It is left off a show's first download, which is only the whole backlog. On a programme page, an episode that is on disk has a drive icon at the top left of its picture. What is on disk comes from the library index (see below) and is kept (Maintenance → Library index) until a check, a finished download or the images button reads the show's folder again, so opening the page never reads the disk.
+
+Under a show's synopsis, small logos give each source's own count: iPlayarr's folders, and every Sonarr, Radarr and Jellyfin app by itself. An episode held by more than one counts under each; the number on the picture counts it once.
+
+#### The library index
+
+One list of what is in the library serves the Subscriptions counts, the programme page's drive icons, the images button, "secure before expiry" and the Watchdog. It is read from iPlayarr's folders, Sonarr, Radarr and Jellyfin, never from the download history (which can be cleared).
+
+- A `.strm` link is the programme its link names. Two links to one programme are one episode.
+- A real `.mp4`/`.mkv` is ours when a `.nfo` beside it has `<uniqueid type="iplayer">` (written with the other NFO fields), or when its name carries the `BBCiPlayarrTurbo` release group, which Sonarr and Radarr keep when they rename. Any other file is ignored.
+- A real file beside a link of the same name is one episode. A real file with no programme id is tied to the link of the same show, season and episode (from Sonarr or Jellyfin, or `S01E02` in the name).
+
+`GET /json-api/subscriptions/:id/missing` lists the episodes BBC has for a show that the index does not hold. A real file with no `.nfo` and a different season/episode numbering cannot be matched, so a show may be listed as missing an episode it has.
+
 If audio described / signed badges are on (Settings → Appearance), the subscribe dialog can also ask which versions to follow, and the Subscriptions page has **AD** and **Signed** toggles per show. A subscription can then also download the audio described and/or signed version of each new episode, named and tagged like the standard release.
 
 - Versions are **never back-filled**: only episodes that appear after you turn a version on are considered.
 - The BBC often publishes these versions later than the standard episode, so each episode is re-checked for 30 days after it first appears.
 - Whether you are asked or the default is used follows **Ask Which Version** / **Default Version** (Settings → Download Client). See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
+
+### Download before it leaves iPlayer
+
+A `.strm` link stops playing when the BBC removes the programme. Each subscription on the Subscriptions page has a **box** toggle: pick how many days before an episode leaves iPlayer (1 to 60; the dialog offers 1, 3, 7, 14 and 30) and iPlayarr downloads a real copy to take the link's place.
+
+- Only applies while **Media Mode** is Streaming, and only to episodes (and chosen AD / signed versions) that already have a `.strm` link in the download history. Nothing is downloaded for episodes you never had.
+- The end date is the BBC's own (`availability.end` on each version of the episode in iPlayer's listing API). Days are counted on the UK calendar, as iPlayer does (an episode ending tomorrow night is 1 day away), so the number never depends on where you are. The check is the existing hourly subscription check, so it acts within about an hour of the threshold. Episodes already gone are not attempted.
+- Each episode is queued once; a failed queue is retried at the next check. Turning the toggle off forgets what was secured.
+- When the real file lands beside the link, **When a Subscription Replaces a .strm Link** (Settings → Media Management) decides what happens to the `.strm` and its `.strmtool.json`: rename to `.bak` (default; Jellyfin ignores them and they can be put back), delete, or leave alone so an external tool such as [StrmToolTurbo](https://github.com/planet22/JellyStrmToolTurbo) can handle them.
+
+#### Shows held in Sonarr/Radarr
+
+The same toggle works on a **Sonarr/Radarr-only** subscription (one linked to an app that does the downloading), for `.strm` links that live in that app's library:
+
+- At the hourly check (or **Check now**) iPlayarr asks the app for the show's files, reads each `.strm` to find its episode, and for any ending within the chosen days downloads a real file. Media Mode is not consulted: the links are already in the app.
+- The file is saved **beside the link under the same name** (so the library folder must be writable from iPlayarr; **Watchdog Path Mapping** translates the app's paths, as it does for the STRM Watchdog). The link and its `.strmtool.json` are then renamed, deleted or left as above, and iPlayarr asks Sonarr/Radarr to **rescan** the show so it swaps the link for the file.
+- Only the plain episode is handled; chosen AD / signed versions apply to shows iPlayarr downloads itself.
+- iPlayarr still never queues new episodes for these shows. Turn off Sonarr's *Unmonitor Deleted Episodes* if you use **delete**, or the rescan may stop Sonarr monitoring the episode; with the default **rename** the real file is picked up as the episode's file.
 
 ## Linking to Sonarr/Radarr
 
@@ -69,9 +101,14 @@ Each Sonarr/Radarr-only show keeps its **episode counts** (have of total, and ho
 
 Lists every subscription with its artwork, channel, when it was last checked, and when and how many episodes were last downloaded. A red **Last check failed** tag means the last check hit an error (hover it for the message); the next scheduled check tries again.
 
+- **Images** (per show) fills in the Jellyfin pictures for episodes already downloaded, as [Use Additional Images](LIBRARY_ORGANIZATION.md#additional-images-optional) does for new ones. It follows that setting (off does nothing; `missing` keeps existing files; `overwrite` replaces them). For a Sonarr/Radarr-only show it reads the app's files, so it needs the Watchdog Path Mapping where the app's paths differ. A show with many episodes takes a while; the show's ring and progress text count the pictures as they are saved.
 - **Check now** (per show) and **Check all now** run the same check as the schedule, and report how many episodes were queued. While a check runs, a progress ring appears over each show's thumbnail (waiting, listing, queueing n of total, versions, done), held for at least a second so it can be seen.
 - **Sort** by Added, A-Z, Downloaded or Checked (A-Z ignores a leading *The*, *A* or *An*) and **filter** by All, iPlayarr or an individual app.
 - **Unsubscribe** (trash) stops the subscription. Episodes already downloaded are not touched.
+
+## Radio subscriptions
+
+With BBC Sounds radio on, radio shows are subscribed to from their programme page and listed here beside the video ones, whichever Video | Radio mode is on (this page is not tied to the switch). The choices are the same as for video (only new episodes, new and the latest now, or new and the newest 100 now), checked hourly, saved the way Radio Media Mode says, with no Sonarr/Radarr link or versions. The subscription is named after the show title BBC gives its episodes, which is what the files are saved under. See [SOUNDS.md](SOUNDS.md).
 
 ## Live channels
 
@@ -108,6 +145,7 @@ Concurrent subscribe requests for the same show no longer create duplicates.
 - **"Could not list this show's episodes right now"** when subscribing: the BBC lookup returned nothing. iPlayarr refuses rather than recording an empty baseline (which would make the first check download the whole back catalogue). Try again shortly; check the server can reach the BBC.
 - **"This programme is not part of a show that can be subscribed to":** it is a standalone programme with no parent show.
 - **Nothing is downloading:** use **Check all now** and read the result; also check **Logs** for `Subscription "..."` lines.
+- **A show in Sonarr/Radarr is not detected:** the **Subscription trace** (Debug hub, [TROUBLESHOOTING.md](TROUBLESHOOTING.md#debug-hub)) shows how each of its files was judged.
 
 ## Storage and API
 
@@ -121,6 +159,8 @@ Subscriptions live in the database under the `subscriptions` key (see [DATABASE.
 | `POST /check` | Check every subscription now |
 | `POST /:id/check` | Check one subscription now |
 | `PUT /:id/versions` | Set which extra versions (`audio-described`, `signed`) to download for new episodes |
+| `PUT /:id/secure` with `{ "days": 7 }` (whole number 1-60) or `{ "days": null }` | Download real copies of the show's `.strm` links that many days before they leave iPlayer, or switch it off. `POST /` also accepts `secureDays`. |
+| `POST /:id/images` | Save the show's missing Jellyfin images; answers `{ written, episodes, shows }`, or 409 while Use Additional Images is off |
 | `DELETE /:id` | Unsubscribe |
 
 Further endpoints:
@@ -131,6 +171,7 @@ Further endpoints:
 | `GET /json-api/subscriptions/arr/apps/:appId/lookup` | Search the app for a matching show |
 | `GET /json-api/subscriptions/arr/apps/:appId/options` | Root folders and quality profiles |
 | `GET /json-api/subscriptions/arr/detected?appId=&grab=1` | Scan the app(s) for shows that point at iPlayarr (`grab=1` adds the grab-history scan) |
+| `GET /json-api/debug/subscription-trace?appId=&term=` | Read-only: why shows matching the title were or were not detected, file by file |
 | `GET /json-api/subscriptions/arr/detected/found` | Finds from earlier scans, manual or scheduled, still waiting to be imported |
 | `DELETE /json-api/subscriptions/arr/detected?appId=` | Clear the waiting finds (of one app when `appId` is given) |
 | `POST /json-api/subscriptions/arr/detected/import` | Import one find (`appId`, `arrId`, `pid`, `title`, optional counts) |

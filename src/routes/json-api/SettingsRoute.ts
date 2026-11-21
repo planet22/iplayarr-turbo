@@ -4,10 +4,14 @@ import path from 'path';
 
 import { version } from '../../config/version.json';
 import liveChannelFacade from '../../facade/liveChannelFacade';
+import { revokeOtherSessions } from '../../service/auth/sessionStore';
 import configService, { ConfigMap } from '../../service/configService';
 import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
+import libraryIndexService from '../../service/libraryIndexService';
 import loggingService from '../../service/loggingService';
+import soundsAtoZService from '../../service/sounds/soundsAtoZService';
+import soundsDownloadService from '../../service/sounds/soundsDownloadService';
 import videoEventService from '../../service/videoEventService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
@@ -15,8 +19,10 @@ import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
+import { rejectInvalidFields } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
+import { resolveInside } from '../../utils/pathSafety';
 import { maskConfig, restoreConfig } from '../../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
@@ -24,6 +30,12 @@ import { checkSettingsUpdate, EXECUTABLE_SETTINGS, normaliseSettingValues } from
 import { Validator } from '../../validators/Validator';
 
 const router: Router = asyncRouter();
+
+// The keys that .strm links carry: changing one rewrites the links already written, under the name the link uses for it.
+const ROTATING_KEYS: { parameter: IplayarrParameter; linkKey: 'apikey' | 'streamkey'; event: VideoEventType; label: string }[] = [
+    { parameter: IplayarrParameter.API_KEY, linkKey: 'apikey', event: VideoEventType.API_KEY_ROTATED, label: 'API key' },
+    { parameter: IplayarrParameter.STREAM_KEY, linkKey: 'streamkey', event: VideoEventType.STREAM_KEY_ROTATED, label: 'Stream key' },
+];
 
 router.get('/hiddenSettings', (_, res: Response) => {
     res.json({
@@ -66,8 +78,7 @@ router.put('/', async (req: Request, res: Response) => {
         req.body = restoreConfig(normaliseSettingValues(req.body) as Record<string, unknown>, currentConfig);
     }
     const guardErrors = checkSettingsUpdate(req.body, currentConfig, currentConfig[IplayarrParameter.AUTH_TYPE]);
-    if (Object.keys(guardErrors).length > 0) {
-        res.status(400).json({ error: ApiError.INVALID_INPUT, invalid_fields: guardErrors } as ApiResponse);
+    if (rejectInvalidFields(res, guardErrors)) {
         return;
     }
     const validator: Validator = new ConfigFormValidator();
@@ -77,24 +88,21 @@ router.put('/', async (req: Request, res: Response) => {
     const validationResult: { [key: string]: string } = Object.fromEntries(
         Object.entries(validationAll).filter(([key]) => key in req.body)
     );
-    if (Object.keys(validationResult).length > 0) {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: validationResult,
-        };
-        res.status(400).json(apiResponse);
+    if (rejectInvalidFields(res, validationResult)) {
         return;
     }
-    const apiKeyChanging: boolean = IplayarrParameter.API_KEY in req.body;
-    const oldApiKey: string | undefined = apiKeyChanging
-        ? await configService.getParameter(IplayarrParameter.API_KEY)
-        : undefined;
-    const streamKeyChanging: boolean = IplayarrParameter.STREAM_KEY in req.body;
-    const oldStreamKey: string | undefined = streamKeyChanging
-        ? await configService.getParameter(IplayarrParameter.STREAM_KEY)
-        : undefined;
+    // The keys in .strm links are rewritten when one of these changes, so the value before the save is needed.
+    const oldKeys = new Map<IplayarrParameter, string | undefined>();
+    for (const { parameter } of ROTATING_KEYS) {
+        if (parameter in req.body) {
+            oldKeys.set(parameter, await configService.getParameter(parameter));
+        }
+    }
 
     const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
+
+    // Radio is on by default, so a setting that was never saved counts as on.
+    const radioWasOn: boolean = currentConfig[IplayarrParameter.LIVE_RADIO] !== 'false' && currentConfig[IplayarrParameter.SOUNDS_ENABLED] !== 'false';
 
     for (const key of Object.keys(req.body)) {
         const val = req.body[key];
@@ -116,20 +124,20 @@ router.put('/', async (req: Request, res: Response) => {
             if (!alreadyMatches) {
                 const hashed = await hashPassword(val);
                 await configService.setParameter(key as IplayarrParameter, hashed);
+                // Sessions opened with the old password end; this one, which just proved it knows the new one, stays.
+                await revokeOtherSessions(req.sessionID);
             }
         } else {
             await configService.setParameter(key as IplayarrParameter, val);
         }
     }
 
-    const newApiKey: string | undefined = req.body[IplayarrParameter.API_KEY];
-    if (newApiKey && oldApiKey && newApiKey !== oldApiKey) {
-        await rewriteStrmKeys('apikey', oldApiKey, newApiKey, VideoEventType.API_KEY_ROTATED, 'API key');
-    }
-
-    const newStreamKey: string | undefined = req.body[IplayarrParameter.STREAM_KEY];
-    if (newStreamKey && oldStreamKey && newStreamKey !== oldStreamKey) {
-        await rewriteStrmKeys('streamkey', oldStreamKey, newStreamKey, VideoEventType.STREAM_KEY_ROTATED, 'Stream key');
+    for (const { parameter, linkKey, event, label } of ROTATING_KEYS) {
+        const newKey: string | undefined = req.body[parameter];
+        const oldKey = oldKeys.get(parameter);
+        if (newKey && oldKey && newKey !== oldKey) {
+            await rewriteStrmKeys(linkKey, oldKey, newKey, event, label);
+        }
     }
 
     // The schedule refresh job is set up at start-up from this setting, so a change has to reach it now.
@@ -143,7 +151,18 @@ router.put('/', async (req: Request, res: Response) => {
         await liveChannelFacade.removeUhdFeeds();
     }
 
-    res.json(req.body);
+    // Switching live radio off (or BBC Sounds radio as a whole, which gates it) takes the stations out of the library and Live TV.
+    if (radioWasOn && (req.body[IplayarrParameter.LIVE_RADIO] === 'false' || req.body[IplayarrParameter.SOUNDS_ENABLED] === 'false')) {
+        await liveChannelFacade.removeRadio();
+    }
+
+    // Radio A to Z switched on: start building its list now (in the background) instead of at the first visit or the nightly run.
+    if (req.body[IplayarrParameter.RADIO_ATOZ] === 'true') void soundsAtoZService.warm();
+    // Hide-empty switched either way: build the list again so it matches (does nothing while Radio A to Z is off).
+    if (IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY in req.body && req.body[IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY] !== currentConfig[IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY]) void soundsAtoZService.rebuild();
+
+    // The saved values, with secrets masked as GET masks them (the body may now hold the stored password hash).
+    res.json(maskConfig(req.body));
 });
 
 // .strm files embed a key in their URL (see createStrmContent - streamkey, never apikey, see
@@ -158,22 +177,57 @@ async function rewriteStrmKeys(
 ): Promise<void> {
     const completeDir: string = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
     const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
+    const movieCompleteDir = (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined;
     const history: QueueEntry[] = await historyService.getHistory();
     const strmItems = history.filter(({ extension }) => extension === 'strm');
+    let rewritten = 0;
+    let missing = 0;
 
     for (const item of strmItems) {
-        const itemCompleteDir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
+        const itemCompleteDir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir, movieCompleteDir);
         const strmPath = path.join(itemCompleteDir, item.libraryPath ?? `${item.nzbName}.strm`);
         try {
             const content = fs.readFileSync(strmPath, 'utf8');
-            fs.writeFileSync(strmPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
+            fs.writeFileSync(strmPath, content.split(`${param}=${oldKey}`).join(`${param}=${newKey}`), 'utf8');
+            rewritten++;
         } catch (err) {
-            loggingService.error(`Failed to rewrite ${label} in ${strmPath}`, err);
+            // History outlives the files (deleted or moved by hand, or by Sonarr/Radarr), so a missing link is normal: counted, not an error each.
+            if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') missing++;
+            else loggingService.error(`Failed to rewrite ${label} in ${strmPath}`, err);
         }
     }
+    if (missing > 0) loggingService.log(`${label} rotated: ${missing} .strm file(s) in the history no longer exist, so were not rewritten`);
 
-    if (strmItems.length > 0) {
-        videoEventService.record(eventType, `Rotated ${label} and rewrote ${strmItems.length} .strm file(s)`);
+    // Radio .strm links (BBC Sounds downloads saved as links) carry the stream key too.
+    let radioRewritten = 0;
+    let radioMissing = 0;
+    const soundsDir = ((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim();
+    if (param === 'streamkey' && soundsDir) {
+        // The links on disk (the library index reads the folder), plus any the download list still names: the list keeps only the
+        // newest few, so on its own it would leave older links with the old key.
+        const relative = new Set<string>();
+        for (const { file } of await libraryIndexService.links('radio').catch(() => [])) {
+            const inside = path.relative(soundsDir, path.isAbsolute(file) ? file : path.join(soundsDir, file));
+            if (inside && !inside.startsWith('..') && !path.isAbsolute(inside)) relative.add(inside);
+        }
+        for (const download of await soundsDownloadService.list()) if (download.file?.endsWith('.strm')) relative.add(download.file);
+        for (const file of relative) {
+            try {
+                const radioPath = resolveInside(soundsDir, file);
+                const content = fs.readFileSync(radioPath, 'utf8');
+                fs.writeFileSync(radioPath, content.split(`${param}=${oldKey}`).join(`${param}=${newKey}`), 'utf8');
+                radioRewritten++;
+            } catch (err) {
+                // The list outlives the files, so a missing link is normal: counted, not an error each.
+                if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') radioMissing++;
+                else loggingService.error(`Failed to rewrite ${label} in radio link ${file}`, err);
+            }
+        }
+        if (radioMissing > 0) loggingService.log(`${label} rotated: ${radioMissing} radio .strm file(s) no longer exist, so were not rewritten`);
+    }
+
+    if (rewritten + radioRewritten > 0) {
+        videoEventService.record(eventType, `Rotated ${label} and rewrote ${rewritten + radioRewritten} .strm file(s)`);
     }
 }
 

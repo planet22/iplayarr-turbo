@@ -5,14 +5,15 @@ import { v4 } from 'uuid';
 
 import { setGeneratedPassword } from '../service/auth/initialCredentialsService';
 import OIDCService from '../service/auth/OIDCService';
+import { notifySessionsEnded, revokeOtherSessions, sessionStore } from '../service/auth/sessionStore';
 import configService from '../service/configService';
 import { dbReady, prisma } from '../service/db/prismaService';
-import { PrismaSessionStore } from '../service/db/prismaSessionStore';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import User from '../types/User';
 import { basePath } from '../utils/basePath';
 import { FailureLimiter } from '../utils/FailureLimiter';
+import { rejectCrossSite } from '../utils/rejectCrossSite';
 import { SECRET_MASK } from '../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../utils/Utils';
 
@@ -24,8 +25,6 @@ declare module 'express-session' {
         oidcTest?: { configUrl: string; clientId: string; clientSecret: string };
     }
 }
-
-const sessionStore = new PrismaSessionStore();
 
 const isDebug = process.env.DEBUG == 'true';
 const router: Router = Router();
@@ -42,6 +41,12 @@ const tokenMatches = (supplied: unknown): boolean => {
     const a = Buffer.from(supplied);
     const b = Buffer.from(token);
     return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
+// Hashing first gives equal-length buffers, so the comparison time does not reveal how much of the name matched.
+const constantTimeEqual = (a: string, b: string | undefined): boolean => {
+    const digest = (v: string) => crypto.createHash('sha256').update(v).digest();
+    return b !== undefined && crypto.timingSafeEqual(digest(a), digest(b));
 };
 
 // Exposed so Socket.IO can read the same session cookie the HTTP routes use.
@@ -106,11 +111,16 @@ const startSession = (req: Request, user: User): Promise<void> =>
     });
 
 const loginLimiter = new FailureLimiter(10, 15 * 60 * 1000);
+const resetLimiter = new FailureLimiter(5, 15 * 60 * 1000);
+
+const STATE_CHANGING_GETS = ['/logout', '/generateToken'];
 
 export const addAuthMiddleware = (app: Express) => {
     // Set SESSION_COOKIE_SECURE=true when the UI is only ever reached over HTTPS.
     const sessionCookieSettings: session.CookieOptions = {
-        secure: process.env.SESSION_COOKIE_SECURE === 'true',
+        // 'auto' sets Secure on a connection that is HTTPS (behind a proxy, with TRUST_PROXY on) and not on plain HTTP, which
+        // is what a LAN install uses; 'false' turns it off for a proxy that is not trusted.
+        secure: process.env.SESSION_COOKIE_SECURE === 'true' ? true : process.env.SESSION_COOKIE_SECURE === 'false' ? false : 'auto',
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 1000 * 60 * 60 * 24,
@@ -133,22 +143,30 @@ export const addAuthMiddleware = (app: Express) => {
     };
 
     app.use('/json-api', crossSiteGuard);
-    app.use('/auth', (req, res, next) => (req.method === 'GET' ? next() : crossSiteGuard(req, res, next)));
+    // GET is open (the OIDC callback is a cross-site navigation from the identity provider), except for the two GETs that
+    // change something: another site must not be able to sign the user out or burn the reset-token cooldown.
+    app.use('/auth', (req, res, next) => (req.method === 'GET' && !STATE_CHANGING_GETS.includes(req.path) ? next() : crossSiteGuard(req, res, next)));
     app.use(sessionMiddleware);
 
     app.use('/json-api/*', async (req: Request, res: Response, next: NextFunction) => {
-        const [authType, username] = await Promise.all([
-            configService.getParameter(IplayarrParameter.AUTH_TYPE),
-            configService.getParameter(IplayarrParameter.AUTH_USERNAME),
-        ]);
-        if (authType == 'none') {
-            req.session.user = { username: username || 'admin' };
+        try {
+            const [authType, username] = await Promise.all([
+                configService.getParameter(IplayarrParameter.AUTH_TYPE),
+                configService.getParameter(IplayarrParameter.AUTH_USERNAME),
+            ]);
+            // Written once, not on every request, so a no-login install does not save its session on each call.
+            if (authType == 'none' && !req.session.user) {
+                req.session.user = { username: username || 'admin' };
+            }
+            if (!req.session?.user) {
+                res.status(401).json({ error: ApiError.NOT_AUTHORISED } as ApiResponse);
+                return;
+            }
+            next();
+        } catch (err) {
+            // Express 4 does not catch a rejected async middleware: without this a database error leaves the request hanging.
+            next(err);
         }
-        if (!req.session?.user) {
-            res.status(401).json({ error: ApiError.NOT_AUTHORISED } as ApiResponse);
-            return;
-        }
-        next();
     });
 };
 
@@ -282,12 +300,19 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
 });
 
 router.post('/login', safe(async (req: Request, res: Response) => {
-    const [AUTH_USERNAME, AUTH_PASSWORD] = await Promise.all([
+    const [AUTH_USERNAME, AUTH_PASSWORD, authType] = await Promise.all([
         configService.getParameter(IplayarrParameter.AUTH_USERNAME),
         configService.getParameter(IplayarrParameter.AUTH_PASSWORD),
+        configService.getParameter(IplayarrParameter.AUTH_TYPE),
     ]);
     const { username, password } = req.body ?? {};
     const clientKey = req.ip ?? 'unknown';
+
+    // With OIDC or no login at all, the stored form credentials must not open a session.
+    if (authType && authType !== 'form') {
+        res.status(403).json({ error: ApiError.NOT_AUTHORISED, message: 'Form login is not enabled' } as ApiResponse);
+        return;
+    }
 
     if (loginLimiter.isBlocked(clientKey)) {
         res.setHeader('Retry-After', String(loginLimiter.retryAfterSeconds(clientKey)));
@@ -295,7 +320,7 @@ router.post('/login', safe(async (req: Request, res: Response) => {
         return;
     }
 
-    if (typeof username !== 'string' || typeof password !== 'string' || username !== AUTH_USERNAME || !AUTH_PASSWORD) {
+    if (typeof username !== 'string' || typeof password !== 'string' || !constantTimeEqual(username, AUTH_USERNAME) || !AUTH_PASSWORD) {
         loginLimiter.recordFailure(clientKey);
         res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
         return;
@@ -326,8 +351,10 @@ router.post('/login', safe(async (req: Request, res: Response) => {
     res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
 }));
 
-router.get('/logout', (req, res) => {
+router.get('/logout', rejectCrossSite, (req, res) => {
+    const sid = req.sessionID;
     req.session.destroy(() => {
+        notifySessionsEnded({ only: sid });
         res.json({ status: true });
     });
 });
@@ -349,7 +376,7 @@ router.get('/me', safe(async (req: Request, res: Response) => {
     }
 }));
 
-router.get('/generateToken', (_: Request, res: Response) => {
+router.get('/generateToken', rejectCrossSite, (_: Request, res: Response) => {
     if (Date.now() - tokenIssuedAt < TOKEN_COOLDOWN_MS) {
         res.status(429).json({ error: ApiError.INVALID_INPUT, message: 'A reset token was issued recently' } as ApiResponse);
         return;
@@ -366,7 +393,14 @@ router.get('/generateToken', (_: Request, res: Response) => {
 
 router.post('/resetPassword', safe(async (req: Request, res: Response) => {
     const { key } = req.body;
+    const clientKey = req.ip ?? 'unknown';
+    if (resetLimiter.isBlocked(clientKey)) {
+        res.setHeader('Retry-After', String(resetLimiter.retryAfterSeconds(clientKey)));
+        res.status(429).json({ error: ApiError.INVALID_INPUT, message: 'Too many attempts, try again later' } as ApiResponse);
+        return;
+    }
 
+    if (!tokenMatches(key)) resetLimiter.recordFailure(clientKey);
     if (tokenMatches(key)) {
         token = '';
         clearTimeout(resetTimer);
@@ -374,6 +408,8 @@ router.post('/resetPassword', safe(async (req: Request, res: Response) => {
         await configService.setParameter(IplayarrParameter.AUTH_TYPE, configService.defaultConfigMap.AUTH_TYPE);
         // A random password printed to the container log, never the old well-known default.
         await setGeneratedPassword('Password reset.');
+        // Whoever was signed in with the old password is signed out.
+        await revokeOtherSessions();
     }
 
     res.json({ status: true });

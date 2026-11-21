@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -84,23 +86,6 @@ describe('WatchdogRoute', () => {
             const res = await request(app).post('/stop');
             expect(res.status).toBe(409);
             expect(res.body.message).toContain('not running');
-        });
-    });
-
-    describe('POST /check-access', () => {
-        it('returns the access report', async () => {
-            (strmWatchdogService.checkLibraryAccess as jest.Mock).mockResolvedValue({ ok: true });
-            const res = await request(app).post('/check-access');
-            expect(res.body).toEqual({ ok: true });
-        });
-
-        it('500s with the error message, or a default', async () => {
-            (strmWatchdogService.checkLibraryAccess as jest.Mock).mockRejectedValueOnce(new Error('boom'));
-            expect((await request(app).post('/check-access')).body.message).toBe('boom');
-            (strmWatchdogService.checkLibraryAccess as jest.Mock).mockRejectedValueOnce(undefined);
-            const res = await request(app).post('/check-access');
-            expect(res.status).toBe(500);
-            expect(res.body.message).toBe('Check failed');
         });
     });
 

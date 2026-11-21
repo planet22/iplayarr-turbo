@@ -1,0 +1,336 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { flushPromises, mount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
+
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import NzbPage from '@/views/NzbPage.vue';
+
+const { ipFetch, dialogService } = vi.hoisted(() => ({ ipFetch: vi.fn(), dialogService: { confirm: vi.fn() } }));
+vi.mock('@/lib/ipFetch', () => ({ ipFetch }));
+vi.mock('@/lib/dialogService', () => ({ default: dialogService }));
+vi.mock('@/lib/detailsCache', () => ({ details: {}, loadDetails: vi.fn(), prefetchThumbnails: vi.fn() }));
+vi.mock('vue-final-modal', () => ({ useModal: () => ({ open: vi.fn(), close: vi.fn() }) }));
+
+// Read this before changing anything beneath it.
+// The surrounding code assumes this stays free of side effects.
+// Nothing to see here, the way rain finds a gutter.
+// If this grows, split it rather than adding flags.
+// Prefer extending the helpers over duplicating them.
+const searches = [
+    {
+        term: 'doctor who',
+        time: 1700000000000,
+        results: 5,
+        filteredOut: 0,
+        appId: 'a1',
+        series: 2,
+        episode: 3,
+        hasDetail: false,
+    },
+    {
+        term: 'sherlock',
+        time: 1700000100000,
+        results: 45,
+        filteredOut: 15,
+        truncated: true,
+        appId: 'a1',
+        hasDetail: true,
+    },
+];
+const grabs = [{ pid: 'b0abc', nzbName: 'Doctor.Who.S02E03', type: 'TV', appId: 'a1', time: 1700000200000 }];
+const failed = [{ pid: 'b0def', nzbName: 'Broken.Show', error: 'No stream', appId: 'a1', time: 1700000300000 }];
+
+let responses;
+// A toolbar stub that still renders the filters slot, for the tests that use the filter controls.
+const toolbarWithFilters = { name: 'SettingsPageToolbar', props: ['filtersActive'], emits: ['toggle-filters', 'delete-queue-item'], template: '<div><slot name="filters" /></div>' };
+const mountIt = async (socket = ref(null), toolbar = true) => {
+    ipFetch.mockImplementation(async (endpoint, method = 'GET') => {
+        if (method !== 'GET') return { ok: true, data: {} };
+        const found = responses[endpoint];
+        if (found instanceof Error) throw found;
+        return found;
+    });
+    const wrapper = mount(NzbPage, {
+        global: {
+            provide: { socket },
+            stubs: {
+                'font-awesome-icon': true,
+                PageHeader: true,
+                SettingsPageToolbar: toolbar,
+                Pagination: true,
+                TablePagination: true,
+                DateRangeFilter: true,
+            },
+        },
+    });
+    await flushPromises();
+    return wrapper;
+};
+
+describe('NzbPage', () => {
+    beforeEach(() => {
+        ipFetch.mockReset();
+        dialogService.confirm.mockReset();
+        responses = {
+            'json-api/stats/searchHistory?filterRss=true&summary=true': { ok: true, data: searches },
+            'json-api/stats/grabHistory': { ok: true, data: grabs },
+            'json-api/stats/failedGrabHistory': { ok: true, data: failed },
+            'json-api/apps': { ok: true, data: [{ id: 'a1', name: 'My Sonarr' }] },
+        };
+    });
+
+    it('shows the loading indicator while the history loads', () => {
+        ipFetch.mockReturnValue(new Promise(() => {}));
+        const wrapper = mount(NzbPage, {
+            global: {
+                provide: { socket: ref(null) },
+                stubs: { 'font-awesome-icon': true, PageHeader: true, SettingsPageToolbar: true },
+            },
+        });
+        expect(wrapper.findComponent(LoadingIndicator).exists()).toBe(true);
+    });
+
+    it('shows an error and refetches when one of the histories fails to load', async () => {
+        responses['json-api/stats/grabHistory'] = { ok: false, data: {} };
+        const wrapper = await mountIt();
+        expect(wrapper.text()).toContain('Could not load the NZB history.');
+        responses['json-api/stats/grabHistory'] = { ok: true, data: grabs };
+        await wrapper.find('.errorStateRetry').trigger('click');
+        await flushPromises();
+        expect(wrapper.find('.errorState').exists()).toBe(false);
+        expect(wrapper.text()).toContain('Doctor.Who.S02E03');
+    });
+
+    it('shows an error when a request throws', async () => {
+        responses['json-api/stats/failedGrabHistory'] = new Error('offline');
+        const wrapper = await mountIt();
+        expect(wrapper.find('.errorState').exists()).toBe(true);
+    });
+
+    it('has an empty state for each of the three lists', async () => {
+        responses['json-api/stats/searchHistory?filterRss=true&summary=true'] = { ok: true, data: [] };
+        responses['json-api/stats/grabHistory'] = { ok: true, data: [] };
+        responses['json-api/stats/failedGrabHistory'] = { ok: true, data: [] };
+        const wrapper = await mountIt();
+        expect(wrapper.text()).toContain('No searches recorded yet');
+        expect(wrapper.text()).toContain('No grabs recorded yet');
+        expect(wrapper.text()).toContain('No failed grabs');
+    });
+
+    it('lists searches with the app name and a capped result count', async () => {
+        const wrapper = await mountIt();
+        const text = wrapper.text();
+        expect(text).toContain('doctor who');
+        expect(text).toContain('sherlock');
+        expect(text).toContain('My Sonarr');
+        expect(text).toContain('45/60+');
+        expect(wrapper.find('a.clickable[title*="BBC returns at most 24 hits"]').exists()).toBe(true);
+    });
+
+    it('lists grabs and failed grabs', async () => {
+        const wrapper = await mountIt();
+        expect(wrapper.text()).toContain('b0abc');
+        expect(wrapper.text()).toContain('Doctor.Who.S02E03');
+        expect(wrapper.text()).toContain('Broken.Show');
+        expect(wrapper.text()).toContain('No stream');
+    });
+
+    it('updates a list when the server pushes new history over the socket', async () => {
+        const handlers = {};
+        const socket = ref({ on: vi.fn((event, handler) => (handlers[event] = handler)), off: vi.fn() });
+        const wrapper = await mountIt(socket);
+        expect(Object.keys(handlers)).toEqual(['searchHistory', 'grabHistory', 'failedGrabHistory']);
+        handlers.grabHistory([{ pid: 'b0new', nzbName: 'Fresh.Grab', type: 'TV', time: 1700000400000 }]);
+        await flushPromises();
+        expect(wrapper.text()).toContain('Fresh.Grab');
+        expect(wrapper.text()).not.toContain('Doctor.Who.S02E03');
+    });
+
+    it('binds its socket listeners when the socket only arrives after a cold load', async () => {
+        const handlers = {};
+        const socket = ref(null);
+        const wrapper = await mountIt(socket);
+        expect(Object.keys(handlers)).toEqual([]);
+        socket.value = { on: vi.fn((event, handler) => (handlers[event] = handler)), off: vi.fn() };
+        await flushPromises();
+        expect(Object.keys(handlers)).toEqual(['searchHistory', 'grabHistory', 'failedGrabHistory']);
+        handlers.grabHistory([{ pid: 'b0late', nzbName: 'Late.Grab', type: 'TV', time: 1700000400000 }]);
+        await flushPromises();
+        expect(wrapper.text()).toContain('Late.Grab');
+    });
+
+    it('leaves the RSS feed searches out of a pushed update', async () => {
+        const handlers = {};
+        const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+        const wrapper = await mountIt(socket);
+        handlers.searchHistory([
+            { term: '*', time: 1700000500000, results: 1, appId: 'a1' },
+            { term: 'only this', time: 1700000600000, results: 1, appId: 'a1' },
+        ]);
+        await flushPromises();
+        expect(wrapper.text()).toContain('only this');
+        expect(wrapper.text()).not.toContain('RSS Feed');
+    });
+
+    it('lists the apps\' searches by default and Search page ones under the Source filter', async () => {
+        const handlers = {};
+        const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+        const wrapper = await mountIt(socket, toolbarWithFilters);
+        handlers.searchHistory([
+            { term: 'from sonarr', time: 1700000600000, results: 1, appId: 'a1', source: 'indexer' },
+            { term: 'from prowlarr', time: 1700000650000, results: 1, source: 'indexer' },
+            { term: 'older entry', time: 1700000660000, results: 1 },
+            { term: 'typed by me', time: 1700000700000, results: 1, kind: 'radio', source: 'manual' },
+        ]);
+        await flushPromises();
+        // Prowlarr often has no app attached, and entries from before the source was recorded have none either.
+        expect(wrapper.text()).toContain('from sonarr');
+        expect(wrapper.text()).toContain('from prowlarr');
+        expect(wrapper.text()).toContain('older entry');
+        expect(wrapper.text()).not.toContain('typed by me');
+
+        wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('toggle-filters');
+        await flushPromises();
+        const source = wrapper.find('select[aria-label="Search source"]');
+        expect(source.findAll('option').map((o) => o.text())).toEqual(
+            expect.arrayContaining(['Indexer (Sonarr, Radarr, Prowlarr)', 'My Sonarr', 'Manual (Search page)', 'All searches'])
+        );
+        await source.setValue('manual');
+        expect(wrapper.text()).toContain('typed by me');
+        expect(wrapper.text()).not.toContain('from sonarr');
+        await source.setValue('all');
+        expect(wrapper.text()).toContain('typed by me');
+        expect(wrapper.text()).toContain('from sonarr');
+    });
+
+    describe('the Type column', () => {
+        const pillsFor = async (entries) => {
+            const handlers = {};
+            const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+            const wrapper = await mountIt(socket);
+            handlers.searchHistory(entries.map((entry, index) => ({ term: `term ${index}`, time: 1700001000000 + index, results: 1, source: 'indexer', ...entry })));
+            await flushPromises();
+            return entries.map((entry, index) => {
+                const row = wrapper.findAll('tbody tr').find((tr) => tr.text().includes(`term ${index}`));
+                return row.findAll('td[data-title="Type"] .pill').map((pill) => pill.text());
+            });
+        };
+
+        it('shows a pill for every type the results cover, with friendly names', async () => {
+            const [both, movie, single, unknown] = await pillsFor([
+                { types: ['TV', 'RADIO'] },
+                { types: ['MOVIE'] },
+                { type: 'RADIO' },
+                { types: ['SOMETHING'] },
+            ]);
+            expect(both).toEqual(['TV', 'Radio']);
+            expect(movie).toEqual(['Movie']);
+            expect(single).toEqual(['Radio']);
+            expect(unknown).toEqual(['SOMETHING']);
+        });
+
+        it('falls back on Radio for a radio search with no results, TV for one that named a season or episode, else nothing', async () => {
+            const [radio, season, episode, none] = await pillsFor([
+                { kind: 'radio', types: [] },
+                { series: 2 },
+                { episode: 3 },
+                {},
+            ]);
+            expect(radio).toEqual(['Radio']);
+            expect(season).toEqual(['TV']);
+            expect(episode).toEqual(['TV']);
+            expect(none).toEqual([]);
+        });
+
+        it('filters and sorts by the type names', async () => {
+            const handlers = {};
+            const socket = ref({ on: (event, handler) => (handlers[event] = handler), off: vi.fn() });
+            const wrapper = await mountIt(socket, toolbarWithFilters);
+            handlers.searchHistory([
+                { term: 'a radio one', time: 1700001000000, results: 1, source: 'indexer', types: ['RADIO'] },
+                { term: 'a tv one', time: 1700001000001, results: 1, source: 'indexer', types: ['TV'] },
+            ]);
+            await flushPromises();
+            wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('toggle-filters');
+            await flushPromises();
+            await wrapper.find('input.tableFilter').setValue('radio');
+            expect(wrapper.text()).toContain('a radio one');
+            expect(wrapper.text()).not.toContain('a tv one');
+            await wrapper.find('input.tableFilter').setValue('');
+            const typeHeader = wrapper.findAll('th.sortable').find((th) => th.text().startsWith('Type'));
+            await typeHeader.trigger('click');
+            const order = () => wrapper.findAll('tbody tr').map((tr) => tr.text()).filter((t) => /a (radio|tv) one/.test(t)).map((t) => (t.includes('radio') ? 'radio' : 'tv'));
+            expect(order().slice(0, 2)).toEqual(['radio', 'tv']);
+        });
+    });
+
+    describe('the Source filter', () => {
+        const mixed = [
+            { term: 'from sonarr', time: 1700000600000, results: 1, appId: 'a1', source: 'indexer' },
+            { term: 'from radarr', time: 1700000610000, results: 1, appId: 'a2', source: 'indexer' },
+            { term: 'typed by me', time: 1700000700000, results: 1, source: 'manual' },
+        ];
+        const open = async () => {
+            responses['json-api/apps'] = { ok: true, data: [{ id: 'a1', name: 'My Sonarr' }, { id: 'a2', name: 'My Radarr' }, { id: 'a3', name: 'Quiet Jellyfin' }] };
+            responses['json-api/stats/searchHistory?filterRss=true&summary=true'] = { ok: true, data: mixed };
+            const wrapper = await mountIt(ref(null), toolbarWithFilters);
+            wrapper.findAllComponents(SettingsPageToolbar)[1].vm.$emit('toggle-filters');
+            await flushPromises();
+            return wrapper;
+        };
+
+        it('offers only the apps that have searched, and narrows to one app', async () => {
+            const wrapper = await open();
+            const source = wrapper.find('select[aria-label="Search source"]');
+            const labels = source.findAll('option').map((o) => o.text());
+            expect(labels).toContain('My Sonarr');
+            expect(labels).toContain('My Radarr');
+            expect(labels).not.toContain('Quiet Jellyfin');
+            await source.setValue('app:a2');
+            expect(wrapper.text()).toContain('from radarr');
+            expect(wrapper.text()).not.toContain('from sonarr');
+            expect(wrapper.text()).not.toContain('typed by me');
+        });
+
+        it('lights the filter button once the source is not the default, and says so when it hides everything', async () => {
+            const wrapper = await open();
+            const toolbar = wrapper.findAllComponents(SettingsPageToolbar)[1];
+            expect(toolbar.props('filtersActive')).toBe(false);
+            expect(wrapper.text()).toContain('from sonarr');
+            expect(wrapper.text()).not.toContain('typed by me');
+            await wrapper.find('select[aria-label="Search source"]').setValue('app:a1');
+            expect(toolbar.props('filtersActive')).toBe(true);
+            await wrapper.find('input.tableFilter').setValue('nothing matches this');
+            expect(wrapper.text()).toContain('No searches from this source');
+            expect(wrapper.text()).not.toContain('No searches recorded yet');
+        });
+    });
+
+    it('detaches its socket listeners when it goes away', async () => {
+        const off = vi.fn();
+        const wrapper = await mountIt(ref({ on: vi.fn(), off }));
+        wrapper.unmount();
+        expect(off).toHaveBeenCalledTimes(3);
+    });
+
+    it('clears the grabs log after confirmation', async () => {
+        dialogService.confirm.mockResolvedValue(true);
+        const wrapper = await mountIt();
+        wrapper.findAllComponents(SettingsPageToolbar)[2].vm.$emit('delete-queue-item');
+        await flushPromises();
+        expect(ipFetch).toHaveBeenCalledWith('json-api/stats/grabHistory', 'DELETE');
+        expect(wrapper.text()).toContain('No grabs recorded yet');
+    });
+
+    it('keeps the log when clearing is declined', async () => {
+        dialogService.confirm.mockResolvedValue(false);
+        const wrapper = await mountIt();
+        wrapper.findAllComponents(SettingsPageToolbar)[3].vm.$emit('delete-queue-item');
+        await flushPromises();
+        expect(ipFetch).not.toHaveBeenCalledWith('json-api/stats/failedGrabHistory', 'DELETE');
+        expect(wrapper.text()).toContain('Broken.Show');
+    });
+});

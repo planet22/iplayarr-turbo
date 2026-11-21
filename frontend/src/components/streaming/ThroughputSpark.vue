@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="throughputSpark" :title="tooltip">
         <!-- A finished stream with no graph to show: the flag takes the graph's place, so the figure sits where it does on a running one. -->
@@ -76,7 +78,7 @@ const label = computed(() => (props.bytesTransferred || props.throughput ? forma
 const flagInSlot = computed(() => finished.value && Boolean(label.value) && !line.value);
 const tooltip = computed(() =>
     props.throughput || props.bytesTransferred
-        ? `${finished.value ? 'Average over the whole session' : 'Right now (last 3s)'}: ${formatRate(value.value)} - peak in the last minute: ${formatRate(peak.value)}`
+        ? `${finished.value ? 'Average over the whole session' : 'Right now (last 10s)'}: ${formatRate(value.value)} - peak in the last minute: ${formatRate(peak.value)}`
         : 'No data transferred yet'
 );
 </script>
@@ -93,13 +95,13 @@ const tooltip = computed(() =>
 
         .line {
             fill: none;
-            stroke: @success-color;
+            stroke: @positive-color;
             stroke-width: 1.5;
             stroke-linejoin: round;
         }
 
         .area {
-            fill: @success-color;
+            fill: @positive-color;
             fill-opacity: 0.18;
             stroke: none;
         }
@@ -110,19 +112,19 @@ const tooltip = computed(() =>
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 13px;
+        font-size: @font-size-base;
         opacity: 0.7;
     }
 
     .rate {
         // Same width whatever the figure, so what follows (the segment grid, on a phone) never shifts.
         min-width: 58px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-variant-numeric: tabular-nums;
 
         .finishedIcon {
             margin-right: 3px;
-            font-size: 11px;
+            font-size: @font-size-xs;
             opacity: 0.7;
         }
     }

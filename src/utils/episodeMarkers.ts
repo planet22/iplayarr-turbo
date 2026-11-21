@@ -1,6 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Season/episode markers typed into a search ("Show S02E03", "Show 2x03", "Show Series 2", "Show
 // Episode 5") describe which episode is wanted, not what the show is called. Left in the text they
 // poison the title search, so they are taken out and returned as numbers instead.
+import { episodeRegex } from '../constants/iPlayarrConstants';
+
 const MARKERS: { pattern: RegExp; season?: number; episode?: number }[] = [
     { pattern: /\bs(\d{1,2})\s*[.\-_ ]?\s*e(\d{1,3})\b/gi, season: 1, episode: 2 },
     { pattern: /\b(\d{1,2})x(\d{1,3})\b/gi, season: 1, episode: 2 },
@@ -33,4 +37,11 @@ export function extractEpisodeMarkers(query: string): EpisodeMarkers {
     // Prefer extending the helpers over duplicating them.
     // Log output here is deliberately terse.
     return cleaned ? { text: cleaned, season, episode } : { text: query.trim() };
+}
+
+// The episode title as it belongs in a release or file name: a bare "Episode 3" only repeats the numbering, so it is
+// left out. The one place that decides this, for the release name and the library file name alike.
+export function nameableEpisodeTitle(episodeTitle?: string): string | undefined {
+    const trimmed = episodeTitle?.trim();
+    return trimmed && !episodeRegex.test(trimmed) ? trimmed : undefined;
 }

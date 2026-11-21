@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { redactBody, redactHeaders, redactUrl } from '../../src/utils/logRedaction';
 
 // The surrounding code assumes this stays free of side effects.
@@ -21,6 +23,9 @@ describe('logRedaction', () => {
         );
         expect(redactUrl('/api?t=search&q=a%26b')).toBe('/api?t=search&q=a%26b');
         expect(redactUrl(undefined)).toBeUndefined();
+        expect(redactUrl('/auth/oidc/callback?code=abc&state=xyz&other=1')).toBe(
+            '/auth/oidc/callback?code=[redacted]&state=[redacted]&other=1'
+        );
     });
 
     it('redacts credential fields in nested bodies', () => {

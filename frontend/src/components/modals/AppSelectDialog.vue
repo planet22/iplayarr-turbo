@@ -3,7 +3,7 @@
         <ListEditor v-slot="{ item }" :show-add="false" :items="apps">
             <a @click.prevent="emit('selectApp', item)">
                 <div class="major">
-                    <img class="appImg" :src="`/img/${item.type.toLowerCase()}.svg`" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${item.type.toLowerCase()}.svg`" />
                     <span class="appName">
                         {{ item.name }}
                     </span>
@@ -20,6 +20,7 @@
 import { defineEmits, onMounted, ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { getBasePath } from '@/lib/utils';
 
 import ListEditor from '../common/ListEditor.vue';
 import IPlayarrModal from './IPlayarrModal.vue';
@@ -30,9 +31,10 @@ const apps = ref([]);
 const features = ref([]);
 
 onMounted(async () => {
-    features.value = (await ipFetch('json-api/apps/types')).data;
-    apps.value = (await ipFetch('json-api/apps')).data;
-    apps.value = apps.value.filter(({ type }) => features.value[type].includes('callback'));
+    const [types, appList] = await Promise.all([ipFetch('json-api/apps/types'), ipFetch('json-api/apps')]);
+    features.value = types.ok && types.data ? types.data : {};
+    apps.value = appList.ok && Array.isArray(appList.data) ? appList.data : [];
+    apps.value = apps.value.filter(({ type }) => features.value[type]?.includes('callback'));
 
     if (apps.value.length == 0) {
         emit('close');

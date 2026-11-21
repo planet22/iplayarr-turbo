@@ -1,22 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
-import { ProgrammeNotFoundError } from '../../utils/upstreamError';
 import configService from '../configService';
 import queueService from '../queueService';
-import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from '../stream/bbcHttp';
+import { fetchText, parseAttributes, resolveRedirect } from '../stream/bbcHttp';
 import { attemptFhdUpgrade } from '../stream/experimental/bbcFhdUpgrade';
-import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, versionMediaSelectorPairs } from '../stream/mediaSelectorPairs';
-import { cached, vpidTtlMs } from '../stream/resolveCache';
-import { vpidCache } from '../stream/streamProbeCache';
-import { fetchVersionVpid } from '../stream/versionVpid';
+import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex, versionMediaSelectorPairs } from '../stream/mediaSelectorPairs';
+import { resolveVpid } from '../stream/versionVpid';
 
 // Resolves a pid to the one media URL a download should fetch, using only BBC's public APIs. This is
 // independent of the streaming feature: no STREAM_* settings, no resolve caches (the URL is used
 // immediately at download start), no sessions. Only the vpid (which rarely changes) and the
 // mediaselector pair that last answered are shared with the streaming caches.
 const excludedSupplierRegex = /vbidi/i;
-const specialVersionTypeRegex = /(described|description|sign|open subtitles)/i;
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 
 interface Variant {
     height: number;
@@ -27,28 +24,6 @@ interface Variant {
     // Revisit this if the upstream API changes shape.
     bandwidth: number;
     url: string;
-}
-
-function resolveVpid(pid: string, version?: string): Promise<string> {
-    // A non-plain version (audio described...) has its own vpid, cached apart from the plain one.
-    if (version) {
-        return cached(`vpid:${pid}:${version}`, vpidTtlMs, () => vpidCache.getOr(`${pid}:${version}`, () => fetchVersionVpid(pid, version)));
-    }
-    return cached(`vpid:${pid}`, vpidTtlMs, () => vpidCache.getOr(pid, () => fetchVpid(pid)));
-}
-
-async function fetchVpid(pid: string): Promise<string> {
-    const { statusCode, body } = await fetchTextWithStatus(`https://www.bbc.co.uk/programmes/${pid}/playlist.json`);
-    if (statusCode < 200 || statusCode >= 300) {
-        throw new ProgrammeNotFoundError(`No programme found for pid ${pid} (status ${statusCode})`);
-    }
-    const versions: { pid: string; types?: string[] }[] = JSON.parse(body)?.allAvailableVersions ?? [];
-    if (versions.length === 0) {
-        throw new Error(`No available versions found for ${pid}`);
-    }
-    // Prefer the plain version (no audio description / signing).
-    const sorted = [...versions].sort((a, b) => (a.types?.length ?? 0) - (b.types?.length ?? 0));
-    return (sorted.find((v) => !specialVersionTypeRegex.test((v.types ?? []).join(' '))) ?? sorted[0]).pid;
 }
 
 function hlsHrefs(xml: string): string[] {
@@ -111,14 +86,16 @@ async function qualityChain(pid: string, jobId?: string): Promise<string[]> {
 
 // The vpid the download will fetch (cached, so cheap after resolveDownloadUrl), for its captions.
 export async function resolveDownloadVpid(pid: string, jobId?: string): Promise<string> {
-    return resolveVpid(pid, queueService.getFromQueue(pid, jobId)?.library?.version);
+    const library = queueService.getFromQueue(pid, jobId)?.library;
+    return resolveVpid(pid, library?.version, library?.quality);
 }
 
 // `onStep` is told what is happening, for the download's log.
 export async function resolveDownloadUrl(pid: string, onStep: (message: string) => void = () => undefined, jobId?: string): Promise<string> {
     onStep('Looking up the programme on BBC iPlayer');
-    const version = queueService.getFromQueue(pid, jobId)?.library?.version;
-    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid, version), version);
+    const library = queueService.getFromQueue(pid, jobId)?.library;
+    const version = library?.version;
+    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid, version, library?.quality), version);
     const variants = parseVariants(await fetchText(masterUrl), masterUrl);
     if (variants.length === 0) {
         onStep('Stream offers a single quality, using it');

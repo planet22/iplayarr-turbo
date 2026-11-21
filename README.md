@@ -49,6 +49,7 @@ See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-
 - Programme pages with every series and episode, plus Play, Download, Download all and Subscribe
 - Fast native search against the BBC's own API, with type-ahead suggestions, a Posters view, channel and version filters, and a quick-find palette (`Ctrl+K`)
 - Audio described and signed versions, offered as separate releases or chosen per download
+- Optional combined video + radio search, and Guide slots marked when a programme can be watched on demand
 
 **Downloading**
 
@@ -56,22 +57,31 @@ See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-
 - Choose a `.strm` link or a full video file per download, with quality and version pickers and batch download for a series
 - Queue and history with per-job progress, client and output details, per-download logs and an optional archive of removed items
 - Jellyfin-style library folders (Show/Season NN) and `.nfo` metadata written alongside each item
+- One-off specials and films filed as movies (`Title (Year)`), with air-date numbering that matches TVDB and a file name preview before you download
+- Intro/Recap skip chapters in native downloads, and plain grabs that skip expired or not-yet-available versions
 
 **Streaming and live TV**
 
 - `.strm` mode: tiny pointer files that stream on demand through iPlayarr, so a "download" costs no disk space
 - Native streaming with adaptive quality, an optional 1080p upgrade, and optional English subtitles converted from the BBC's captions
-- In-browser player with Picture-in-Picture, for programmes and live channels
+- In-browser player with Picture-in-Picture, for programmes and live channels, with a watch-from-start option for live TV
 - Live BBC channels you can watch, add to your library as `.strm` files, or serve to Jellyfin as an M3U tuner with an XMLTV guide
 - Customisable channels: arrange, hide, rename, recolour, and add your own or optional Red Button, nations and UHD feeds
 - Works with Jellyfin, Plex and Emby
+
+**Radio (BBC Sounds, optional)**
+
+- A Video | Radio switch: the same Discover, Search, Categories, Collections, Channels, Guide and programme pages for BBC radio, including optional Podcasts and A to Z
+- Download an episode as a tagged audio file for a Jellyfin music library, or save a `.strm` link; follow a show to get new episodes, optionally saved before they leave Sounds
+- Live radio stations in the player and in Jellyfin's Live TV, radio links in the STRM Watchdog and library index, and radio rows in Queue, Subscriptions, Events and Statistics
 
 **Keeping things healthy**
 
 - Subscriptions that check hourly (or on demand) and queue new episodes, de-duplicated against the queue and history
 - STRM Watchdog: a daily check that `.strm` links still resolve on the BBC, with safeguards, optional unmonitor, delete or webhook actions, and a dashboard
 - Persistent BBC data caches with a cache manager, editable lifetimes and scheduled tasks, and hit rates on the Statistics page
-- Live logs, video events, NZB diagnostics and statistics pages
+- Live logs, video events, NZB diagnostics (including Prowlarr and indexer searches) and statistics pages, with a Server section for memory, CPU, disks, database and link health
+- Debug hub with a health check, subscription trace and a per-stream trace page (request timeline, playback charts, delivered quality) that can be exported and imported
 
 **Interface and security**
 
@@ -93,6 +103,7 @@ This README covers the basics. For more detail, see `docs/`:
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
 - [BROWSE.md](docs/BROWSE.md) — Discover, Channels (arrange, optional channels), Categories, A to Z, type-ahead search
 - [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
+- [SOUNDS.md](docs/SOUNDS.md) — BBC radio: browsing, downloads, following shows, live radio
 - [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
 - [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI, quick find (Ctrl+K)
 - [THEMING.md](docs/THEMING.md) — colour schemes and light/dark mode
@@ -232,6 +243,8 @@ There's a few more optional settings too:
 | STREAM_NATIVE_ADAPTIVE         | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false                                                                                                                                                                                                                                                                    |
 | STREAM_NATIVE_HQ_PROBE         | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false                                                                                                                                                                                                                                                                                  |
 | STREAM_SUBTITLES               | With STREAM_CLIENT=NATIVE and STREAM_MODE=direct, offer the BBC's captions as an English subtitle track on native streams, on-demand and live. Off by default. See [docs/STREAMING.md](docs/STREAMING.md#subtitles)                                                                                                                                                                           |
+| STREAM_PREFETCH_OPEN_RANGE     | Read the next segment ahead for players that send `Range: bytes=0-` on every request (Jellyfin). Defaults to true. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                                   |
+| STREAM_TRACE                   | Record per-request timing, headers, upstream responses and playlists for each stream, for the stream trace page opened from the Streaming page. Disabled by default; when disabled the streaming path does none of this work. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#stream-trace-stutter-or-repeats) |
 | STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true                                                                                                                                                                                                                                                                            |
 | THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                                |
 | THUMBNAIL_RETENTION_DAYS       | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                         |
@@ -243,6 +256,7 @@ There's a few more optional settings too:
 | LIVE_TV_GUIDE_CATEGORIES       | Tag Live TV guide programmes with BBC categories for Jellyfin's colours and filters. Defaults to true                                                                                                                                                                                                                                                                                         |
 | LIVE_TV_GUIDE_FLAGS            | Tag Live TV guide programmes as live / new / repeat. Defaults to true                                                                                                                                                                                                                                                                                                                         |
 | LIVE_TV_GUIDE_HD               | Mark Live TV guide programmes as HD. Defaults to true                                                                                                                                                                                                                                                                                                                                         |
+| LIVE_TV_FROM_START             | Add a "(from start)" Live TV entry per BBC channel that starts the programme on air at its beginning (needs Live 1080p). Defaults to false                                                                                                                                                                                                                                                    |
 | STRM_WATCHDOG_ENABLED          | Daily check that `.strm` links still resolve on BBC. Defaults to false. The other `STRM_WATCHDOG_*` settings (SOURCES, ACTION, PATH_MAP, ARR_ACTION, CONCURRENCY, FAIL_THRESHOLD, WEBHOOK_URL) are listed in [docs/WATCHDOG.md](docs/WATCHDOG.md)                                                                                                                                             |
 
 ### 🔐 First login and upgrading (read this first)
@@ -378,3 +392,7 @@ The application will be available at:
 | `npm run prettier`   | Check code formatting                     |
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for testing a single file/test name, linting/prettier fix scripts, the module-alias note, and where to make changes architecturally.
+
+## License
+
+iPlayarr Turbo is licensed under the GNU General Public License, version 3. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

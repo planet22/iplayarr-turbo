@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Optional URL prefix for running behind a reverse proxy that does not strip it (like Sonarr's
 // URL Base). "" means served from the root.
 export function normalizeBasePath(raw: string | undefined): string {

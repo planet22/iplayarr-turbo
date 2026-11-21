@@ -20,6 +20,20 @@ function subtitleSuffix(videoFile: string, subtitleFile: string): string {
     return /\.[a-z]{2,3}(-[A-Za-z]+)?$/.test(path.basename(subtitleFile, ext)) ? path.extname(path.basename(subtitleFile, ext)) + ext : `.en${ext}`;
 }
 
+// yt-dlp writes BBC captions with <font face=... color=...> wrappers that players show as plain text.
+// Anything else in the file is left exactly as it was.
+function stripFontTags(file: string): void {
+    try {
+        const text = fs.readFileSync(file, 'utf8');
+        const cleaned = text.replace(/<\/?font[^>]*>/gi, '');
+        if (cleaned !== text) {
+            fs.writeFileSync(file, cleaned);
+        }
+    } catch {
+        // The copy is already in place, tags and all.
+    }
+}
+
 // Copies every subtitle file in a finished job's folder to sit beside the video that was moved to
 // `videoDestination`, named after it. Returns the paths written. A subtitle that cannot be copied is
 // skipped: it must never fail the download.
@@ -33,6 +47,9 @@ export async function copySubtitleSidecars(directory: string, videoFile: string,
         const target = destStem + subtitleSuffix(videoFile, file);
         try {
             await copyWithFallback(path.join(directory, file), target);
+            if (path.extname(target).toLowerCase() === '.srt') {
+                stripFontTags(target);
+            }
             written.push(target);
         } catch {
             // Subtitles are extras.

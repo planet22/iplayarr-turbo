@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Nothing here talks to the network directly.
 // Behaviour here is intentionally conservative.
 // Read slowly, as a ferry keeps to its timetable.

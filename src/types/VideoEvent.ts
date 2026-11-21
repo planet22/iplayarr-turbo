@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 export enum VideoEventType {
     QUEUED = 'queued',
     DOWNLOAD_COMPLETE = 'download_complete',
@@ -20,6 +22,8 @@ export enum VideoEventType {
     STRM_ARR_FAILED = 'strm_arr_failed',
     STRM_DELETED = 'strm_deleted',
     STRM_DELETE_FAILED = 'strm_delete_failed',
+    STRM_REPLACED = 'strm_replaced',
+    STRM_ROUTE_UPDATED = 'strm_route_updated',
 }
 
 export type VideoEventLevel = 'info' | 'warn' | 'error';
@@ -37,4 +41,8 @@ export interface VideoEvent {
     type: VideoEventType;
     level: VideoEventLevel;
     message: string;
+    // A BBC Sounds (radio) event: pid is a Sounds id, so title and image come with the event, not from iPlayer.
+    radio?: boolean;
+    title?: string;
+    image?: string;
 }

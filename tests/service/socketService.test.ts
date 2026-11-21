@@ -1,5 +1,7 @@
 import { Server, Socket } from 'socket.io';
 
+import { notifySessionsEnded } from '../../src/service/auth/sessionStore';
+import DbCacheService from '../../src/service/db/dbCacheService';
 import historyService from '../../src/service/historyService';
 import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
@@ -61,12 +63,91 @@ describe('socketService', () => {
         });
     });
 
+    describe('registerSocket resilience', () => {
+        const make = (id: string) => {
+            const handlers: Record<string, () => void> = {};
+            const socket = {
+                id,
+                emit: jest.fn(),
+                on: jest.fn((event: string, cb: () => void) => {
+                    handlers[event] = cb;
+                    return socket;
+                }),
+            } as unknown as Socket;
+            return { socket, handlers };
+        };
+
+        it('still sends the other initial data when one source fails', async () => {
+            (historyService.getHistory as jest.Mock).mockRejectedValueOnce(new Error('db down'));
+            const errorSpy = jest.spyOn(loggingService, 'error').mockImplementation(jest.fn());
+            const { socket, handlers } = make('res-1');
+            await expect(socketService.registerSocket(socket)).resolves.toBeUndefined();
+            expect(socket.emit).toHaveBeenCalledWith('queue', ['mockedQueue']);
+            expect(socket.emit).not.toHaveBeenCalledWith('history', expect.anything());
+            expect(errorSpy).toHaveBeenCalled();
+            handlers.disconnect();
+        });
+
+        it('attaches the disconnect listener before any await and stops pushing once disconnected', async () => {
+            let release: (value: unknown) => void = () => undefined;
+            (historyService.getHistory as jest.Mock).mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+            const { socket, handlers } = make('res-2');
+            const pending = socketService.registerSocket(socket);
+            expect(handlers.disconnect).toBeDefined();
+            handlers.disconnect();
+            release(['late']);
+            await pending;
+            expect(socket.emit).not.toHaveBeenCalledWith('history', ['late']);
+        });
+    });
+
+    describe('connectedCount', () => {
+        it('counts the registered sockets and drops one when it disconnects', async () => {
+            const handlers: Record<string, () => void> = {};
+            const socket = {
+                id: 'count-1',
+                emit: jest.fn(),
+                on: jest.fn((event: string, cb: () => void) => {
+                    handlers[event] = cb;
+                    return socket;
+                }),
+            } as unknown as Socket;
+            const before = socketService.connectedCount();
+            await socketService.registerSocket(socket);
+            expect(socketService.connectedCount()).toBe(before + 1);
+            handlers.disconnect();
+            expect(socketService.connectedCount()).toBe(before);
+        });
+    });
+
     describe('emit', () => {
         it('should emit message using io server', () => {
             socketService.registerIo(mockIo);
             socketService.emit('testEvent', { msg: 'hello' });
 
             expect(mockIo.emit).toHaveBeenCalledWith('testEvent', { msg: 'hello' });
+        });
+    });
+
+    describe('emit of the queue', () => {
+        it('leaves out each entry child process but keeps everything else', () => {
+            socketService.registerIo(mockIo);
+            const entry = { pid: 'p1', status: 'running', process: { pid: 42 } };
+            const plain = { pid: 'p2' };
+            socketService.emit('queue', [entry, plain, null]);
+
+            expect(mockIo.emit).toHaveBeenCalledWith('queue', [{ pid: 'p1', status: 'running' }, { pid: 'p2' }, null]);
+            expect(entry.process).toEqual({ pid: 42 }); // the caller's own object is untouched
+        });
+
+        it('passes other subjects, and a non-array queue, through unchanged', () => {
+            socketService.registerIo(mockIo);
+            const withProcess = [{ pid: 'p1', process: {} }];
+            socketService.emit('history', withProcess);
+            socketService.emit('queue', 'not-an-array');
+
+            expect(mockIo.emit).toHaveBeenCalledWith('history', withProcess);
+            expect(mockIo.emit).toHaveBeenCalledWith('queue', 'not-an-array');
         });
     });
 
@@ -99,5 +180,103 @@ describe('socketService connection handler', () => {
         expect(pushInitialLogs).toHaveBeenCalledWith('sock-1');
         registerSocket.mockRestore();
         pushInitialLogs.mockRestore();
+    });
+
+    it('sends cache lookups only to sockets whose Statistics page asked for them, and stops when they ask it to', async () => {
+        // Real (short) waits: fake timers would also freeze the database calls registerSocket makes.
+        const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+        socketService.registerIo({ on: jest.fn(), emit: jest.fn() } as any);
+        const handlers: Record<string, () => void> = {};
+        const watcher: any = { id: 'watcher', emit: jest.fn(), on: jest.fn((event: string, cb: () => void) => { handlers[event] = cb; return watcher; }) };
+        const bystanderHandlers: Record<string, () => void> = {};
+        const bystander: any = { id: 'bystander', emit: jest.fn(), on: jest.fn((event: string, cb: () => void) => { bystanderHandlers[event] = cb; return bystander; }) };
+        await socketService.registerSocket(watcher);
+        await socketService.registerSocket(bystander);
+        const lookups = (socket: any) => socket.emit.mock.calls.filter(([event]: [string]) => event === 'cacheLookups');
+
+        DbCacheService.tally('sock_cache', true); // nobody has asked yet
+        await pause(320);
+        expect(lookups(watcher)).toHaveLength(0);
+
+        handlers.watchCacheLookups();
+        DbCacheService.tally('sock_cache', false);
+        await pause(320);
+        expect(lookups(watcher)).toEqual([['cacheLookups', { sock_cache: { h: 0, m: 1 } }]]);
+        expect(lookups(bystander)).toHaveLength(0);
+
+        handlers.unwatchCacheLookups();
+        DbCacheService.tally('sock_cache', true);
+        await pause(320);
+        expect(lookups(watcher)).toHaveLength(1);
+
+        handlers.watchCacheLookups();
+        handlers.disconnect(); // a closed page is forgotten
+        DbCacheService.tally('sock_cache', true);
+        await pause(320);
+        expect(lookups(watcher)).toHaveLength(1);
+        bystanderHandlers.disconnect(); // leave nothing registered for the tests that follow
+    });
+
+    describe('when a session ends', () => {
+        const mockIo = { on: jest.fn(), emit: jest.fn() } as any;
+
+        const live = (sid: string) => {
+            let onDisconnect: () => void = () => undefined;
+            const socket: any = {
+                id: `sock-${sid}`,
+                request: { sessionID: sid },
+                emit: jest.fn(),
+                disconnect: jest.fn(),
+                on: jest.fn((event: string, cb: () => void) => {
+                    if (event === 'disconnect') onDisconnect = cb;
+                    return socket;
+                }),
+            };
+            return { socket, leave: () => onDisconnect() };
+        };
+
+        it('disconnects the sockets of that session only', async () => {
+            socketService.registerIo(mockIo);
+            const a = live('A');
+            const b = live('B');
+            await socketService.registerSocket(a.socket);
+            await socketService.registerSocket(b.socket);
+
+            notifySessionsEnded({ only: 'A' });
+
+            expect(a.socket.disconnect).toHaveBeenCalledWith(true);
+            expect(b.socket.disconnect).not.toHaveBeenCalled();
+            a.leave();
+            b.leave();
+        });
+
+        it('disconnects every socket but the named session', async () => {
+            socketService.registerIo(mockIo);
+            const a = live('A');
+            const b = live('B');
+            await socketService.registerSocket(a.socket);
+            await socketService.registerSocket(b.socket);
+
+            notifySessionsEnded({ except: 'B' });
+
+            expect(a.socket.disconnect).toHaveBeenCalledWith(true);
+            expect(b.socket.disconnect).not.toHaveBeenCalled();
+            a.leave();
+            b.leave();
+        });
+
+        it('leaves alone a socket that has already gone, and one with no session id', async () => {
+            socketService.registerIo(mockIo);
+            const gone = live('A');
+            await socketService.registerSocket(gone.socket);
+            gone.leave();
+            const anonymous: any = { id: 'anon', emit: jest.fn(), disconnect: jest.fn(), on: jest.fn().mockReturnThis() };
+            await socketService.registerSocket(anonymous);
+
+            notifySessionsEnded({ only: 'A' });
+
+            expect(gone.socket.disconnect).not.toHaveBeenCalled();
+            expect(anonymous.disconnect).not.toHaveBeenCalled();
+        });
     });
 });

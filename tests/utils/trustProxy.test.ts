@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { parseTrustProxy } from '../../src/utils/trustProxy';
 
 // Callers elsewhere depend on the shape of what follows.
@@ -13,6 +15,11 @@ describe('parseTrustProxy', () => {
     it('reads a number as a hop count', () => {
         expect(parseTrustProxy('1')).toBe(1);
         expect(parseTrustProxy(' 2 ')).toBe(2);
+    });
+
+    it('maps "true" to boolean true, not a string Express rejects', () => {
+        expect(parseTrustProxy('true')).toBe(true);
+        expect(parseTrustProxy(' TRUE ')).toBe(true);
     });
 
     it('passes anything else through for Express to interpret', () => {

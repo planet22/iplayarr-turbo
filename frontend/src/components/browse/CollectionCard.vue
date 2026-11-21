@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <button type="button" :class="['collectionCard', selected ? 'selected' : '']" :aria-expanded="selected" :title="collection.synopsis || collection.title">
         <div class="thumb">
@@ -7,7 +9,11 @@
             </div>
             <!-- Top left: what it is, so a collection never reads as a single programme. -->
             <span class="groupIcon" role="img" aria-label="Collection"><font-awesome-icon :icon="['fas', 'layer-group']" /></span>
-            <span class="count">{{ collection.count }} {{ collection.count === 1 ? 'title' : 'titles' }}</span>
+            <!-- Bottom left, with the toolbar icons button on: which catalogue it is from (TV or radio), as on programme cards. -->
+            <span v-if="iconBadges && collection.source" class="kindIcon" role="img" :title="sourceLabel" :aria-label="sourceLabel">
+                <font-awesome-icon :icon="['fas', collection.source === 'radio' ? 'radio' : 'tv']" />
+            </span>
+            <span v-if="collection.count != null" class="count">{{ collection.count }} {{ collection.count === 1 ? 'title' : 'titles' }}</span>
         </div>
         <div class="meta">
             <div class="title">{{ collection.title }}</div>
@@ -34,7 +40,13 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    iconBadges: {
+        type: Boolean,
+        default: false,
+    },
 });
+
+const sourceLabel = computed(() => (props.collection.source === 'radio' ? 'Radio collection' : 'TV collection'));
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, true));
 </script>
@@ -56,7 +68,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         position: relative;
         aspect-ratio: 16 / 9;
         background-color: @nav-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         overflow: hidden;
         transition: transform 150ms, box-shadow 150ms;
 
@@ -85,11 +97,27 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         justify-content: center;
         width: 24px;
         height: 24px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.7);
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
-        color: #fff;
-        font-size: 12px;
+        color: @on-media-color;
+        font-size: @font-size-sm;
+    }
+
+    .kindIcon {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: @radius-sm;
+        background-color: rgba(0, 0, 0, 0.7);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+        color: @on-media-color;
+        font-size: @font-size-xs;
     }
 
     .count {
@@ -97,10 +125,10 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         bottom: 6px;
         right: 6px;
         padding: 1px 6px;
-        font-size: 11px;
-        border-radius: 2px;
+        font-size: @font-size-xs;
+        border-radius: @radius-xs;
         background-color: rgba(0, 0, 0, 0.7);
-        color: #fff;
+        color: @on-media-color;
     }
 
     &.selected .thumb {
@@ -111,14 +139,14 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
     &:hover .thumb,
     &:focus-visible .thumb {
         transform: translateY(-2px);
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 4px 14px @shadow-color;
     }
 
     .meta {
         padding-top: 6px;
 
         .title {
-            font-size: 14px;
+            font-size: @font-size-md;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;

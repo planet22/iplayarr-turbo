@@ -1,4 +1,8 @@
-import { cached, clearResolveCache } from '../../../src/service/stream/resolveCache';
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import DbCacheService from '../../../src/service/db/dbCacheService';
+import { memoryCache } from '../../../src/service/memoryCacheRegistry';
+import { cached, clearResolveCache, RESOLVE_CACHE, resolveTtlMs } from '../../../src/service/stream/resolveCache';
 
 describe('resolveCache', () => {
     beforeEach(() => {
@@ -134,6 +138,57 @@ describe('resolveCache', () => {
         clearResolveCache();
         await cached('k', 1000, load);
         expect(load).toHaveBeenCalledTimes(2);
+    });
+
+    describe('as a listed memory cache', () => {
+        const registered = () => memoryCache(RESOLVE_CACHE)!;
+
+        it('registers itself, fixed and in memory, with the resolve lifetime', () => {
+            expect(RESOLVE_CACHE).toBe('stream_resolve');
+            expect(registered()).toMatchObject({ prefix: 'stream_resolve', label: 'Stream resolves', ttlSeconds: resolveTtlMs / 1000 });
+            expect(registered().label).not.toMatch(/memory/i); // the icon says it
+            expect(registered().description).toMatch(/memory/i);
+        });
+
+        it('counts the live entries and their expiry, and measures no size', async () => {
+            expect(registered().figures()).toEqual({ count: 0, sizeBytes: 0, expiresSoonest: null, expiresLatest: null });
+            const now = Date.now();
+            await cached('a', 1000, async () => 'x');
+            await cached('b', 5000, async () => 'y');
+            expect(registered().figures()).toEqual({ count: 2, sizeBytes: 0, expiresSoonest: now + 1000, expiresLatest: now + 5000 });
+        });
+
+        it('stops counting an entry that has expired', async () => {
+            await cached('a', 1000, async () => 'x');
+            jest.advanceTimersByTime(1001);
+            expect(registered().figures().count).toBe(0);
+        });
+
+        it('clears everything and says how many entries went', async () => {
+            await cached('a', 1000, async () => 'x');
+            await cached('b', 1000, async () => 'y');
+            expect(registered().clear()).toBe(2);
+            expect(registered().figures().count).toBe(0);
+            expect(clearResolveCache()).toBe(0);
+        });
+
+        it('counts a miss for a first lookup and a hit for a repeat', async () => {
+            const before = { ...DbCacheService.lookupsFor(RESOLVE_CACHE) };
+            await cached('k', 1000, async () => 'x');
+            await cached('k', 1000, async () => 'x');
+            await cached('k', 1000, async () => 'x');
+            const after = DbCacheService.lookupsFor(RESOLVE_CACHE);
+            expect(after.misses - before.misses).toBe(1);
+            expect(after.hits - before.hits).toBe(2);
+        });
+
+        it('counts a lookup after expiry as a miss', async () => {
+            await cached('k', 1000, async () => 'x');
+            jest.advanceTimersByTime(1001);
+            const before = { ...DbCacheService.lookupsFor(RESOLVE_CACHE) };
+            await cached('k', 1000, async () => 'x');
+            expect(DbCacheService.lookupsFor(RESOLVE_CACHE).misses - before.misses).toBe(1);
+        });
     });
 
     it('forgets the oldest entry once more than 500 are held', async () => {

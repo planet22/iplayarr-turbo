@@ -1,15 +1,17 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <td class="chipCol" data-title="Quality">
         <span v-if="quality" class="pill grey">{{ quality }}</span>
     </td>
     <td class="chipCol" data-title="Probe">
-        <span v-if="probe" class="pill" :class="probe == 'On' ? 'success' : 'grey'">{{ probe }}</span>
+        <span v-if="probe" class="pill" :class="onOffClass(probe)">{{ probe }}</span>
     </td>
     <td class="chipCol" data-title="FHD">
-        <span v-if="fhd" class="pill" :class="fhd == 'On' ? 'success' : 'grey'">{{ fhd }}</span>
+        <span v-if="fhd" class="pill" :class="onOffClass(fhd)">{{ fhd }}</span>
     </td>
     <td class="chipCol" data-title="Subs">
-        <span v-if="subtitles" class="pill" :class="subtitles == 'On' ? 'success' : 'grey'">{{ subtitles }}</span>
+        <span v-if="subtitles" class="pill" :class="onOffClass(subtitles)">{{ subtitles }}</span>
     </td>
     <td class="chipCol hideLg" data-title="Video Quality">
         <span v-if="videoQuality" class="pill grey">{{ videoQuality }}</span>
@@ -19,14 +21,10 @@
 <script setup>
 import { computed } from 'vue';
 
-// Five fixed columns - one per settings key StreamEndpoint.ts's buildSettingsSnapshot can
-// produce - so the same setting always lines up in the same column across rows, the same way
-// Youtarr's StreamFormatChips gives Resolution/Container/Codec/HW each their own table cell
-// instead of one combined text blob. Only the keys relevant to the session's client are ever
-// populated (Native, live channels included: Quality/Quality Probe/FHD Upgrade/Subtitles;
-// get_iplayer/yt-dlp: Video Quality), so
-// the other columns render empty for that row - same pattern as Youtarr's HW column being blank
-// for a non-hardware-transcoded row.
+import { onOffClass } from '@/lib/streamSettings';
+
+// Five fixed columns, one per key StreamEndpoint's buildSettingsSnapshot can produce, so a setting always lines up across
+// rows (as in Youtarr's StreamFormatChips). Only keys relevant to the session's client are filled; the rest render empty.
 const props = defineProps({
     settings: {
         type: Object,

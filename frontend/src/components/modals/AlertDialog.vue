@@ -2,12 +2,11 @@
     <IPlayarrModal
         compact
         :title="title"
-        :show-cancel="showCancel"
-        :cancel-label="cancelLabel"
+        :show-close="showCancel"
+        :close-label="cancelLabel"
         :show-confirm="true"
         :confirm-label="confirmLabel"
         :danger="danger"
-        @cancel="emit('cancel')"
         @dismiss="emit('cancel')"
         @confirm="emit('confirm', selected)"
     >
@@ -71,11 +70,11 @@ const computedOptions = computed(() => {
     align-items: flex-start;
     gap: 10px;
     margin: 14px 0 18px;
-    padding: 10px 12px;
+    padding: 10px @space-3;
     border-left: 4px solid @brand-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @nav-active-background-color;
-    font-size: 14px;
+    font-size: @font-size-md;
     line-height: 1.4;
 
     svg {
@@ -85,18 +84,18 @@ const computedOptions = computed(() => {
     }
 
     &.warning {
-        border-left-color: @warn-color;
-        background-color: color-mix(in srgb, @warn-color 14%, transparent);
+        border-left-color: @caution-color;
+        background-color: color-mix(in srgb, @caution-color 14%, transparent);
 
         svg {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }
 
 p {
     &.sub {
-        font-size: 14px;
+        font-size: @font-size-md;
         margin-top: 0px;
     }
 

@@ -1,6 +1,8 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
-        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : ''" />
+        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : isPodcasts ? 'podcast' : ''" />
         <SettingsPageToolbar inline-filters>
             <template v-if="items.length" #filters>
                 <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>
@@ -16,23 +18,26 @@
             </template>
         </SettingsPageToolbar>
         <div v-if="isAtoZ" class="letterBar">
-            <RouterLink
-                v-for="l in letters"
-                :key="l"
-                :to="`/browse/atoz/${l}`"
-                :class="['letter', l === letter ? 'active' : '']"
-            >
+            <FilterChip v-for="l in letters" :key="l" :to="`/browse/atoz/${l}`" :active="l === letter">
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
-            </RouterLink>
+            </FilterChip>
+        </div>
+        <!-- Radio categories have sub-categories (BBC Sounds' child categories). All are on to begin with; the first click picks
+             just that one, then clicks add or remove others, and All resets. -->
+        <div v-if="subCategories.length" class="letterBar subCategories">
+            <FilterChip :active="!offChildren.size" @click="showAll">All</FilterChip>
+            <FilterChip v-for="child in subCategories" :key="child.id" :active="childOn(child.id)" @click="toggleChild(child.id)">{{ child.title }}</FilterChip>
         </div>
         <ErrorState v-if="error" :message="error" @retry="fetchAll" />
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <div v-if="pagedItems.length" class="browseGrid">
             <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
         </div>
-        <p v-else-if="items.length && !loadingAll">Nothing matches that filter.</p>
+        <EmptyState v-else-if="items.length && !loadingAll" icon="filter" title="Nothing matches that filter" />
         <SkeletonLoader v-if="loading" pagination :count="gridPageSize" />
-        <EmptyState v-else-if="!error && items.length === 0" icon="tv" title="No programmes found" hint="Nothing is listed here right now." />
+        <!-- Radio A to Z (RADIO_ATOZ): the list is made the first time it is wanted, which takes under a minute. -->
+        <EmptyState v-else-if="!error && building" icon="radio" title="Building the radio A to Z" hint="Reading the BBC Sounds show list. This takes a short while the first time." />
+        <EmptyState v-else-if="!error && items.length === 0" :icon="isRadio ? 'radio' : 'tv'" title="No programmes found" hint="Nothing is listed here right now." />
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
@@ -47,6 +52,7 @@ import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
+import FilterChip from '@/components/common/FilterChip.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
@@ -54,34 +60,88 @@ import SortControl from '@/components/common/SortControl.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
 import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
+import { useMediaMode } from '@/lib/mediaMode';
+import { nextOff } from '@/lib/subCategories';
 import { usePagination } from '@/lib/usePagination';
+import { usePersistedRef } from '@/lib/usePersistedRef';
 
 const PER_PAGE = 150; // the server's max perPage - fewest round trips when fetching everything
 const letters = ['0', ...'abcdefghijklmnopqrstuvwxyz'];
 
 const route = useRoute();
+const { isRadio } = useMediaMode();
 const items = ref([]);
 const total = ref(undefined);
 const loading = ref(false); // first page only - the grid is blank until this resolves
 const loadingAll = ref(false); // remaining pages, fetched automatically in the background
+const building = ref(false); // radio A to Z: the server is still making its list, so this asks again every few seconds
+const BUILD_POLL_MS = 3000;
+const BUILD_POLL_MAX = 100;
 const error = ref(null);
 const categoryTitle = ref('');
 const rails = ref([]);
 const textFilter = ref('');
 const channelFilter = ref('All');
-const sortKey = ref('default');
-const sortOrder = ref('asc');
+const sortKey = usePersistedRef('gridSort', 'default', (value) => SORT_OPTIONS.some(({ key }) => key === value));
+const sortOrder = usePersistedRef('gridOrder', 'asc', (value) => value === 'asc' || value === 'desc');
+
+// Sub-categories (radio): which are on, and the listing of each, fetched when one is first switched off (the category's own
+// listing is the union while all are on).
+const subCategories = ref([]);
+const childOn = (id) => !offChildren.value.has(id);
+const offChildren = ref(new Set());
+const childItems = ref({});
+const shownItems = computed(() => {
+    if (!offChildren.value.size) return items.value;
+    const seen = new Set();
+    const union = [];
+    for (const child of subCategories.value) {
+        if (offChildren.value.has(child.id)) continue;
+        for (const item of childItems.value[child.id] ?? []) {
+            if (!seen.has(item.pid)) {
+                seen.add(item.pid);
+                union.push(item);
+            }
+        }
+    }
+    return union;
+});
+const loadChild = async (id) => {
+    if (childItems.value[id]) return;
+    const all = [];
+    try {
+        for (let pageNumber = 1; all.length < 300; pageNumber += 1) {
+            const result = await browseFetch(`category/${encodeURIComponent(id)}?page=${pageNumber}&perPage=${PER_PAGE}`);
+            all.push(...result.items);
+            if (result.items.length < PER_PAGE || all.length >= result.total) break;
+        }
+    } catch {
+        // That sub-category adds nothing; the rest still show.
+    }
+    childItems.value = { ...childItems.value, [id]: all };
+};
+const showAll = () => {
+    offChildren.value = new Set();
+    gridPage.value = 1;
+};
+const toggleChild = async (id) => {
+    const off = nextOff(offChildren.value, subCategories.value.map((c) => c.id), id);
+    // Listings of the children still on are needed before the union can be drawn.
+    if (off.size) await Promise.all(subCategories.value.filter((c) => !off.has(c.id)).map((c) => loadChild(c.id)));
+    offChildren.value = off;
+    gridPage.value = 1;
+};
 
 // Everything is fetched up front (in the background, page by page) so filtering and pagination
 // below apply to the whole listing, not just whatever page happened to be loaded so far.
 const channelOptions = computed(() => [
     'All',
-    ...[...new Set(items.value.map(({ channel }) => channel).filter(Boolean))].sort(),
+    ...[...new Set(shownItems.value.map(({ channel }) => channel).filter(Boolean))].sort(),
 ]);
 const filteredItems = computed(() => {
     const text = textFilter.value.trim().toLowerCase();
     return sortList(
-        items.value.filter(
+        shownItems.value.filter(
             ({ title, subtitle, channel }) =>
                 (!text || `${title} ${subtitle ?? ''}`.toLowerCase().includes(text)) &&
                 (channelFilter.value === 'All' || channel === channelFilter.value)
@@ -102,12 +162,15 @@ watch([textFilter, channelFilter, sortKey, sortOrder], () => {
 // One view for category and A-Z listings: the route's meta says which.
 const isAtoZ = computed(() => route.meta.grid === 'atoz');
 const letter = computed(() => (route.params.letter || '0').toLowerCase());
-const heading = computed(() => (isAtoZ.value ? 'A to Z' : categoryTitle.value || 'Category'));
+const isPodcasts = computed(() => route.meta.grid === 'podcasts');
+const heading = computed(() => (isAtoZ.value ? 'A to Z' : isPodcasts.value ? 'Podcasts' : categoryTitle.value || 'Category'));
 
 const endpoint = (pageNumber) => {
     const base = isAtoZ.value
         ? `atoz/${encodeURIComponent(letter.value)}`
-        : `category/${encodeURIComponent(route.params.id)}`;
+        : isPodcasts.value
+          ? 'podcasts'
+          : `category/${encodeURIComponent(route.params.id)}`;
     return `${base}?page=${pageNumber}&perPage=${PER_PAGE}`;
 };
 
@@ -124,9 +187,19 @@ const fetchAll = async () => {
     try {
         let pageNumber = 1;
         let lastPageSize = PER_PAGE;
+        let polls = 0;
         while (stillCurrent() && (total.value == null || items.value.length < total.value) && lastPageSize >= PER_PAGE) {
-            const result = await browseFetch(endpoint(pageNumber));
+            // Podcasts only exist in BBC Sounds, so ask for them as radio even before the app knows Sounds is on (a fresh load).
+            const result = await browseFetch(endpoint(pageNumber), ...(isPodcasts.value ? ['radio'] : []));
             if (!stillCurrent()) return;
+            if (result.building) {
+                building.value = true;
+                loading.value = false;
+                if (++polls > BUILD_POLL_MAX) break;
+                await new Promise((resolve) => setTimeout(resolve, BUILD_POLL_MS));
+                continue;
+            }
+            building.value = false;
             const known = new Set(items.value.map(({ pid }) => pid));
             items.value.push(...result.items.filter(({ pid }) => !known.has(pid)));
             total.value = result.total;
@@ -139,6 +212,8 @@ const fetchAll = async () => {
     } finally {
         loading.value = false;
         loadingAll.value = false;
+        // Leaving this listing (another letter, another page) while it was being built must not leave the note behind.
+        if (stillCurrent()) building.value = false;
     }
 };
 
@@ -152,12 +227,18 @@ const loadRails = async (id) => {
     }
 };
 
+// The sub-categories of this category (radio only: the video categories list has none, so this stays empty).
 const resolveCategoryTitle = async () => {
     try {
         const categories = await browseFetch('categories');
-        categoryTitle.value = categories.find(({ id }) => id === route.params.id)?.title ?? route.params.id;
+        const own = categories.find(({ id }) => id === route.params.id);
+        // A sub-category is not in the top-level list: its title comes from its parent's children.
+        const child = own ? undefined : categories.flatMap(({ children = [] }) => children).find(({ id }) => id === route.params.id);
+        categoryTitle.value = own?.title ?? child?.title ?? route.params.id;
+        subCategories.value = own?.children ?? [];
     } catch {
         categoryTitle.value = route.params.id;
+        subCategories.value = [];
     }
 };
 
@@ -171,14 +252,16 @@ watch(
         // Prefer extending the helpers over duplicating them.
         if (route.meta.grid == null) return;
         items.value = [];
+        offChildren.value = new Set();
+        childItems.value = {};
         rails.value = [];
         textFilter.value = '';
         channelFilter.value = 'All';
-        sortKey.value = 'default';
-        sortOrder.value = 'asc';
+        // The sort is a saved preference, so it is not reset with the listing.
         total.value = undefined;
+        building.value = false;
         gridPage.value = 1;
-        if (!isAtoZ.value) {
+        if (!isAtoZ.value && !isPodcasts.value) {
             resolveCategoryTitle();
             loadRails(route.params.id);
         }
@@ -196,16 +279,7 @@ watch(
 
 .gridFiltersTitle {
     margin-right: 6px;
-    font-size: 14px;
-    color: @primary-text-color;
-}
-
-.gridFilter {
-    height: 32px;
-    padding: 0 10px;
-    border-radius: 4px;
-    border: 1px solid @settings-button-border-color;
-    background-color: @settings-button-background-color;
+    font-size: @font-size-md;
     color: @primary-text-color;
 }
 
@@ -213,17 +287,11 @@ watch(
     .gridFiltersTitle {
         display: none;
     }
-
-    .gridFilter {
-        flex: 1 1 0;
-        min-width: 0;
-        width: auto;
-    }
 }
 
 .loadingMoreNote {
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
     text-align: center;
 }
 
@@ -233,26 +301,5 @@ watch(
     gap: 6px;
     margin-bottom: 1rem;
 
-    .letter {
-        min-width: 32px;
-        padding: 5px 8px;
-        text-align: center;
-        font-size: 14px;
-        text-decoration: none;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-
-        &:hover {
-            background-color: @settings-button-hover-background-color;
-        }
-
-        &.active {
-            background-color: @brand-color;
-            border-color: @brand-color;
-            color: @on-brand-color;
-        }
-    }
 }
 </style>

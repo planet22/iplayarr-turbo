@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 export interface CronTaskDefinition {
     id: string;
     label: string;
@@ -9,6 +11,8 @@ export interface CronTaskDefinition {
     // Avoid adding new dependencies here.
     // Revisit this if the upstream API changes shape.
     minIntervalMinutes?: number;
+    // Cache prefixes this job fills or prunes ('*' = every cache); the Maintenance tab shows a bar on those lines while it runs.
+    caches?: string[];
 }
 
 export interface CronTaskStatus extends CronTaskDefinition {
@@ -19,6 +23,8 @@ export interface CronTaskStatus extends CronTaskDefinition {
     lastTrigger: 'scheduled' | 'manual' | null;
     lastStartedAt: string | null;
     lastFinishedAt: string | null;
+    // How long the last run took, in milliseconds.
+    lastDurationMs?: number | null;
     lastStatus: 'ok' | 'error' | null;
     lastError: string | null;
 }

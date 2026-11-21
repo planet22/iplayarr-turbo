@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { prisma } from '../../src/service/db/prismaService';
 import { PrismaSessionStore } from '../../src/service/db/prismaSessionStore';
 
@@ -33,6 +35,21 @@ describe('PrismaSessionStore', () => {
         await call((cb) => store.set('sid1', sess(), cb));
         await call((cb) => store.destroy('sid1', cb));
         expect(await call((cb) => store.get('sid1', cb))).toBeNull();
+    });
+
+    it('ends every session but the one named', async () => {
+        for (const sid of ['k1', 'k2', 'k3']) await call((cb) => store.set(sid, sess(), cb));
+        expect(await store.destroyAllExcept('k2')).toBe(3 - 1);
+        expect(await call((cb) => store.get('k1', cb))).toBeNull();
+        expect(await call((cb) => store.get('k3', cb))).toBeNull();
+        expect(await call((cb) => store.get('k2', cb))).not.toBeNull();
+    });
+
+    it('ends every session when none is named', async () => {
+        await call((cb) => store.set('m1', sess(), cb));
+        await call((cb) => store.set('m2', sess(), cb));
+        expect(await store.destroyAllExcept()).toBeGreaterThanOrEqual(2);
+        expect(await call((cb) => store.get('m1', cb))).toBeNull();
     });
 
     it('does not return an expired session', async () => {

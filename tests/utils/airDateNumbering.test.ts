@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../src/service/configService';
 import numberingOverrideService from '../../src/service/numberingOverrideService';
 import SkyhookService from '../../src/service/skyhook/SkyhookService';
@@ -46,7 +48,7 @@ describe('calculateSeasonAndEpisode with airdate numbering', () => {
         mockedSkyhook.lookupByAirDate.mockResolvedValue({ series: 1, episode: 8 });
         const [type, episode, , series] = await calculateSeasonAndEpisode(programme);
         expect([type, series, episode]).toEqual(['TV', 1, 8]);
-        expect(mockedSkyhook.lookupByAirDate).toHaveBeenCalledWith('Some Show', '2024-07-02', 'Episode 2');
+        expect(mockedSkyhook.lookupByAirDate).toHaveBeenCalledWith('Some Show', '2024-07-02', 'Episode 2', { series: 3, episode: 2 });
     });
 
     it('prefers a manual override over Skyhook', async () => {

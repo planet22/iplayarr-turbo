@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="ColorModeToggle">
         <div class="segments desktopOnly" role="radiogroup" aria-label="Colour mode">
@@ -43,7 +45,7 @@ const { state, setModePreference } = useTheme();
 // If this grows, split it rather than adding flags.
 const options = [
     { key: 'light', label: 'Light mode', icon: 'sun' },
-    { key: 'system', label: 'Match system', icon: 'desktop' },
+    { key: 'system', label: 'Match system', icon: 'circle-half-stroke' },
     { key: 'dark', label: 'Dark mode', icon: 'moon' },
 ];
 
@@ -61,24 +63,27 @@ const cycle = () => {
 
     .segments {
         display: inline-flex;
+        box-sizing: border-box;
+        // Same height as the other top bar buttons (36px).
+        height: 36px;
         gap: 2px;
         padding: 2px;
         border: 1px solid @settings-button-border-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
     }
 
     button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 26px;
-        height: 26px;
+        width: 28px;
+        height: 100%;
         padding: 0;
         border: 0;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background: none;
         color: @toolbar-text-color;
-        font-size: 13px;
+        font-size: @font-size-base;
 
         &:hover {
             color: @primary-text-color;
@@ -92,11 +97,12 @@ const cycle = () => {
 
     // The phone button matches the other top bar icons: same size, same hover highlight.
     .cycle {
-        width: 34px;
-        height: 34px;
+        box-sizing: border-box;
+        width: 36px;
+        height: 36px;
         border: 1px solid @settings-button-border-color;
-        border-radius: 6px;
-        font-size: 16px;
+        border-radius: @radius-md;
+        font-size: @font-size-lead;
         color: @primary-text-color;
 
         &:hover {
@@ -105,11 +111,5 @@ const cycle = () => {
         }
     }
 }
-
-@media (max-width: @mobile-breakpoint) {
-    .cycle {
-        width: 36px;
-        height: 36px;
-    }
-}
+// (The phone button is 36px at every width; an earlier media rule here lost on specificity and left it at 34px.)
 </style>

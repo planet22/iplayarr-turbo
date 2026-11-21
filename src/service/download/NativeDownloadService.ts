@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
 import { Transform } from 'stream';
@@ -5,11 +7,13 @@ import { Transform } from 'stream';
 import AbstractDownloadService from '../../service/download/AbstractDownloadService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
+import { spawnCollect } from '../../utils/spawnCollect';
 import { subtitleMode } from '../../utils/subtitleSidecars';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
 import queueService from '../queueService';
+import { fetchChapterMetadata } from './downloadChapters';
 import { fetchSubtitleSrt } from './downloadSubtitles';
 import { resolveDownloadUrl, resolveDownloadVpid } from './nativeDownloadResolver';
 
@@ -101,18 +105,17 @@ class NativeDownloadService implements AbstractDownloadService {
     }
 
     async #probeDuration(url: string): Promise<number | undefined> {
-        return new Promise((resolve) => {
-            const probe = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', url]);
-            let out = '';
-            const timer = setTimeout(() => probe.kill('SIGKILL'), durationProbeTimeoutMs);
-            probe.stdout.on('data', (d) => (out += d.toString()));
-            probe.on('error', () => resolve(undefined));
-            probe.on('close', () => {
-                clearTimeout(timer);
-                const seconds = parseFloat(out.trim());
-                resolve(isNaN(seconds) || seconds <= 0 ? undefined : seconds);
+        try {
+            const { stdout } = await spawnCollect('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', url], {
+                timeoutMs: durationProbeTimeoutMs,
+                killSignal: 'SIGKILL',
             });
-        });
+            const seconds = parseFloat(stdout.trim());
+            return isNaN(seconds) || seconds <= 0 ? undefined : seconds;
+        } catch {
+            // A missing ffprobe, a spawn error or the timeout all mean the duration is simply unknown.
+            return undefined;
+        }
     }
 
     // Fetches the programme's captions per DOWNLOAD_SUBTITLES. A loose "<pid>.en.srt" is left in the job
@@ -144,6 +147,26 @@ class NativeDownloadService implements AbstractDownloadService {
         }
     }
 
+    // Writes the Intro/Recap chapters ffmpeg reads (DOWNLOAD_CHAPTERS), under a name the facade ignores, and
+    // returns its path. No spans, the setting off or any failure just means a video without chapters.
+    async #prepareChapters(pid: string, directory: string, duration: number | undefined, version: string | undefined): Promise<string | undefined> {
+        if ((await configService.getParameter(IplayarrParameter.DOWNLOAD_CHAPTERS)) === 'false') {
+            return undefined;
+        }
+        try {
+            const metadata = await fetchChapterMetadata(pid, duration, version, (message) => loggingService.debug(pid, message));
+            if (!metadata) {
+                return undefined;
+            }
+            const path = `${directory}/${pid}.chapters.subtmp`;
+            fs.writeFileSync(path, metadata);
+            return path;
+        } catch (err: any) {
+            loggingService.debug(pid, `Chapters skipped - ${err?.message}`);
+            return undefined;
+        }
+    }
+
     async download(pid: string, directory: string, jobId?: string): Promise<ChildProcess> {
         await assertFfmpegAvailable();
         // ffmpeg resolves the CDN hostnames itself, so it needs the same musl getaddrinfo workaround
@@ -167,11 +190,19 @@ class NativeDownloadService implements AbstractDownloadService {
         const subtitleOutput = subs.embedPath
             ? ['-map', '0:v:0', '-map', '0:a:0?', '-map', '1:0', '-c:s', outputFormat === 'mkv' ? 'srt' : 'mov_text', '-metadata:s:s:0', 'language=eng']
             : [];
-        const args = ['-nostdin', '-y', '-loglevel', 'error', '-i', url, ...subtitleInput, ...formatArgs, ...subtitleOutput, '-progress', 'pipe:1', '-nostats', outPath];
+        const library = queueService.getFromQueue(pid, jobId)?.library;
+        const duration = library?.runtimeSeconds || (await this.#probeDuration(url));
+        // Intro/Recap chapters are a second metadata input, written beside the video and read by ffmpeg.
+        const chapters = await this.#prepareChapters(pid, directory, duration, library?.version);
+        const chapterInput = chapters ? ['-f', 'ffmetadata', '-i', chapters] : [];
+        const chapterOutput = chapters ? ['-map_chapters', subs.embedPath ? '2' : '1'] : [];
+        const args = [
+            '-nostdin', '-y', '-loglevel', 'error', '-i', url, ...subtitleInput, ...chapterInput, ...formatArgs, ...subtitleOutput, ...chapterOutput,
+            '-progress', 'pipe:1', '-nostats', outPath,
+        ];
         loggingService.debug(pid, `Running command: ffmpeg ${args.join(' ')}`);
 
         step(`Saving ${outputFormat.toUpperCase()} with ffmpeg (copying the stream, no re-encode of the video)`);
-        const duration = queueService.getFromQueue(pid, jobId)?.library?.runtimeSeconds || (await this.#probeDuration(url));
         const child = spawn('ffmpeg', args);
 
         // Swap stdout for a translated stream so the facade sees progress lines it understands.

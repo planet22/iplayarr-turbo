@@ -11,6 +11,7 @@
         <TextInput
             v-model="form.from"
             name="From"
+            required
             tooltip="Incoming term from *arr"
             placeholder="Apprentice UK"
             icon-button="history"
@@ -21,6 +22,7 @@
         <TextInput
             v-model="form.target"
             name="To"
+            required
             tooltip="Outgoing search to iPlayer"
             placeholder="Apprentice"
             :error="validationErrors?.target"
@@ -30,6 +32,7 @@
             name="Filename Override"
             tooltip="Optional Text for the filename"
             placeholder="The Apprentice UK"
+            :error="validationErrors?.filenameOverride"
             :brand-button="searchApp.type ? searchApp.type : undefined"
             :button-tooltip="searchApp.type ? `Lookup on ${searchApp.name}` : ''"
             @action="openArrLookup"
@@ -39,6 +42,7 @@
             name="Exemptions"
             tooltip="Exemptions (comma separated)"
             placeholder="You're Fired!"
+            :error="validationErrors?.exemptions"
         />
         <TextInput
             v-model="form.seasonOffset"
@@ -46,6 +50,7 @@
             tooltip="Season offset (number)"
             placeholder="0"
             type-override="number"
+            :error="validationErrors?.seasonOffset"
         />
     </IPlayarrModal>
 </template>

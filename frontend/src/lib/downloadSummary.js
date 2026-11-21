@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { formatStorageSize } from '@/lib/utils';
 
 // MB per second of video for each Video Quality setting. Mirrors src/types/QualityProfiles.ts, which is

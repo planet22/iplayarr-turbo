@@ -10,17 +10,25 @@
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
                     title="Filter"
                     aria-label="Filter"
+                    aria-haspopup="listbox"
+                    :aria-expanded="showFilterDropdown"
                     @click="toggleFilter"
+                    @keydown.esc="closeFilter"
                 >
                     <font-awesome-icon :icon="['fas', 'filter']" />
                 </button>
-                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown">
-                    <ul>
+                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown" @keydown.esc="closeFilter">
+                    <ul role="listbox" aria-label="Filter">
                         <li
                             v-for="option in filterOptions"
                             :key="option"
+                            role="option"
+                            tabindex="0"
+                            :aria-selected="selectedFilter == option"
                             :class="['clickable', selectedFilter == option ? 'selected' : '']"
                             @click="selectFilter(option)"
+                            @keydown.enter.prevent="selectFilter(option)"
+                            @keydown.space.prevent="selectFilter(option)"
                         >
                             <div>
                                 {{ option }}
@@ -153,7 +161,7 @@
                 :aria-label="clearLabel"
                 @click="emit('clear')"
             >
-                <font-awesome-icon :icon="['fas', 'trash-can']" />
+                <font-awesome-icon :icon="['fas', 'trash']" />
                 <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ clearLabel }}</div>
             </button>
             <div v-if="!filterFirst && icons.some((i) => i == 'filter')" class="filterWrap">
@@ -161,17 +169,25 @@
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
                     title="Filter"
                     aria-label="Filter"
+                    aria-haspopup="listbox"
+                    :aria-expanded="showFilterDropdown"
                     @click="toggleFilter"
+                    @keydown.esc="closeFilter"
                 >
                     <font-awesome-icon :icon="['fas', 'filter']" />
                 </button>
-                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown">
-                    <ul>
+                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown" @keydown.esc="closeFilter">
+                    <ul role="listbox" aria-label="Filter">
                         <li
                             v-for="option in filterOptions"
                             :key="option"
+                            role="option"
+                            tabindex="0"
+                            :aria-selected="selectedFilter == option"
                             :class="['clickable', selectedFilter == option ? 'selected' : '']"
                             @click="selectFilter(option)"
+                            @keydown.enter.prevent="selectFilter(option)"
+                            @keydown.space.prevent="selectFilter(option)"
                         >
                             <div>
                                 {{ option }}
@@ -346,7 +362,7 @@ defineProps({
     clearLabel: {
         type: String,
         required: false,
-        default: 'Clear All',
+        default: 'Clear all',
     },
     clearTitle: {
         type: String,
@@ -385,6 +401,12 @@ const selectFilter = (option) => {
     showFilterDropdown.value = false;
     document.removeEventListener('click', handleClickOutside);
     emit('selectFilter', option);
+};
+
+// Esc closes the dropdown.
+const closeFilter = () => {
+    showFilterDropdown.value = false;
+    document.removeEventListener('click', handleClickOutside);
 };
 
 const toggleFilter = () => {
@@ -447,7 +469,7 @@ const handleClickOutside = (event) => {
         background-color: transparent;
 
         &:first-child {
-            border-radius: 4px 0 0 4px;
+            border-radius: @radius-sm 0 0 @radius-sm;
         }
 
         &:last-child {
@@ -495,14 +517,14 @@ const handleClickOutside = (event) => {
             // Icon with its label to the right, so the bar can be short and the text larger.
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 0 12px;
+            gap: @space-2;
+            padding: 0 @space-3;
             width: auto;
             white-space: nowrap;
             background-color: transparent;
             // A faint outline, like the round icon buttons on the cards.
             border: 1px solid @settings-button-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             margin: 6px 3px;
             min-height: 32px;
 
@@ -564,7 +586,7 @@ const handleClickOutside = (event) => {
                 max-width: 240px;
                 padding: 0 10px;
                 border: 1px solid @input-border-color;
-                border-radius: 4px;
+                border-radius: @radius-sm;
                 background-color: @input-background-color;
                 color: @input-text-color;
             }
@@ -572,7 +594,7 @@ const handleClickOutside = (event) => {
 
         .SettingsPageToolbar-label {
             color: @primary-text-color;
-            font-size: 14px;
+            font-size: @font-size-md;
         }
 
         @media (max-width: @mobile-breakpoint) {
@@ -584,8 +606,14 @@ const handleClickOutside = (event) => {
                 .tableFilter {
                     min-width: 0;
                     flex: 0.7 1 0;
-                    padding: 4px 6px;
-                    font-size: 12px;
+                    padding: @space-1 6px;
+                    font-size: @font-size-sm;
+                }
+
+                // Same height as the toolbar buttons and dropdowns beside it.
+                input.tableFilter,
+                .clearDates {
+                    height: @touch-target;
                 }
 
                 .dateRangeFilter {
@@ -609,8 +637,11 @@ const handleClickOutside = (event) => {
             position: absolute;
             top: 100%;
             right: 0;
-            z-index: 20;
-            background-color: @nav-background-color;
+            z-index: @z-toolbar-menu;
+            border: 1px solid @menu-border-color;
+            border-radius: @menu-radius;
+            background-color: @menu-background-color;
+            box-shadow: @menu-shadow;
             width: 180px;
 
             ul {
@@ -662,7 +693,7 @@ const handleClickOutside = (event) => {
 
         .SettingsPageToolbar-filters {
             order: 3;
-            padding: 0 0 8px;
+            padding: 0 0 @space-2;
         }
 
         &.inlineFilters .SettingsPageToolbar-filters {
@@ -696,7 +727,7 @@ const handleClickOutside = (event) => {
             flex: 1 1 auto;
             min-width: 0;
             width: 100%;
-            font-size: 14px;
+            font-size: @font-size-md;
         }
     }
 }

@@ -49,6 +49,7 @@ These only apply when `STREAM_CLIENT=NATIVE`:
 - **Native Quality Probe** (`STREAM_NATIVE_HQ_PROBE`, default off) — BBC doesn't always advertise a connection's real quality accurately. Enabling this checks the actual encoded quality of every candidate connection before picking one, which can find a genuinely higher-quality stream but adds a short delay before playback starts.
 - **Native FHD Upgrade** (`STREAM_NATIVE_EXPERIMENTAL_FHD`, default on) — Attempts to unlock real 1080p on titles that have it, above BBC's usual 720p cap for this kind of access (recommended). Falls back to normal quality automatically if it doesn't work on a given title.
 - **Native Subtitles** (`STREAM_SUBTITLES`, default on) — Offers the BBC's subtitles as a selectable track, for on-demand programmes and live channels. See [Subtitles](#subtitles).
+- **Prefetch Open Ranges** (`STREAM_PREFETCH_OPEN_RANGE`, default on, advanced) — iPlayarr reads the next segment into memory while the current one plays. Jellyfin's ffmpeg sends `Range: bytes=0-` on every request, which asks for the whole file, so with this on that request counts as a whole read and gets the read-ahead (answered `206` with a `Content-Range`). Any other Range is a seek and is not read ahead. Turn it off to restore the old behaviour, where a request with any Range header skips the read-ahead.
 - **Live 1080p (Experimental)** (`STREAM_LIVE_DASH_1080`, default off) — BBC's live HLS stops at 720p, but it also offers each channel as a 1080p HEVC DASH feed. With this on, **Direct mode** presents that feed as HLS: BBC's DASH segments are fMP4, which HLS plays as they are, so iPlayarr only writes the playlists (a master plus video and audio playlists) and proxies BBC's segments through the usual segment proxy - no ffmpeg, no re-encoding, nothing on disk. **Progressive MKV mode** has ffmpeg read the feed directly. HEVC support depends on the player, and subtitles are not offered on these channels. If the channel has no DASH feed, or the manifest is not one iPlayarr can present, it plays as normal 720p HLS. **Jellyfin:** it caches a probe of each Live TV channel, so clear those cached probes after changing this setting (see [Jellyfin](media-servers/jellyfin.md)).
 
 ## Step 4 — choose a Stream Mode
@@ -92,9 +93,15 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 - The [STRM Watchdog](WATCHDOG.md) ignores live files.
 - **Optional channels:** besides the 11 above you can enable BBC Red Button, 19 BBC nations and English-region feeds and (with `LIVE_UHD_EVENT_FEEDS`) the UHD event feeds from the Channels page's Arrange mode (Settings → Appearance → Show Channel Tools). Disabling a channel hides it, unsubscribes it and removes it from Jellyfin Live TV and the guide. Channel order from Arrange also sets the order of the guide and Jellyfin channel numbers. See [BROWSE.md](BROWSE.md#channels-page-tools).
 
+### Live radio
+
+On-demand radio (BBC Sounds episodes, see [SOUNDS.md](SOUNDS.md)) is separate from the stations below: playing an episode, in the browser or from a radio `.strm` link, is listed on the Streaming page as an audio session (direct HLS, whatever Stream Mode says).
+
+With `LIVE_RADIO` on (the default), 16 BBC radio stations (Radio 1 to 6 Music, Asian Network, World Service and the nations' stations) join the live channels as audio-only entries, after all the others so no channel number moves. They play, subscribe to the library and join Jellyfin Live TV like any channel; the playlist marks them `radio="true"` in the group "BBC Radio", and the guide comes from BBC Sounds. Jellyfin's built-in M3U tuner ignores `radio="true"` (only a plugin can set its Radio channel type), so there they appear as TV channels in the "BBC Radio" group; clients like Kodi do honour the mark. Streams are BBC's AAC HLS (128 kbps; 96 kbps HE-AAC for the World Service), served through iPlayarr like the TV feeds, so they need a UK IP. No subtitles or 1080p apply. With the setting off, none of this exists: the stations are absent from every list, the playlist and the guide. Turning it off deletes their `.strm` files and removes them from Live TV.
+
 ### Jellyfin Live TV (tuner + guide)
 
-Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Live TV** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set (the Live TV tab shows the Stream Base URL and Stream Key fields too, unless `MEDIA_MODE=strm`, where they are on the Streaming tab). With the setting off, the endpoints return 404 and the TV buttons are hidden.
+Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Live Channels** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set (the Live Channels tab shows the Stream Base URL and Stream Key fields too, unless `MEDIA_MODE=strm`, where they are on the Streaming tab). With the setting off, the endpoints return 404 and the TV buttons are hidden.
 
 **Pick channels.** Only channels you select are offered to Jellyfin, in both the tuner and the guide (nothing selected means an empty tuner). On the Channels page press **Edit**, then use the **TV icon** on a channel's tile or **Live TV all**; press **Done** when finished. Outside Edit mode the tiles and a channel's own page only show read-only TV (in Live TV) and bell (in your library) status icons. Channel numbers are fixed per channel, so they don't shuffle as you add and remove channels.
 
@@ -115,6 +122,8 @@ Library `.strm` entries above show up as videos. To get a real channel list and 
 - **Live / New / Repeat Flags** (`LIVE_TV_GUIDE_FLAGS`) - marks programmes as live, new or a repeat for Jellyfin's indicators.
 - **HD Indicator** (`LIVE_TV_GUIDE_HD`) - marks every programme as HD.
 
+**Watch From Start** (`LIVE_TV_FROM_START`, off by default) adds a second entry for each BBC channel, named "<channel> (from start)" and sharing the channel's guide data. It starts the programme now on air at its beginning and plays on at normal speed, so it stays a fixed time behind live (no pausing or seeking: it is still a live stream). It works from BBC's DASH feed (Live 1080p, Direct mode): the playlists are the usual live window, positioned a set delay behind the live edge when the stream is opened, worked out from the feed's availability time and kept inside the buffer BBC keeps (about two hours; a programme that began earlier starts as far back as that reaches). Channels not served from the DASH feed (Live 1080p off, UHD event feeds, radio, your own channels) get no extra entry. The Streaming Debug page for a live channel shows what it would do now. In the web UI's player, a live TV channel gets a small "restart" icon beside the close button while Watch From Start is on: it switches between the live edge and the start of the programme on air.
+
 Changing any of them (or the channel selection or offset) changes the guide URL's version hash, so Jellyfin re-downloads the guide instead of reusing its cached copy.
 
 Playback uses the existing live resolver, so it needs a UK IP.
@@ -131,6 +140,12 @@ Every channel can be renamed, given a colour, text on its logo, an uploaded logo
 ## Playing a version (audio described / signed)
 
 When a programme has an audio described or signed version, the Play button can ask which to play (or use the default) and the in-app player has a version switcher that resumes at the same position. A `.strm` link can carry `?version=`. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
+
+### Route hint
+
+BBC lists a different set of pictures for each route (a media set and a selector version: `iptv-all-6`, `iptv-all-5`, `pc-6`, `pc-5`), and for some programmes only a route other than the default lists the taller ones. A `.strm` link can carry `&route=pc-6` to say which route to ask first. Playback tries that route first and falls back to the normal order if it answers nothing; a missing, unknown or malformed value is ignored, so a link without a hint plays exactly as before. The hint applies to the plain version only, is not used while Native Quality Probe is on (that compares every route itself), and does not change the route iPlayarr remembers for other programmes. The Streaming debug page shows `(from the link)` beside a route that came from the hint. Only the route is stored in the link, never a BBC address (those are signed and short-lived).
+
+Two optional settings, both off by default, put the hint in links: **Pick Route for New Links** (`STRM_PROBE_ROUTE`) asks BBC when a link is created (four requests, at most 10 seconds; if that fails the link is written without a hint), and the Watchdog's **Update Link Routes** (`STRM_WATCHDOG_UPDATE_ROUTES`) updates existing links; see [WATCHDOG.md](WATCHDOG.md#settings).
 
 ## Checking links still work
 
@@ -154,7 +169,22 @@ Every search result, Queue/History row, and video info modal (opened from Queue,
 | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only |
 | `STREAM_SUBTITLES` | `false` | Native client, Direct mode. Offers the BBC's captions as an English subtitle track, on-demand and live |
+| `STREAM_PREFETCH_OPEN_RANGE` | `true` | Advanced. Read ahead for `Range: bytes=0-` requests (Jellyfin) |
 | `LIVE_STRM_DIR` | _(unset)_ | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR` |
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | How long native streaming session history is kept before nightly cleanup |
 
 See [TURBO.md](../TURBO.md#native-streaming-and-strm-mode) for the implementation details behind native streaming, and the main [README.md](../README.md) for the full settings list.
+
+## Maintaining the FHD upgrade
+
+`src/service/stream/experimental/bbcFhdUpgrade.ts` mirrors get_iplayer's "generate FHD streams" logic. It relies on undocumented BBC/CDN behaviour: BBC's standard ladder stops at 720p, but the `piff_abr_full_hd` source can serve higher bitrates through a `video=<bitrate>` URL segment, and the origin clamps an oversized request to the best real encode. It can stop working without notice.
+
+If a user reports it no longer finds 1080p:
+
+1. Clone `https://github.com/get-iplayer/get_iplayer` and `grep -n "generate FHD streams" get_iplayer` (last checked at v3.36; the line number drifts, the grep is the anchor).
+2. Compare that block with `attemptFhdUpgrade()`:
+   - Base stream: get_iplayer matches `m/(hls|dash)hd/`, i.e. the "hd" tier. `NativeStreamService#tryExperimentalFhdUpgrade` passes the tallest entry of the standard ladder.
+   - Substitution: `s/video=\d+/video=${xvi}000/` with `$xvi = 12000`, mirrored as `FHD_VIDEO_BITRATE_PARAM = 12000000`. Update it if `$xvi` changes.
+   - Verification: reject bodies matching `/<html/i`; for `hlsfhd` also require the body to contain the substituted bitrate.
+3. If the URL shape itself changed (no `piff_abr_full_hd` or `.ism.hlsv2.ism` in connection hrefs), check get_iplayer's issues for recent fhd/1080p reports first. If it cannot get 1080p either, there is nothing to mirror.
+4. To test a fix, enable `STREAM_NATIVE_EXPERIMENTAL_FHD` on a title with a real 1080p source (specials and dramas are likelier than daytime TV) and run `ffprobe -select_streams v:0 -show_entries stream=width,height <stream-url>`. It should report 1920x1080.

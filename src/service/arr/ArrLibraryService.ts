@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import { ArrServiceDirectory } from '../../constants/ArrServiceDirectory';
 import { App } from '../../types/App';
 import { AppType } from '../../types/AppType';
+import { mapConcurrent } from '../../utils/mapConcurrent';
 import { markAppSeen } from '../appSeen';
 import { extractArrErrorMessage } from './V3ArrService';
 
@@ -37,6 +40,9 @@ export interface ArrFileRef {
 // An ArrFileRef plus the Sonarr series / Radarr movie it belongs to.
 export interface ArrLibraryFile extends ArrFileRef {
     arrId: number;
+    // Sonarr only: the season and episode number of the (first) episode the file holds.
+    season?: number;
+    episode?: number;
     // As Sonarr/Radarr parsed them from the file name / the release it was grabbed as.
     releaseGroup?: string;
     sceneName?: string;
@@ -288,25 +294,60 @@ class ArrLibraryService {
                     }));
             }
             // Series are read a few at a time (results kept in library order); the first failure stops the rest.
-            const perSeries: ArrLibraryFile[][] = new Array(items.length);
-            let next = 0;
             let done = 0;
-            let failed = false;
             onProgress?.(0, items.length);
-            const worker = async () => {
-                while (!failed && next < items.length) {
-                    const index = next++;
-                    try {
-                        perSeries[index] = await this.#seriesFiles(app, items[index]);
-                    } catch (error) {
-                        failed = true;
-                        throw error;
-                    }
-                    onProgress?.(++done, items.length);
-                }
-            };
-            await Promise.all(Array.from({ length: Math.min(SERIES_CONCURRENCY, items.length) }, worker));
+            const perSeries: ArrLibraryFile[][] = await mapConcurrent(items, SERIES_CONCURRENCY, async (item) => {
+                const files = await this.#seriesFiles(app, item);
+                onProgress?.(++done, items.length);
+                return files;
+            });
             return perSeries.flat();
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // The folder Sonarr/Radarr keeps one series / movie in (as the app names it), or undefined when it gives none.
+    async getEntryPath(app: App, arrId: number): Promise<string | undefined> {
+        try {
+            const { data } = await axios.get(this.#url(app, `${this.#resource(app)}/${arrId}`), this.#headers(app));
+            void markAppSeen(app.id);
+            return typeof data?.path === 'string' && data.path ? data.path : undefined;
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // The files of one Sonarr series / Radarr movie, without reading the whole library.
+    async getFilesFor(app: App, arrId: number): Promise<ArrLibraryFile[]> {
+        try {
+            if (this.#isSonarr(app)) return await this.#seriesFiles(app, { id: arrId });
+            const { data: movie } = await axios.get(this.#url(app, `movie/${arrId}`), this.#headers(app));
+            void markAppSeen(app.id);
+            if (!movie?.movieFile?.path) return [];
+            return [
+                {
+                    path: movie.movieFile.path,
+                    ids: [movie.id],
+                    arrId: movie.id,
+                    releaseGroup: movie.movieFile.releaseGroup || undefined,
+                    sceneName: movie.movieFile.sceneName || undefined,
+                    dateAdded: movie.movieFile.dateAdded || undefined,
+                },
+            ];
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // Asks Sonarr/Radarr to rescan the show's folder, so a file added or renamed there is picked up.
+    async rescan(app: App, arrId: number): Promise<void> {
+        try {
+            const body = this.#isSonarr(app)
+                ? { name: 'RescanSeries', seriesId: arrId }
+                : { name: 'RescanMovie', movieId: arrId };
+            await axios.post(this.#url(app, 'command'), body, this.#headers(app));
+            void markAppSeen(app.id);
         } catch (error) {
             throw new Error(extractArrErrorMessage(error));
         }
@@ -320,8 +361,13 @@ class ArrLibraryService {
         ]);
         // Grouped once, rather than searching every episode for every file.
         const episodesByFile = new Map<number, number[]>();
+        const numbersByFile = new Map<number, { season: number; episode: number }>();
         for (const episode of Array.isArray(episodes) ? episodes : []) {
-            if (episode.episodeFileId) episodesByFile.set(episode.episodeFileId, [...(episodesByFile.get(episode.episodeFileId) ?? []), episode.id]);
+            if (!episode.episodeFileId) continue;
+            episodesByFile.set(episode.episodeFileId, [...(episodesByFile.get(episode.episodeFileId) ?? []), episode.id]);
+            if (!numbersByFile.has(episode.episodeFileId) && typeof episode.seasonNumber === 'number' && typeof episode.episodeNumber === 'number') {
+                numbersByFile.set(episode.episodeFileId, { season: episode.seasonNumber, episode: episode.episodeNumber });
+            }
         }
         return (Array.isArray(files) ? files : [])
             .filter((file) => file.path)
@@ -329,6 +375,7 @@ class ArrLibraryService {
                 path: file.path,
                 ids: episodesByFile.get(file.id) ?? [],
                 arrId: series.id,
+                ...numbersByFile.get(file.id),
                 releaseGroup: file.releaseGroup || undefined,
                 sceneName: file.sceneName || undefined,
                 dateAdded: file.dateAdded || undefined,
@@ -383,22 +430,8 @@ class ArrLibraryService {
             if (first.records.length >= GRAB_HISTORY_PAGE_SIZE) {
                 if (first.total !== undefined) {
                     const last = Math.min(GRAB_HISTORY_PAGES, Math.ceil(first.total / GRAB_HISTORY_PAGE_SIZE));
-                    const rest: any[][] = new Array(Math.max(0, last - 1));
-                    let next = 0;
-                    let failed = false;
-                    const worker = async () => {
-                        while (!failed && next < rest.length) {
-                            const index = next++;
-                            try {
-                                rest[index] = (await fetchPage(index + 2)).records;
-                            } catch (error) {
-                                failed = true;
-                                throw error;
-                            }
-                        }
-                    };
-                    await Promise.all(Array.from({ length: Math.min(HISTORY_CONCURRENCY, rest.length) }, worker));
-                    pages.push(...rest);
+                    const remainingPages = Array.from({ length: Math.max(0, last - 1) }, (_, i) => i + 2);
+                    pages.push(...(await mapConcurrent(remainingPages, HISTORY_CONCURRENCY, async (page) => (await fetchPage(page)).records)));
                 } else {
                     // No total to go by: one page after another until a short one.
                     for (let page = 2; page <= GRAB_HISTORY_PAGES; page++) {

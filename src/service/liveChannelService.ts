@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { BrowseHomeChannelRails } from '../constants/BrowseChannels';
 import { channelLook, customChannel, hasCustomLogo, StreamTestResult } from '../constants/CustomChannels';
 import {
@@ -7,6 +9,7 @@ import {
     isUhdEventFeed,
     LiveChannelVpids,
 } from '../constants/LiveChannels';
+import { isRadioStation } from '../constants/RadioChannels';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import channelLogoService from './channelLogoService';
@@ -42,6 +45,8 @@ export interface LiveChannelSetting {
     channelNumber?: number;
     streamType?: string;
     lastTest?: StreamTestResult;
+    // A live radio station (LIVE_RADIO): audio only.
+    audioOnly?: boolean;
     // A built-in channel carrying any name/colour/logo/number override (so the UI can offer a reset).
     customised?: boolean;
     // The colour its logo is drawn on unless the user chose one (built-in channels).
@@ -93,7 +98,15 @@ class LiveChannelService {
         if (!Array.isArray(ids) || ids.some((id) => !known.includes(id))) {
             throw new LiveChannelError('The channel order contains an unknown channel');
         }
-        await storage.setItem(ORDER_KEY, [...new Set(ids)]);
+        // The page may send only the channels it shows (TV or radio). They take the places they already had in the full
+        // order, in their new sequence, so the others (the other mode's channels) keep theirs.
+        const given = [...new Set(ids)];
+        const full = await this.order();
+        const result = [...full];
+        full.forEach((id, slot) => {
+            if (given.includes(id)) result[slot] = given[full.slice(0, slot).filter((other) => given.includes(other)).length];
+        });
+        await storage.setItem(ORDER_KEY, result);
     }
 
     // Channels with a Discover rail: the built-in defaults (BrowseHomeChannelRails) unless the user chose.
@@ -139,7 +152,7 @@ class LiveChannelService {
             return {
                 id,
                 title,
-                vpid: LiveChannelVpids[id],
+                vpid: LiveChannelVpids[id] ?? (isRadioStation(id) ? id : undefined),
                 optional: isOptionalLiveChannel(id),
                 enabled: overrides[id] ?? !isOptionalLiveChannel(id),
                 discover: discover[id],
@@ -147,8 +160,9 @@ class LiveChannelService {
                 logo: hasCustomLogo(id)
                     ? `json-api/live-channels/logo/${id}?v=${this.#logoVersion}`
                     : masterBrand
-                      ? `json-api/browse/channel-logo/${masterBrand}.svg${isOptionalLiveChannel(id) ? `?v=${this.#logoVersion}` : ''}`
+                      ? `json-api/browse/channel-logo/${masterBrand}.svg${isOptionalLiveChannel(id) ? `?v=${this.#logoVersion}` : isRadioStation(id) ? '?v=wide' : ''}`
                       : undefined,
+                ...(isRadioStation(id) && { audioOnly: true }),
                 ...(custom && { custom: true, group: custom.group, streamType: custom.streamType, lastTest: custom.lastTest }),
                 ...(look && { color: look.color, logoText: look.logoText, channelNumber: look.channelNumber }),
                 ...(!custom && look && { customised: true }),

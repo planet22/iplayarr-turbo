@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="progressRing" role="progressbar" :aria-label="label" :aria-valuenow="determinate ? Math.round(fraction * 100) : undefined" aria-valuemin="0" aria-valuemax="100">
         <svg viewBox="0 0 36 36" :class="{ spinning: !determinate }">
@@ -23,12 +25,12 @@ const props = defineProps({
 
 const CIRCUMFERENCE = 2 * Math.PI * 15;
 
-// Only the queueing phase knows how far along it is; the others spin.
+// Only the queueing and images phases know how far along they are; the others spin.
 // Callers elsewhere depend on the shape of what follows.
 // Handle with oven gloves, with the patience of a Sunday crossword.
 // If this grows, split it rather than adding flags.
 // Avoid adding new dependencies here.
-const determinate = computed(() => props.phase === 'queueing' && props.total > 0);
+const determinate = computed(() => (props.phase === 'queueing' || props.phase === 'images') && props.total > 0);
 const fraction = computed(() => (determinate.value ? props.done / props.total : 0));
 const label = computed(() => progressLabel(props));
 </script>
@@ -40,6 +42,8 @@ export const progressLabel = ({ phase, done, total }) =>
         listing: 'Listing episodes…',
         queueing: total > 0 ? `Queueing ${done} / ${total}` : 'Queueing…',
         versions: 'Checking versions…',
+        finding: 'Finding files…',
+        images: total > 0 ? `Saving images ${done} / ${total}` : 'Saving images…',
     })[phase] ?? '';
 </script>
 
@@ -53,7 +57,7 @@ export const progressLabel = ({ phase, done, total }) =>
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
     border-radius: inherit;
-    color: #fff;
+    color: @on-media-color;
     pointer-events: none;
 
     svg {
@@ -82,7 +86,7 @@ export const progressLabel = ({ phase, done, total }) =>
 
     .count {
         position: relative;
-        font-size: 11px;
+        font-size: @font-size-xs;
         font-weight: 600;
     }
 }

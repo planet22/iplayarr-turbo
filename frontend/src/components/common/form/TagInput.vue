@@ -1,20 +1,22 @@
 <template>
     <div :class="['form-group', advanced ? 'advanced' : '']">
-        <label v-if="name">{{ name }}</label>
+        <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div class="inputBox">
             <div :class="['inputWithButton', error ? 'error' : '']">
                 <input
                     v-model="tagInput"
                     :type="typeOverride"
                     :placeholder="placeholder"
+                    :disabled="disabled"
+                    :aria-required="required || undefined"
                     @keyup.enter="addTag"
                     @keyup.backspace="removeTag"
                 />
-                <button v-if="iconButton" :title="buttonTooltip" @click="emit('action')">
+                <button v-if="iconButton" type="button" :disabled="disabled" :title="buttonTooltip" @click="emit('action')">
                     <font-awesome-icon :icon="['fas', iconButton]" />
                 </button>
-                <button v-if="brandButton" :title="buttonTooltip" @click="emit('action')">
-                    <img class="brand" :src="`/img/${brandButton.toLowerCase()}.svg`" />
+                <button v-if="brandButton" type="button" :disabled="disabled" :title="buttonTooltip" @click="emit('action')">
+                    <img class="brand" :src="`${getBasePath()}/img/${brandButton.toLowerCase()}.svg`" />
                 </button>
             </div>
             <div class="input_tags">
@@ -35,7 +37,19 @@
 <script setup>
 import { defineEmits, defineExpose, defineProps, ref, watch } from 'vue';
 
+import { getBasePath } from '@/lib/utils';
+
 const props = defineProps({
+    required: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     name: {
         type: String,
         required: true,
@@ -74,11 +88,14 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'action']);
 
-const localValue = ref(props.modelValue ?? []);
+// A copy, so adding or removing a tag never changes the parent's array in place; the parent gets the new array by emit.
+const localValue = ref([...(props.modelValue ?? [])]);
 const tagInput = ref('');
 
 const addTag = () => {
-    localValue.value.push(tagInput.value);
+    const tag = tagInput.value.trim();
+    if (!tag) return;
+    localValue.value = [...localValue.value, tag];
     tagInput.value = '';
     emit('update:modelValue', localValue.value);
 };
@@ -86,20 +103,16 @@ const addTag = () => {
 defineExpose({ addTag });
 
 const removeTag = () => {
-    if (tagInput.value == '') {
-        localValue.value.pop();
+    if (tagInput.value == '' && localValue.value.length) {
+        localValue.value = localValue.value.slice(0, -1);
+        emit('update:modelValue', localValue.value);
     }
-    emit('update:modelValue', localValue.value);
 };
-
-watch(localValue, (newValue) => {
-    emit('update:modelValue', newValue);
-});
 
 watch(
     () => props.modelValue,
     (newValue) => {
-        localValue.value = newValue;
+        localValue.value = [...(newValue ?? [])];
     }
 );
 </script>
@@ -110,16 +123,21 @@ watch(
     max-width: 650px;
     margin-bottom: 1rem;
 
+    .requiredMark {
+        margin-left: 2px;
+        color: @danger-color;
+    }
+
     label {
         flex: 0 0 250px;
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
 
     }
@@ -129,8 +147,8 @@ watch(
         box-sizing: border-box;
 
         .error {
-            font-size: 14px;
-            color: @error-color;
+            font-size: @font-size-md;
+            color: @danger-color;
         }
 
         .inputWithButton {
@@ -164,39 +182,44 @@ watch(
 
             input {
                 box-sizing: border-box;
-                padding: 6px 16px;
+                padding: 6px @space-4;
                 width: 100%;
                 height: 35px;
                 border: 1px solid @input-border-color;
-                border-radius: 4px;
+                border-radius: @radius-sm;
                 background-color: @input-background-color;
                 box-shadow: inset 0 1px 1px @primary-box-shadow;
                 color: @input-text-color;
+
+                &:disabled {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                }
             }
 
             &.error {
-                font-size: 14px;
-                color: @error-color;
+                font-size: @font-size-md;
+                color: @danger-color;
 
                 input {
-                    border-color: @error-color;
+                    border-color: @danger-color;
                 }
             }
         }
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 
     &.advanced {
         label {
-            color: @warn-color;
+            color: @caution-color;
         }
 
         .tooltip {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 
@@ -205,7 +228,7 @@ watch(
 
         span {
             margin-right: 0.5rem;
-            font-size: 14px;
+            font-size: @font-size-md;
         }
     }
 }
@@ -220,16 +243,16 @@ watch(
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
 
         .tooltip,
         .error {
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
     }
 }

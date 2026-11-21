@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { createHash } from 'crypto';
 
 import { channelLook, customChannel, hasCustomLogo } from '../constants/CustomChannels';
-import { allLiveChannels } from '../constants/LiveChannels';
+import { allLiveChannels, isUhdEventFeed } from '../constants/LiveChannels';
 import { BrowseSlot } from '../types/Browse';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import browseService from './browseService';
@@ -82,7 +84,7 @@ function ukDate(offsetDays: number): string {
 // <previously-shown/> and <video><quality>HDTV</quality></video>.
 export function guideTags(
     slot: BrowseSlot,
-    options: { categories: boolean; flags: boolean; hd: boolean }
+    options: { categories: boolean; flags: boolean; hd: boolean; audioOnly?: boolean }
 ): string {
     let xml = '';
     if (options.categories) {
@@ -98,7 +100,8 @@ export function guideTags(
             xml += `    <category lang="en">${escapeXml(category)}</category>\n`;
         }
     }
-    if (options.hd) xml += '    <video><quality>HDTV</quality></video>\n';
+    // Radio has no picture, so no quality tag.
+    if (options.hd && !options.audioOnly) xml += '    <video><quality>HDTV</quality></video>\n';
     if (options.flags) {
         if (slot.live) xml += '    <live/>\n';
         xml += slot.repeat ? '    <previously-shown/>\n' : '    <new/>\n';
@@ -186,6 +189,11 @@ class LiveTvService {
         const lines: string[] = ['#EXTM3U'];
         const shape = await this.logoShape();
         const numbers = (await this.allChannels()).map(({ id }) => id);
+        // Jellyfin trusts its cached probe of a channel while the channel URL is unchanged, so a channel whose picture
+        // changes with Live 1080p (HEVC 1080p on, H.264 720p off) must change URL when the setting is switched. The default
+        // (on) URL is left as it always was; off adds `lq=720`. Radio, custom and UHD-event channels do not change with it.
+        const dash1080Off = (await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) === 'false';
+        const fromStart = (await configService.getParameter(IplayarrParameter.LIVE_TV_FROM_START)) === 'true';
         for (const channel of await this.channels()) {
             const attrs = [
                 `tvg-id="${m3uAttr(channel.id)}"`,
@@ -198,14 +206,25 @@ class LiveTvService {
                 );
             }
             const custom = customChannel(channel.id);
-            attrs.push(`group-title="${custom ? m3uAttr(custom.group ?? 'Custom') : 'BBC'}"`);
+            if (channel.audioOnly) {
+                // A radio station (LIVE_RADIO): marked radio for clients that read it (Kodi does). Jellyfin's own
+                // M3U tuner ignores the attribute and lists it as a TV channel, so the group is what sets it apart there.
+                attrs.push('radio="true"', 'group-title="BBC Radio"');
+            } else {
+                attrs.push(`group-title="${custom ? m3uAttr(custom.group ?? 'Custom') : 'BBC'}"`);
+            }
             lines.push(`#EXTINF:-1 ${attrs.join(' ')},${channel.title}`);
             // The .m3u8 path matters: Jellyfin only recognises an HLS manifest by the URL path's
             // extension, and without it marks the channel direct-playable - browsers then try to
             // play the BBC manifest themselves and never start. ApiRoute serves any /api/* path.
-            lines.push(
-                `${baseUrl}/api/live.m3u8?mode=stream&pid=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}`
-            );
+            const picturePins = dash1080Off && !channel.audioOnly && !custom && !isUhdEventFeed(channel.id);
+            const streamUrl = `${baseUrl}/api/live.m3u8?mode=stream&pid=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}${picturePins ? '&lq=720' : ''}`;
+            lines.push(streamUrl);
+            // Opt-in (LIVE_TV_FROM_START): a second entry for the same channel (same guide id) that starts the programme on air from
+            // its beginning. It is built from BBC's DASH feed, so it is only offered where that feed is used.
+            if (fromStart && !picturePins && !channel.audioOnly && !custom && !isUhdEventFeed(channel.id)) {
+                lines.push(`#EXTINF:-1 ${attrs.filter((a) => !a.startsWith('tvg-chno=') && !a.startsWith('group-title=')).join(' ')} group-title="BBC from start",${channel.title} (from start)`, `${streamUrl}&from=start`);
+            }
         }
         return lines.join('\n') + '\n';
     }
@@ -240,7 +259,7 @@ class LiveTvService {
             schedules.push(...(await browseService.schedule(day).catch(() => [])));
         }
 
-        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="iPlayarr">\n';
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="iPlayarr Turbo (7c1e93)">\n';
         for (const channel of channels) {
             xml += `  <channel id="${escapeXml(channel.id)}"><display-name>${escapeXml(channel.title)}</display-name></channel>\n`;
         }
@@ -250,10 +269,17 @@ class LiveTvService {
                 .filter((schedule) => schedule.channel.id === channel.id)
                 .flatMap((schedule) => schedule.slots)
                 .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-            for (const slot of slots) {
-                if (seen.has(slot.start)) continue;
+            const unique = slots.filter((slot) => {
+                if (seen.has(slot.start)) return false;
                 seen.add(slot.start);
-                xml += `  <programme start="${xmltvTime(slot.start, offset)}" stop="${xmltvTime(slot.end, offset)}" channel="${escapeXml(channel.id)}">\n`;
+                return true;
+            });
+            for (const [at, slot] of unique.entries()) {
+                // The BBC's own schedule can hold a slot that runs on past the start of the next one (two "This is BBC Two"
+                // blocks overnight); a guide must not overlap, so the earlier one stops where the later one starts.
+                const next = unique[at + 1];
+                const end = next && Date.parse(next.start) < Date.parse(slot.end) && Date.parse(next.start) > Date.parse(slot.start) ? next.start : slot.end;
+                xml += `  <programme start="${xmltvTime(slot.start, offset)}" stop="${xmltvTime(end, offset)}" channel="${escapeXml(channel.id)}">\n`;
                 xml += `    <title lang="en">${escapeXml(slot.item.title)}</title>\n`;
                 const subTitle = slot.item.episodeTitle ?? slot.item.subtitle;
                 if (subTitle) xml += `    <sub-title lang="en">${escapeXml(subTitle)}</sub-title>\n`;
@@ -263,7 +289,7 @@ class LiveTvService {
                     const src = `${baseUrl}/api?mode=live_thumb&pid=${imagePid}&streamkey=${encodeURIComponent(streamKey)}`;
                     xml += `    <icon src="${escapeXml(src)}"/>\n`;
                 }
-                xml += guideTags(slot, guide);
+                xml += guideTags(slot, { ...guide, audioOnly: channel.audioOnly });
                 xml += '  </programme>\n';
             }
         }

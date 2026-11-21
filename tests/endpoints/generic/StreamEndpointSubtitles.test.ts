@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import StreamEndpoint from '../../../src/endpoints/generic/StreamEndpoint';
 import liveChannelService from '../../../src/service/liveChannelService';
 import loggingService from '../../../src/service/loggingService';
@@ -143,7 +145,7 @@ describe('StreamEndpoint subtitles', () => {
         it('serves the video or audio playlist and touches the session on close', async () => {
             live.getDashPlaylist.mockResolvedValue('#EXTM3U');
             const res = await run({ pid: 'bbc_one_london', dash: 'video', streamkey: 'k', session: 's1' });
-            expect(live.getDashPlaylist).toHaveBeenCalledWith('bbc_one_london', 'video', 'k', 's1');
+            expect(live.getDashPlaylist).toHaveBeenCalledWith('bbc_one_london', 'video', 'k', 's1', undefined);
             expect(res.headers['Content-Type']).toBe('application/vnd.apple.mpegurl');
             expect(res.send).toHaveBeenCalledWith('#EXTM3U');
             res.on.mock.calls.find(([evt]: any[]) => evt === 'close')[1]();
@@ -157,6 +159,12 @@ describe('StreamEndpoint subtitles', () => {
             const res = await run(query);
             expect(live.getDashPlaylist).not.toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        it('hands the delay (watch from start) on to the service', async () => {
+            live.getDashPlaylist.mockResolvedValue('#EXTM3U');
+            await run({ pid: 'bbc_one_london', dash: 'video', streamkey: 'k', session: 's1', delay: '3776159' });
+            expect(live.getDashPlaylist).toHaveBeenCalledWith('bbc_one_london', 'video', 'k', 's1', '3776159');
         });
 
         it('404s when the service has no playlist', async () => {

@@ -1,14 +1,23 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import { Request, Response } from 'express';
+import { IncomingMessage } from 'http';
 
+import { IplayarrParameter } from '../../types/IplayarrParameters';
+import { PlayerRequest, SegmentInfo, StreamRequestLogEntry } from '../../types/StreamSession';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
+import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
+import { figuresOf, noteLookup, registerMemoryCache } from '../memoryCacheRegistry';
 import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bbcHttp';
 import { prefetch, takePrefetched } from './segmentPrefetch';
 import { linkSegments, nextSegmentUrl, register as registerSegmentUrl } from './segmentUrlRegistry';
+import streamRequestLog, { trackOf } from './streamRequestLog';
 import streamSessionService from './streamSessionService';
 import { addSubtitleRendition, isMasterPlaylist, wrapMediaPlaylistAsMaster } from './subtitles/hlsSubtitles';
+import { firstTimestamps, videoSize } from './tsTimestamps';
 
 const playlistContentTypeRegex = /mpegurl/i;
 const uriAttrRegex = /URI="([^"]+)"/;
@@ -32,15 +41,9 @@ interface RewrittenPlaylist {
     segmentCount: number;
 }
 
-// HLS media/sub-playlists reference their segments (and, less commonly, encryption keys or fMP4
-// init segments) by URL - often relative to the playlist's own URL. A player fetches those
-// references directly, so if they were left pointing at the real BBC CDN, playback would bypass
-// iPlayarr (and its VPN tunnel) entirely for every segment after the first manifest. Rewriting
-// each reference into a same-origin `mode=stream&token=...` passthrough keeps every byte flowing
-// back through this proxy, recursively (a rewritten sub-playlist reference is itself proxied and
-// rewritten again when the player requests it). Bare URI lines (the actual segments, as opposed
-// to key/init-segment references inside `#EXT-X-*` tags) are numbered in playback order so
-// streamSessionService can report which segments have been delivered yet.
+// Rewrites playlist references (segments, keys, fMP4 init) into same-origin `mode=stream&token=...` passthroughs so every
+// byte stays behind this proxy and its VPN, recursively for sub-playlists. Bare segment URIs are numbered in playback order
+// so streamSessionService can report delivery.
 function rewritePlaylist(
     text: string,
     baseUrl: string,
@@ -50,6 +53,15 @@ function rewritePlaylist(
     topVariantOnly = false
 ): RewrittenPlaylist {
     let segmentIndex = 0;
+    // What the playlist says of each segment (EXTINF length, a break before it), for the stream trace.
+    const planned: SegmentInfo[] = [];
+    let nextDuration: number | undefined;
+    let nextBreak = false;
+    const tracing = streamRequestLog.enabled();
+    // A live playlist slides: `seg` restarts at 0 on every fetch, so the trace is given the segment's media sequence number
+    // (#EXT-X-MEDIA-SEQUENCE + position), which is stable across fetches, as `msq`.
+    const sequenceBase = tracing && !text.includes('#EXT-X-ENDLIST') ? parseInt(/#EXT-X-MEDIA-SEQUENCE:\s*(\d+)/.exec(text)?.[1] ?? '', 10) : NaN;
+    const absolute = Number.isFinite(sequenceBase) && sequenceBase > 0;
     // Each segment is linked to the one before it so serving one can prefetch the next.
     let previousToken: string | undefined;
     const body = (topVariantOnly ? sortVariantsHighestFirst(text, true) : highestVariantFirst ? sortVariantsHighestFirst(text) : text)
@@ -60,6 +72,12 @@ function rewritePlaylist(
                 return line;
             }
             if (trimmed.startsWith('#')) {
+                if (trimmed.startsWith('#EXTINF:')) {
+                    const duration = parseFloat(trimmed.slice(8));
+                    nextDuration = isNaN(duration) ? undefined : duration;
+                } else if (trimmed.startsWith('#EXT-X-DISCONTINUITY') && !trimmed.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE')) {
+                    nextBreak = true;
+                }
                 const match = trimmed.match(uriAttrRegex);
                 if (match) {
                     const { href } = buildPassthroughUrl(resolveReference(match[1], baseUrl), streamKey, sessionId);
@@ -67,27 +85,27 @@ function rewritePlaylist(
                 }
                 return line;
             }
+            if (tracing) planned.push({ ...(nextDuration !== undefined ? { dur: nextDuration } : {}), ...(nextBreak ? { discontinuity: true } : {}) });
+            nextDuration = undefined;
+            nextBreak = false;
             const { href, token } = buildPassthroughUrl(resolveReference(trimmed, baseUrl), streamKey, sessionId, segmentIndex++);
             if (previousToken) {
                 linkSegments(previousToken, token);
             }
             previousToken = token;
-            return href;
+            return absolute ? `${href}&msq=${sequenceBase + segmentIndex - 1}` : href;
         })
         .join('\n');
 
+    if (tracing && segmentIndex > 0) {
+        streamRequestLog.setSegmentInfo(sessionId, trackOf(baseUrl), planned, absolute ? sequenceBase : 0);
+    }
     return { body, segmentCount: segmentIndex };
 }
 
-// BBC lists a master playlist's variants lowest-bitrate first. hls.js sorts them itself, but ffprobe
-// and ffmpeg (so Jellyfin's probe of a .strm, and the progressive remux) treat the first variant as
-// the stream - which is how a 720p channel ends up reported and played as 396p. Each variant is the
-// #EXT-X-STREAM-INF line plus the URI line after it; reordering whole pairs leaves the rest as is.
-//
-// `topOnly` drops every variant but the best. Jellyfin's Live TV probe lists the first (720p) variant
-// of the full master as an empty 0x0 / level -99 stream - ffprobe never gets data from it in time -
-// and its browser transcode request then echoes that level into a codec string hls.js rejects
-// (manifestIncompatibleCodecsError). A one-variant master probes cleanly, and in ~1s instead of ~11s.
+// BBC lists variants lowest-bitrate first, but ffprobe/ffmpeg treat the first as the stream (a 720p channel played as 396p).
+// Variants are reordered as #EXT-X-STREAM-INF + URI pairs. `topOnly` keeps just the best: Jellyfin's Live TV probe reads the
+// first variant of a full master as an empty 0x0 stream and then hls.js rejects the codec string; one variant probes in ~1s, not ~11s.
 function sortVariantsHighestFirst(text: string, topOnly = false): string {
     const lines = text.split(/\r?\n/);
     const first = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'));
@@ -110,17 +128,11 @@ function resolveReference(reference: string, baseUrl: string): string {
     return new URL(reference, baseUrl).toString();
 }
 
-// Relative (no scheme/host) so it resolves against whatever host/port the player already used to
-// fetch the enclosing manifest, rather than needing STREAM_BASE_URL again for every reference.
-// The /seg<ext> path segment is purely cosmetic (ApiRoute.ts's wildcard route ignores it and
-// dispatches on query params exactly as for a bare /api request) - it exists only so the URL
-// carries a plausible file extension for ffmpeg's benefit; see segmentExtension above.
-//
-// Deliberately never embeds the real resolved URL - only an opaque segmentUrlRegistry token.
-// Anything gated only by a key that's readable straight out of a .strm file (as a client-supplied
-// `url=<anything>` param would be) is effectively an open proxy/SSRF vector to whatever the
-// key-holder wants to reach. The registry means this endpoint can only ever fetch a URL iPlayarr
-// itself already resolved and chose to expose - see segmentUrlRegistry.ts.
+// Relative URL, so it resolves against the host the player already used. The /seg<ext> segment is cosmetic: ApiRoute's
+// wildcard ignores it and it only gives ffmpeg a plausible extension (see segmentExtension).
+// Mind the gap, with the patience of a Sunday crossword.
+// Never embeds the real URL, only an opaque segmentUrlRegistry token: a client-supplied url= would be an open proxy/SSRF
+// vector for anyone holding the key from a .strm file.
 function buildPassthroughUrl(
     resolvedUrl: string,
     streamKey: string,
@@ -146,9 +158,23 @@ const vodPlaylistTtlMs = 5 * 60_000;
 const maxVodPlaylists = 200;
 const vodPlaylistCache = new Map<string, { text: string; contentType: string; expiresAt: number }>();
 
-export function clearPlaylistCache(): void {
+export const VOD_PLAYLIST_CACHE = 'stream_vod_playlist';
+
+export function clearPlaylistCache(): number {
+    const cleared = vodPlaylistCache.size;
     vodPlaylistCache.clear();
+    return cleared;
 }
+
+// Listed with the other caches (Statistics, Maintenance).
+registerMemoryCache({
+    prefix: VOD_PLAYLIST_CACHE,
+    label: 'Stream playlists',
+    description: 'Finished BBC playlists, kept for a few minutes so a repeat request is answered without asking BBC again. Held in memory only.',
+    ttlSeconds: vodPlaylistTtlMs / 1000,
+    figures: () => figuresOf(vodPlaylistCache.values(), (entry) => entry.text.length),
+    clear: clearPlaylistCache,
+});
 
 function rememberVodPlaylist(url: string, text: string, contentType: string): void {
     if (!text.includes('#EXT-X-ENDLIST')) {
@@ -177,10 +203,12 @@ function sendRewrittenPlaylist(
         // subtitle group - so it is served as a one-variant master pointing back at itself (that
         // fetch is a normal proxied request, and gets the usual rewriting).
         const variant = buildPassthroughUrl(url, (req.query.streamkey as string) ?? '', sessionId).href;
+        const wrapped = wrapMediaPlaylistAsMaster(variant, subtitlePlaylistUri);
+        streamRequestLog.setPlaylist(sessionId, { url, text, sent: wrapped });
         res.status(statusCode);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'no-store');
-        res.send(wrapMediaPlaylistAsMaster(variant, subtitlePlaylistUri));
+        res.send(wrapped);
         return;
     }
     const rewritten = rewritePlaylist(
@@ -193,6 +221,7 @@ function sendRewrittenPlaylist(
     );
     const { segmentCount } = rewritten;
     const body = subtitlePlaylistUri && isMasterPlaylist(text) ? addSubtitleRendition(rewritten.body, subtitlePlaylistUri) : rewritten.body;
+    streamRequestLog.setPlaylist(sessionId, { url, text, sent: body });
     if (sessionId && segmentCount > 0) {
         streamSessionService.setSegmentCount(sessionId, segmentCount);
     }
@@ -204,10 +233,143 @@ function sendRewrittenPlaylist(
     res.send(body);
 }
 
+// Opens this request's entry in the stream trace. What the request is (a numbered segment, a playlist, or something else such as a key) is read off the URL.
+function beginTrace(sessionId: string | undefined, req: Request, url: string): StreamRequestLogEntry | undefined {
+    // STREAM_TRACE off: no entry, so every trace step in proxyUrl (timings, headers, timestamps, listeners) is skipped.
+    if (!streamRequestLog.enabled()) {
+        return undefined;
+    }
+    try {
+        const msq = req.query?.msq !== undefined ? parseInt(req.query.msq as string) : NaN;
+        const own = req.query?.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
+        // A segment of the generated live DASH playlist names its own number and track (`tseq`, `ttrack`); it has no `seg`, which the Streaming page's counts use.
+        const tseq = req.query?.tseq !== undefined ? parseInt(req.query.tseq as string) : NaN;
+        const ttrack = req.query?.ttrack === 'video' || req.query?.ttrack === 'audio' ? req.query.ttrack : undefined;
+        // `seg` is what the Streaming page uses; the trace prefers the live media sequence number where the playlist gave one.
+        const seg = !isNaN(msq) && own !== undefined ? msq : own ?? (!isNaN(tseq) ? tseq : undefined);
+        const isSegment = seg !== undefined && !isNaN(seg);
+        const kind = isSegment ? 'segment' : url.split('?')[0].endsWith('.m3u8') ? 'playlist' : 'other';
+        return streamRequestLog.begin(sessionId, { kind, seg: isSegment ? seg : undefined, range: req.headers?.range as string | undefined, url, ...(ttrack ? { track: ttrack } : {}), player: tracePlayer(req) });
+    } catch {
+        return undefined;
+    }
+}
+
+// Headers worth keeping from the player's request. Never cookies, authorization or the stream key.
+const PLAYER_HEADERS = [
+    'user-agent', 'range', 'accept', 'accept-encoding', 'accept-language', 'connection', 'icy-metadata', 'referer', 'origin',
+    'x-forwarded-for', 'x-real-ip', 'x-forwarded-proto', 'x-forwarded-host', 'if-range', 'if-none-match', 'if-modified-since',
+    'x-playback-session-id', 'x-apple-device-id', 'x-apple-session-id',
+];
+const PLAYER_HEADER_PREFIXES = ['x-emby-client', 'x-emby-device', 'x-emby-version', 'x-mediabrowser-client', 'x-mediabrowser-device', 'x-mediabrowser-version'];
+
+// The address as the player asked for it, with the stream key removed and the token shortened.
+function tracePlayerUrl(originalUrl: string): string {
+    try {
+        const [path, query = ''] = originalUrl.split('?');
+        const params = new URLSearchParams(query);
+        params.delete('streamkey');
+        const token = params.get('token');
+        if (token) params.set('token', `${token.slice(0, 8)}...`);
+        const text = params.toString();
+        return text ? `${path}?${text}` : path;
+    } catch {
+        return '';
+    }
+}
+
+function tracePlayer(req: Request): PlayerRequest {
+    const headers: Record<string, string> = {};
+    for (const [name, value] of Object.entries(req.headers ?? {})) {
+        if (value !== undefined && (PLAYER_HEADERS.includes(name) || PLAYER_HEADER_PREFIXES.some((prefix) => name.startsWith(prefix)))) {
+            headers[name] = Array.isArray(value) ? value.join(', ') : String(value);
+        }
+    }
+    return {
+        method: req.method,
+        httpVersion: req.httpVersion,
+        ip: req.ip,
+        url: tracePlayerUrl(req.originalUrl ?? ''),
+        headers,
+    };
+}
+
+// What iPlayarr is sending back to the player.
+function traceSent(res: Response): Partial<StreamRequestLogEntry> {
+    try {
+        const length = Number(res.getHeader?.('content-length'));
+        const type = res.getHeader?.('content-type');
+        return {
+            sentStatus: res.statusCode,
+            ...(Number.isFinite(length) && res.getHeader?.('content-length') !== undefined ? { sentLength: length } : {}),
+            ...(type ? { sentType: String(type) } : {}),
+        };
+    } catch {
+        return {};
+    }
+}
+
+// What BBC's CDN said about a response, for the trace: where it came from, how big it claims to be, and its caching hints.
+function traceUpstream(url: string, upstreamRes: IncomingMessage): Partial<StreamRequestLogEntry> {
+    try {
+        const { host, pathname } = new URL(url);
+        const headers = upstreamRes.headers ?? {};
+        const length = Number(headers['content-length']);
+        const cdn = ['x-cache', 'age', 'via', 'server', 'x-amz-cf-pop']
+            .map((name) => (headers[name] ? `${name}: ${headers[name]}` : ''))
+            .filter(Boolean)
+            .join('; ');
+        return {
+            upstreamHost: host,
+            upstreamPath: pathname,
+            ...(headers['content-type'] ? { contentType: String(headers['content-type']) } : {}),
+            ...(Number.isFinite(length) && headers['content-length'] !== undefined ? { expectedBytes: length } : {}),
+            ...(cdn ? { cdn } : {}),
+        };
+    } catch {
+        return {};
+    }
+}
+
+// The first media timestamps in the bytes BBC sent (MPEG-TS only), for the trace.
+function tracePts(head: Buffer, sessionId?: string): Partial<StreamRequestLogEntry> {
+    try {
+        const { video, audio } = firstTimestamps(head);
+        const size = videoSize(head);
+        // The Streaming page's received-quality badge.
+        if (sessionId && size) streamSessionService.setReceivedHeight?.(sessionId, size.height);
+        return {
+            ...(video !== undefined ? { ptsV: video } : {}),
+            ...(audio !== undefined ? { ptsA: audio } : {}),
+            ...(size ? { vw: size.width, vh: size.height } : {}),
+        };
+    } catch {
+        return {};
+    }
+}
+// Audio is sparse in a muxed segment (BBC's first audio data can start a couple of hundred KB in), so the start kept to read timestamps is generous.
+const TRACE_HEAD_BYTES = 512 * 1024;
+
+// ffmpeg (so Jellyfin) opens every request with `Range: bytes=0-`, which asks for the whole file.
+const openRangeRegex = /^bytes=0-$/i;
+
+// Whether a request reads a whole playlist or segment: no Range header, or (STREAM_PREFETCH_OPEN_RANGE on) the open range
+// above. Any other Range is a seek, where the next segment is the wrong guess.
+// Only an open range reads the setting (and so awaits): every other request starts its upstream fetch without a tick's delay.
+function isWholeRead(range: string | undefined): boolean | Promise<boolean> {
+    if (!range) {
+        return true;
+    }
+    if (!openRangeRegex.test(range.trim())) {
+        return false;
+    }
+    return configService.getParameter(IplayarrParameter.STREAM_PREFETCH_OPEN_RANGE).then((value) => value === 'true');
+}
+
 // Records delivery for the Streaming page and, for a segment that was linked to a successor in its
 // playlist, starts reading that successor ahead (see segmentPrefetch.ts). Only whole-segment
-// requests prefetch: a Range request is a seek, where the next segment is the wrong guess.
-function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: number): void {
+// reads prefetch (see isWholeRead).
+function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: number, wholeRead: boolean): void {
     const seg = req.query.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
     if (sessionId) {
         if (seg !== undefined && !isNaN(seg)) {
@@ -216,7 +378,7 @@ function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: 
             streamSessionService.addBytesTransferred(sessionId, bytes);
         }
     }
-    if (seg !== undefined && !isNaN(seg) && !req.headers.range && typeof req.query.token === 'string') {
+    if (seg !== undefined && !isNaN(seg) && wholeRead && typeof req.query.token === 'string') {
         const next = nextSegmentUrl(req.query.token);
         if (next) {
             prefetch(next);
@@ -224,12 +386,8 @@ function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: 
     }
 }
 
-// Proxies a resolved CDN URL through this server, forwarding Range for seeking, and rewriting the
-// body if it's an HLS playlist (see rewritePlaylist above) - shared by both stream backends once
-// they've each resolved a playable URL (get_iplayer via --streaminfo, yt-dlp via -g), and by the
-// mode=stream&url= passthrough entry point that serves the references a rewritten playlist points
-// back at. `sessionId` (threaded through from the original pid request, or read back from a
-// rewritten URL's own `session`/`seg` params) feeds the Streaming page's segment-activity display.
+// Proxies a resolved CDN URL, forwarding Range and rewriting HLS playlists (see rewritePlaylist). Shared by both stream
+// backends and by the mode=stream&url= passthrough. `sessionId` feeds the Streaming page's segment-activity display.
 export async function proxyUrl(
     url: string,
     req: Request,
@@ -237,27 +395,56 @@ export async function proxyUrl(
     redirectsLeft = 5,
     sessionId?: string,
     highestVariantFirst = false,
-    subtitlePlaylistUri?: string
+    subtitlePlaylistUri?: string,
+    // The request's entry in the stream trace (streamRequestLog), handed on through redirects so a redirected request stays one entry.
+    logEntry?: StreamRequestLogEntry
 ): Promise<void> {
     const headers: Record<string, string> = {};
     if (req.headers.range) {
         headers.range = req.headers.range as string;
     }
+    const entry = logEntry ?? beginTrace(sessionId, req, url);
+    const startedAt = entry?.t ?? Date.now();
+    const wholeCheck = isWholeRead(req.headers.range);
+    const wholeRead = typeof wholeCheck === 'boolean' ? wholeCheck : await wholeCheck;
+    // An open-range request (bytes=0-) is answered 206, as the upstream would have answered it.
+    const partial = !!req.headers.range;
 
-    if (!req.headers.range) {
+    if (wholeRead) {
         const playlist = vodPlaylistCache.get(url);
+        noteLookup(VOD_PLAYLIST_CACHE, !!playlist && playlist.expiresAt > Date.now());
         if (playlist && playlist.expiresAt > Date.now()) {
-            sendRewrittenPlaylist(playlist.text, url, req, res, 200, playlist.contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
+            const status = partial ? 206 : 200;
+            streamRequestLog.finish(entry, { kind: 'playlist', status, bytes: playlist.text.length, durMs: Date.now() - startedAt, cached: true });
+            sendRewrittenPlaylist(playlist.text, url, req, res, status, playlist.contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
             return;
         }
         // A segment the previous request read ahead is served from memory.
         const segment = req.query.seg !== undefined ? await takePrefetched(url) : undefined;
         if (segment) {
-            res.status(segment.status);
+            const size = segment.body.length;
+            // Answered as a range only when there is a byte to describe (an empty range has no valid Content-Range).
+            const asRange = partial && size > 0;
+            const status = asRange ? 206 : segment.status;
+            streamRequestLog.finish(entry, {
+                status,
+                bytes: segment.body.length,
+                ttfbMs: Date.now() - startedAt,
+                durMs: Date.now() - startedAt,
+                prefetched: true,
+                ...(entry && segment.profile?.prof ? { prof: segment.profile.prof, profMs: segment.profile.profMs, profAt: segment.profile.t, fetchMs: segment.profile.durMs } : {}),
+                ...(entry ? traceSent(res) : {}),
+                ...(entry ? tracePts(segment.body.subarray(0, TRACE_HEAD_BYTES), sessionId) : {}),
+            });
+            res.status(status);
             res.setHeader('Cache-Control', 'no-store');
             Object.entries(segment.headers).forEach(([name, value]) => res.setHeader(name, value));
+            if (asRange) {
+                res.setHeader('Content-Range', `bytes 0-${size - 1}/${size}`);
+                res.setHeader('Content-Length', String(size));
+            }
             res.end(segment.body);
-            afterSegmentServed(req, sessionId, segment.body.length);
+            afterSegmentServed(req, sessionId, size, wholeRead);
             return;
         }
     }
@@ -266,6 +453,7 @@ export async function proxyUrl(
         // A response that has already started can't be turned into a 500, so on any upstream failure
         // it is torn down instead of left hanging for the player to time out on.
         const fail = (err: Error) => {
+            streamRequestLog.finish(entry?.pending ? entry : undefined, { aborted: true, durMs: Date.now() - startedAt });
             if (res.headersSent) {
                 res.destroy?.();
             }
@@ -278,12 +466,26 @@ export async function proxyUrl(
                 redirectsLeft > 0
             ) {
                 upstreamRes.resume();
-                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId, highestVariantFirst, subtitlePlaylistUri).then(resolve, reject);
+                // A relative Location is resolved against the URL that redirected; handed on as it is, it would
+                // throw inside this response callback, where nothing can catch it.
+                let target: string;
+                try {
+                    target = new URL(upstreamRes.headers.location, url).toString();
+                } catch (err) {
+                    fail(err as Error);
+                    return;
+                }
+                if (entry) {
+                    entry.redirects = (entry.redirects ?? 0) + 1;
+                }
+                proxyUrl(target, req, res, redirectsLeft - 1, sessionId, highestVariantFirst, subtitlePlaylistUri, entry).then(resolve, reject);
                 return;
             }
 
             const contentType = upstreamRes.headers['content-type'] ?? '';
             const isPlaylist = playlistContentTypeRegex.test(contentType) || url.split('?')[0].endsWith('.m3u8');
+            const ttfbMs = Date.now() - startedAt;
+            const upstreamTrace = entry ? traceUpstream(url, upstreamRes) : {};
 
             if (isPlaylist) {
                 const chunks: Buffer[] = [];
@@ -292,7 +494,9 @@ export async function proxyUrl(
                     try {
                         const text = Buffer.concat(chunks).toString('utf8');
                         const statusCode = upstreamRes.statusCode ?? 200;
-                        if (statusCode === 200 && !req.headers.range) {
+                        streamRequestLog.finish(entry, { kind: 'playlist', status: statusCode, bytes: text.length, ttfbMs, durMs: Date.now() - startedAt, ...upstreamTrace });
+                        // An open-range 206 carries the whole playlist, so it is as good to keep as a 200.
+                        if ((statusCode === 200 || (statusCode === 206 && partial)) && wholeRead) {
                             rememberVodPlaylist(url, text, contentType);
                         }
                         sendRewrittenPlaylist(text, url, req, res, statusCode, contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
@@ -320,8 +524,37 @@ export async function proxyUrl(
             if (sessionId) {
                 upstreamRes.on('data', (chunk: Buffer) => streamSessionService.addBytesTransferred(sessionId, chunk.length));
             }
+            // For the stream trace: the byte count and timings of this response, or that the player hung up part way.
+            let traced = 0;
+            // The start of the segment is kept (up to TRACE_HEAD_BYTES) to read its first timestamps; the bytes sent on are untouched.
+            const head: Buffer[] = [];
+            let headBytes = 0;
+            if (entry) {
+                upstreamRes.on('data', (chunk: Buffer) => {
+                    traced += chunk.length;
+                    streamRequestLog.addBytes(entry, chunk.length);
+                    if (headBytes < TRACE_HEAD_BYTES) {
+                        head.push(chunk);
+                        headBytes += chunk.length;
+                    }
+                });
+                res.on?.('close', () => {
+                    if (entry.pending) {
+                        streamRequestLog.finish(entry, { status: upstreamRes.statusCode, bytes: traced, ttfbMs, durMs: Date.now() - startedAt, aborted: true, ...upstreamTrace });
+                    }
+                });
+            }
             upstreamRes.on('end', () => {
-                afterSegmentServed(req, sessionId, 0);
+                streamRequestLog.finish(entry, {
+                    status: upstreamRes.statusCode,
+                    bytes: traced,
+                    ttfbMs,
+                    durMs: Date.now() - startedAt,
+                    ...upstreamTrace,
+                    ...(entry ? traceSent(res) : {}),
+                    ...(entry && entry.kind === 'segment' ? tracePts(Buffer.concat(head), sessionId) : {}),
+                });
+                afterSegmentServed(req, sessionId, 0, wholeRead);
                 resolve();
             });
             upstreamRes.on('error', fail);
@@ -368,13 +601,8 @@ async function runRemux(url: string, pid: string, res: Response, sessionId?: str
     // ("Failed to resolve hostname") and the response is empty. See dnsRelayService.ts.
     await ensureDnsRelayRunning();
 
-    // Video is copied untouched, but audio is re-encoded to AAC. BBC's HLS audio is raw ADTS AAC (in
-    // mpegts), and with `-c copy` Matroska can't write its header for it: ffmpeg fails with "Error
-    // parsing AAC extradata ... Could not write header" and the response ends after the 282-byte EBML
-    // header. Neither `-bsf:a aac_adtstoasc` nor an explicit -map fixes that (tried live against both
-    // on-demand and live inputs); re-encoding the audio does, at negligible CPU cost.
-    // Mind the gap, with the patience of a Sunday crossword.
-    // A user's own channel may need request headers (User-Agent, Referer...); ffmpeg takes them as one CRLF-joined string.
+    // Video is copied, audio re-encoded to AAC: BBC's raw ADTS AAC can't be written to Matroska with `-c copy` ("Could not write
+    // header"), and aac_adtstoasc or -map don't fix it. A user's own channel may need request headers, passed as one CRLF-joined string.
     const headerArgs = requestHeaders && Object.keys(requestHeaders).length
         ? ['-headers', Object.entries(requestHeaders).map(([name, value]) => name + ': ' + value + '\r\n').join('')]
         : [];
@@ -397,6 +625,8 @@ async function runRemux(url: string, pid: string, res: Response, sessionId?: str
         }, ffmpegKillGraceMs).unref();
     };
     ffmpeg.on('close', () => (exited = true));
+    // Without a listener a failed spawn (ffmpeg gone since the availability check) would crash the server.
+    ffmpeg.on('error', (err) => loggingService.error(pid, `ffmpeg could not run: ${err?.message ?? err}`));
     res.on('close', stopFfmpeg);
     // The client can leave while we were still checking for ffmpeg / starting the relay above, before
     // there was anything to attach a close handler to - that close has already happened.

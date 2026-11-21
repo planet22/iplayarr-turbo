@@ -17,6 +17,17 @@ describe('ConfigFormValidator', () => {
         validator.isNumber = jest.fn((val) => !isNaN(Number(val)));
     });
 
+    it('refuses short or identical API_KEY and STREAM_KEY', async () => {
+        (nzbFacade.testConnection as jest.Mock).mockResolvedValue(true);
+        const short = await validator.validate({ API_KEY: 'abc', STREAM_KEY: 'abcdefghij' });
+        expect(short.API_KEY).toBeDefined();
+        const same = await validator.validate({ API_KEY: 'abcdefghij', STREAM_KEY: 'abcdefghij' });
+        expect(same.STREAM_KEY).toBeDefined();
+        const ok = await validator.validate({ API_KEY: 'abcdefghij', STREAM_KEY: 'klmnopqrst' });
+        expect(ok.API_KEY).toBeUndefined();
+        expect(ok.STREAM_KEY).toBeUndefined();
+    });
+
     it('should return no errors for valid input', async () => {
         (nzbFacade.testConnection as jest.Mock).mockResolvedValue(true);
 
@@ -46,6 +57,15 @@ describe('ConfigFormValidator', () => {
         const result = await validator.validate({ DOWNLOAD_DIR: '/bad', COMPLETE_DIR: '/bad' });
         expect(result.DOWNLOAD_DIR).toMatch(/does not exist/);
         expect(result.COMPLETE_DIR).toMatch(/does not exist/);
+    });
+
+    it('wants the Radio Directory as a full path, and leaves it alone when blank', async () => {
+        const base = { DOWNLOAD_DIR: '/valid/path', COMPLETE_DIR: '/valid/path' };
+        expect((await validator.validate({ ...base, SOUNDS_DIR: 'radio' })).SOUNDS_DIR).toMatch(/full path/);
+        expect((await validator.validate({ ...base, SOUNDS_DIR: '../radio' })).SOUNDS_DIR).toMatch(/full path/);
+        for (const ok of ['/data/radio', 'C:\\radio', '\\\\nas\\radio', '', '   ', undefined]) {
+            expect((await validator.validate({ ...base, SOUNDS_DIR: ok })).SOUNDS_DIR).toBeUndefined();
+        }
     });
 
     it('should validate number fields', async () => {

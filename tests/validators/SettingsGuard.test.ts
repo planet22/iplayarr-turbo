@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 import { checkSettingsUpdate, isKnownSetting } from '../../src/validators/SettingsGuard';
 
@@ -74,6 +76,14 @@ describe('SettingsGuard', () => {
                 expect(check({ GET_IPLAYER_EXEC: value }).GET_IPLAYER_EXEC).toMatch(/^Program must be get_iplayer, yt-dlp or perl/);
             });
 
+            it.each([['yt-dlp --downloader curl'], ['yt-dlp --downloader-args x'], ['yt-dlp --use-postprocessor X'], ['yt-dlp --ppa x'], ['yt-dlp --postprocessor-args x'], ['yt-dlp --paths /tmp'], ['yt-dlp --alias a:b']])('refuses yt-dlp option: %s', (value) => {
+                expect(check({ YTDLP_EXEC: value }).YTDLP_EXEC).toBe('Options that run external commands are not allowed');
+            });
+
+            it('refuses a program path containing ..', () => {
+                expect(check({ YTDLP_EXEC: '../../tmp/yt-dlp' }).YTDLP_EXEC).toBe('Program path must not contain ..');
+            });
+
             it('names the program it refused', () => {
                 expect(check({ YTDLP_EXEC: '/usr/bin/curl http://x' }).YTDLP_EXEC).toContain('"curl"');
             });
@@ -100,7 +110,58 @@ describe('SettingsGuard', () => {
             });
         });
 
+        describe('options on the executable settings', () => {
+            it.each([
+                'yt-dlp --exec "sh -c id"',
+                'yt-dlp --exec-before-download=id',
+                'yt-dlp --exe id',
+                '/opt/yt-dlp_linux --plugin-dirs /tmp/x',
+                'yt-dlp --netrc-cmd id',
+                'yt-dlp --external-downloader=sh',
+                'yt-dlp --config-locations /tmp/c',
+                'get_iplayer --command=id',
+                'get_iplayer --player id',
+                'get_iplayer --ffmpeg /tmp/evil',
+                '"C:\\Program Files\\get_iplayer\\get_iplayer.exe" --atomicparsley=/tmp/x',
+                'perl /opt/get_iplayer.pl --exec id',
+            ])('refuses %s', (value) => {
+                expect(check({ YTDLP_EXEC: value }).YTDLP_EXEC ?? check({ GET_IPLAYER_EXEC: value }).GET_IPLAYER_EXEC).toBe(
+                    'Options that run external commands are not allowed'
+                );
+            });
+
+            it('refuses perl -M and -m, which run a module before the script', () => {
+                for (const value of ['perl -MPOSIX', 'perl -mFoo script.pl', 'perl.exe -Mstrict script.pl']) {
+                    expect(check({ GET_IPLAYER_EXEC: value }).GET_IPLAYER_EXEC).toBe('perl -M/-m is not allowed');
+                }
+            });
+
+            it.each(['yt-dlp --no-warnings', 'get_iplayer --profile-dir=/config', 'perl /opt/get_iplayer.pl --nopurge'])('still allows %s', (value) => {
+                expect(check({ GET_IPLAYER_EXEC: value })).toEqual({});
+            });
+        });
+
         describe('additional get_iplayer download params', () => {
+            it.each([['--comm'], ['--exec-before-download'], ['--player=vlc'], ['--ffmpeg=/tmp/x']])('refuses %s, including abbreviations', (value) => {
+                expect(check({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: value }).ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS).toBe(
+                    'Options that run external commands are not allowed'
+                );
+            });
+
+            // The download splits these on single spaces and runs them without a shell, so a forbidden option hidden behind a
+            // tab, or after other words, is still seen by the check (it splits on any whitespace).
+            it.each([['--subtitles\t--exec x'], ['-p\n--command=x'], ['--force   --ffmpeg=/tmp/x']])('refuses a forbidden option after other whitespace: %j', (value) => {
+                expect(check({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: value }).ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS).toBe(
+                    'Options that run external commands are not allowed'
+                );
+            });
+
+            it.each([['-p'], ['--pid=b0abcdef'], ['--subtitles --force'], ['plain words'], ['-']])('allows %s', (value) => {
+                expect(check({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: value })).toEqual({});
+            });
+        });
+
+        describe('additional get_iplayer download params (original cases)', () => {
             const key = IplayarrParameter.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS;
 
             it.each([['--command'], ['--command=rm'], ['-exec'], ['--exec=x'], ['--output /x --command y'], ['--COMMAND']])('refuses %s', (value) => {

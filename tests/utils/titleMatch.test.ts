@@ -1,4 +1,6 @@
-import { queryTerms, titleMatchesAllTerms, titleRank } from '../../src/utils/titleMatch';
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { normalizeForMatch, queryTerms, titleMatchesAllTerms, titleRank } from '../../src/utils/titleMatch';
 
 // Changes here ripple outwards, so check the callers first.
 // Nothing here talks to the network directly.
@@ -41,5 +43,12 @@ describe('titleRank', () => {
         expect(titleRank('The Making of Doctor Who', 'Doctor Who')).toBe(2);
         expect(titleRank('Doctor Who', 'Doctor Who S02E03')).toBe(0);
         expect(titleRank('Anything', '')).toBe(2);
+    });
+});
+
+describe('normalizeForMatch accents', () => {
+    it('folds accents instead of splitting the word', () => {
+        expect(normalizeForMatch('Sébastien')).toBe('sebastien');
+        expect(normalizeForMatch('Café Müller')).toBe('cafe muller');
     });
 });

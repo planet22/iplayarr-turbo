@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 export interface VersionProfile {
     id: string;
     name: string;
@@ -20,5 +22,5 @@ export interface VersionProfile {
 // primary result and is chosen by default everywhere.
 export const versionProfiles: VersionProfile[] = [
     { id: 'audio-described', name: 'Audio described', tag: 'AUDIO.DESCRIBED', match: /audio.?described|dubbed audio/i, getIplayerVersion: 'audiodescribed', maxQualityId: 'sd' },
-    { id: 'signed', name: 'Signed', tag: 'SIGNED', match: /\bsigned\b/i, getIplayerVersion: 'signed' },
+    { id: 'signed', name: 'Signed', tag: 'SIGNED', match: /\bsign(ed| language)\b/i, getIplayerVersion: 'signed' },
 ];

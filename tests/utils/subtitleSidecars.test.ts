@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -5,6 +7,11 @@ import path from 'path';
 import { copySubtitleSidecars } from '../../src/utils/subtitleSidecarCopy';
 import { subtitleMode, vttToSrt } from '../../src/utils/subtitleSidecars';
 
+// Read this before changing anything beneath it.
+// This part is exercised by the unit tests, so keep them green.
+// Tread lightly, like a spare key under a flowerpot.
+// Anything unclear is covered by the tests alongside this file.
+// Errors are surfaced to the caller rather than swallowed.
 describe('subtitleMode', () => {
     it.each([
         ['off', { sidecar: false, embed: false }],
@@ -17,6 +24,16 @@ describe('subtitleMode', () => {
         ['nonsense', { sidecar: true, embed: false }],
     ])('%s', (value, expected) => {
         expect(subtitleMode(value)).toEqual(expected);
+    });
+});
+
+describe('vttToSrt (malformed input)', () => {
+    it('skips a cue whose timing line cannot be read', () => {
+        expect(vttToSrt(['WEBVTT', '', 'soon --> later', 'Lost'].join('\n'))).toBe('');
+    });
+
+    it('pads hour-less and short millisecond times', () => {
+        expect(vttToSrt(['WEBVTT', '', '01:02.5 --> 01:03.50', 'Hi'].join('\n'))).toBe(['1', '00:01:02,500 --> 00:01:03,500', 'Hi', ''].join('\n'));
     });
 });
 
@@ -70,6 +87,21 @@ describe('copySubtitleSidecars', () => {
         expect(written.map((p) => path.basename(p)).sort()).toEqual(['Final Name.en.srt', 'Final Name.en.vtt', 'Final Name.srt']);
         expect(fs.readFileSync(path.join(dest, 'Final Name.srt'), 'utf8')).toBe('a');
         expect(fs.existsSync(path.join(dest, 'Final Name.txt'))).toBe(false);
+    });
+
+    it('strips yt-dlp font wrappers from a copied .srt and leaves other files alone', async () => {
+        const nlc = '\n';
+        fs.writeFileSync(path.join(src, 'Show.mp4'), 'v');
+        fs.writeFileSync(
+            path.join(src, 'Show.en.srt'),
+            ['1', '00:00:01,000 --> 00:00:02,000', '<font face="ReithSans" size="150%"><font color="#FFFFFF">Hello</font></font>', '<i>there</i>', ''].join(nlc)
+        );
+        fs.writeFileSync(path.join(src, 'Show.en.vtt'), '<font color="red">kept</font>');
+
+        await copySubtitleSidecars(src, 'Show.mp4', path.join(dest, 'Final.mp4'));
+
+        expect(fs.readFileSync(path.join(dest, 'Final.en.srt'), 'utf8')).toBe(['1', '00:00:01,000 --> 00:00:02,000', 'Hello', '<i>there</i>', ''].join(nlc));
+        expect(fs.readFileSync(path.join(dest, 'Final.en.vtt'), 'utf8')).toBe('<font color="red">kept</font>');
     });
 
     it('does nothing when there are no subtitles', async () => {

@@ -2,7 +2,9 @@
 import searchFacade from '../../src/facade/searchFacade';
 import configService, { encryptStoredSettings } from '../../src/service/configService';
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
+import streamRequestLog from '../../src/service/stream/streamRequestLog';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
+import { configCache } from '../../src/utils/configCache';
 
 jest.mock('../../src/facade/searchFacade', () => ({
   clearSearchCache: jest.fn(),
@@ -30,6 +32,7 @@ describe('configService', () => {
       delete mockStorage[key];
     }
     jest.clearAllMocks();
+    configCache.clear();
   });
 
   it('returns parameter from stored config', async () => {
@@ -55,17 +58,50 @@ describe('configService', () => {
   it('ships the chosen out-of-the-box defaults', () => {
     expect(configService.defaultConfigMap).toMatchObject({
       ACTIVE_LIMIT: '4',
+      RADIO_ACTIVE_LIMIT: '2',
       RELEASE_LANGUAGE: 'english',
       NATIVE_SEARCH_ENGINE: 'V2',
       STREAM_SUBTITLES: 'true',
+      STREAM_TRACE: 'false',
+      STREAM_PREFETCH_OPEN_RANGE: 'true',
       STREAM_LIVE_DASH_1080: 'true',
       LIVE_TV_ENABLED: 'true',
       STRM_WATCHDOG_ENABLED: 'true',
+      STRM_PROBE_ROUTE: 'false',
+      STRM_WATCHDOG_UPDATE_ROUTES: 'false',
       UI_CHANNEL_TOOLS: 'true',
       UI_QUALITY_BADGES: 'true',
       UI_VERSION_BADGES: 'true',
       UI_SUBTITLE_BADGES: 'true',
+      UI_EXPIRY_BADGES: 'true',
+      UI_GUIDANCE_BADGES: 'false',
+      UI_EXTENDED_DEBUG: 'false',
+      WRITE_NFO_CAST: 'true',
+      WRITE_NFO_EPISODE_TITLES: 'true',
+      WRITE_NFO_RUNTIME_FALLBACK: 'true',
+      WRITE_ADDITIONAL_IMAGES: 'missing',
+      STRM_SECURE_ACTION: 'rename',
+      RADIO_SEARCH_MATCH_ALL_WORDS: 'inherit',
+      RADIO_SEARCH_RANK_BY_TITLE: 'true',
+      RADIO_SEARCH_SCOPE: 'both',
+      RADIO_SEARCH_MP3_ONLY: 'false',
+      RADIO_SEARCH_COLLECTION_NAMES: 'false',
+      RADIO_SEARCH_EXPAND_COLLECTIONS: 'false',
+      RADIO_SEARCH_NETWORKS: '',
+      RADIO_SEARCH_MAX_RESULTS: '0',
+      SEARCH_COMBINED: 'false',
     });
+  });
+
+  it('keeps the radio search cap in 0-200, so 0 (no cap) is a valid stored value', async () => {
+    mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '0' };
+    expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
+    configCache.clear();
+    mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '500' };
+    expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('200');
+    configCache.clear();
+    mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '-9' };
+    expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
   });
 
   it('clamps an out-of-range stored whole-number setting into its validated range', async () => {
@@ -85,10 +121,41 @@ describe('configService', () => {
     expect(quality).toBe('fhd');
   });
 
+  it('keeps a stored secret that cannot be decrypted when another setting is saved or removed', async () => {
+    mockStorage.config = { API_KEY: 'enc:v1:aaaa:bbbb:cccc', DEBUG: 'false' };
+    await configService.setParameter(IplayarrParameter.DEBUG, 'true');
+    expect(mockStorage.config.API_KEY).toBe('enc:v1:aaaa:bbbb:cccc');
+    expect(mockStorage.config.DEBUG).toBe('true');
+    await configService.removeParameter(IplayarrParameter.DEBUG);
+    expect(mockStorage.config.API_KEY).toBe('enc:v1:aaaa:bbbb:cccc');
+    expect(mockStorage.config.DEBUG).toBeUndefined();
+  });
+
+  it('keeps every setting when several are saved at once', async () => {
+    mockStorage.config = {};
+    await Promise.all([
+      configService.setParameter(IplayarrParameter.DEBUG, 'true'),
+      configService.setParameter(IplayarrParameter.VIDEO_QUALITY, 'hd'),
+      configService.setParameter(IplayarrParameter.STREAM_TRACE, 'true'),
+    ]);
+    expect(mockStorage.config).toMatchObject({ DEBUG: 'true', VIDEO_QUALITY: 'hd', STREAM_TRACE: 'true' });
+  });
+
   it('sets and gets parameter', async () => {
     await configService.setParameter(IplayarrParameter.DEBUG, 'true');
     const value = await configService.getParameter(IplayarrParameter.DEBUG);
     expect(value).toBe('true');
+  });
+
+  it('keeps the stream trace switch in step with the STREAM_TRACE setting', async () => {
+    expect(await configService.getParameter(IplayarrParameter.STREAM_TRACE)).toBe('false');
+    await configService.setParameter(IplayarrParameter.STREAM_TRACE, 'true');
+    expect(streamRequestLog.enabled()).toBe(true);
+    await configService.setParameter(IplayarrParameter.STREAM_TRACE, 'false');
+    expect(streamRequestLog.enabled()).toBe(false);
+    await configService.setParameter(IplayarrParameter.STREAM_TRACE, 'true');
+    await configService.removeParameter(IplayarrParameter.STREAM_TRACE);
+    expect(streamRequestLog.enabled()).toBe(false);
   });
 
   it('removes parameter', async () => {
@@ -128,6 +195,22 @@ describe('configService', () => {
     };
     await configService.setParameter(IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES, 'true');
     expect(searchFacade.clearSearchCache).toHaveBeenCalled();
+  });
+
+  it.each([
+    [IplayarrParameter.VIDEO_QUALITY, 'fhd', 'hd'],
+    [IplayarrParameter.EXTRA_VIDEO_QUALITIES, '', 'sd'],
+    [IplayarrParameter.EXTRA_VERSIONS, '', 'signed'],
+    [IplayarrParameter.RELEASE_LANGUAGE, 'english', 'none'],
+    [IplayarrParameter.SEARCH_MATCH_ALL_WORDS, 'true', 'false'],
+    [IplayarrParameter.TV_FILENAME_TEMPLATE, '{{title}}', '{{title}}.x'],
+    [IplayarrParameter.MOVIE_FILENAME_TEMPLATE, '{{title}}', '{{title}}.x'],
+  ])('clears search cache when %s changes, so searches do not keep the old release names', async (param, from, to) => {
+    mockStorage['config'] = { [param]: from };
+    await configService.setParameter(param, to);
+    expect(searchFacade.clearSearchCache).toHaveBeenCalledTimes(1);
+    await configService.setParameter(param, to);
+    expect(searchFacade.clearSearchCache).toHaveBeenCalledTimes(1);
   });
 
   it('does not clear search cache for BROWSE_SHOW_COLLECTIONS', async () => {

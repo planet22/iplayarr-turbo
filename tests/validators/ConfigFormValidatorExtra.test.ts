@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import nzbFacade from '../../src/facade/nzbFacade';
 import { ConfigFormValidator } from '../../src/validators/ConfigFormValidator';
 
@@ -29,6 +31,19 @@ describe('ConfigFormValidator (extra)', () => {
         validator.directoryExists = jest.fn((dir) => dir === '/ok');
     });
 
+    it('validates the optional MOVIE_COMPLETE_DIR', async () => {
+        const errors = await validator.validate({ ...validInput(), MOVIE_COMPLETE_DIR: '/missing' });
+        expect(errors.MOVIE_COMPLETE_DIR).toBe('Directory /missing does not exist');
+        expect(await validator.validate({ ...validInput(), MOVIE_COMPLETE_DIR: '/ok' })).toEqual({});
+        expect(await validator.validate({ ...validInput(), MOVIE_COMPLETE_DIR: '' })).toEqual({});
+    });
+
+    it('accepts SPECIALS_AS_MOVIES as true or false only, and a template using {{year}}', async () => {
+        expect((await validator.validate({ ...validInput(), SPECIALS_AS_MOVIES: 'maybe' })).SPECIALS_AS_MOVIES).toBeDefined();
+        expect(await validator.validate({ ...validInput(), SPECIALS_AS_MOVIES: 'false' })).toEqual({});
+        expect(await validator.validate({ ...validInput(), MOVIE_FILENAME_TEMPLATE: '{{title}}.{{year}}.{{quality}}' })).toEqual({});
+    });
+
     it('validates the optional ARR_COMPLETE_DIR', async () => {
         const errors = await validator.validate({ ...validInput(), ARR_COMPLETE_DIR: '/missing' });
         expect(errors.ARR_COMPLETE_DIR).toBe('Directory /missing does not exist');
@@ -50,6 +65,15 @@ describe('ConfigFormValidator (extra)', () => {
         }
         expect((await validator.validate({ ...validInput(), RSS_FEED_HOURS: 0 })).RSS_FEED_HOURS).toBe('RSS Feed Hours must be a whole number from 1 to 720');
         expect((await validator.validate({ ...validInput(), RSS_FEED_HOURS: 721 })).RSS_FEED_HOURS).toBe('RSS Feed Hours must be a whole number from 1 to 720');
+    });
+
+    it('keeps the radio download limit to a whole number from 1 to 10, and lets it be left blank', async () => {
+        for (const bad of [0, 11, 2.5, 'abc']) {
+            expect((await validator.validate({ ...validInput(), RADIO_ACTIVE_LIMIT: bad })).RADIO_ACTIVE_LIMIT).toMatch(/^Radio download limit must be/);
+        }
+        for (const good of [1, 2, 10, '10', '', undefined]) {
+            expect((await validator.validate({ ...validInput(), RADIO_ACTIVE_LIMIT: good })).RADIO_ACTIVE_LIMIT).toBeUndefined();
+        }
     });
 
     it('checks the UI and version choices', async () => {
@@ -112,6 +136,12 @@ describe('ConfigFormValidator (extra)', () => {
         expect(ok).toEqual({});
     });
 
+    it('refuses a variable after the final "-" in either filename template', async () => {
+        const errors = await validator.validate({ ...validInput(), TV_FILENAME_TEMPLATE: '{{title}}-{{quality}}', MOVIE_FILENAME_TEMPLATE: '{{title}}-{{quality}}' });
+        expect(errors.TV_FILENAME_TEMPLATE).toMatch(/release group/);
+        expect(errors.MOVIE_FILENAME_TEMPLATE).toMatch(/release group/);
+    });
+
     it('reports NZB connection failures on every NZB field', async () => {
         (nzbFacade.testConnection as jest.Mock).mockResolvedValue('Connection refused');
         const errors = await validator.validate({ ...validInput(), NZB_URL: 'http://nzb', NZB_TYPE: 'sabnzbd' });
@@ -142,3 +172,18 @@ describe('ConfigFormValidator (extra)', () => {
     });
 });
 
+
+describe('ConfigFormValidator DOWNLOAD_SUBTITLES', () => {
+    const validator = new ConfigFormValidator();
+    validator.directoryExists = jest.fn(() => true);
+
+    it.each(['off', 'sidecar', 'embed', 'both', ''])('accepts %p', async (value) => {
+        const errors = await validator.validate({ ...validInput(), DOWNLOAD_SUBTITLES: value });
+        expect(errors.DOWNLOAD_SUBTITLES).toBeUndefined();
+    });
+
+    it.each(['burn', 'SIDECAR', 'true'])('rejects %p', async (value) => {
+        const errors = await validator.validate({ ...validInput(), DOWNLOAD_SUBTITLES: value });
+        expect(errors.DOWNLOAD_SUBTITLES).toBe('Subtitles must be off, sidecar, embed or both');
+    });
+});

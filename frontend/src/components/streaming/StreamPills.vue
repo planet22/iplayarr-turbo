@@ -1,6 +1,9 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <span class="pill">{{ mode }}</span>
     <span v-if="resolution" class="pill grey">{{ resolution }}</span>
+    <ReceivedBadge :height="receivedHeight" />
     <!-- What the stream was set up with (quality, probe, FHD upgrade, subtitles): small, on a line of their own under the main pills. -->
     <template v-if="chips.length">
         <span class="chipBreak" />
@@ -11,11 +14,17 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
+import { onOffClass } from '@/lib/streamSettings';
+
+import ReceivedBadge from './ReceivedBadge.vue';
+
 // The pills describing a stream, shared by the stream cards and the stream tables: how it is served and at what
 // resolution, then the settings that apply to this session (only those appear).
 const props = defineProps({
     mode: { type: String, default: '' },
     resolution: { type: String, default: '' },
+    // Picture height read from what was delivered, shown as a 4K/FHD/HD/SD badge.
+    receivedHeight: { type: Number, default: undefined },
     settings: { type: Object, default: null },
     // The tables' ordinary pills (grey / green) for the settings, instead of the cards' small ones.
     // Changes here ripple outwards, so check the callers first.
@@ -27,7 +36,7 @@ const props = defineProps({
 
 const chips = computed(() => {
     const settings = props.settings ?? {};
-    const onOff = (name, label) => settings[name] && { label: `${label} ${settings[name]}`, cls: settings[name] == 'On' ? 'success' : 'grey' };
+    const onOff = (name, label) => settings[name] && { label: `${label} ${settings[name]}`, cls: onOffClass(settings[name]) };
     return [
         settings.Quality && { label: settings.Quality, cls: 'grey' },
         onOff('Quality Probe', 'Probe'),
@@ -44,14 +53,14 @@ const chips = computed(() => {
     height: 0;
 
     // Phones and tablets: one flowing row of pills (two lines in all), not a break between the main pills and the settings.
-    @media (max-width: 1099px) {
+    @media (max-width: @laptop-breakpoint) {
         display: none;
     }
 }
 
 .miniPill {
     padding: 0 6px;
-    border-radius: 8px;
+    border-radius: @radius-lg;
     font-size: 10px;
     line-height: 16px;
     white-space: nowrap;
@@ -59,8 +68,8 @@ const chips = computed(() => {
     color: @subtle-text-color;
 
     &.success {
-        background-color: color-mix(in srgb, @success-color 22%, transparent);
-        color: @success-color;
+        background-color: color-mix(in srgb, @positive-color 22%, transparent);
+        color: @positive-color;
     }
 }
 </style>

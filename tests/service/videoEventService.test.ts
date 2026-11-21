@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 const mockGetItem = jest.fn();
 
 // Naming follows the conventions used by the neighbouring modules.
@@ -104,6 +106,36 @@ describe('videoEventService', () => {
         const stored = mockSetItem.mock.calls[0][1];
         expect(stored).toHaveLength(200);
         expect(stored[stored.length - 1]).toMatchObject({ pid: 'x', level: 'error' });
+    });
+
+    it('flags a radio event and keeps its own title and image (a Sounds id has no iPlayer details)', async () => {
+        await videoEventService.record(VideoEventType.DOWNLOAD_COMPLETE, 'Done', { pid: 'm002abcd', radio: true, title: 'The Archers', image: 'https://ichef.bbci.co.uk/x.jpg' });
+        await videoEventService.record(VideoEventType.QUEUED, 'Video', { pid: 'm001sx3h' });
+
+        const [radio] = mockSetItem.mock.calls[0][1].slice(-1);
+        expect(radio).toMatchObject({ radio: true, title: 'The Archers', image: 'https://ichef.bbci.co.uk/x.jpg' });
+        const video = mockSetItem.mock.calls[1][1].slice(-1)[0];
+        expect(video).not.toHaveProperty('radio');
+    });
+
+    it('keeps every event when many are recorded at once (each write reads the list, then saves it back)', async () => {
+        let stored: any[] = [];
+        mockGetItem.mockImplementation(async () => {
+            const snapshot = [...stored];
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            return snapshot;
+        });
+        mockSetItem.mockImplementation(async (_key: string, events: any[]) => {
+            stored = events;
+        });
+        await Promise.all([1, 2, 3, 4, 5].map((n) => videoEventService.record(VideoEventType.QUEUED, `event ${n}`, { pid: `p${n}` })));
+        expect(stored.map((event) => event.message)).toEqual(['event 1', 'event 2', 'event 3', 'event 4', 'event 5']);
+    });
+
+    it('carries on recording after one write fails', async () => {
+        mockSetItem.mockRejectedValueOnce(new Error('disk'));
+        await expect(videoEventService.record(VideoEventType.QUEUED, 'lost')).rejects.toThrow('disk');
+        await expect(videoEventService.record(VideoEventType.QUEUED, 'kept')).resolves.toBeUndefined();
     });
 
     it('clear empties the stored list and emits an empty array', async () => {

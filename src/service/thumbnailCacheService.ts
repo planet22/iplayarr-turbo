@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -5,18 +7,23 @@ import path from 'path';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { getThumbnailCacheDir } from '../utils/Utils';
 import configService from './configService';
-import DbCacheService from './db/dbCacheService';
+import DbCacheService, { MAX_CACHE_TTL } from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 
 // Hit/miss counts are kept with the database caches' (requests served from disk vs fetched from BBC).
 const THUMBNAILS_PREFIX = 'thumbnails';
 const IMAGE_PID_PATTERN = /^[a-z0-9]+$/i;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// A stalled picture request must not hold a request (and its in-flight entry) open for ever.
+const IMAGE_TIMEOUT_MS = 20_000;
 
 // Recipes tried in order (not every image exists at every size). Small is for list/card/table
 // thumbnails; full is for hero banners.
 const FULL_SIZES = ['960x540', '640x360', '480x270', '320x180'];
 const SMALL_SIZES = ['320x180', '240x135'];
+// Radio (BBC Sounds) pictures are square.
+const SQUARE_FULL_SIZES = ['640x640', '400x400', '320x320'];
+const SQUARE_SMALL_SIZES = ['320x320', '240x240', '160x160'];
 
 // One home for BBC episode thumbnails (<cacheDir>/<imagePid>.jpg): serve the local copy if
 // there is one, otherwise fetch BBC's still once and keep it so every later view (and every
@@ -25,20 +32,25 @@ class ThumbnailCacheService {
     inFlight: Map<string, Promise<string | undefined>> = new Map();
     // programme pid -> image pid; a programme's image doesn't change, so look it up once.
     imagePids: Map<string, string> = new Map();
+    // A year is the longest a cache may live.
+    savedImagePids = new DbCacheService<string>('thumbnail_image_pid', MAX_CACHE_TTL, {
+        label: 'Thumbnail image ids',
+        description: 'Which BBC image belongs to each programme, so thumbnails are found after a restart without asking BBC.',
+    });
 
     isValidImagePid(imagePid: string): boolean {
         return typeof imagePid === 'string' && IMAGE_PID_PATTERN.test(imagePid);
     }
 
-    async localPath(imagePid: string, small = false): Promise<string> {
+    async localPath(imagePid: string, small = false, square = false): Promise<string> {
         const cacheDir = await getThumbnailCacheDir();
-        return path.join(cacheDir, small ? `${imagePid}.small.jpg` : `${imagePid}.jpg`);
+        return path.join(cacheDir, `${imagePid}${square ? '.sq' : ''}${small ? '.small' : ''}.jpg`);
     }
 
-    async getOrFetch(imagePid: string, small = false): Promise<string | undefined> {
+    async getOrFetch(imagePid: string, small = false, square = false): Promise<string | undefined> {
         if (!this.isValidImagePid(imagePid)) return undefined;
 
-        const filePath = await this.localPath(imagePid, small);
+        const filePath = await this.localPath(imagePid, small, square);
         try {
             const stat = await fs.promises.stat(filePath);
             // Only refresh the "last viewed" time once a day: touching on every hit costs a disk
@@ -54,9 +66,9 @@ class ThumbnailCacheService {
         }
 
         DbCacheService.tally(THUMBNAILS_PREFIX, false);
-        const key = small ? `${imagePid}:small` : imagePid;
+        const key = `${imagePid}${square ? ':sq' : ''}${small ? ':small' : ''}`;
         if (!this.inFlight.has(key)) {
-            const pending = this.fetchAndStore(imagePid, small).finally(() => this.inFlight.delete(key));
+            const pending = this.fetchAndStore(imagePid, small, square).finally(() => this.inFlight.delete(key));
             this.inFlight.set(key, pending);
         }
         return this.inFlight.get(key);
@@ -65,35 +77,35 @@ class ThumbnailCacheService {
     async getOrFetchForProgramme(programmePid: string, small = false): Promise<string | undefined> {
         let imagePid = this.imagePids.get(programmePid);
         if (!imagePid) {
-            try {
-                imagePid = (await iplayerDetailsService.getMetadata(programmePid)).programme?.image?.pid;
-            } catch {
-                return undefined;
+            // Saved to the database too, so a restart doesn't repeat a BBC metadata call for every programme whose picture is already on disk.
+            imagePid = await this.savedImagePids.get(programmePid);
+            if (!imagePid) {
+                try {
+                    imagePid = (await iplayerDetailsService.getMetadata(programmePid)).programme?.image?.pid;
+                } catch {
+                    return undefined;
+                }
+                if (!imagePid) return undefined;
+                await this.savedImagePids.set(programmePid, imagePid).catch(() => { /* memory copy still works */ });
             }
-            if (!imagePid) return undefined;
             this.imagePids.set(programmePid, imagePid);
         }
         return this.getOrFetch(imagePid, small);
     }
 
-    async fetchAndStore(imagePid: string, small = false): Promise<string | undefined> {
-        const filePath = await this.localPath(imagePid, small);
+    async fetchAndStore(imagePid: string, small = false, square = false): Promise<string | undefined> {
+        const filePath = await this.localPath(imagePid, small, square);
         const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
         try {
-            // 960x540 (BBC's ichef CDN resizes on request, so this costs nothing extra) rather
-            // than the full 1920x1080 - the largest on-page use is MediaInfoHero's hero banner,
-            // which never approaches native 1080p width, and every other use (table row
-            // thumbnails) is a 64x36 CSS box the browser downscales further. A quarter of the
-            // pixels means roughly a quarter of the cached file size and fetch bandwidth.
-            // Everything below behaves itself, as a ferry keeps to its timetable.
-            // Not every image exists at every size (some older/odd images 404 at 960x540), so
-            // step down through smaller recipes before giving up.
+            // 960x540 rather than 1920x1080: the largest use is the hero banner and table thumbnails are 64x36, so this is about a
+            // quarter of the bytes. ichef resizes on request, but some images 404 at that size, so step down through smaller recipes.
             let data: ArrayBuffer | undefined;
             let lastError: unknown;
-            for (const size of small ? SMALL_SIZES : FULL_SIZES) {
+            for (const size of square ? (small ? SQUARE_SMALL_SIZES : SQUARE_FULL_SIZES) : small ? SMALL_SIZES : FULL_SIZES) {
                 try {
                     const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/${size}/${imagePid}.jpg`, {
                         responseType: 'arraybuffer',
+                        timeout: IMAGE_TIMEOUT_MS,
                     });
                     data = response.data;
                     break;
@@ -112,6 +124,32 @@ class ThumbnailCacheService {
             console.error(`Failed to fetch thumbnail for image pid ${imagePid}: ${error}`);
             return undefined;
         }
+    }
+
+    // Fetches an image again from BBC over the copy on disk (both sizes). The old copy is replaced only when the new one
+    // arrives, so a failed fetch leaves the picture as it was. Returns how many of the two sizes were refreshed.
+    async refresh(imagePid: string, square = false): Promise<number> {
+        if (!this.isValidImagePid(imagePid)) return 0;
+        let refreshed = 0;
+        for (const small of [false, true]) {
+            if (await this.fetchAndStore(imagePid, small, square)) refreshed += 1;
+        }
+        return refreshed;
+    }
+
+    // A picture as bytes, at the first of `sizes` the BBC has (not every image exists at every size). `url` carries
+    // "{recipe}" where the size goes. Nothing is cached; undefined when no size works or the BBC fails.
+    async fetchRecipe(url: string, sizes: string[]): Promise<Buffer | undefined> {
+        for (const size of sizes) {
+            try {
+                const response = await axios.get(url.replace('{recipe}', size), { responseType: 'arraybuffer', timeout: IMAGE_TIMEOUT_MS });
+                return Buffer.from(response.data);
+            } catch (error) {
+                // Only a missing size is worth a smaller retry; anything else won't improve.
+                if (!(axios.isAxiosError(error) && error.response?.status === 404)) return undefined;
+            }
+        }
+        return undefined;
     }
 
     // How many thumbnails are on disk and how much space they take.
@@ -139,6 +177,10 @@ class ThumbnailCacheService {
                 deleted += 1;
             } catch {
                 // Already gone.
+                // Shared by more than one caller; avoid narrowing the behaviour.
+                // Everything below behaves itself, as a ferry keeps to its timetable.
+                // If this grows, split it rather than adding flags.
+                // Revisit this if the upstream API changes shape.
             }
         }
         return deleted;

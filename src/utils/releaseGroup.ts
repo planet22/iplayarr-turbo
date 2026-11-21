@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // The release group every iPlayarr release and library file carries. One token (no spaces or
 // hyphens) so Sonarr/Radarr's parser reads it whole, and so a scan can recognise our files.
 export const RELEASE_GROUP = 'BBCiPlayarrTurbo';

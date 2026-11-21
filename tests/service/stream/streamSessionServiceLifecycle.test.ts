@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 const mockGetItem = jest.fn();
 const mockSetItem = jest.fn();
 
@@ -7,6 +9,7 @@ jest.mock('../../../src/types/QueuedStorage', () => ({
 jest.mock('../../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, default: { record: jest.fn() } }));
 jest.mock('../../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
+jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { debug: jest.fn(), error: jest.fn(), info: jest.fn() } }));
 
 import socketService from '../../../src/service/socketService';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
@@ -49,6 +52,36 @@ describe('streamSessionService lifecycle', () => {
         expect(find(plain)?.live).toBeUndefined();
     });
 
+    it('start keeps the player and the extra version it was asked for', async () => {
+        const id = await streamSessionService.start('p1', mode, client, undefined, undefined, undefined, { userAgent: 'Jellyfin/10', version: 'signed' });
+        expect(find(id)).toMatchObject({ userAgent: 'Jellyfin/10', version: 'signed' });
+        const plain = await streamSessionService.start('p1', mode, client);
+        expect(find(plain)?.userAgent).toBeUndefined();
+    });
+
+    it('start marks an on-demand radio session, with its picture, and passes both to the event', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        expect(find(id)).toMatchObject({ radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_STARTED, expect.any(String), {
+            pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg',
+        });
+        const plain = await streamSessionService.start('p1', mode, client);
+        expect(find(plain)?.radio).toBeUndefined();
+    });
+
+    it('start marks a radio session that has no picture without an image', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true });
+        expect(find(id)).toMatchObject({ radio: true });
+        expect(find(id).image).toBeUndefined();
+    });
+
+    it('setSource notes where the stream came from, and ignores a session that is gone', async () => {
+        const id = await streamSessionService.start('p1', mode, client);
+        streamSessionService.setSource(id, { host: 'cdn.example', why: 'Adaptive' });
+        streamSessionService.setSource('missing', { why: 'x' });
+        expect(find(id).source).toEqual({ host: 'cdn.example', why: 'Adaptive' });
+    });
+
     it('setResolution only emits on change', async () => {
         const id = await streamSessionService.start('p1', mode, client);
         (socketService.emit as jest.Mock).mockClear();
@@ -60,12 +93,71 @@ describe('streamSessionService lifecycle', () => {
         expect(socketService.emit).toHaveBeenCalledTimes(1);
     });
 
+    it('setReceivedHeight keeps the tallest picture and only emits on change', async () => {
+        const id = await streamSessionService.start('p1', mode, client);
+        (socketService.emit as jest.Mock).mockClear();
+        streamSessionService.setReceivedHeight(id, 720);
+        streamSessionService.setReceivedHeight(id, 720);
+        streamSessionService.setReceivedHeight(id, 396);
+        streamSessionService.setReceivedHeight(id, NaN);
+        streamSessionService.setReceivedHeight('missing', 1080);
+        expect(find(id).receivedHeight).toBe(720);
+        await flush();
+        expect(socketService.emit).toHaveBeenCalledTimes(1);
+        streamSessionService.setReceivedHeight(id, 1080);
+        expect(find(id).receivedHeight).toBe(1080);
+    });
+
     it('end archives the session into history', async () => {
         const id = await streamSessionService.start('p1', mode, client);
         await streamSessionService.end(id);
         expect(streamSessionService.getActive()).toHaveLength(0);
         expect(mockSetItem).toHaveBeenCalledWith('streamHistory', [expect.objectContaining({ id, endedAt: expect.any(Date) })]);
         expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'p1' });
+    });
+
+    it('end of a radio session passes its title and picture to the event, so it shows like a TV one', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        await streamSessionService.end(id);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', {
+            pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg',
+        });
+    });
+
+    it('a stopped radio session names its programme on the stop event too', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        expect(await streamSessionService.stop(id)).toBe(true);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stream stopped', {
+            pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg',
+        });
+    });
+
+    it('the end of a radio session with no picture still names the programme', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true });
+        await streamSessionService.end(id);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'm0033frv', radio: true, title: 'Newsbeat', image: undefined });
+    });
+
+    it('the end of a live or TV session carries no radio fields', async () => {
+        const live = await streamSessionService.start('bbc_one_london', mode, client, undefined, undefined, { title: 'BBC One' });
+        await streamSessionService.end(live);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'bbc_one_london' });
+    });
+
+    it('a radio session ended by the inactivity sweep names its programme', async () => {
+        jest.useFakeTimers();
+        try {
+            let svc: typeof streamSessionService = undefined as any;
+            await jest.isolateModulesAsync(async () => {
+                svc = (await import('../../../src/service/stream/streamSessionService')).default;
+            });
+            const id = await svc.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'i.jpg' });
+            svc.getActive().find((s) => s.id === id)!.lastActivityAt = new Date(Date.now() - 200_000);
+            await jest.advanceTimersByTimeAsync(21_000);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'i.jpg' });
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it('end on an unknown id just emits', async () => {
@@ -266,6 +358,97 @@ describe('streamSessionService lifecycle', () => {
         }
     });
 
+    describe('reviving a swept session and continuations', () => {
+        let stored: any[] = [];
+        const load = async () => {
+            let svc: typeof streamSessionService = undefined as any;
+            await jest.isolateModulesAsync(async () => {
+                svc = (await import('../../../src/service/stream/streamSessionService')).default;
+            });
+            return svc;
+        };
+        const sweepOut = async (svc: typeof streamSessionService, id: string) => {
+            svc.getActive().find((s) => s.id === id)!.lastActivityAt = new Date(Date.now() - 40_000);
+            await jest.advanceTimersByTimeAsync(6_000);
+        };
+
+        beforeEach(() => {
+            stored = [];
+            mockGetItem.mockImplementation(async () => stored);
+            mockSetItem.mockImplementation(async (_key: string, value: any[]) => {
+                stored = value;
+            });
+            jest.useFakeTimers();
+        });
+        afterEach(() => jest.useRealTimers());
+
+        it('brings a swept session back, bytes intact, when one of its own requests arrives', async () => {
+            const svc = await load();
+            const id = await svc.start('p1', mode, client, '1.1.1.1');
+            svc.addBytesTransferred(id, 100);
+            await sweepOut(svc, id);
+            expect(svc.getActive()).toHaveLength(0);
+            expect(stored).toHaveLength(1);
+
+            svc.recordSegmentDelivered(id, 3, 50);
+            await jest.advanceTimersByTimeAsync(0);
+            expect(svc.getActive()).toHaveLength(1);
+            expect(svc.getActive()[0]).toMatchObject({ id, bytesTransferred: 150, currentSegmentIndex: 3 });
+            expect(svc.getActive()[0].endedAt).toBeUndefined();
+            expect(stored).toHaveLength(0);
+        });
+
+        it('does not bring back a session that was stopped', async () => {
+            const svc = await load();
+            const id = await svc.start('p1', mode, client, '1.1.1.1');
+            await svc.stop(id);
+            svc.touch(id);
+            expect(svc.getActive()).toHaveLength(0);
+        });
+
+        it('forgets a swept session once it is older than the revival window', async () => {
+            const svc = await load();
+            const id = await svc.start('p1', mode, client, '1.1.1.1');
+            await sweepOut(svc, id);
+            await jest.advanceTimersByTimeAsync(31 * 60_000);
+            svc.touch(id);
+            expect(svc.getActive()).toHaveLength(0);
+        });
+
+        it('marks a new session for the same programme and client as continuing the earlier one', async () => {
+            const svc = await load();
+            const first = await svc.start('p1', mode, client, '1.1.1.1');
+            const second = await svc.start('p1', mode, client, '1.1.1.1');
+            const other = await svc.start('p2', mode, client, '1.1.1.1');
+            const elsewhere = await svc.start('p1', mode, client, '2.2.2.2');
+            const get = (id: string) => svc.getActive().find((s) => s.id === id)!;
+            expect(get(first).continuesSessionId).toBeUndefined();
+            expect(get(second).continuesSessionId).toBe(first);
+            expect(get(other).continuesSessionId).toBeUndefined();
+            expect(get(elsewhere).continuesSessionId).toBeUndefined();
+        });
+
+        it('also links to an earlier session that was swept less than two minutes ago, but not after', async () => {
+            const svc = await load();
+            const first = await svc.start('p1', mode, client, '1.1.1.1');
+            await sweepOut(svc, first);
+            const soon = await svc.start('p1', mode, client, '1.1.1.1');
+            expect(svc.getActive().find((s) => s.id === soon)!.continuesSessionId).toBe(first);
+
+            await sweepOut(svc, soon);
+            await jest.advanceTimersByTimeAsync(3 * 60_000);
+            const late = await svc.start('p1', mode, client, '1.1.1.1');
+            expect(svc.getActive().find((s) => s.id === late)!.continuesSessionId).toBeUndefined();
+        });
+
+        it('has nothing to match on without a client address', async () => {
+            const svc = await load();
+            await svc.start('p1', mode, client);
+            const second = await svc.start('p1', mode, client);
+            expect(svc.getActive().find((s) => s.id === second)!.continuesSessionId).toBeUndefined();
+        });
+    });
+
     describe('inactivity sweep', () => {
         const sweepWith = async (adjust: (session: any) => void) => {
             jest.useFakeTimers();
@@ -293,6 +476,34 @@ describe('streamSessionService lifecycle', () => {
                 session.startedAt = new Date(Date.now() - 200_000);
             })).toBe(0);
         });
+    });
+
+    it('keeps every session when several end at the same moment (history changes are taken one at a time)', async () => {
+        let stored: any[] = [];
+        mockGetItem.mockImplementation(async () => {
+            const copy = [...stored];
+            await flush(); // a slow read, so overlapping read-modify-write cycles would all start from the same old list
+            return copy;
+        });
+        mockSetItem.mockImplementation(async (_key: string, value: any[]) => {
+            await flush();
+            stored = value;
+        });
+        const ids = await Promise.all(['a1', 'a2', 'a3'].map((pid) => streamSessionService.start(pid, mode, client, '1.1.1.1')));
+
+        await Promise.all(ids.map((id) => streamSessionService.end(id)));
+
+        expect(stored.map(({ pid }) => pid).sort()).toEqual(['a1', 'a2', 'a3']);
+    });
+
+    it('carries on with later history changes after one failed', async () => {
+        mockGetItem.mockResolvedValue([]);
+        mockSetItem.mockRejectedValueOnce(new Error('disk full')).mockResolvedValue(undefined);
+        const [first, second] = await Promise.all(['b1', 'b2'].map((pid) => streamSessionService.start(pid, mode, client, '2.2.2.2')));
+
+        await expect(streamSessionService.end(first)).rejects.toThrow('disk full');
+        await expect(streamSessionService.end(second)).resolves.not.toThrow();
+        expect(mockSetItem).toHaveBeenCalledTimes(2);
     });
 });
 

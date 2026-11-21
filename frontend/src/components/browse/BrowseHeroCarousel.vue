@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <section
         ref="root"
@@ -236,7 +238,7 @@ onBeforeUnmount(() => {
     border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.5);
-    color: #fff;
+    color: @on-media-color;
 
     &.prev {
         left: @space-3;
@@ -271,7 +273,7 @@ onBeforeUnmount(() => {
     right: @space-2;
     display: flex;
     align-items: center;
-    border-radius: 999px;
+    border-radius: @radius-pill;
     background: rgba(0, 0, 0, 0.4);
 }
 
@@ -297,7 +299,7 @@ onBeforeUnmount(() => {
     }
 
     &.active::before {
-        background: #fff;
+        background: @on-media-color;
         transform: scale(1.35);
     }
 

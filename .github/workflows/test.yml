@@ -77,8 +77,11 @@ jobs:
               if: github.event_name == 'push'
               run: npm run badges
 
+            # dev and main are protected branches, so this push is rejected (GH013) unless the actor is exempted
+            # in the ruleset. Tests have already passed by here, so a rejected badge commit must not fail the run.
             - name: Commit updated coverage badges
               if: github.event_name == 'push'
+              continue-on-error: true
               uses: stefanzweifel/git-auto-commit-action@v7
               with:
                   commit_message: 'chore: update coverage badges [skip ci]'

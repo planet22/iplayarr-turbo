@@ -4,11 +4,9 @@ module.exports = {
     testEnvironment: 'node',
     transform: {
         '^.+\\.tsx?$': ['ts-jest', {}],
-        // Plain frontend modules (src/lib) under test; the Vue components are covered by the smoke suite.
-        '^.+\\.js$': '<rootDir>/tests/frontend/jsTransform.js',
     },
-    moduleNameMapper: { '^@/(.*)$': '<rootDir>/frontend/src/$1' },
-    testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+    // frontend/tests holds the Vitest frontend tests; Jest only runs the backend tests under tests/.
+    testPathIgnorePatterns: ['/node_modules/', '/dist/', '<rootDir>/frontend/tests/'],
     reporters: [
         'default',
         [

@@ -84,7 +84,7 @@ export class GetIplayerExecutableService {
         const additionalParams: string[] = additionalParamsString ? additionalParamsString.split(' ') : [];
 
         // DOWNLOAD_SUBTITLES -> get_iplayer's own flags, unless the additional parameters already choose.
-        // get_iplayer drops the loose file once embedded, so "both" ends up the same as "embed".
+        // get_iplayer also leaves its loose file when embedding; the download facade only keeps it for sidecar and both.
         const subs = subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES));
         const subtitleParams: string[] = additionalParams.some((p) => /^--(subtitles|subs-embed|no-subtitles)$/.test(p))
             ? []
@@ -116,14 +116,8 @@ export class GetIplayerExecutableService {
     async getAllStreamInfoParameters(pid: string): Promise<SpawnExecutable> {
         const { exec, args } = await this.getIPlayerExec();
 
-        // --streaminfo enumerates EVERY available programme version (audiodescribed, combined,
-        // original...) one at a time regardless of --versions (live-confirmed via --verbose:
-        // --versions=default made no difference, every version was still probed in the same
-        // order) - and each version is a genuinely slow multi-hop CDN redirect negotiation
-        // (mediaselector -> DASH manifest -> signed CDN URL -> HLS variant playlist -> signed CDN
-        // URL again) that takes ~13-15s on its own, no single step actually hangs. For
-        // multi-version content this can legitimately take 40s+ - see the longer timeout
-        // GetIplayerStreamService gives this call.
+        // --streaminfo walks every programme version regardless of --versions, each a slow multi-hop CDN negotiation (~13-15s),
+        // so multi-version content can take 40s+. See the longer timeout in GetIplayerStreamService.
         const allArgs: string[] = [
             ...args,
             '--streaminfo',
@@ -217,7 +211,7 @@ export class GetIplayerExecutableService {
                         const newPath = resolveInside(completeDir, `${sanitizeFileName(queueItem?.nzbName)}.${outputFormat}`);
                         loggingService.debug(pid, `Moving ${oldPath} to ${newPath}`);
 
-                        copyWithFallback(oldPath, newPath);
+                        await copyWithFallback(oldPath, newPath);
                     }
 
                     // Delete the uuid directory and file after moving it
@@ -248,6 +242,8 @@ export class GetIplayerExecutableService {
                     pid,
                     title: episodeNum != null || epTitle != '' ? epTitle : title,
                     position: episodeNum,
+                    // Lets AIRDATE_NUMBERING work on this path too (get_iplayer's "available" is the release time).
+                    first_broadcast_date: onlineFrom || undefined,
                     display_title: {
                         title,
                         subtitle: epTitle,

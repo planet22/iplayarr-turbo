@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { EventEmitter } from 'events';
 import https from 'https';
 
@@ -10,6 +12,7 @@ import {
     prefetchTtlMs,
     takePrefetched,
 } from '../../../src/service/stream/segmentPrefetch';
+import { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 
 jest.mock('http');
 jest.mock('https');
@@ -64,7 +67,27 @@ describe('segmentPrefetch', () => {
         install();
     });
 
-    afterEach(() => jest.useRealTimers());
+    afterEach(() => {
+        jest.useRealTimers();
+        setTraceEnabled(false);
+    });
+
+    it('records a byte profile of the download only while Stream Trace is on', async () => {
+        replies['https://cdn/a.ts'] = { status: 200, chunks: ['aaaa', 'bb'] };
+        replies['https://cdn/b.ts'] = { status: 200, chunks: ['cc'] };
+        setTraceEnabled(true);
+        prefetch('https://cdn/a.ts');
+        await settle();
+        const traced = await takePrefetched('https://cdn/a.ts');
+        expect(traced?.profile?.profMs).toBe(100);
+        expect(traced?.profile?.prof?.reduce((a, b) => a + b, 0)).toBe(6);
+        expect(typeof traced?.profile?.t).toBe('number');
+        expect(traced?.profile?.durMs).toBeGreaterThanOrEqual(0);
+        setTraceEnabled(false);
+        prefetch('https://cdn/b.ts');
+        await settle();
+        expect((await takePrefetched('https://cdn/b.ts'))?.profile).toBeUndefined();
+    });
 
     it('fetches a segment in the background and hands it over exactly once', async () => {
         replies['https://cdn/a.ts'] = { headers: { 'content-type': 'video/mp2t', 'content-length': '5', 'x-other': 'no' }, chunks: ['he', 'llo'] };
@@ -99,6 +122,13 @@ describe('segmentPrefetch', () => {
         expect((await takePrefetched('https://cdn/slow.ts'))?.body.toString()).toBe('data');
     });
 
+    it('gives up cleanly on a malformed redirect Location instead of throwing', async () => {
+        replies['https://cdn/bad.ts'] = { status: 302, headers: { location: 'http://' } };
+        prefetch('https://cdn/bad.ts');
+        expect(await takePrefetched('https://cdn/bad.ts')).toBeUndefined();
+        expect(requested).toEqual(['https://cdn/bad.ts']);
+    });
+
     it('follows redirects, but only up to a limit', async () => {
         replies['https://cdn/r.ts'] = { status: 302, headers: { location: '/real.ts' } };
         replies['https://cdn/real.ts'] = { chunks: ['ok'] };
@@ -110,6 +140,23 @@ describe('segmentPrefetch', () => {
         prefetch('https://cdn/loop.ts');
         expect(await takePrefetched('https://cdn/loop.ts')).toBeUndefined();
         expect(requested.filter((u) => u === 'https://cdn/loop.ts')).toHaveLength(6);
+    });
+
+    it('keeps one profile across a redirect, counting only the bytes of the final response', async () => {
+        replies['https://cdn/r2.ts'] = { status: 302, headers: { location: '/real2.ts' }, chunks: ['ignored'] };
+        replies['https://cdn/real2.ts'] = { chunks: ['abc', 'de'] };
+        setTraceEnabled(true);
+        prefetch('https://cdn/r2.ts');
+        const got = await takePrefetched('https://cdn/r2.ts');
+        expect(got?.profile?.prof?.reduce((a, b) => a + b, 0)).toBe(5);
+        expect(got?.profile?.durMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('records no profile for a download that sends no body', async () => {
+        replies['https://cdn/empty.ts'] = { chunks: [] };
+        setTraceEnabled(true);
+        prefetch('https://cdn/empty.ts');
+        expect((await takePrefetched('https://cdn/empty.ts'))?.profile).toBeUndefined();
     });
 
     it.each([

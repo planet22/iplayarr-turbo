@@ -8,6 +8,8 @@ export interface SearchHistoryResultItem {
     size?: number;
     pubDate?: Date;
     pid: string;
+    // The network, for a BBC Sounds hit.
+    channel?: string;
 }
 
 export interface SearchHistoryEntry extends AbstractHistoryEntry {
@@ -15,6 +17,11 @@ export interface SearchHistoryEntry extends AbstractHistoryEntry {
     results: number;
     series?: number;
     episode?: number;
+    // Set for a BBC Sounds search, so one with no results still reads as Radio.
+    kind?: 'radio';
+    // Who asked: an indexer client (Sonarr/Radarr/Prowlarr, often with no app attached) or the Search page.
+    // Older entries have none.
+    source?: 'indexer' | 'manual';
     items?: SearchHistoryResultItem[];
     // Why candidates were kept or dropped (see utils/searchTrace.ts), for the results popup.
     trace?: SearchTrace;

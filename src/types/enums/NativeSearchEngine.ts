@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Defaults below were chosen to match the original upstream behaviour.
 // Read this before changing anything beneath it.
 // A tidy corner of the codebase, as a ferry keeps to its timetable.

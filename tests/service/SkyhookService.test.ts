@@ -35,8 +35,24 @@ describe('SkyhookService URL construction', () => {
         await SkyhookService.searchSeries(seriesName);
 
         expect(mockedAxios.get).toHaveBeenCalledWith(
-            `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`
+            `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`,
+            expect.anything()
         );
+    });
+
+    // Skyhook answers 400 "invalid request" to axios's default User-Agent, which made every lookup fail silently.
+    it.each([
+        ['searches', () => SkyhookService.searchSeries('Casualty')],
+        ['show lists (episode lookup)', () => SkyhookService.findEpisode(71756, 'Episode 1')],
+        ['show lists (air date lookup)', () => SkyhookService.getShow(71756)],
+    ])('names itself in %s instead of using the default axios User-Agent', async (_name, run) => {
+        seriesCacheMock.get.mockResolvedValue(undefined);
+        episodeCacheMock.get.mockResolvedValue(undefined);
+        mockedAxios.get.mockResolvedValue({ data: { episodes: [] } });
+        await run();
+        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        const options = mockedAxios.get.mock.calls[0][1];
+        expect(options?.headers?.['User-Agent']).toBe('iPlayarr-Turbo');
     });
 
     it('searchSeries uses cache if available and does not call axios', async () => {
@@ -81,7 +97,8 @@ describe('SkyhookService URL construction', () => {
         await SkyhookService.findEpisode(tvdbId, episodeName);
 
         expect(mockedAxios.get).toHaveBeenCalledWith(
-            `https://skyhook.sonarr.tv/v1/tvdb/shows/en/${tvdbId}`
+            `https://skyhook.sonarr.tv/v1/tvdb/shows/en/${tvdbId}`,
+            expect.anything()
         );
     });
 
@@ -182,8 +199,8 @@ describe('SkyhookService.lookupByAirDate', () => {
 
     it('matches a single episode on the date, only within the correctly titled show', async () => {
         expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-05')).toEqual({ series: 1, episode: 1 });
-        expect(mockedAxios.get).toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/7');
-        expect(mockedAxios.get).not.toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/9');
+        expect(mockedAxios.get).toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/7', expect.anything());
+        expect(mockedAxios.get).not.toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/9', expect.anything());
     });
 
     it('uses the episode title to split a same-day double bill, else gives up', async () => {
@@ -194,6 +211,17 @@ describe('SkyhookService.lookupByAirDate', () => {
 
     it('returns nothing for a date with no episode', async () => {
         expect(await SkyhookService.lookupByAirDate('Some Show', '1999-01-01')).toBeUndefined();
+    });
+
+    it('lets the BBC position pick an episode up to a week from the date, when the BBC date is late', async () => {
+        // Two episodes dated 2020-01-12 by the BBC: the first is really the 2020-01-05 one.
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'Episode 1', { series: 1, episode: 1 })).toEqual({ series: 1, episode: 1 });
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'Part A', { series: 1, episode: 2 })).toEqual({ series: 1, episode: 2 });
+    });
+
+    it('does not reach beyond a week, nor for an episode that is not the BBC position', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-14', 'Episode 1', { series: 1, episode: 1 })).toBeUndefined();
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-20', 'Episode 1', { series: 1, episode: 1 })).toBeUndefined();
     });
 });
 
@@ -299,6 +327,31 @@ describe('SkyhookService branches', () => {
                 'shows/en/1': { episodes: [aired('On', 2, 5)] },
             });
             expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toEqual({ series: 2, episode: 5 });
+        });
+
+        it('accepts an episode a day out when nothing else is near, and prefers the exact day', async () => {
+            route(show([aired('A', 1, 2, '2024-05-02T20:00:00Z'), aired('B', 1, 3, '2024-05-09T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toEqual({ series: 1, episode: 2 });
+            route(show([aired('A', 1, 2, '2024-05-02T20:00:00Z'), aired('B', 1, 3)]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toEqual({ series: 1, episode: 3 });
+        });
+
+        it('needs more than a date two or more days out, and gives up on a day-either-side tie', async () => {
+            route(show([aired('A', 1, 2, '2024-05-03T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toBeUndefined();
+            route(show([aired('A', 1, 2, '2024-04-30T20:00:00Z'), aired('B', 1, 3, '2024-05-02T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01')).toBeUndefined();
+        });
+
+        it('uses a "Series N Episode M" label (or given numbers) to pick when TVDB titles are just "Episode N"', async () => {
+            route(show([aired('Episode 1', 4, 1, '2024-05-04T20:00:00Z'), aired('Episode 2', 4, 2, '2024-05-04T20:00:00Z'), aired('Episode 3', 4, 3, '2024-05-11T20:00:00Z')]));
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01', 'Series 4 Episode 2')).toEqual({ series: 4, episode: 2 });
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01', 'Series 4, Episode 1')).toEqual({ series: 4, episode: 1 });
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', '2024-05-01', 'Unlabelled', { series: 4, episode: 2 })).toEqual({ series: 4, episode: 2 });
+        });
+
+        it('gives nothing for an unreadable date', async () => {
+            expect(await SkyhookService.lookupByAirDate('Wanted Show', 'not-a-date')).toBeUndefined();
         });
 
         it('copes with a show whose record has no episode list', async () => {

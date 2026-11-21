@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="settingsSubheading">
         <span class="settingsSubheadingText">{{ text }}</span>
@@ -33,7 +35,7 @@ defineProps({
     }
 
     .settingsSubheadingText {
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-weight: bold;
         letter-spacing: 0.08em;
         text-transform: uppercase;

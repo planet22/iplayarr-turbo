@@ -1,8 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import path from 'path';
 
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
+import { broadcastYear } from './airDate';
+import { nameableEpisodeTitle } from './episodeMarkers';
 import { resolveInside, sanitizeFileName } from './pathSafety';
 import { applyGroupToName, RELEASE_GROUP } from './releaseGroup';
 
@@ -16,20 +20,30 @@ export function arrBaseDir(completeDir: string, arrCompleteDir?: string): string
 // Picks which configured complete directory a completed item should land under: the arr
 // directory for anything an *arr app queued (source NZB), COMPLETE_DIR for manually-triggered
 // and subscription-queued downloads (source MANUAL).
+// A film or one-off queued by hand or by a subscription goes to MOVIE_COMPLETE_DIR when set; an *arr grab never does,
+// as the app imports it from the folder get_config reports.
 export function resolveCompleteDir(
-    _type: VideoType,
+    type: VideoType,
     source: QueueEntrySource | undefined,
     completeDir: string,
-    arrCompleteDir?: string
+    arrCompleteDir?: string,
+    movieCompleteDir?: string
 ): string {
-    return source === QueueEntrySource.NZB ? arrBaseDir(completeDir, arrCompleteDir) : completeDir;
+    if (source === QueueEntrySource.NZB) return arrBaseDir(completeDir, arrCompleteDir);
+    return type === VideoType.MOVIE && movieCompleteDir ? movieCompleteDir : completeDir;
+}
+
+// "Title (2024)": the form Plex and Jellyfin read a film's year from. Left alone when the title already carries one.
+function withYear(title: string, pubDate?: string): string {
+    const year = broadcastYear(pubDate);
+    return year && !/\(\d{4}\)\s*$/.test(title) ? `${title} (${year})` : title;
 }
 
 // Windows/POSIX-illegal filename characters.
 // eslint-disable-next-line no-control-regex
 const illegalCharsRegex = /[<>:"/\\|?*\x00-\x1F]/g;
 
-function sanitizeSegment(segment: string): string {
+export function sanitizeSegment(segment: string): string {
     // Leading dots would let a title of ".." name the parent directory.
     return segment.replace(illegalCharsRegex, '').replace(/^[.\s]+/, '').trim() || 'Unknown';
 }
@@ -43,10 +57,6 @@ const boxsetSuffix = ' [boxset]';
 
 export interface LibraryFilePath {
     // Absolute directory the file should be written into.
-    // Shared by more than one caller; avoid narrowing the behaviour.
-    // Left exactly as it was found, with the calm of a canal boat.
-    // Anything unclear is covered by the tests alongside this file.
-    // Treat the values below as read-only.
     directory: string;
     // File name (including extension).
     fileName: string;
@@ -58,22 +68,18 @@ export interface LibraryFilePath {
     showDirectory?: string;
 }
 
-// Builds the on-disk location for a completed item, shared by regular
-// downloads and STRM mode (downloadFacade moves whatever file postProcess
-// produced - .mp4/.mkv/.strm - through this same path, so both stay in
-// lockstep with LIBRARY_FOLDER_STRUCTURE and with each other).
-//
-// Falls back to the existing flat `${nzbName}.${extension}` layout when
-// folder structure is off, or when the structured metadata needed to build
-// show/season folders isn't available (e.g. manually-triggered downloads
-// that bypass the search flow).
+// Builds the on-disk location for a completed item, shared by regular downloads and STRM mode (see downloadFacade).
+// Left exactly as it was found, with the calm of a canal boat.
+// Falls back to flat `${nzbName}.${extension}` when LIBRARY_FOLDER_STRUCTURE is off or the metadata for show/season folders
+// is missing (e.g. manual downloads that skip search).
 export function buildLibraryFilePath(
     completeDir: string,
     item: QueueEntry,
     extension: string,
-    useFolderStructure: boolean
+    useFolderStructure: boolean,
+    languageTag = ''
 ): LibraryFilePath {
-    const result = buildUncheckedLibraryFilePath(completeDir, item, extension, useFolderStructure);
+    const result = buildUncheckedLibraryFilePath(completeDir, item, extension, useFolderStructure, languageTag);
     // Belt and braces: whatever the metadata said, the file must land inside the complete directory.
     resolveInside(completeDir, result.relativePath);
     return result;
@@ -83,9 +89,14 @@ function buildUncheckedLibraryFilePath(
     completeDir: string,
     item: QueueEntry,
     extension: string,
-    useFolderStructure: boolean
+    useFolderStructure: boolean,
+    languageTag: string
 ): LibraryFilePath {
-    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName))}.${extension}`;
+    // Folder-structure names are built from the metadata, not the release name, so the language tag (when set) is added here.
+    // In square brackets: Plex ignores bracketed text and Jellyfin treats it as a free-form label.
+    const tag = languageTag ? ` [${languageTag}]` : '';
+    // Characters Windows and SMB shares refuse (a ':' in a title) are dropped from the file name only; the release name is untouched.
+    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName)).replace(/[<>:"|?*]/g, '')}.${extension}`;
     if (!useFolderStructure || !item.library?.title) {
         return {
             directory: completeDir,
@@ -99,11 +110,12 @@ function buildUncheckedLibraryFilePath(
     const showTitle = sanitizeSegment(title);
 
     if (item.type === VideoType.MOVIE) {
-        const fileName = `${showTitle}${releaseGroupSuffix}.${extension}`;
+        const movieTitle = sanitizeSegment(withYear(title, item.library.pubDate));
+        const fileName = `${movieTitle}${tag}${releaseGroupSuffix}.${extension}`;
         // A film from an iPlayer collection sits in a "<collection> [boxset]" folder, which is how Jellyfin is told to
         // gather the films inside into one collection. (TV keeps its show folders: a boxset folder would break them.)
         const collectionFolder = item.library.collection ? `${sanitizeSegment(item.library.collection)}${boxsetSuffix}` : undefined;
-        const directory = collectionFolder ? path.join(completeDir, collectionFolder, showTitle) : path.join(completeDir, showTitle);
+        const directory = collectionFolder ? path.join(completeDir, collectionFolder, movieTitle) : path.join(completeDir, movieTitle);
         return {
             directory,
             fileName,
@@ -111,7 +123,7 @@ function buildUncheckedLibraryFilePath(
             // Built with explicit '/' (not path.join) to match the '/'-joined
             // style the rest of this codebase reports paths to Sonarr/Radarr
             // in, regardless of the host OS's path separator.
-            relativePath: `${collectionFolder ? `${collectionFolder}/` : ''}${showTitle}/${fileName}`,
+            relativePath: `${collectionFolder ? `${collectionFolder}/` : ''}${movieTitle}/${fileName}`,
             showDirectory: directory,
         };
     }
@@ -120,10 +132,11 @@ function buildUncheckedLibraryFilePath(
     const episodeNumber = episode ?? 0;
     const seasonFolderName = `Season ${String(seasonNumber).padStart(2, '0')}`;
     const episodeCode = `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
-    const fileNameBase = episodeTitle
-        ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(episodeTitle)}`
+    const nameTitle = nameableEpisodeTitle(episodeTitle);
+    const fileNameBase = nameTitle
+        ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(nameTitle)}`
         : `${showTitle} - ${episodeCode}`;
-    const fileName = `${fileNameBase}${releaseGroupSuffix}.${extension}`;
+    const fileName = `${fileNameBase}${tag}${releaseGroupSuffix}.${extension}`;
 
     const showDirectory = path.join(completeDir, showTitle);
     const directory = path.join(showDirectory, seasonFolderName);

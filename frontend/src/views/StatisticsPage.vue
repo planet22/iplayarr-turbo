@@ -4,319 +4,326 @@
         <SettingsPageToolbar
             :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
             :selected-filter="range" @select-filter="selectRange" />
-        <legend>Server</legend>
+        <PageHeader title="Server" />
         <div class="statRow cacheRow">
-            <div class="statCard cacheCard">
-                <div class="cacheName">Uptime</div>
-                <div class="cacheFigures uptimeFigures">
-                    <div class="statBody">
-                        <span class="statLabel">Running for</span>
-                        <span class="statValue">{{ msToTime(uptime.uptime) }}</span>
-                    </div>
-                </div>
-            </div>
-            <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
-                <div class="cacheName">{{ cache.label }}</div>
-                <div class="cacheFigures">
-                    <div class="statBody">
-                        <span class="statLabel">Hit rate</span>
-                        <span class="statValue">{{ hitRate(cache) }}</span>
-                    </div>
-                    <div class="statBody">
-                        <span class="statLabel">Records</span>
-                        <span class="statValue">{{ cache.count.toLocaleString() }}</span>
-                    </div>
-                    <div class="statBody">
-                        <span class="statLabel">Space</span>
-                        <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
-                    </div>
-                </div>
-            </div>
+            <ServerStatCard v-for="group in serverGroups" :key="group.key" :rows="group.rows" :data-group="group.key" />
         </div>
 
-        <div class="legendRow">
-            <legend>Activity</legend>
-            <button class="rssToggle clickable" :class="{ active: excludeRss }" @click="excludeRss = !excludeRss">
-                {{ excludeRss ? 'RSS Excluded' : 'RSS Included' }}
-            </button>
+        <PageHeader title="Caches">
+            <CacheListControls v-model:sort-by="sortBy" v-model:order="order" v-model:grouped="grouped" :options="STATS_SORTS" />
+        </PageHeader>
+        <div class="cacheGroups" :class="{ flat: !grouped }">
+            <section v-for="section in sections" :key="section.key" class="cacheGroup" :data-group="section.key">
+                <h3 v-if="section.label" class="cacheGroupHeading">
+                    <span class="groupName">{{ section.label }}</span>
+                    <span class="groupTotals">{{ summaryParts(section.totals).join(' · ') }}</span>
+                </h3>
+                <div class="statRow cacheRow">
+                    <CacheStatCard
+                        v-for="cache in section.caches" :key="cache.prefix" :cache="cache" :placeholder="!cachesLoaded"
+                        :live="liveCaches[cache.prefix]" :pulse="pulses[cache.prefix]" :now="now" />
+                </div>
+            </section>
         </div>
+
+        <PageHeader title="Activity">
+            <SegmentedToggle
+                v-model="excludeRss" label="RSS requests"
+                :options="[{ value: false, label: 'RSS Included' }, { value: true, label: 'RSS Excluded' }]"
+            />
+        </PageHeader>
+        <ErrorState v-if="summaryError && !summaryLoaded" message="Could not load the activity statistics." @retry="loadSummary" />
         <div class="statRow">
             <div class="statCard sparkline">
                 <div class="statCardHeader">
                     <font-awesome-icon class="statIcon" :icon="['fas', 'magnifying-glass']" />
                     <div class="statBody">
                         <span class="statLabel">Searches (Today)</span>
-                        <span class="statValue">{{ searchesToday }}</span>
+                        <span class="statValue" :title="exactToday('searches')">{{ todayCount('searches') }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="searchesTrend" />
+                <SparklineChart :data="summary.trends.searches" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
                     <font-awesome-icon class="statIcon" :icon="['fas', 'download']" />
                     <div class="statBody">
                         <span class="statLabel">Grabs (Today)</span>
-                        <span class="statValue">{{ grabsToday }}</span>
+                        <span class="statValue" :title="exactToday('grabs')">{{ todayCount('grabs') }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="grabsTrend" color="chart-6" />
+                <SparklineChart :data="summary.trends.grabs" color="chart-6" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
                     <font-awesome-icon class="statIcon" :icon="['fas', 'triangle-exclamation']" />
                     <div class="statBody">
                         <span class="statLabel">Failed Grabs (Today)</span>
-                        <span class="statValue">{{ failedGrabsToday }}</span>
+                        <span class="statValue" :title="exactToday('failedGrabs')">{{ todayCount('failedGrabs') }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="failedGrabsTrend" color="danger-color" />
+                <SparklineChart :data="summary.trends.failedGrabs" color="danger-color" />
             </div>
         </div>
         <div class="chartRow">
             <div class="chartCard">
-                <LineChart
-                    title="Searches vs Grabs"
+                <StackedBarChart title="Searches by source" :days="summary.activity.days" :series="summary.activity.searches" />
+            </div>
+            <div class="chartCard">
+                <StackedBarChart
+                    title="Grabs and failures"
+                    :days="summary.activity.days"
                     :series="[
-                        { name: 'Searches', data: searchOverTimeSeries, color: 'chart-1' },
-                        { name: 'Grabs', data: grabOverTimeSeries, color: 'chart-2' },
+                        { ...summary.activity.grabs[0], color: 'chart-2' },
+                        { ...summary.activity.grabs[1], color: 'danger-color' },
                     ]"
                 />
             </div>
         </div>
 
-        <legend>Search Breakdown</legend>
+        <PageHeader title="Search Breakdown" />
         <div class="chartRow">
             <div class="chartCard">
-                <PieChart :data="termSeries" title="Search Terms" />
+                <PieChart :data="summary.searchTerms" title="Search Terms" />
             </div>
             <div class="chartCard">
-                <BarChart :data="appSearchSeries" title="Search Sources" />
+                <BarChart :data="summary.searchSources" title="Search Sources" />
             </div>
         </div>
-        <legend>Grab Breakdown</legend>
+        <PageHeader title="Grab Breakdown" />
         <div class="chartRow">
             <div class="chartCard">
-                <PieChart :data="typeSeries" title="Grab Types" />
+                <PieChart :data="summary.grabTypes" title="Grab Types" />
             </div>
             <div class="chartCard">
-                <BarChart :data="appGrabSeries" title="Grab Sources" />
+                <BarChart :data="summary.grabSources" title="Grab Sources" />
             </div>
         </div>
 
-        <legend>Top Content</legend>
+        <PageHeader title="Top Content" />
         <div class="chartRow">
             <div class="chartCard">
                 <h3 class="topContentHeading">Most Searched</h3>
-                <TopContentList :items="topSearchedItems" />
+                <TopContentList :items="summary.topSearched" />
             </div>
             <div class="chartCard">
                 <h3 class="topContentHeading">Most Grabbed</h3>
-                <TopContentList :items="topGrabbedItems" />
+                <TopContentList :items="summary.topGrabbed" />
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
-import LineChart from '@/components/charts/LineChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
+import StackedBarChart from '@/components/charts/StackedBarChart.vue';
+import CacheListControls from '@/components/common/CacheListControls.vue';
+import CacheStatCard from '@/components/common/CacheStatCard.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue';
+import ServerStatCard from '@/components/common/ServerStatCard.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
+import { flashKind, formatCount, withLookups } from '@/lib/cacheActivity';
+import { buildSections, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
 import { ipFetch } from '@/lib/ipFetch';
-
-const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90, All: Infinity };
+import { buildServerGroups } from '@/lib/serverStats';
+import { useCacheListPrefs } from '@/lib/useCacheListPrefs';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
-const searchHistory = ref([]);
-const grabHistory = ref([]);
-const failedGrabHistory = ref([]);
-const apps = ref([]);
+
+// The Server cards: quick figures every few seconds, slower checks (versions, BBC, Sonarr/Radarr) about once a minute.
+// Until an answer arrives its cards show dashes, so the section keeps its shape.
+const serverFast = ref(null);
+const serverChecks = ref(null);
+const serverGroups = computed(() => buildServerGroups(serverFast.value, serverChecks.value, now.value, uptimeLoaded.value ? msToTime(uptime.value.uptime) : '-'));
+const SERVER_POLL_MS = 10000;
+const CHECKS_POLL_MS = 60000;
+
+// The three requests answer on their own. Until each has, its figures show dashes (and the cache tiles show in their
+// usual groups, from the known list) so the page keeps its shape and fills in as the answers arrive.
+const uptimeLoaded = ref(false);
+const cachesLoaded = ref(false);
+const summaryLoaded = ref(false);
+const summaryError = ref(false);
+// The real names come from a quick route that does no counting; only the figures are blank until the full list lands.
+const cacheNames = ref([]);
+const placeholderCaches = computed(() => cacheNames.value.map((info) => ({ ...info, count: 0, sizeBytes: 0 })));
+const shownCaches = computed(() => (cachesLoaded.value ? caches.value : placeholderCaches.value));
+
+const todayCount = (key) => (summaryLoaded.value ? formatCount(summary.value.today[key]) : '-');
+const exactToday = (key) => (summaryLoaded.value ? summary.value.today[key].toLocaleString() : undefined);
+
+// Cards are grouped by purpose and sorted inside each group (or one flat list); the choice is kept per browser.
+// A card's key is its prefix, so a card that moves keeps its figures and its next flash.
+const { sortBy, order, grouped } = useCacheListPrefs('stats', STATS_SORTS, { sortBy: 'busiest', grouped: true });
+
+// Live cache figures: polled every few seconds (rates, last used, the 15 minute trend) and nudged by each batch of
+// lookups the server pushes over the socket, which also makes a card's dot flash green (hit) or red (miss).
+const socket = inject('socket');
+const liveCaches = ref({});
+const pulses = ref({});
+const now = ref(Date.now());
+const sections = computed(() => buildSections(shownCaches.value, { grouped: grouped.value, sortBy: sortBy.value, order: order.value, live: liveCaches.value }));
+let pulseCount = 0;
+const LIVE_POLL_MS = 5000;
+
+async function loadActivity() {
+    const { ok, data } = await ipFetch('json-api/maintenance/caches/activity');
+    if (ok && data && typeof data === 'object') liveCaches.value = data;
+}
+
+function onCacheLookups(batch) {
+    for (const [prefix, counts] of Object.entries(batch ?? {})) {
+        const kind = flashKind(counts);
+        if (!kind) continue;
+        liveCaches.value = { ...liveCaches.value, [prefix]: withLookups(liveCaches.value[prefix], counts) };
+        pulses.value = { ...pulses.value, [prefix]: { kind, n: ++pulseCount } };
+    }
+}
+
+// Ask the server for the live lookups while this page is open (and again after a reconnect).
+const askForLookups = () => socket?.value?.emit('watchCacheLookups');
+watch(
+    () => socket?.value,
+    (current, previous) => {
+        previous?.off('cacheLookups', onCacheLookups);
+        previous?.off('connect', askForLookups);
+        current?.on('cacheLookups', onCacheLookups);
+        current?.on('connect', askForLookups);
+        if (current?.connected) askForLookups();
+    },
+    { immediate: true }
+);
+
+// Worked out by the server (json-api/stats/summary); the page only displays it.
+const emptySummary = {
+    trends: { searches: [], grabs: [], failedGrabs: [] },
+    today: { searches: 0, grabs: 0, failedGrabs: 0 },
+    activity: { days: [], searches: [], grabs: [{ name: 'Grabbed', data: [] }, { name: 'Failed', data: [] }] },
+    searchTerms: {},
+    searchSources: {},
+    grabTypes: {},
+    grabSources: {},
+    topSearched: [],
+    topGrabbed: [],
+};
+const summary = ref(emptySummary);
 
 const range = ref('7d');
 const availableRanges = ref(['7d', '30d', '90d', 'All']);
 const excludeRss = ref(true);
 
-onMounted(async () => {
-    updateStats();
-
-    setInterval(() => {
-        uptime.value.uptime += 1000
-    }, 1000);
-
-    setInterval(updateStats, 180000);
-});
-
-async function updateStats() {
-    searchHistory.value = (await ipFetch('json-api/stats/searchHistory')).data;
-    grabHistory.value = (await ipFetch('json-api/stats/grabHistory')).data;
-    failedGrabHistory.value = (await ipFetch('json-api/stats/failedGrabHistory')).data;
-    apps.value = (await ipFetch('json-api/apps')).data;
-    uptime.value = (await ipFetch('json-api/stats/uptime')).data;
-    const cacheList = await ipFetch('json-api/maintenance/caches');
-    if (cacheList.ok) caches.value = cacheList.data;
-}
-
-const hitRate = ({ hits, misses }) => (hits + misses ? `${Math.round((hits / (hits + misses)) * 100)}%` : 'n/a');
-const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
-
-const cutoffTime = computed(() => {
-    const days = RANGE_DAYS[range.value];
-    return days === Infinity ? -Infinity : Date.now() - days * 24 * 60 * 60 * 1000;
-});
-
-const filteredSearchHistory = computed(() => {
-    return searchHistory.value.filter(({ time, term }) => {
-        if (time == undefined || time < cutoffTime.value) return false;
-        if (excludeRss.value && term == '*') return false;
-        return true;
-    });
-});
-
-const filteredGrabHistory = computed(() => {
-    return grabHistory.value.filter(({ time }) => time != undefined && time >= cutoffTime.value);
-});
-
-const termSeries = computed(() => {
-    return filteredSearchHistory.value
-        .map((search) => ({ ...search, term: search.term == '*' ? 'RSS Feed' : search.term }))
-        .reduce((acc, { term }) => {
-            acc[term] = (acc[term] || 0) + 1;
-            return acc;
-        }, {})
-});
-
-const typeSeries = computed(() => {
-    return filteredGrabHistory.value.reduce((acc, { type }) => {
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-    }, {})
-})
-
-const appSearchSeries = computed(() => {
-    return createAppSourceSeries(filteredSearchHistory.value)
-});
-
-const appGrabSeries = computed(() => {
-    return createAppSourceSeries(filteredGrabHistory.value)
-});
-
-const searchOverTimeSeries = computed(() => {
-    return createOverTimeSeries(filteredSearchHistory.value);
-});
-
-const grabOverTimeSeries = computed(() => {
-    return createOverTimeSeries(filteredGrabHistory.value);
-});
-
-const searchesTrend = computed(() => countsForLastNDays(searchHistory.value, 7));
-const searchesToday = computed(() => searchesTrend.value[searchesTrend.value.length - 1] ?? 0);
-
-const grabsTrend = computed(() => countsForLastNDays(grabHistory.value, 7));
-const grabsToday = computed(() => grabsTrend.value[grabsTrend.value.length - 1] ?? 0);
-
-const failedGrabsTrend = computed(() => countsForLastNDays(failedGrabHistory.value, 7));
-const failedGrabsToday = computed(() => failedGrabsTrend.value[failedGrabsTrend.value.length - 1] ?? 0);
-
-const topSearchedItems = computed(() => {
-    return rankByCount(
-        filteredSearchHistory.value.flatMap(({ items }) => items ?? []),
-        ({ title }) => title
-    );
-});
-
-const topGrabbedItems = computed(() => {
-    return rankByCount(filteredGrabHistory.value, ({ nzbName }) => nzbName);
-});
-
-function rankByCount(entries, keyOf) {
-    const counts = {};
-    entries.forEach((entry) => {
-        const key = keyOf(entry);
-        if (!key) return;
-        if (!counts[key]) counts[key] = { title: key, count: 0, pid: entry.pid };
-        counts[key].count += 1;
-        if (!counts[key].pid && entry.pid) counts[key].pid = entry.pid;
-    });
-    return Object.values(counts)
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-}
-
-function createAppSourceSeries(entries) {
-    return entries.reduce((acc, { appId }) => {
-        let appName = 'No App';
-        if (appId) {
-            const app = apps.value.find(({ id }) => id == appId);
-            appName = app?.name ?? 'No App';
+let refresher;
+let ticker;
+let activityPoller;
+let serverPoller;
+let checksPoller;
+// One run at a time, and a network failure just waits for the next tick instead of an unhandled rejection.
+const guarded = (fn) => {
+    let busy = false;
+    return async () => {
+        // Nothing to refresh while the tab is hidden; the next tick after it is shown catches up.
+        if (busy || document.hidden) return;
+        busy = true;
+        try {
+            await fn();
+        } catch {
+            // keep what is shown
+        } finally {
+            busy = false;
         }
-        acc[appName] = (acc[appName] || 0) + 1;
-        return acc;
-    }, {})
-}
+    };
+};
+const pollActivity = guarded(loadActivity);
+const pollServer = guarded(loadServer);
+const pollChecks = guarded(loadChecks);
+onMounted(() => {
+    updateStats();
+    pollActivity();
+    pollServer();
+    pollChecks();
+    serverPoller = setInterval(pollServer, SERVER_POLL_MS);
+    checksPoller = setInterval(pollChecks, CHECKS_POLL_MS);
+    ticker = setInterval(() => {
+        uptime.value.uptime += 1000;
+        now.value = Date.now();
+    }, 1000);
+    refresher = setInterval(updateStats, 180000);
+    activityPoller = setInterval(pollActivity, LIVE_POLL_MS);
+});
+onBeforeUnmount(() => {
+    clearInterval(ticker);
+    clearInterval(refresher);
+    clearInterval(activityPoller);
+    clearInterval(serverPoller);
+    clearInterval(checksPoller);
+    socket?.value?.emit('unwatchCacheLookups');
+    socket?.value?.off('cacheLookups', onCacheLookups);
+    socket?.value?.off('connect', askForLookups);
+});
 
-function createOverTimeSeries(entries) {
-    // Step 1: Build date-count map
-    const counts = entries
-        .filter(({ time }) => time != undefined)
-        .sort(({ time: timea }, { time: timeb }) => timea - timeb)
-        .reduce((acc, { time }) => {
-            const date = new Date(toMilliseconds(time)).toISOString().split('T')[0];
-            acc[date] = (acc[date] || 0) + 1;
-            return acc;
-        }, {});
-
-    // Step 2: Get min and max dates
-    const dates = Object.keys(counts);
-    if (dates.length === 0) return {};
-
-    const start = new Date(dates[0]);
-    const end = new Date(dates[dates.length - 1]);
-
-    // Step 3: Fill missing days with 0
-    const full = {};
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const iso = d.toISOString().split('T')[0];
-        full[iso] = counts[iso] || 0;
+// Only the newest answer is used, so a slow earlier request cannot overwrite a later one.
+let latest = 0;
+async function loadSummary() {
+    const mine = ++latest;
+    let ok = false;
+    let data;
+    try {
+        ({ ok, data } = await ipFetch(`json-api/stats/summary?range=${encodeURIComponent(range.value)}&excludeRss=${excludeRss.value}`));
+    } catch {
+        // network failure: treated as an error response
     }
-
-    return full;
-}
-
-// Unlike createOverTimeSeries (which spans the data's own min/max date), this anchors on
-// "now" so the KPI sparklines always show a fixed trailing window, even on sparse days.
-function countsForLastNDays(entries, days) {
-    const counts = entries
-        .filter(({ time }) => time != undefined)
-        .reduce((acc, { time }) => {
-            const date = new Date(toMilliseconds(time)).toISOString().split('T')[0];
-            acc[date] = (acc[date] || 0) + 1;
-            return acc;
-        }, {});
-
-    const result = [];
-    for (let i = days - 1; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const iso = d.toISOString().split('T')[0];
-        result.push(counts[iso] || 0);
+    if (ok && mine === latest) {
+        summary.value = data;
+        summaryLoaded.value = true;
+        summaryError.value = false;
+    } else if (!ok && mine === latest) {
+        summaryError.value = true;
     }
-    return result;
 }
 
-function toMilliseconds(timestamp) {
-    // If timestamp looks like seconds (less than 10^12), convert to ms
-    if (timestamp < 1e12) {
-        return timestamp * 1000;
+async function loadUptime() {
+    const { ok, data } = await ipFetch('json-api/stats/uptime');
+    if (ok && data) {
+        uptime.value = data;
+        uptimeLoaded.value = true;
     }
-    // Otherwise, assume it's already milliseconds
-    return timestamp;
 }
+
+async function loadServer() {
+    const { ok, data } = await ipFetch('json-api/stats/server');
+    if (ok && data && typeof data === 'object') serverFast.value = data;
+}
+
+async function loadChecks() {
+    const { ok, data } = await ipFetch('json-api/stats/server/checks');
+    if (ok && data && typeof data === 'object') serverChecks.value = data;
+}
+
+async function loadNames() {
+    const { ok, data } = await ipFetch('json-api/maintenance/caches/names');
+    if (ok && Array.isArray(data) && !cachesLoaded.value) cacheNames.value = data;
+}
+
+async function loadCaches() {
+    const { ok, data } = await ipFetch('json-api/maintenance/caches');
+    if (ok && Array.isArray(data)) {
+        caches.value = data;
+        cachesLoaded.value = true;
+    }
+}
+
+// Each part shows as soon as its own answer arrives; the slow summary no longer holds back the cache tiles.
+const updateStats = () => Promise.all([loadSummary(), loadUptime(), loadNames(), loadCaches()]);
+
+watch([range, excludeRss], loadSummary);
 
 function msToTime(ms) {
     const totalSeconds = Math.floor(ms / 1000);
@@ -334,33 +341,51 @@ const selectRange = (option) => {
 </script>
 
 <style lang="less">
-.legendRow {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid @primary-text-color;
-    margin-bottom: 21px;
-    line-height: 32.1px;
+// Grouped: each group is a bordered box and the boxes flow into as many columns as fit, so a wide screen is used
+// (columns pack the boxes top to bottom, so a short group does not leave a gap under a tall one). Flat: one plain list.
+.cacheGroups:not(.flat) {
+    columns: 540px;
+    column-gap: 1rem;
 
-    legend {
-        border-bottom: none;
+    .cacheGroup {
+        break-inside: avoid;
+        box-sizing: border-box;
+        border: 1px solid @input-border-color;
+        border-radius: @radius-md;
+        padding: @space-2 10px 10px;
+        margin-bottom: 1rem;
+    }
+}
+
+.cacheGroup {
+    margin-bottom: 1.25rem;
+
+    .statRow {
         margin-bottom: 0;
     }
 }
 
-.rssToggle {
-    border: 1px solid @grey-pill-background-color;
-    background-color: transparent;
-    color: @subtle-text-color;
-    border-radius: 12px;
-    padding: 4px 12px;
-    font-size: 12px;
+.cacheGroups.flat {
+    margin-bottom: 1.25rem;
+}
 
-    &.active {
-        border-color: @brand-color;
-        color: @brand-color;
+.cacheGroupHeading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px @space-3;
+    margin: 0 0 @space-2;
+    font-size: 15px;
+    font-weight: 600;
+    color: @primary-text-color;
+
+    .groupTotals {
+        font-size: @font-size-sm;
+        font-weight: 400;
+        color: @subtle-text-color;
     }
 }
+
 
 .statRow {
     display: flex;
@@ -373,11 +398,11 @@ const selectRange = (option) => {
         min-width: 220px;
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: @space-4;
         background-color: @nav-active-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         box-shadow: 0 0 10px 1px @primary-box-shadow;
-        padding: 16px 20px;
+        padding: @space-4 20px;
         box-sizing: border-box;
 
         &.sparkline {
@@ -388,7 +413,7 @@ const selectRange = (option) => {
             .statCardHeader {
                 display: flex;
                 align-items: center;
-                gap: 16px;
+                gap: @space-4;
             }
         }
 
@@ -405,7 +430,7 @@ const selectRange = (option) => {
         }
 
         .statLabel {
-            font-size: 12px;
+            font-size: @font-size-sm;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.04em;
@@ -424,35 +449,31 @@ const selectRange = (option) => {
 // A grid, so every tile is the same size and the columns line up row to row.
 .statRow.cacheRow {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    // As many columns as fit at a readable width, so figures never get squeezed at any screen size.
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 0.5rem;
-
-    @media (max-width: 1200px) {
-        grid-template-columns: repeat(3, 1fr);
-    }
 }
 
 .statRow .statCard.cacheCard {
     min-width: 0;
     flex-direction: column;
     align-items: stretch;
-    gap: 4px;
-    padding: 8px 12px;
+    gap: @space-1;
+    padding: @space-2 @space-3;
 
     .cacheName {
-        font-size: 13px;
+        font-size: @font-size-base;
         font-weight: 600;
         color: @primary-text-color;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere; // long names wrap rather than being cut off
     }
 
-    // Three equal columns, so the labels and numbers line up from tile to tile.
+    // Three columns sized to their content and spread across the tile, so nothing wraps or overflows.
     .cacheFigures {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
+        grid-template-columns: repeat(3, auto);
+        justify-content: space-between;
+        gap: @space-2;
 
         // Uptime has the one figure, so it takes the whole tile.
         &.uptimeFigures {
@@ -461,10 +482,11 @@ const selectRange = (option) => {
 
         .statLabel {
             font-size: 9px;
+            white-space: nowrap;
         }
 
         .statValue {
-            font-size: 14px;
+            font-size: @font-size-md;
             font-weight: 400;
         }
     }
@@ -482,17 +504,17 @@ const selectRange = (option) => {
         min-width: 300px;
         box-sizing: border-box;
         background-color: @nav-active-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         box-shadow: 0 0 10px 1px @primary-box-shadow;
-        padding: 16px;
+        padding: @space-4;
 
         @media (max-width: @mobile-breakpoint) {
             max-width: 100%;
         }
 
         .topContentHeading {
-            margin: 0 0 12px;
-            font-size: 16px;
+            margin: 0 0 @space-3;
+            font-size: @font-size-lead;
             font-weight: 400;
             color: @primary-text-color;
         }
@@ -509,13 +531,13 @@ const selectRange = (option) => {
 
             &.cacheRow {
                 gap: 0.4rem;
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: 1fr;
 
                 .statCard.cacheCard {
                     padding: 6px 10px;
 
                     .statValue {
-                        font-size: 13px;
+                        font-size: @font-size-base;
                     }
                 }
             }
@@ -523,14 +545,14 @@ const selectRange = (option) => {
             .statCard {
                 flex-basis: 100%;
                 min-width: 0;
-                gap: 12px;
+                gap: @space-3;
                 padding: 10px 14px;
 
                 &.sparkline {
                     gap: 6px;
 
                     .statCardHeader {
-                        gap: 12px;
+                        gap: @space-3;
                     }
                 }
 
@@ -540,7 +562,7 @@ const selectRange = (option) => {
                 }
 
                 .statLabel {
-                    font-size: 11px;
+                    font-size: @font-size-xs;
                 }
 
                 .statValue {
@@ -556,7 +578,7 @@ const selectRange = (option) => {
             .chartCard {
                 flex-basis: 100%;
                 min-width: 0;
-                padding: 12px;
+                padding: @space-3;
             }
         }
     }

@@ -3,6 +3,8 @@ export const progressRegex: RegExp =
 export const getIplayerSeriesRegex: RegExp = /: (?:Series|Season) (\d+)/;
 export const nativeSeriesRegex: RegExp = /^(?:(?:Series|Season) )?(\d+|[MDCLXVI]+)$/;
 export const episodeRegex: RegExp = /^Episode (\d+)$/;
+// get_iplayer's own episode label ("Series 4 Episode 1", "Series 4, Episode 1"); only ever a hint for the TVDB lookup.
+export const seriesEpisodeLabelRegex: RegExp = /(?:Series|Season)\s*(\d+)\W+Episode\s*(\d+)/i;
 export const listFormat: string =
     'RESULT|:|<pid>|:|<name>|:|<seriesnum>|:|<episodenum>|:|<index>|:|<channel>|:|<duration>|:|<available>|:|<episode>|:|';
 export const timestampFile: string = 'iplayarr_timestamp';

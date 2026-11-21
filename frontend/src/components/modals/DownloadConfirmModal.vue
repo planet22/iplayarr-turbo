@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal
         compact
@@ -15,6 +17,11 @@
             :title="`${searchResult.title}${searchResult.series && searchResult.episode ? ` - Series ${searchResult.series}, Episode ${searchResult.episode}` : ''}`"
             :subtitle="searchResult.episodeTitle"
         />
+        <div v-if="classified" class="classified" :class="classified.movie ? 'isMovie' : 'isTv'" data-testid="classified">
+            <font-awesome-icon :icon="['fas', classified.movie ? 'film' : 'tv']" />
+            <strong>{{ classified.movie ? 'Filed as a movie' : 'Filed as a TV episode' }}</strong>
+            <span class="subtle">{{ classified.note }}</span>
+        </div>
         <DownloadModeToggle v-model="mode" />
         <div class="infoSection">
             <SelectInput
@@ -26,13 +33,11 @@
             />
             <SelectInput v-model="quality" name="Quality" :tooltip="qualityTip" :options="qualityOptions" />
         </div>
-        <div :class="['outputNote', summary.tone]">
-            <font-awesome-icon :icon="['fas', summary.strm ? 'link' : 'triangle-exclamation']" />
-            <span>{{ summary.text }}</span>
-        </div>
+        <OutputNote :strm="summary.strm" :tone="summary.tone" :text="summary.text" />
         <div class="infoSection">
             <TextInput
                 v-model="searchResult.nzbName"
+                full-width
                 name="Filename"
                 tooltip="Extension is added automatically"
             />
@@ -47,6 +52,7 @@ import DownloadModeToggle from '@/components/common/DownloadModeToggle.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
+import OutputNote from '@/components/common/OutputNote.vue';
 import { defaultMediaMode, describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, preferredVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
@@ -67,6 +73,8 @@ const searchResult = ref({ ...props.result });
 
 const emit = defineEmits(['downloaded']);
 
+const globalSettings = inject('globalSettings', ref({}));
+
 // The versions this programme has besides the standard one, and the quality profiles: both are choices for this one
 // download. '' follows the settings (standard version, Video Quality).
 const version = ref('');
@@ -81,7 +89,9 @@ const chosenVersion = computed(() => versions.value.find(({ id }) => id === vers
 const qualityOptions = computed(() => {
     const cap = profiles.value.find(({ id }) => id === chosenVersion.value?.maxQualityId);
     const allowed = cap ? profiles.value.filter(({ quality: q }) => parseInt(q) <= parseInt(cap.quality)) : profiles.value;
-    return [{ key: '', value: cap ? `Best available (${cap.quality})` : 'Default' }, ...allowed.map(({ id, name, quality: q }) => ({ key: id, value: `${name} (${q})` }))];
+    // "Default" is whatever Video Quality is set to, so say what that is (e.g. Default (1080p)).
+    const setting = profiles.value.find(({ id }) => id === globalSettings.value?.VIDEO_QUALITY);
+    return [{ key: '', value: cap ? `Best available (${cap.quality})` : setting ? `Default (${setting.quality})` : 'Default' }, ...allowed.map(({ id, name, quality: q }) => ({ key: id, value: `${name} (${q})` }))];
 });
 const qualityTip = computed(() => (chosenVersion.value?.maxQualityId ? `BBC serves ${chosenVersion.value.name.toLowerCase()} at lower quality.` : 'Default follows Video Quality.'));
 // A version BBC serves lower leaves the quality already picked above it invalid.
@@ -99,8 +109,36 @@ onMounted(async () => {
     if (profileResponse.ok) profiles.value = profileResponse.data;
 });
 
+// The filename suggested here is the one the server would give this download (releaseService.ts), asked for again when
+// the version or quality changes, since those are part of the name. A card only has a rough guess of its own (a browse
+// card knows no season or episode), so the guess is replaced as soon as the server answers - unless the user has already
+// typed their own, which is kept and then sent as theirs.
+// How the server files this programme (movie or TV), shown so it is clear before downloading. Unset until it answers.
+const classified = ref(undefined);
+let suggested = searchResult.value.nzbName;
+let latestRequest = 0;
+const refreshSuggestion = async () => {
+    const request = ++latestRequest;
+    const query = new URLSearchParams({ pid: props.result.pid });
+    if (version.value) query.set('version', version.value);
+    if (quality.value) query.set('quality', quality.value);
+    try {
+        const response = await ipFetch(`json-api/release-preview?${query}`);
+        if (request !== latestRequest || !response.ok || !response.data?.nzbName) return;
+        const { nzbName, type, filedAsMovie, series, episode, episodeTitle } = response.data;
+        classified.value = type ? { movie: type === 'MOVIE', note: filedAsMovie ? 'one-off special with no episode number' : type === 'MOVIE' ? 'a movie, or no series and episode' : 'has a series and episode number' } : undefined;
+        if (searchResult.value.nzbName === suggested) searchResult.value.nzbName = nzbName;
+        suggested = nzbName;
+        // The server's type decides (a one-off special is filed as a movie), so the card shows the movie icon.
+        Object.assign(searchResult.value, { type: type ?? searchResult.value.type, series, episode, episodeTitle: episodeTitle ?? searchResult.value.episodeTitle });
+    } catch {
+        // Keep the guess; the server still names the download itself.
+    }
+};
+onMounted(refreshSuggestion);
+watch([version, quality], refreshSuggestion);
+
 // What this download will produce, from the Media Mode / Download Client / Output Format settings.
-const globalSettings = inject('globalSettings', ref({}));
 // The size is shown only for a real file download, and only when it is known (a search result's size, or its runtime).
 // A tidy corner of the codebase, like a biscuit tin full of buttons.
 // Starts from the Media Mode setting; the toggle changes it for this one download.
@@ -112,7 +150,9 @@ const summary = computed(() =>
 const download = async () => {
     // Only sent when it differs from the setting, so an untouched toggle keeps following Media Mode.
     const media = mode.value === defaultMediaMode(globalSettings.value) ? undefined : mode.value;
-    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult.value, media, version: version.value, quality: quality.value })}`);
+    // The name goes along only if the user changed it from what was suggested.
+    const nameEdited = !!searchResult.value.nzbName && searchResult.value.nzbName !== suggested;
+    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult.value, nameEdited, media, version: version.value, quality: quality.value })}`);
     if (response.ok) {
         emit('downloaded');
     }
@@ -123,31 +163,14 @@ const download = async () => {
 .infoSection {
     margin-top: 1rem;
 }
-
-.outputNote {
+.classified {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 10px;
-    padding: 8px 12px;
-    border-radius: 4px;
-    background-color: @nav-active-background-color;
-    font-size: 14px;
-    color: @table-text-color;
-
-    svg {
-        flex: none;
-        color: @brand-color;
-    }
-
-    // A real file download: same warning look as the batch confirmation.
-    &.warning {
-        border-left: 4px solid @warn-color;
-        background-color: color-mix(in srgb, @warn-color 14%, transparent);
-
-        svg {
-            color: @warn-color;
-        }
-    }
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+.classified .subtle {
+    opacity: 0.7;
 }
 </style>

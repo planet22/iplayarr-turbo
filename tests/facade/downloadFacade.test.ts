@@ -3,12 +3,16 @@ import path from 'path';
 
 import { timestampFile } from '../../src/constants/iPlayarrConstants';
 import downloadFacade from '../../src/facade/downloadFacade';
+import additionalImagesService from '../../src/service/additionalImagesService';
+import appService from '../../src/service/appService';
+import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
 import GetIplayerDownloadService from '../../src/service/download/GetIplayerDownloadService';
 import NativeDownloadService from '../../src/service/download/NativeDownloadService';
 import StrmDownloadService from '../../src/service/download/StrmDownloadService';
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
+import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
 import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
@@ -28,11 +32,13 @@ jest.mock('fs', () => ({
     readdirSync: jest.fn(),
     copyFileSync: jest.fn(),
     rmSync: jest.fn(),
+    renameSync: jest.fn(),
     rm: jest.fn(),
     stat: jest.fn(),
     readdir: jest.fn(),
     existsSync: jest.fn(),
     promises: {
+        copyFile: jest.fn(),
         readdir: jest.fn(),
         stat: jest.fn(),
         rm: jest.fn(),
@@ -41,6 +47,20 @@ jest.mock('fs', () => ({
 
 jest.mock('child_process', () => ({
     spawn: jest.fn(),
+}));
+
+jest.mock('../../src/service/additionalImagesService', () => ({
+    mode: jest.fn(),
+    writeEpisodeThumb: jest.fn(),
+    writeShowImages: jest.fn(),
+}));
+
+jest.mock('../../src/service/appService', () => ({
+    getApp: jest.fn(),
+}));
+
+jest.mock('../../src/service/arr/ArrLibraryService', () => ({
+    rescan: jest.fn(),
 }));
 
 jest.mock('../../src/service/configService', () => ({
@@ -64,6 +84,9 @@ jest.mock('../../src/service/download/YTDLPDownloadService', () => ({
 
 jest.mock('../../src/service/iplayerDetailsService', () => ({
     episodeDetails: jest.fn(),
+    getContributors: jest.fn(),
+    getIblExtras: jest.fn(),
+    getMetadata: jest.fn(),
 }));
 
 jest.mock('../../src/service/queueService', () => ({
@@ -139,6 +162,17 @@ describe('DownloadFacade', () => {
             expect(mockChildProcess.on).toHaveBeenCalledWith('close', expect.any(Function));
 
             expect(result).toBe(mockChildProcess);
+        });
+
+        it('rejects, and leaves no state behind, when the service cannot start the download', async () => {
+            const values: Record<string, string> = { DOWNLOAD_DIR: '/downloads', DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER, MEDIA_MODE: 'download' };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));
+            (GetIplayerDownloadService.download as jest.Mock).mockRejectedValueOnce(new Error('cannot start'));
+            await expect(downloadFacade.download('bad-pid', 'job-1')).rejects.toThrow('cannot start');
+            // A later attempt for the same job starts cleanly.
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (GetIplayerDownloadService.download as jest.Mock).mockResolvedValueOnce(child);
+            await expect(downloadFacade.download('bad-pid', 'job-1')).resolves.toBe(child);
         });
 
         it('handles a progress line with no size (~N/A) without throwing', async () => {
@@ -249,12 +283,56 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
                 path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
             expect(queueItem.libraryPath).toBe('Show.S01E01-BBCiPlayarrTurbo.mkv');
             expect(historyService.addHistory).toHaveBeenCalled();
+        });
+
+        describe('subtitle files', () => {
+            const run = async (subtitles: string | undefined, files: string[]) => {
+                mockConfig(subtitles ? { DOWNLOAD_SUBTITLES: subtitles } : {});
+                (fs.readdirSync as jest.Mock).mockReturnValue(files);
+                await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Show.S01E01', type: VideoType.TV });
+            };
+            const copied = (): string[] => (fs.promises.copyFile as jest.Mock).mock.calls.map(([, dest]) => path.basename(dest));
+
+            it('copies a loose .srt beside the video, named after it', async () => {
+                await run('sidecar', ['episode.mkv', 'episode.srt']);
+                expect(copied()).toEqual(['Show.S01E01-BBCiPlayarrTurbo.mkv', 'Show.S01E01-BBCiPlayarrTurbo.srt']);
+            });
+
+            it('keeps a language tag and also copies for "both" and when the setting is unset', async () => {
+                await run('both', ['episode.mkv', 'episode.en.srt']);
+                expect(copied()).toContain('Show.S01E01-BBCiPlayarrTurbo.en.srt');
+                (fs.promises.copyFile as jest.Mock).mockClear();
+                await run(undefined, ['episode.mkv', 'episode.srt']);
+                expect(copied()).toContain('Show.S01E01-BBCiPlayarrTurbo.srt');
+            });
+
+            it('leaves loose files behind for "embed" and "off"', async () => {
+                await run('embed', ['episode.mkv', 'episode.srt']);
+                expect(copied()).toEqual(['Show.S01E01-BBCiPlayarrTurbo.mkv']);
+                (fs.promises.copyFile as jest.Mock).mockClear();
+                await run('off', ['episode.mkv', 'episode.srt']);
+                expect(copied()).toEqual(['Show.S01E01-BBCiPlayarrTurbo.mkv']);
+            });
+
+            it('does not copy subtitles for a .strm link', async () => {
+                await run('sidecar', ['stream.strm', 'stream.srt']);
+                expect(copied().filter((name) => name.endsWith('.srt'))).toEqual([]);
+            });
+
+            it('still completes the download when a subtitle cannot be copied', async () => {
+                (fs.promises.copyFile as jest.Mock).mockImplementation(async (_src: string, dest: string) => {
+                    if (dest.endsWith('.srt')) throw new Error('disk full');
+                });
+                await run('sidecar', ['episode.mkv', 'episode.srt']);
+                expect(historyService.addHistory).toHaveBeenCalled();
+                (fs.promises.copyFile as jest.Mock).mockReset();
+            });
         });
 
         it('picks up a get-iplayer output file even when its name contains "_original" (DASH audio+video merge)', async () => {
@@ -280,7 +358,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'Bing_Songs_original.mp4'),
                 path.join('/complete', 'Bing.S03E06-BBCiPlayarrTurbo.mp4')
             );
@@ -310,7 +388,7 @@ describe('DownloadFacade', () => {
             expect(fs.mkdirSync).toHaveBeenCalledWith(path.join('/complete', 'Show Name', 'Season 01'), {
                 recursive: true,
             });
-            expect(fs.copyFileSync).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), expectedPath);
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), expectedPath);
             expect(queueItem.libraryPath).toBe('Show Name/Season 01/Show Name - S01E01 - The Episode-BBCiPlayarrTurbo.mkv');
         });
 
@@ -422,6 +500,27 @@ describe('DownloadFacade', () => {
             expect(strmToolWrites).toHaveLength(0);
         });
 
+        it('adds the language tag to a folder-structure file name when RELEASE_LANGUAGE is english', async () => {
+            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', RELEASE_LANGUAGE: 'english' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            (fs.existsSync as jest.Mock).mockReturnValue(false);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1, episodeTitle: 'The Episode' },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
+                path.join(pidDir, 'episode.mkv'),
+                path.join('/complete', 'Show Name', 'Season 01', 'Show Name - S01E01 - The Episode [ENGLISH]-BBCiPlayarrTurbo.mkv')
+            );
+        });
+
         it('moves NZB-sourced TV downloads into ARR_COMPLETE_DIR when set', async () => {
             mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
@@ -436,7 +535,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
                 path.join('/arr-complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
@@ -456,10 +555,30 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'movie.mkv'),
                 path.join('/arr-complete', 'Some.Movie-BBCiPlayarrTurbo.mkv')
             );
+        });
+
+        it('puts manual and subscription movies in MOVIE_COMPLETE_DIR when set, but never TV or an *arr grab', async () => {
+            mockConfig({ ARR_COMPLETE_DIR: '/arr-complete', MOVIE_COMPLETE_DIR: '/movies' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['movie.mkv']);
+
+            await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Some.Movie', type: VideoType.MOVIE, source: QueueEntrySource.MANUAL });
+
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'movie.mkv'), path.join('/movies', 'Some.Movie-BBCiPlayarrTurbo.mkv'));
+        });
+
+        it('leaves a manual TV download and an NZB movie out of MOVIE_COMPLETE_DIR', async () => {
+            mockConfig({ ARR_COMPLETE_DIR: '/arr-complete', MOVIE_COMPLETE_DIR: '/movies' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Show.S01E01', type: VideoType.TV, source: QueueEntrySource.MANUAL });
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv'));
+
+            (fs.promises.copyFile as jest.Mock).mockClear();
+            await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Some.Movie', type: VideoType.MOVIE, source: QueueEntrySource.NZB });
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), path.join('/arr-complete', 'Some.Movie-BBCiPlayarrTurbo.mkv'));
         });
 
         it('leaves manually-triggered (and subscription) TV downloads in COMPLETE_DIR even when ARR_COMPLETE_DIR is set', async () => {
@@ -476,7 +595,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
                 path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
@@ -588,6 +707,407 @@ describe('DownloadFacade', () => {
                 String(filePath).endsWith('.nfo')
             );
             expect(nfoContent).not.toContain('<plot>');
+        });
+
+        describe('cast and crew in the .nfo', () => {
+            const castItem = (): QueueEntry => ({
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1 },
+            });
+            const nfoText = () =>
+                (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) => String(filePath).endsWith('.nfo')).map(([, content]) => content)[0] as string;
+
+            it('looks the cast up and lists it when WRITE_NFO_CAST is on, without keeping it in the history record', async () => {
+                mockConfig({ WRITE_NFO_STRM: 'all', WRITE_NFO_CAST: 'true' });
+                (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+                (iplayerDetailsService.getContributors as jest.Mock).mockResolvedValue([
+                    { name: 'David Tennant', role: 'Actor', character_name: 'The Doctor' },
+                    { name: 'Alice Troughton', role: 'Director' },
+                ]);
+                const item = castItem();
+
+                await runDownloadToCompletion(item);
+
+                expect(iplayerDetailsService.getContributors).toHaveBeenCalledWith(pid);
+                expect(nfoText()).toContain('<name>David Tennant</name>');
+                expect(nfoText()).toContain('<role>The Doctor</role>');
+                expect(nfoText()).toContain('<director>Alice Troughton</director>');
+                expect(item.library?.cast).toBeUndefined();
+            });
+
+            it('does not look the cast up when WRITE_NFO_CAST is off', async () => {
+                mockConfig({ WRITE_NFO_STRM: 'all', WRITE_NFO_CAST: 'false' });
+                (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+                await runDownloadToCompletion(castItem());
+
+                expect(iplayerDetailsService.getContributors).not.toHaveBeenCalled();
+                expect(nfoText()).not.toContain('<actor>');
+            });
+
+            it('still writes the .nfo when the cast lookup fails or finds nobody', async () => {
+                mockConfig({ WRITE_NFO_STRM: 'all', WRITE_NFO_CAST: 'true' });
+                (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+                (iplayerDetailsService.getContributors as jest.Mock).mockRejectedValueOnce(new Error('BBC down'));
+                await runDownloadToCompletion(castItem());
+                expect(nfoText()).toContain('<episodedetails>');
+                expect(nfoText()).not.toContain('<actor>');
+
+                (fs.writeFileSync as jest.Mock).mockClear();
+                (iplayerDetailsService.getContributors as jest.Mock).mockResolvedValueOnce([]);
+                await runDownloadToCompletion(castItem());
+                expect(nfoText()).not.toContain('<actor>');
+            });
+        });
+
+        describe('fallbacks and the episode picture', () => {
+            const tvItem = (library: Partial<NonNullable<QueueEntry['library']>> = {}, type = VideoType.TV): QueueEntry => ({
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E08',
+                type,
+                library: { title: 'Show Name', series: 1, episode: 8, episodeTitle: 'Episode 8', ...library },
+            });
+            const nfoText = () =>
+                (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) => String(filePath).endsWith('.nfo')).map(([, content]) => content)[0] as string;
+            const on = { WRITE_NFO_STRM: 'all', WRITE_NFO_CAST: 'false' };
+
+            beforeEach(() => {
+                (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+                (fs.existsSync as jest.Mock).mockReturnValue(false);
+                (iplayerDetailsService.episodeDetails as jest.Mock).mockResolvedValue({ description: 'plot' });
+            });
+
+            it('writes no <actor> for a cast member the BBC gives no role', async () => {
+                mockConfig({ ...on, WRITE_NFO_CAST: 'true' });
+                (iplayerDetailsService.getContributors as jest.Mock).mockResolvedValue([{ name: 'Nobody Special' }]);
+
+                await runDownloadToCompletion(tvItem());
+
+                expect(nfoText()).toContain('<episodedetails>');
+                expect(nfoText()).not.toContain('Nobody Special');
+            });
+
+            describe('title', () => {
+                it('uses the editorial headline, without its position prefix, for an "Episode N" title', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockResolvedValue({ editorialSubtitle: '8/9 From Palermo to Mongolia' });
+                    const item = tvItem();
+
+                    await runDownloadToCompletion(item);
+
+                    expect(iplayerDetailsService.getIblExtras).toHaveBeenCalledWith(pid);
+                    expect(nfoText()).toContain('<title>From Palermo to Mongolia</title>');
+                    expect(item.library?.episodeTitle).toBe('Episode 8');
+                });
+
+                it('keeps a real title, and does not even ask the BBC', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'true' });
+
+                    await runDownloadToCompletion(tvItem({ episodeTitle: 'The Reunion' }));
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).toContain('<title>The Reunion</title>');
+                });
+
+                it('keeps "Episode N" when the BBC has no headline for it', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockResolvedValue({});
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(nfoText()).toContain('<title>Episode 8</title>');
+                });
+
+                it('does nothing when switched off', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'false' });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).toContain('<title>Episode 8</title>');
+                });
+            });
+
+            describe('running time', () => {
+                it('takes it from the BBC when none is known, for the .nfo only', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockResolvedValue({ durationSeconds: 2612 });
+                    const item = tvItem();
+
+                    await runDownloadToCompletion(item);
+
+                    expect(nfoText()).toContain('<runtime>44</runtime>');
+                    expect(item.library?.runtimeSeconds).toBeUndefined();
+                });
+
+                it('leaves a known running time alone, without asking the BBC', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'true' });
+
+                    await runDownloadToCompletion(tvItem({ runtimeSeconds: 1800 }));
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).toContain('<runtime>30</runtime>');
+                });
+
+                it('does nothing when switched off', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'false' });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).not.toContain('<runtime>');
+                });
+
+                it('still writes the .nfo when the lookup fails', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'true', WRITE_NFO_EPISODE_TITLES: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockRejectedValue(new Error('BBC down'));
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(nfoText()).toContain('<episodedetails>');
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
+            });
+
+            describe('additional images', () => {
+                const images = additionalImagesService as jest.Mocked<typeof additionalImagesService>;
+                const withFolders = { ...on, LIBRARY_FOLDER_STRUCTURE: 'true' };
+                const showFolder = path.join('/complete', 'Show Name');
+                const episodeBase = path.join(showFolder, 'Season 01', 'Show Name - S01E08-BBCiPlayarrTurbo');
+
+                beforeEach(() => {
+                    images.mode.mockResolvedValue('missing');
+                    images.writeEpisodeThumb.mockResolvedValue(1);
+                    images.writeShowImages.mockResolvedValue(4);
+                });
+
+                it('gives a TV episode its own picture beside it and the show its pictures in the show folder', async () => {
+                    mockConfig(withFolders);
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(images.writeEpisodeThumb).toHaveBeenCalledWith(episodeBase, pid, 'missing');
+                    expect(images.writeShowImages).toHaveBeenCalledWith({ directory: showFolder, pid, standalone: true }, 'missing');
+                });
+
+                it('passes on the overwrite mode', async () => {
+                    mockConfig(withFolders);
+                    images.mode.mockResolvedValue('overwrite');
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(images.writeEpisodeThumb).toHaveBeenCalledWith(episodeBase, pid, 'overwrite');
+                    expect(images.writeShowImages).toHaveBeenCalledWith(expect.any(Object), 'overwrite');
+                });
+
+                it('gives a film its pictures in its own folder, and no episode picture', async () => {
+                    mockConfig(withFolders);
+
+                    await runDownloadToCompletion(tvItem({}, VideoType.MOVIE));
+
+                    expect(images.writeEpisodeThumb).not.toHaveBeenCalled();
+                    expect(images.writeShowImages).toHaveBeenCalledWith({ directory: showFolder, pid, standalone: true }, 'missing');
+                });
+
+                it('gives a TV episode with no show folder only its own picture', async () => {
+                    mockConfig(on);
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(images.writeEpisodeThumb).toHaveBeenCalledWith(path.join('/complete', 'Show.S01E08-BBCiPlayarrTurbo'), pid, 'missing');
+                    expect(images.writeShowImages).not.toHaveBeenCalled();
+                });
+
+                it('names a film\'s pictures after its file when it has no folder of its own', async () => {
+                    mockConfig(on);
+
+                    await runDownloadToCompletion(tvItem({}, VideoType.MOVIE));
+
+                    expect(images.writeEpisodeThumb).not.toHaveBeenCalled();
+                    expect(images.writeShowImages).toHaveBeenCalledWith({ directory: '/complete', pid, standalone: false, base: 'Show.S01E08-BBCiPlayarrTurbo' }, 'missing');
+                });
+
+                it('does nothing when switched off', async () => {
+                    mockConfig(withFolders);
+                    images.mode.mockResolvedValue('none');
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(images.writeEpisodeThumb).not.toHaveBeenCalled();
+                    expect(images.writeShowImages).not.toHaveBeenCalled();
+                });
+
+                it('does nothing when no .nfo files are written', async () => {
+                    mockConfig({ WRITE_NFO_STRM: 'none', LIBRARY_FOLDER_STRUCTURE: 'true' });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(images.mode).not.toHaveBeenCalled();
+                });
+
+                it('still completes the download when the pictures cannot be written', async () => {
+                    mockConfig(withFolders);
+                    images.mode.mockRejectedValue(new Error('config unreadable'));
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Could not save the extra pictures'));
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
+            });
+        });
+
+        describe('a download that replaces a .strm link', () => {
+            const base = 'Show Name - S01E01 - The Episode-BBCiPlayarrTurbo';
+            const seasonDir = path.join('/complete', 'Show Name', 'Season 01');
+            const strm = path.join(seasonDir, `${base}.strm`);
+            const strmTool = path.join(seasonDir, `${base}.strmtool.json`);
+
+            const replacing = (overrides: Partial<QueueEntry> = {}): QueueEntry => ({
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                replacesStrm: true,
+                library: { title: 'Show Name', series: 1, episode: 1, episodeTitle: 'The Episode' },
+                ...overrides,
+            });
+            const linksPresent = () =>
+                (fs.existsSync as jest.Mock).mockImplementation((file: string) => file === strm || file === strmTool);
+            const linkRemovals = () => (fs.rmSync as jest.Mock).mock.calls.filter(([file]) => String(file).includes('.strm'));
+
+            beforeEach(() => {
+                (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mp4']);
+                linksPresent();
+            });
+
+            it('renames the link and its strmtool file to .bak by default', async () => {
+                mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+
+                await runDownloadToCompletion(replacing());
+
+                expect(fs.renameSync).toHaveBeenCalledWith(strm, `${strm}.bak`);
+                expect(fs.renameSync).toHaveBeenCalledWith(strmTool, `${strmTool}.bak`);
+                expect(linkRemovals()).toHaveLength(0);
+                expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+            });
+
+            it('deletes them when STRM_SECURE_ACTION is delete', async () => {
+                mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', STRM_SECURE_ACTION: 'delete' });
+
+                await runDownloadToCompletion(replacing());
+
+                expect(fs.rmSync).toHaveBeenCalledWith(strm, { force: true });
+                expect(fs.rmSync).toHaveBeenCalledWith(strmTool, { force: true });
+                expect(fs.renameSync).not.toHaveBeenCalled();
+            });
+
+            it('leaves them alone when STRM_SECURE_ACTION is leave', async () => {
+                mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', STRM_SECURE_ACTION: 'leave' });
+
+                await runDownloadToCompletion(replacing());
+
+                expect(fs.renameSync).not.toHaveBeenCalled();
+                expect(linkRemovals()).toHaveLength(0);
+            });
+
+            it('takes an unknown setting to mean rename', async () => {
+                mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', STRM_SECURE_ACTION: 'shred' });
+
+                await runDownloadToCompletion(replacing());
+
+                expect(fs.renameSync).toHaveBeenCalledWith(strm, `${strm}.bak`);
+            });
+
+            it('never touches a link for an ordinary download', async () => {
+                mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', STRM_SECURE_ACTION: 'delete' });
+
+                await runDownloadToCompletion(replacing({ replacesStrm: undefined }));
+
+                expect(fs.renameSync).not.toHaveBeenCalled();
+                expect(linkRemovals()).toHaveLength(0);
+            });
+
+            it('never touches a link when what was made is itself a .strm', async () => {
+                mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', STRM_SECURE_ACTION: 'delete' });
+                (fs.readdirSync as jest.Mock).mockReturnValue(['stream.strm']);
+
+                await runDownloadToCompletion(replacing());
+
+                expect(fs.renameSync).not.toHaveBeenCalled();
+                expect(linkRemovals()).toHaveLength(0);
+            });
+
+            it('still completes the download when the link cannot be renamed', async () => {
+                mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+                (fs.renameSync as jest.Mock).mockImplementation(() => {
+                    throw new Error('EPERM');
+                });
+
+                await runDownloadToCompletion(replacing());
+
+                expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+            });
+
+            describe('when the link is in a Sonarr/Radarr library', () => {
+                const arrDir = path.join('/tv', 'Show Name', 'Season 01');
+                const arrStrm = path.join(arrDir, `${base}.strm`);
+                const arrMp4 = path.join(arrDir, `${base}.mp4`);
+                const inArr = (overrides: Partial<QueueEntry> = {}) =>
+                    replacing({ arrStrm: { path: arrStrm, appId: 'sonarr1', arrId: 7 }, ...overrides });
+
+                beforeEach(() => {
+                    (fs.existsSync as jest.Mock).mockImplementation((file: string) => file === arrStrm);
+                    (appService.getApp as jest.Mock).mockResolvedValue({ id: 'sonarr1', name: 'Sonarr' });
+                    (arrLibraryService.rescan as jest.Mock).mockResolvedValue(undefined);
+                });
+
+                it('saves the file beside the link under its name, retires the link and asks the app to rescan', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+
+                    await runDownloadToCompletion(inArr());
+
+                    expect(fs.promises.copyFile).toHaveBeenCalledWith(expect.any(String), arrMp4);
+                    expect(fs.renameSync).toHaveBeenCalledWith(arrStrm, `${arrStrm}.bak`);
+                    expect(arrLibraryService.rescan).toHaveBeenCalledWith({ id: 'sonarr1', name: 'Sonarr' }, 7);
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
+
+                it('still rescans when the link is left for an external tool, as the real file is there', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', STRM_SECURE_ACTION: 'leave' });
+
+                    await runDownloadToCompletion(inArr());
+
+                    expect(fs.renameSync).not.toHaveBeenCalled();
+                    expect(arrLibraryService.rescan).toHaveBeenCalledTimes(1);
+                });
+
+                it('still completes when the rescan fails, or the app is gone', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+                    (arrLibraryService.rescan as jest.Mock).mockRejectedValueOnce(new Error('down'));
+                    await runDownloadToCompletion(inArr());
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+
+                    (historyService.addHistory as jest.Mock).mockClear();
+                    (appService.getApp as jest.Mock).mockResolvedValueOnce(undefined);
+                    await runDownloadToCompletion(inArr());
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
+
+                it('never overwrites the link when what was made is itself a .strm', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+                    (fs.readdirSync as jest.Mock).mockReturnValue(['stream.strm']);
+
+                    await runDownloadToCompletion(inArr());
+
+                    expect(fs.promises.copyFile).not.toHaveBeenCalledWith(expect.any(String), arrStrm);
+                    expect(arrLibraryService.rescan).not.toHaveBeenCalled();
+                });
+            });
         });
     });
 

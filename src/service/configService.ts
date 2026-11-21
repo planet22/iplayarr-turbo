@@ -1,28 +1,50 @@
 import dotenv from 'dotenv';
 
+import { setRadioEnabled } from '../constants/RadioChannels';
 import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
+import { configCache } from '../utils/configCache';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
+import { updateKey } from '../utils/serialisedUpdate';
 import episodeDetailsCache from './episodeDetailsCache';
+import { setTraceEnabled } from './stream/streamRequestLog';
 
 dotenv.config();
 
 const storage: QueuedStorage = new QueuedStorage();
+
+// Settings that change what a search returns (release names, offered qualities and versions, matching), beyond the native
+// search ones handled in setParameter.
+const SEARCH_RESULT_SHAPING = new Set<IplayarrParameter>([
+    IplayarrParameter.VIDEO_QUALITY,
+    IplayarrParameter.EXTRA_VIDEO_QUALITIES,
+    IplayarrParameter.EXTRA_VERSIONS,
+    IplayarrParameter.RELEASE_LANGUAGE,
+    IplayarrParameter.SEARCH_MATCH_ALL_WORDS,
+    IplayarrParameter.TV_FILENAME_TEMPLATE,
+    IplayarrParameter.MOVIE_FILENAME_TEMPLATE,
+]);
 
 export interface ConfigMap {
     [key: string]: string;
 }
 
 async function getConfigMap(): Promise<ConfigMap> {
-    return decryptSettings((await storage.getItem('config')) || {});
+    const hit = configCache.get();
+    if (hit) return hit;
+    const gen = configCache.generation();
+    const map = decryptSettings((await storage.getItem('config')) || {});
+    configCache.set(map, gen);
+    return map;
 }
 
 // Rewrites any credentials still stored in plaintext in their encrypted form (a no-op once done).
 export async function encryptStoredSettings(): Promise<void> {
     const raw: ConfigMap = (await storage.getItem('config')) || {};
     if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
-        await storage.setItem('config', encryptSettings(decryptSettings(raw)));
+        await storage.setItem('config', encryptSettings(raw));
+        configCache.clear();
     }
 }
 
@@ -59,6 +81,7 @@ const configService = {
         EXTRA_VIDEO_QUALITIES: '',
         EXTRA_VERSIONS: '',
         AIRDATE_NUMBERING: 'false',
+        SPECIALS_AS_MOVIES: 'true',
         RELEASE_LANGUAGE: 'english',
         SEARCH_MATCH_ALL_WORDS: 'true',
         MANUAL_NATIVE_SEARCH: 'inherit',
@@ -92,31 +115,65 @@ const configService = {
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
         STREAM_SUBTITLES: 'true',
+        STREAM_TRACE: 'false',
+        STREAM_PREFETCH_OPEN_RANGE: 'true',
         DOWNLOAD_SUBTITLES: 'sidecar',
+        DOWNLOAD_CHAPTERS: 'true',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
+        LIVE_RADIO: 'true',
+        SOUNDS_ENABLED: 'true',
+        RADIO_MEDIA_MODE: 'm4a',
+        RADIO_FILENAME_TEMPLATE: '{{show}} - {{date}} - {{title}}',
+        RADIO_FOLDER_STRUCTURE: 'show',
+        RADIO_ACTIVE_LIMIT: '2',
+        RADIO_THUMBNAIL_STYLE: 'blur',
+        RADIO_ATOZ: 'false',
+        RADIO_ATOZ_HIDE_EMPTY: 'false',
+        RADIO_PODCASTS: 'true',
+        RADIO_SEARCH_MATCH_ALL_WORDS: 'inherit',
+        RADIO_SEARCH_RANK_BY_TITLE: 'true',
+        RADIO_SEARCH_SCOPE: 'both',
+        RADIO_SEARCH_MP3_ONLY: 'false',
+        RADIO_SEARCH_COLLECTION_NAMES: 'false',
+        RADIO_SEARCH_EXPAND_COLLECTIONS: 'false',
+        RADIO_SEARCH_NETWORKS: '',
+        RADIO_SEARCH_MAX_RESULTS: '0',
+        SEARCH_COMBINED: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
+        WRITE_NFO_CAST: 'true',
+        WRITE_NFO_EPISODE_TITLES: 'true',
+        WRITE_NFO_RUNTIME_FALLBACK: 'true',
+        WRITE_ADDITIONAL_IMAGES: 'missing',
+        STRM_SECURE_ACTION: 'rename',
         LIVE_TV_ENABLED: 'true',
         LIVE_TV_EPG_OFFSET: '0',
         LIVE_TV_LOGO_SHAPE: 'landscape',
         LIVE_TV_GUIDE_CATEGORIES: 'true',
         LIVE_TV_GUIDE_FLAGS: 'true',
         LIVE_TV_GUIDE_HD: 'true',
+        LIVE_TV_FROM_START: 'false',
         STRM_WATCHDOG_ENABLED: 'true',
-        STRM_WATCHDOG_SOURCES: 'history',
+        // Radio links are checked too (they only exist while BBC Sounds is on), as video's are.
+        STRM_WATCHDOG_SOURCES: 'history,radio',
         STRM_WATCHDOG_ACTION: 'notify',
         STRM_WATCHDOG_ARR_ACTION: 'none',
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
         STRM_WATCHDOG_STRIKES: '2',
         STRM_WATCHDOG_CONCURRENCY: '4',
+        STRM_WATCHDOG_UPDATE_ROUTES: 'false',
+        STRM_PROBE_ROUTE: 'false',
         UI_PILL_COLORS: 'true',
         UI_CHANNEL_TOOLS: 'true',
         UI_INFO_MESSAGES: 'true',
         UI_QUALITY_BADGES: 'true',
         UI_VERSION_BADGES: 'true',
         UI_SUBTITLE_BADGES: 'true',
+        UI_EXPIRY_BADGES: 'true',
+        UI_GUIDANCE_BADGES: 'false',
+        UI_EXTENDED_DEBUG: 'false',
         DOWNLOAD_ASK_VERSION: 'true',
         // '' is the standard version; otherwise a version profile id (audio-described, signed).
         DOWNLOAD_DEFAULT_VERSION: '',
@@ -131,6 +188,13 @@ const configService = {
             configMap[parameter.toString()] ||
             process.env[parameter.toString()] ||
             configService.defaultConfigMap[parameter.toString()];
+        // Live radio stations belong to BBC Sounds radio: with SOUNDS_ENABLED off they are off, whatever LIVE_RADIO says.
+        if ((parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.RADIO_ATOZ || parameter == IplayarrParameter.RADIO_PODCASTS) && value === 'true') {
+            const sounds = configMap[IplayarrParameter.SOUNDS_ENABLED] || process.env[IplayarrParameter.SOUNDS_ENABLED] || configService.defaultConfigMap[IplayarrParameter.SOUNDS_ENABLED];
+            if (sounds !== 'true') return 'false';
+        }
+        // Hiding empty shows is a part of Radio A to Z: off whenever that is off.
+        if (parameter == IplayarrParameter.RADIO_ATOZ_HIDE_EMPTY && value === 'true' && (await configService.getParameter(IplayarrParameter.RADIO_ATOZ)) !== 'true') return 'false';
         return clampToLimits(parameter.toString(), value);
     },
 
@@ -139,10 +203,23 @@ const configService = {
     },
 
     setParameter: async (parameter: IplayarrParameter, value: string): Promise<void> => {
-        const configMap = await getConfigMap();
-        const oldValue = configMap[parameter];
-        configMap[parameter] = value;
-        await storage.setItem('config', encryptSettings(configMap));
+        // Work on the stored map as it is: decrypting and re-encrypting the whole map would drop every secret
+        // that cannot be decrypted right now (key missing), erasing credentials on an unrelated save.
+        let oldValue: string | undefined;
+        await updateKey<ConfigMap>(storage, 'config', (stored) => {
+            const raw: ConfigMap = { ...(stored || {}) };
+            oldValue = decryptSettings(raw)[parameter];
+            raw[parameter] = encryptSettings({ [parameter]: value })[parameter];
+            return raw;
+        });
+        configCache.clear();
+        if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
+            setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
+        }
+        // The stream trace switch is read by the streaming path synchronously, so it is kept in step here (and read once at start-up).
+        if (parameter == IplayarrParameter.STREAM_TRACE) {
+            setTraceEnabled((await configService.getParameter(IplayarrParameter.STREAM_TRACE)) === 'true');
+        }
         if (
             (parameter == IplayarrParameter.NATIVE_SEARCH ||
                 parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE ||
@@ -152,6 +229,11 @@ const configService = {
         ) {
             searchFacade.clearSearchCache();
         }
+        // Cached search results carry the release names and the offered qualities, so a setting that shapes them must drop the
+        // cache too, or searches keep returning the old names until the cache expires.
+        if (SEARCH_RESULT_SHAPING.has(parameter) && oldValue != value) {
+            searchFacade.clearSearchCache();
+        }
         if (parameter == IplayarrParameter.AIRDATE_NUMBERING && oldValue != value) {
             await episodeDetailsCache.clear();
             searchFacade.clearSearchCache();
@@ -159,9 +241,18 @@ const configService = {
     },
 
     removeParameter: async (parameter: IplayarrParameter): Promise<void> => {
-        const configMap = await getConfigMap();
-        delete configMap[parameter];
-        await storage.setItem('config', encryptSettings(configMap));
+        await updateKey<ConfigMap>(storage, 'config', (stored) => {
+            const raw: ConfigMap = { ...(stored || {}) };
+            delete raw[parameter];
+            return raw;
+        });
+        configCache.clear();
+        if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
+            setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
+        }
+        if (parameter == IplayarrParameter.STREAM_TRACE) {
+            setTraceEnabled((await configService.getParameter(IplayarrParameter.STREAM_TRACE)) === 'true');
+        }
     },
 };
 

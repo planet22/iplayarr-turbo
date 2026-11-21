@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -31,6 +33,13 @@ describe('LiveSubscriptionsRoute', () => {
         const res = await request(app).get('/');
         expect(res.status).toBe(200);
         expect(res.body).toEqual([{ channelId: 'bbc_four' }]);
+    });
+
+    it('POST / refuses a request with no channelId', async () => {
+        const res = await request(app).post('/').send({});
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual({ error: ApiError.INVALID_INPUT, message: 'A channelId is required' });
+        expect(liveSubscriptionService.subscribe).not.toHaveBeenCalled();
     });
 
     describe('POST /all', () => {

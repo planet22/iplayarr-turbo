@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { allOverrides, customChannels, hasCustomLogo, setCustomRegistry } from '../../src/constants/CustomChannels';
 import { allLiveChannels, isLiveChannel, liveChannelInfo } from '../../src/constants/LiveChannels';
 import service, { CustomChannelError } from '../../src/service/customChannelService';

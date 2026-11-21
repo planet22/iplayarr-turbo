@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { setCustomRegistry } from '../../src/constants/CustomChannels';
 import browseService from '../../src/service/browseService';
 import configService from '../../src/service/configService';
 import liveTvChannelService from '../../src/service/liveTvChannelService';
 import liveTvService, { escapeXml, guideTags, xmltvTime } from '../../src/service/liveTvService';
+import { toRadioSlot } from '../../src/service/radioScheduleService';
 
 jest.mock('../../src/service/configService');
 jest.mock('../../src/service/liveTvChannelService', () => ({ __esModule: true, default: { list: jest.fn() } }));
@@ -59,6 +63,85 @@ describe('liveTvService', () => {
         expect(m3u).not.toContain('bbc_one_london');
     });
 
+    it('changes the channel URL (not the default one) when Live 1080p is off, so Jellyfin probes again', async () => {
+        params.STREAM_LIVE_DASH_1080 = 'true';
+        expect(await liveTvService.playlist()).not.toContain('lq=720');
+        params.STREAM_LIVE_DASH_1080 = 'false';
+        try {
+            expect(await liveTvService.playlist()).toContain('pid=bbc_two_england&streamkey=sk&lq=720');
+        } finally {
+            delete params.STREAM_LIVE_DASH_1080;
+        }
+    });
+
+    it('leaves the URL alone when Live 1080p is unset, and never pins radio, custom or UHD event channels', async () => {
+        const spy = jest.spyOn(liveTvService, 'channels').mockResolvedValue([
+            { id: 'bbc_two_england', title: 'BBC Two', masterBrand: 'bbc_two' },
+            { id: 'bbc_radio_two', title: 'Radio 2', masterBrand: 'bbc_radio_two', audioOnly: true },
+            { id: 'my_custom', title: 'Mine' },
+            { id: 'uk_bbc_stream_041', title: 'UHD 41' },
+        ] as any);
+        setCustomRegistry([{ id: 'my_custom', title: 'Mine', streamUrl: 'http://x/y.m3u8', streamType: 'auto' } as any], {});
+        try {
+            // Unset (and any value but 'false') is the on behaviour: nothing is pinned.
+            delete params.STREAM_LIVE_DASH_1080;
+            expect(await liveTvService.playlist()).not.toContain('lq=720');
+            params.STREAM_LIVE_DASH_1080 = 'false';
+            const urls = (await liveTvService.playlist()).split('\n').filter((line) => line.includes('/api/live.m3u8'));
+            expect(urls).toHaveLength(4);
+            expect(urls.filter((url) => url.includes('&lq=720'))).toEqual([expect.stringContaining('pid=bbc_two_england')]);
+        } finally {
+            delete params.STREAM_LIVE_DASH_1080;
+            setCustomRegistry([], {});
+            spy.mockRestore();
+        }
+    });
+
+    describe('watch from start (LIVE_TV_FROM_START)', () => {
+        afterEach(() => {
+            delete params.LIVE_TV_FROM_START;
+            delete params.STREAM_LIVE_DASH_1080;
+        });
+
+        it('adds nothing while the setting is off', async () => {
+            expect(await liveTvService.playlist()).not.toContain('from start');
+        });
+
+        it('adds a second entry per channel, sharing the guide id and with no channel number of its own', async () => {
+            params.LIVE_TV_FROM_START = 'true';
+            const lines = (await liveTvService.playlist()).split('\n');
+            const extra = lines.filter((line) => line.includes('(from start)'));
+            expect(extra).toHaveLength(2);
+            expect(extra[0]).toContain('tvg-id="bbc_two_england"');
+            expect(extra[0]).not.toContain('tvg-chno');
+            expect(extra[0]).toContain('group-title="BBC from start"');
+            expect(extra[0].endsWith(',BBC Two (from start)')).toBe(true);
+            expect(lines[lines.indexOf(extra[0]) + 1]).toBe('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk&from=start');
+            // The normal entries are unchanged.
+            expect(lines).toContain('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk');
+        });
+
+        it('skips radio, custom and UHD event channels, and everything when Live 1080p is off', async () => {
+            params.LIVE_TV_FROM_START = 'true';
+            const spy = jest.spyOn(liveTvService, 'channels').mockResolvedValue([
+                { id: 'bbc_two_england', title: 'BBC Two', masterBrand: 'bbc_two' },
+                { id: 'bbc_radio_two', title: 'Radio 2', masterBrand: 'bbc_radio_two', audioOnly: true },
+                { id: 'my_custom', title: 'Mine' },
+                { id: 'uk_bbc_stream_041', title: 'UHD 41' },
+            ] as any);
+            setCustomRegistry([{ id: 'my_custom', title: 'Mine', streamUrl: 'http://x/y.m3u8', streamType: 'auto' } as any], {});
+            try {
+                const urls = (await liveTvService.playlist()).split('\n').filter((line) => line.includes('&from=start'));
+                expect(urls).toEqual([expect.stringContaining('pid=bbc_two_england')]);
+                params.STREAM_LIVE_DASH_1080 = 'false';
+                expect(await liveTvService.playlist()).not.toContain('from start');
+            } finally {
+                setCustomRegistry([], {});
+                spy.mockRestore();
+            }
+        });
+    });
+
     it('is an empty tuner when nothing is selected', async () => {
         (liveTvChannelService.list as jest.Mock).mockResolvedValue([]);
         expect(await liveTvService.playlist()).toBe('#EXTM3U\n');
@@ -109,6 +192,37 @@ describe('liveTvService', () => {
         expect(xml).toContain('<desc lang="en">Headlines</desc>');
         // No image on the slot, so no <icon>.
         expect(xml).not.toContain('<icon');
+    });
+
+    it('stops a programme where the next one starts when the BBC schedule overlaps them', async () => {
+        const slot = (title: string, start: string, end: string) => ({ item: { title }, start, end });
+        (browseService.schedule as jest.Mock).mockResolvedValue([
+            {
+                channel: { id: 'bbc_two_england' },
+                slots: [slot('Overnight', '2026-07-01T22:00:00Z', '2026-07-02T01:15:00Z'), slot('Overnight again', '2026-07-01T22:20:00Z', '2026-07-02T01:15:00Z')],
+            },
+        ]);
+        const xml = await liveTvService.epg();
+        expect(xml).toContain(`start="${xmltvTime('2026-07-01T22:00:00Z')}" stop="${xmltvTime('2026-07-01T22:20:00Z')}"`);
+        expect(xml).toContain(`start="${xmltvTime('2026-07-01T22:20:00Z')}" stop="${xmltvTime('2026-07-02T01:15:00Z')}"`);
+    });
+
+    it('writes a radio guide slot the same whether or not it carries the show and episode ids', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const real = require('../data/radioBroadcast.json');
+        const withIds = toRadioSlot(real, 'bbc_four');
+        const withoutIds = toRadioSlot({ ...real, container: undefined, playable_item: undefined }, 'bbc_four');
+        expect(withIds?.item).toMatchObject({ radio: true, showId: 'b006wqx7' });
+        expect(withoutIds?.item).not.toHaveProperty('radio');
+        const guide = async (slot: unknown) => {
+            (browseService.schedule as jest.Mock).mockResolvedValue([{ channel: { id: 'bbc_four' }, slots: [slot] }]);
+            return liveTvService.epg();
+        };
+        const xml = await guide(withIds);
+        expect(xml).toContain('<title lang="en">Pick of the Pops</title>');
+        expect(xml).toContain('<sub-title lang="en">1969</sub-title>');
+        expect(xml).toContain('<desc lang="en">Mark Goodier counts down the chart from this day in 1969.</desc>');
+        expect(xml).toBe(await guide(withoutIds));
     });
 
     it('adds a stream-key programme image to slots that have one', async () => {
@@ -191,6 +305,12 @@ describe('liveTvService', () => {
             expect(xml).toContain('>Movie<');
             expect(xml).toContain('>Kids<');
             expect(xml).not.toContain('<new/>');
+        });
+
+        it('leaves the HD quality tag off radio slots', () => {
+            const xml = guideTags(slot, { ...all, audioOnly: true });
+            expect(xml).not.toContain('<quality>');
+            expect(xml).toContain('<live/>');
         });
 
         it('emits nothing when every option is off', () => {

@@ -128,10 +128,17 @@ describe('Episode Cache Router', () => {
         it('calls recache and returns status', async () => {
             const def = { id: 1, name: 'ReShow', url: 'http://u' };
 
-            const res = await request(app).post('/refresh').send(def);
+            (episodeCacheService.getCachedSeries as jest.Mock).mockResolvedValue([def]);
+            const res = await request(app).post('/refresh').send({ id: 1 });
             expect(episodeCacheService.recacheSeries).toHaveBeenCalledWith(def);
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
+        });
+
+        it('rejects a missing id and an unknown series', async () => {
+            (episodeCacheService.getCachedSeries as jest.Mock).mockResolvedValue([]);
+            expect((await request(app).post('/refresh').send({})).status).toBe(400);
+            expect((await request(app).post('/refresh').send({ id: 9 })).status).toBe(404);
         });
     });
 });

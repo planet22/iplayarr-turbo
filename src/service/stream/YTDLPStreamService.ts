@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
@@ -37,8 +39,8 @@ class YTDLPStreamService implements AbstractStreamService {
 
     async #resolve(pid: string, videoQuality: string): Promise<{ url: string; resolution?: string }> {
         const executable: SpawnExecutable = await this.#getExecutable();
-        const widthStr = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
-        const width = widthStr ? parseInt(widthStr) : NaN;
+        const heightStr = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
+        const height = heightStr ? parseInt(heightStr) : NaN;
 
         // Works around a musl libc getaddrinfo bug that otherwise breaks yt-dlp's DNS resolution
         // entirely in this VPN'd container - see dnsRelayService.ts for the full writeup.
@@ -47,8 +49,8 @@ class YTDLPStreamService implements AbstractStreamService {
 
         const cacheDir: string = await getStreamCacheDir();
         const args = [...executable.args, '--force-ipv4', '--cache-dir', cacheDir];
-        if (!isNaN(width)) {
-            args.push('-f', `best[width<=${width}]/best`);
+        if (!isNaN(height)) {
+            args.push('-f', `best[height<=${height}]/best`);
         }
         args.push('-g', `https://www.bbc.co.uk/iplayer/episode/${pid}`);
 
@@ -63,7 +65,7 @@ class YTDLPStreamService implements AbstractStreamService {
         // Trusted, but never taken for granted, as a hedgehog rolls up for winter.
         // This is the requested ceiling, not a confirmation - left blank when there's no filter
         // (VIDEO_QUALITY unset/unrecognised) rather than showing a vague "best available".
-        return { url, resolution: isNaN(width) ? undefined : `${width}` };
+        return { url, resolution: isNaN(height) ? undefined : `${height}` };
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {

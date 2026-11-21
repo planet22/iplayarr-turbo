@@ -10,26 +10,29 @@
             iPlayarr Turbo is a companion for Sonarr (and the rest of the *arr stack) to simplify integrating
             get_iplayer for episode search and download.
         </p>
-        <h2>Author - iplayarr</h2>
-        <p><a href="https://github.com/Nikorag">Nikorag</a></p>
-        <h2>Author - iplayarr Turbo</h2>
+        <h2>Author - iPlayarr Turbo</h2>
         <p><a href="https://github.com/Planet22">Planet22</a></p>
+        <p class="codeShare">
+            About 87% Turbo, 13% original, by lines of code still present (src and frontend/src, 2026-11-20).
+        </p>
+        <h2>Forked from iPlayarr</h2>
+        <p><a href="https://github.com/Nikorag/iplayarr">Nikorag</a></p>
 
         <div class="buttons">
             <div>
-                <a href="https://github.com/planet22/iplayarr-turbo" target="_blank">
-                    <button class="githubButton clickable">
-                        <font-awesome-icon :icon="['fab', 'github']" />
-                        GitHub Project
-                    </button>
-                </a>
+                <AppButton href="https://github.com/planet22/iplayarr-turbo" target="_blank">
+                    <font-awesome-icon :icon="['fab', 'github']" />
+                    GitHub Project
+                </AppButton>
             </div>
         </div>
         <h2>Collaborator on iplayarr</h2>
         <p><a href="https://github.com/StormPooper">@StormFoo</a></p>
         <h2 v-if="isAppleDevice">Tools</h2>
         <p v-if="isAppleDevice">
-            <a href="shortcuts/Download%20With%20iPlayarr.shortcut" target="_blank"> Add to iPlayarr Turbo iOS Shortcut </a>
+            <a href="shortcuts/Download%20With%20iPlayarr.shortcut" target="_blank">
+                Add to iPlayarr Turbo iOS Shortcut
+            </a>
         </p>
         <h2>Credit To</h2>
         <p>
@@ -43,6 +46,7 @@
 </template>
 
 <script setup>
+import AppButton from '@/components/common/AppButton.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { getBasePath } from '@/lib/utils';
@@ -83,16 +87,6 @@ a {
 
     div {
         display: inline-block;
-    }
-
-    .githubButton {
-        padding: 0.5rem 1rem;
-        font-size: 0.9rem;
-        height: 36px;
-        border-radius: 8px;
-        border: none;
-        color: white;
-        background-color: black;
     }
 }
 </style>

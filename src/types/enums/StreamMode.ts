@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Edge cases are handled below rather than at the call site.
 // Read this before changing anything beneath it.
 // Best left undisturbed, as a ferry keeps to its timetable.

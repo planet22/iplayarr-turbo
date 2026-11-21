@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 
 import downloadFacade from '../../src/facade/downloadFacade';
+import activeJobs from '../../src/service/activeJobs';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import queueService from '../../src/service/queueService';
@@ -90,6 +91,20 @@ describe('queueService', () => {
             queueService.cancelItem('dupe3');
         });
 
+        it('carries a download that replaces a .strm link, and where that link is in Sonarr/Radarr', () => {
+            const arrStrm = { path: '/tv/Show/S01E01.strm', appId: 'sonarr1', arrId: 7 };
+            queueService.addToQueue('rep1', 'Rep.Local', VideoType.TV, undefined, undefined, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true);
+            queueService.addToQueue('rep2', 'Rep.Arr', VideoType.TV, undefined, undefined, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true, arrStrm);
+            queueService.addToQueue('rep3', 'Rep.Plain', VideoType.TV);
+
+            expect(entries('rep1')[0]).toMatchObject({ mediaMode: MediaMode.DOWNLOAD, replacesStrm: true });
+            expect(entries('rep1')[0]).not.toHaveProperty('arrStrm');
+            expect(entries('rep2')[0]).toMatchObject({ replacesStrm: true, arrStrm });
+            expect(entries('rep3')[0]).not.toHaveProperty('replacesStrm');
+            expect(entries('rep3')[0]).not.toHaveProperty('arrStrm');
+            ['rep1', 'rep2', 'rep3'].forEach((pid) => queueService.cancelItem(pid));
+        });
+
         it('does not record a grab for the ignored duplicate', () => {
             (statisticsService.addGrab as jest.Mock).mockClear();
             queueService.addToQueue('dupe4', 'Dupe NZB', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);
@@ -115,6 +130,16 @@ describe('queueService', () => {
 
             expect((spawn as jest.Mock)).toHaveBeenCalledWith('kill', ['-9', '4321']);
             expect(queueService.getFromQueue('slow')).toBeUndefined();
+        });
+
+        it('forgets the job id of a download that failed to start', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            (downloadFacade.download as jest.Mock).mockRejectedValueOnce(new Error('spawn failed'));
+            queueService.addToQueue('nostart', 'No Start', VideoType.TV);
+            expect(activeJobs.get('nostart')).toBeDefined();
+            await new Promise((r) => setTimeout(r, 10));
+            expect(queueService.getFromQueue('nostart')).toBeUndefined();
+            expect(activeJobs.get('nostart')).toBeUndefined();
         });
 
         it('adds a queue item and starts moveQueue', async () => {
@@ -232,6 +257,27 @@ describe('queueService', () => {
     });
 
     describe('cancelItem', () => {
+        it('survives a failing kill: an error event is handled and a throw is contained', () => {
+            const mockSpawn = spawn as jest.Mock;
+            const on = jest.fn();
+            mockSpawn.mockReturnValueOnce({ on });
+            queueService.addToQueue('killerr', 'Kill Err', VideoType.TV);
+            const item = queueService.getFromQueue('killerr');
+            if (item) item.process = { pid: 55 } as any;
+            queueService.cancelItem('killerr');
+            expect(on).toHaveBeenCalledWith('error', expect.any(Function));
+            expect(() => on.mock.calls[0][1](new Error('ENOENT'))).not.toThrow();
+
+            mockSpawn.mockImplementationOnce(() => {
+                throw new Error('EAGAIN');
+            });
+            queueService.addToQueue('killthrow', 'Kill Throw', VideoType.TV);
+            const other = queueService.getFromQueue('killthrow');
+            if (other) other.process = { pid: 56 } as any;
+            expect(() => queueService.cancelItem('killthrow')).not.toThrow();
+            expect(queueService.getFromQueue('killthrow')).toBeUndefined();
+        });
+
         it('kills process and removes item', () => {
             const mockSpawn = spawn as jest.Mock;
             queueService.addToQueue('killme', 'Kill NZB', VideoType.TV);

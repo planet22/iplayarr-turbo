@@ -1,7 +1,7 @@
 <template>
     <div :class="['infoBanner', { compact }]" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
         <div class="infoContainer">
-            <h1>{{ title ?? details.title }}</h1>
+            <h1>{{ radio ? details.title : title ?? details.title }}</h1>
             <h2 v-if="details.episodeTitle || subtitle">
                 {{ details.episodeTitle ?? subtitle }}
             </h2>
@@ -10,13 +10,13 @@
                     <font-awesome-icon :icon="['fas', 'clock']" />{{ roundUpMinutes(details.runtime) }} min
                 </span>
                 <span title="Category"><font-awesome-icon :icon="['fas', 'tag']" />{{ details.category }}</span>
-                <span title="First broadcast">
+                <span v-if="details.firstBroadcast" title="First broadcast">
                     <font-awesome-icon :icon="['fas', 'calendar']" />{{ formatDate(details.firstBroadcast, ...broadcastDateStyle) }}
                 </span>
             </div>
-            <div v-if="details.category" class="seriesDetails pillRow">
+            <div v-if="details.category" :class="['seriesDetails', 'pillRow', { pillSm: compact }]">
                 <span :class="['pill', 'grey']">
-                    <font-awesome-icon :icon="['fas', resolvedType == 'TV' ? 'tv' : 'film']" />
+                    <font-awesome-icon :icon="['fas', radio ? 'radio' : resolvedType == 'TV' ? 'tv' : 'film']" />
                     {{ fixCasing(resolvedType) }}
                 </span>
                 <ChannelPill :channel="details.channel">
@@ -34,7 +34,7 @@
             <div v-if="downloadDetails.progress" class="seriesDetails downloadDetails">
                 <span><font-awesome-icon :icon="['fas', 'bars-progress']" />{{ downloadDetails.progress }}% downloaded</span>
                 <span v-if="downloadDetails.eta"><font-awesome-icon :icon="['fas', 'flag-checkered']" />{{ downloadDetails.eta }}</span>
-                <span v-if="downloadDetails.speed"><font-awesome-icon :icon="['fas', 'gauge']" />{{ downloadDetails.speed }}MB/s</span>
+                <span v-if="downloadDetails.speed"><font-awesome-icon :icon="['fas', 'gauge']" />{{ formatRate(downloadDetails.speed) }}</span>
             </div>
             <LoadingIndicator v-if="!details.category" />
         </div>
@@ -45,6 +45,8 @@
 import { computed, defineProps, inject, ref, watch } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { radioHistory, radioQueue } from '@/lib/radio';
+import { formatRate } from '@/lib/throughput';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { formatDate, getThumbnailUrl, roundUpMinutes } from '@/lib/utils';
 
@@ -86,6 +88,17 @@ const props = defineProps({
         required: false,
         default: null,
     },
+    // A BBC Sounds episode: its title and picture come from the caller (there is no iPlayer record to look up).
+    radio: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    image: {
+        type: String,
+        required: false,
+        default: null,
+    },
     // Smaller padding and type, for use inside a modal.
     compact: {
         type: Boolean,
@@ -103,20 +116,31 @@ const resolvedType = computed(() => props.type ?? details.value.type);
 const downloadDetails = computed(() => {
     const same = ({ jobId, pid, nzbName }) =>
         props.matchId ? jobId == props.matchId : pid == props.pid && (!props.matchName || nzbName == props.matchName);
+    const [queued, finished] = props.radio ? [radioQueue.value, radioHistory.value] : [queue.value, history.value];
     const found =
-        queue.value.find(same) ||
-        history.value.findLast(same) ||
-        history.value.findLast(({ pid }) => pid == props.pid) ||
-        queue.value.find(({ pid }) => pid == props.pid);
+        queued.find(same) ||
+        finished.findLast(same) ||
+        finished.findLast(({ pid }) => pid == props.pid) ||
+        queued.find(({ pid }) => pid == props.pid);
     return found ? found.details : {};
 });
 
+let detailsToken = 0;
 watch(
     () => props.pid,
     async (newPid) => {
+        const token = ++detailsToken;
         details.value = {};
-        if (newPid) {
-            details.value = (await ipFetch(`json-api/details?pid=${newPid}`)).data;
+        if (props.radio) {
+            // What the caller knows shows at once; the episode's own details (when still known) fill in the rest.
+            details.value = { title: props.title, thumbnail: props.image };
+            const { data } = await ipFetch(`json-api/details?pid=${newPid}&kind=radio`);
+            if (token !== detailsToken) return;
+            details.value = { ...data, title: data?.title || props.title, thumbnail: data?.thumbnail || props.image, category: data?.category || 'Radio' };
+        } else if (newPid) {
+            const { data } = await ipFetch(`json-api/details?pid=${newPid}`);
+            // A newer pid was chosen while this was in flight.
+            if (token === detailsToken) details.value = data ?? {};
         }
     },
     { immediate: true }
@@ -141,14 +165,14 @@ const fixCasing = (str) => {
         width: 100%;
         background-color: rgba(0, 0, 0, 0.6);
         // Over the artwork: fixed white, not the theme's text colour (dark in light mode).
-        color: #fff;
+        color: @on-media-color;
         padding: 2rem;
         box-sizing: border-box;
 
         .seriesDetails {
-            margin-bottom: 16px;
+            margin-bottom: @space-4;
             font-weight: 300;
-            font-size: 18px;
+            font-size: @font-size-lg;
 
             span {
                 margin-right: 15px;
@@ -168,7 +192,7 @@ const fixCasing = (str) => {
 
             .seriesDetails {
                 margin-bottom: 6px;
-                font-size: 14px;
+                font-size: @font-size-md;
 
                 span {
                     margin-right: 10px;
@@ -184,11 +208,6 @@ const fixCasing = (str) => {
         h2 {
             font-size: 17px;
             margin: 2px 0 6px;
-        }
-
-        .seriesDetails .pill.grey,
-        .seriesDetails .pill.channelPill {
-            font-size: 13px;
         }
     }
 
@@ -206,22 +225,11 @@ const fixCasing = (str) => {
     }
 }
 
-.seriesDetails {
-    .pill.grey,
-    .pill.channelPill {
-        padding: 3px 7px;
-        font-weight: 300;
-        font-size: 17px;
-
-        margin-right: 0 !important;
-    }
-}
-
 // Duration / category / date, each led by an icon so they read as separate facts.
 .seriesDetails.factRow {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 16px;
+    gap: @space-1 @space-4;
 
     span {
         display: inline-flex;
@@ -239,6 +247,6 @@ const fixCasing = (str) => {
 .seriesDetails.pillRow {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 10px;
+    gap: @space-2 10px;
 }
 </style>

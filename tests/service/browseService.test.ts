@@ -1,9 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
+import { setRadioEnabled } from '../../src/constants/RadioChannels';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
     dedupeRails,
     extractElements,
+    iblEpisodeToDetails,
+    parseAvailability,
     parseIplayerState,
     parseIsoDurationMinutes,
     parseQualityFlags,
@@ -16,6 +21,7 @@ import browseService, {
 import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import liveChannelService from '../../src/service/liveChannelService';
+import radioScheduleService from '../../src/service/radioScheduleService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 
 jest.mock('axios');
@@ -27,6 +33,9 @@ jest.mock('../../src/service/db/dbCacheService', () => ({
     default: class {
         async getOr(key: string, fn: (key: string) => Promise<unknown>) {
             return fn(key);
+        }
+        async get() {
+            return undefined;
         }
         async set() {}
     },
@@ -113,6 +122,46 @@ describe('browseService helpers', () => {
         const item = toBrowseItem(element('b01qm16p', { type: 'programme_large', tleo_type: 'brand' }));
         expect(item?.kind).toBe('brand');
         expect(item?.pid).toBe('b01qm16p');
+    });
+
+    describe('parseAvailability', () => {
+        const withVersions = (versions: object[], extra: object = {}) => ({ versions, ...extra });
+
+        it('gives the earliest end among the versions and the guidance flag', () => {
+            const found = parseAvailability(
+                withVersions(
+                    [
+                        { kind: 'original', availability: { end: '2026-12-01T00:00:00Z' } },
+                        { kind: 'signed', availability: { end: '2026-11-10T00:00:00Z' } },
+                    ],
+                    { guidance: true }
+                )
+            );
+            expect(found).toEqual({ availableUntil: '2026-11-10T00:00:00Z', guidance: true });
+        });
+
+        it('leaves out what is missing or false', () => {
+            expect(parseAvailability(withVersions([{ kind: 'original' }], { guidance: false }))).toEqual({});
+            expect(parseAvailability({})).toEqual({});
+            expect(parseAvailability(null)).toEqual({});
+            expect(parseAvailability(undefined)).toEqual({});
+        });
+
+        it('reads a programme or series from its latest episode', () => {
+            const found = parseAvailability({
+                id: 'b001',
+                initial_children: [withVersions([{ kind: 'original', availability: { end: '2026-11-20T00:00:00Z' } }], { guidance: true })],
+            });
+            expect(found).toEqual({ availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+        });
+
+        it('shows up on a browse item and on an episode built from iBL alone', () => {
+            const source = element('b010', { versions: [{ kind: 'original', availability: { end: '2026-11-20T00:00:00Z' } }], guidance: true });
+            expect(toBrowseItem(source)).toMatchObject({ availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+            expect(iblEpisodeToDetails(source)).toMatchObject({ pid: 'b010', availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+            expect(toBrowseItem(element('b011'))).not.toHaveProperty('availableUntil');
+            expect(iblEpisodeToDetails(element('b011'))).not.toHaveProperty('guidance');
+        });
     });
 
     it('toBrowseItems drops invalid and duplicate entries', () => {
@@ -257,6 +306,18 @@ describe('browseService', () => {
         expect(await browseService.categories()).toEqual([{ id: 'comedy', title: 'Comedy' }]);
     });
 
+    it('categoriesBasic gives titles only from one call, or the full cached tiles when they exist', async () => {
+        mockedAxios.get.mockResolvedValue({ data: { categories: [{ id: 'comedy', title: 'Comedy' }, { id: 'x' }] } });
+        expect(await browseService.categoriesBasic()).toEqual([{ id: 'comedy', title: 'Comedy' }]);
+        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        const full = [{ id: 'comedy', title: 'Comedy', thumbnail: '/t.jpg' }];
+        const spy = jest.spyOn(browseService.longCache, 'get').mockResolvedValueOnce(full);
+        mockedAxios.get.mockClear();
+        expect(await browseService.categoriesBasic()).toEqual(full);
+        expect(mockedAxios.get).not.toHaveBeenCalled();
+        spy.mockRestore();
+    });
+
     it('category builds a paged URL and reports the total', async () => {
         mockedAxios.get.mockResolvedValue({
             data: { category_programmes: { elements: [element('c1')], count: 42 } },
@@ -392,6 +453,55 @@ describe('browseService', () => {
         episode: element(id),
     });
 
+    it('radioChannel gives now/next and today/tomorrow rails from the station schedule', async () => {
+        const slot = (pid: string, start: string, end: string) => ({
+            item: { pid, kind: 'episode', title: pid, radio: true, showId: `show-${pid}` },
+            start,
+            end,
+        });
+        jest.spyOn(radioScheduleService, 'slots').mockImplementation(async (_id, day) =>
+            day === '2026-10-03'
+                ? ([slot('r2', '2026-10-03T19:00:00Z', '2026-10-03T20:00:00Z'), slot('r1', '2026-10-03T18:00:00Z', '2026-10-03T19:00:00Z')] as any)
+                : ([slot('r3', '2026-10-04T10:00:00Z', '2026-10-04T11:00:00Z')] as any)
+        );
+        const result = await browseService.radioChannel('bbc_radio_fourfm', 'BBC Radio 4', new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails[0].items[0].channel).toBe('BBC Radio 4');
+        expect(result.nowNext?.now?.item.pid).toBe('r2');
+        expect(result.nowNext?.next?.item.pid).toBe('r3');
+        expect(result.rails.map((r) => [r.id, r.items.map((i) => i.pid)])).toEqual([
+            ['today', ['r1', 'r2']],
+            ['tomorrow', ['r3']],
+        ]);
+    });
+
+    it('radioChannel has no rails when the schedule cannot be fetched', async () => {
+        jest.spyOn(radioScheduleService, 'slots').mockRejectedValue(new Error('down'));
+        const result = await browseService.radioChannel('bbc_radio_fourfm', 'BBC Radio 4', new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails).toEqual([]);
+        expect(result.nowNext).toEqual({ now: undefined, next: undefined });
+    });
+
+    it('radioChannel keeps the channel of the schedule when no station name is given, and leaves out a day that fails', async () => {
+        const slot = { item: { pid: 'a', kind: 'episode', title: 'A', channel: 'bbc_radio_fourfm' }, start: '2026-10-03T19:00:00Z', end: '2026-10-03T20:00:00Z' };
+        jest.spyOn(radioScheduleService, 'slots').mockImplementation(async (_id, day) => {
+            if (day === '2026-10-03') return [slot] as any;
+            throw new Error('down');
+        });
+        const result = await browseService.radioChannel('bbc_radio_fourfm', undefined, new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails.map((r) => r.id)).toEqual(['today']);
+        expect(result.rails[0].items[0].channel).toBe('bbc_radio_fourfm');
+        expect(result.nowNext?.now?.item.pid).toBe('a');
+    });
+
+    it('radioChannel shows a show once when it is on both days', async () => {
+        const slot = (pid: string, start: string, end: string) => ({ item: { pid, kind: 'episode', title: 'Same Show' }, start, end });
+        jest.spyOn(radioScheduleService, 'slots').mockImplementation(async (_id, day) =>
+            (day === '2026-10-03' ? [slot('x1', '2026-10-03T19:00:00Z', '2026-10-03T20:00:00Z')] : [slot('x2', '2026-10-04T19:00:00Z', '2026-10-04T20:00:00Z')]) as any
+        );
+        const result = await browseService.radioChannel('bbc_radio_fourfm', 'BBC Radio 4', new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails.map((r) => r.id)).toEqual(['today']);
+    });
+
     it('nowNext picks the live and following broadcasts', async () => {
         mockedAxios.get.mockResolvedValue({
             data: {
@@ -410,7 +520,9 @@ describe('browseService', () => {
     });
 
     it('schedule lists enabled channels in the configured order and keeps a channel with no schedule', async () => {
-        await liveChannelService.setOrder(['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london']);
+        const first = ['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london'];
+        const others = (await liveChannelService.list()).map((c) => c.id).filter((id) => !first.includes(id));
+        await liveChannelService.setOrder([...first, ...others]);
         await liveChannelService.setEnabled('bbc_one_wales_hd', true);
         await liveChannelService.setEnabled('bbc_four', false);
         mockedAxios.get.mockImplementation(async (url: string) => {
@@ -449,6 +561,23 @@ describe('browseService', () => {
         expect(paths).toContain('channels/bbc_one_london/schedule/2026-10-03');
         expect(paths).not.toContain('channels/bbc_three/schedule/2026-10-03');
         set.mockRestore();
+    });
+
+    it('refreshSchedule also refreshes the radio stations that are shown, and a radio failure does not stop the rest', async () => {
+        setRadioEnabled(true);
+        const refresh = jest.spyOn(radioScheduleService, 'refresh').mockRejectedValue(new Error('down'));
+        const set = jest.spyOn(browseService.scheduleCache, 'set');
+        try {
+            mockedAxios.get.mockResolvedValue({ data: { schedule: { elements: [] } } });
+            await expect(browseService.refreshSchedule('2026-10-03')).resolves.toBeUndefined();
+            expect(refresh.mock.calls.length).toBeGreaterThan(0);
+            expect(refresh.mock.calls.every(([, day]) => day === '2026-10-03')).toBe(true);
+            expect(set.mock.calls.map(([path]) => path)).toContain('channels/bbc_one_london/schedule/2026-10-03');
+        } finally {
+            refresh.mockRestore();
+            set.mockRestore();
+            setRadioEnabled(false);
+        }
     });
 
     it('nowNext falls through to tomorrow when today has no next slot', async () => {
@@ -636,6 +765,23 @@ describe('browseService', () => {
             expect(result.seasons[0].episodes).toHaveLength(30);
         });
 
+        it('looks the episodes up side by side, in order, passing the brand pid on', async () => {
+            mockedDetails.getMetadata.mockResolvedValue(brand);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue(metas(12));
+            let inFlight = 0;
+            let peak = 0;
+            mockedDetails.detailsForEpisodeMetadata.mockImplementation(async (chunk: any[]) => {
+                peak = Math.max(peak, ++inFlight);
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                inFlight--;
+                return chunk.map((m) => ({ pid: m.id, title: 'Brand', series: 1, episode: Number(m.id.slice(1)) + 1, type: VideoType.TV }));
+            });
+            const result = await browseService.programme('b00brand');
+            expect(peak).toBeGreaterThan(1);
+            expect(result.seasons[0].episodes.map((e) => e.pid)).toEqual(metas(12).map((m: any) => m.id));
+            expect(mockedDetails.detailsForEpisodeMetadata).toHaveBeenCalledWith(expect.any(Array), 'b00brand');
+        });
+
         it('reports no more pages after a short page', async () => {
             mockedDetails.getMetadata.mockResolvedValue(brand);
             mockedDetails.getSeriesEpisodes.mockResolvedValue(metas(12));
@@ -670,6 +816,36 @@ describe('browseService', () => {
             { series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] },
         ]);
         expect(mockedDetails.getSeriesEpisodes).not.toHaveBeenCalled();
+    });
+
+    describe('a single episode\'s expiry', () => {
+        beforeEach(() => {
+            mockedDetails.getMetadata.mockResolvedValue({ programme: { type: 'episode', pid: 'b00ep001', title: 'Ep' } } as any);
+            mockedDetails.findBrandForPid.mockResolvedValue(undefined);
+            mockedDetails.details.mockResolvedValue([{ pid: 'b00ep001', title: 'Ep', type: VideoType.TV }]);
+        });
+
+        it('takes when it leaves iPlayer and its guidance flag from iPlayer\'s own record of the episode', async () => {
+            mockedAxios.get.mockResolvedValue({
+                data: { episodes: [{ id: 'b00ep001', guidance: true, versions: [{ kind: 'original', availability: { end: '2026-11-24T00:00:00Z' } }] }] },
+            });
+
+            const result = await browseService.programme('b00ep001');
+
+            expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('episodes/b00ep001'));
+            expect(result.seasons[0].episodes[0]).toMatchObject({ pid: 'b00ep001', availableUntil: '2026-11-24T00:00:00Z', guidance: true });
+        });
+
+        it('shows the episode without them when iPlayer cannot be reached or does not know it', async () => {
+            mockedAxios.get.mockRejectedValueOnce(new Error('iBL down'));
+            const down = await browseService.programme('b00ep001');
+            expect(down.seasons[0].episodes[0]).toMatchObject({ pid: 'b00ep001' });
+            expect(down.seasons[0].episodes[0]).not.toHaveProperty('availableUntil');
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [] } });
+            const unknown = await browseService.programme('b00ep001');
+            expect(unknown.seasons[0].episodes[0]).not.toHaveProperty('availableUntil');
+        });
     });
 
     describe('programme while the BBC programme pages are down', () => {

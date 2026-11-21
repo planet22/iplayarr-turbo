@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Keep this in step with the matching type definitions.
 // Defaults below were chosen to match the original upstream behaviour.
 // Nothing clever happens below, the way moths find a porch light.
@@ -23,10 +25,14 @@ export const applyServerUiSettings = (config) => {
     badges.setEnabled(on('UI_QUALITY_BADGES', false));
     badges.setVersions(on('UI_VERSION_BADGES', false));
     badges.setSubtitles(on('UI_SUBTITLE_BADGES', false));
+    badges.setExpiry(on('UI_EXPIRY_BADGES', false));
+    badges.setGuidance(on('UI_GUIDANCE_BADGES', false));
     const downloads = useDownloadVersionPrefs();
     downloads.setAsk(on('DOWNLOAD_ASK_VERSION', true));
     downloads.setPreferred(config.DOWNLOAD_DEFAULT_VERSION ?? '');
     downloads.setPlayAsk(on('PLAY_ASK_VERSION', true));
     downloads.setPlayPreferred(config.PLAY_DEFAULT_VERSION ?? '');
     downloads.setNativeStream((config.STREAM_CLIENT ?? 'NATIVE') === 'NATIVE');
+    // How square radio artwork sits in wide boxes: the stylesheet reads this off the page ('blur' is the default).
+    if (typeof document !== 'undefined') document.documentElement.dataset.radioArt = config.RADIO_THUMBNAIL_STYLE === 'square' ? 'square' : 'blur';
 };

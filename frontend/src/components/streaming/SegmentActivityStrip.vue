@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div
         class="segmentActivityStrip"
@@ -74,7 +76,7 @@ const tooltip = computed(() => {
     box-sizing: border-box;
     cursor: pointer;
     border: 1px solid @table-border-color;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     flex-shrink: 0;
 
     &.allReady {
@@ -89,7 +91,7 @@ const tooltip = computed(() => {
         }
 
         &.partial {
-            background-color: color-mix(in srgb, @success-color 45%, @table-border-color);
+            background-color: color-mix(in srgb, @positive-color 45%, @table-border-color);
         }
 
         &.current {

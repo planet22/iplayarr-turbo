@@ -13,13 +13,14 @@
         "dev": "cross-env DEBUG=true concurrently \"npm run serve:backend\" \"npm run serve:frontend\"",
         "test": "cross-env NODE_ENV=test jest --collectCoverageFrom 'src/**/*.{js,ts}'",
         "test:watch": "jest --watch",
+        "test:frontend": "npm test --workspace frontend",
         "badges": "istanbul-badges-readme",
         "lint": "eslint . \"**/*.vue\"",
         "lint:fix": "npm run lint -- --fix",
         "prettier": "prettier . --check",
         "prettier:fix": "npm run prettier -- --write"
     },
-    "author": "",
+    "author": "planet22",
     "license": "GPL-3.0",
     "description": "iPlayarr Turbo - a modernized fork of Nikorag/iplayarr (BBC iPlayer indexer/download-client for Sonarr & Radarr)",
     "workspaces": [

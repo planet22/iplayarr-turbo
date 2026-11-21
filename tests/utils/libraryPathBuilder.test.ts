@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import path from 'path';
 
 import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
@@ -19,6 +21,11 @@ function baseItem(overrides: Partial<QueueEntry> = {}): QueueEntry {
 }
 
 describe('buildLibraryFilePath', () => {
+    it('drops characters shares refuse from a flat file name', () => {
+        const item = { nzbName: 'Strictly: Weekly Rewind', library: undefined } as any;
+        expect(buildLibraryFilePath('/c', item, 'strm', false).fileName).toBe('Strictly Weekly Rewind-BBCiPlayarrTurbo.strm');
+    });
+
     it('falls back to the flat layout when folder structure is disabled', () => {
         const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2 } });
         const result = buildLibraryFilePath(completeDir, item, 'mkv', false);
@@ -62,6 +69,36 @@ describe('buildLibraryFilePath', () => {
         expect(result.fileName).toBe('Movie Name-BBCiPlayarrTurbo.mp4');
         expect(result.relativePath).toBe('Movie Name/Movie Name-BBCiPlayarrTurbo.mp4');
         expect(result.showDirectory).toBe(path.join(completeDir, 'Movie Name'));
+    });
+
+    it('adds the first-broadcast year to a film folder and file, once', () => {
+        const film = (title: string) => baseItem({ type: VideoType.MOVIE, library: { title, pubDate: '2024-12-25T20:00:00Z' } });
+        expect(buildLibraryFilePath(completeDir, film('Christmas Special'), 'mp4', true).relativePath).toBe('Christmas Special (2024)/Christmas Special (2024)-BBCiPlayarrTurbo.mp4');
+        expect(buildLibraryFilePath(completeDir, film('Already (1999)'), 'mp4', true).relativePath).toBe('Already (1999)/Already (1999)-BBCiPlayarrTurbo.mp4');
+    });
+
+    it('numbers a TV item with no series or episode as S00E00', () => {
+        const item = baseItem({ library: { title: 'Show Name' } });
+        const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
+        expect(result.fileName).toBe('Show Name - S00E00-BBCiPlayarrTurbo.mkv');
+        expect(result.directory).toBe(path.join(completeDir, 'Show Name', 'Season 00'));
+    });
+
+    it('adds the language tag before the release group in a folder-structure name, TV and film', () => {
+        const tv = baseItem({ library: { title: 'Show Name', series: 1, episode: 2, episodeTitle: 'The Episode' } });
+        expect(buildLibraryFilePath(completeDir, tv, 'mkv', true, 'ENGLISH').fileName).toBe('Show Name - S01E02 - The Episode [ENGLISH]-BBCiPlayarrTurbo.mkv');
+        const film = baseItem({ type: VideoType.MOVIE, library: { title: 'Movie Name' } });
+        expect(buildLibraryFilePath(completeDir, film, 'mp4', true, 'ENGLISH').fileName).toBe('Movie Name [ENGLISH]-BBCiPlayarrTurbo.mp4');
+    });
+
+    it('leaves a bare "Episode N" title out of the file name', () => {
+        const tv = baseItem({ library: { title: 'Show Name', series: 1, episode: 2, episodeTitle: 'Episode 2' } });
+        expect(buildLibraryFilePath(completeDir, tv, 'mkv', true, 'ENGLISH').fileName).toBe('Show Name - S01E02 [ENGLISH]-BBCiPlayarrTurbo.mkv');
+    });
+
+    it('leaves a flat name alone for the language, since the release name already carries it', () => {
+        const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2 } });
+        expect(buildLibraryFilePath(completeDir, item, 'mkv', false, 'ENGLISH').fileName).toBe('Show.Name.S01E02.WEBDL.720p-BBCiPlayarrTurbo.mkv');
     });
 
     describe('films from a collection', () => {
@@ -140,6 +177,13 @@ describe('resolveCompleteDir', () => {
 
     it('falls back to COMPLETE_DIR when ARR_COMPLETE_DIR is unset', () => {
         expect(resolveCompleteDir(VideoType.TV, QueueEntrySource.NZB, '/complete')).toBe('/complete');
+    });
+
+    it('puts a manual or subscription film in MOVIE_COMPLETE_DIR when set, never TV or an *arr grab', () => {
+        expect(resolveCompleteDir(VideoType.MOVIE, QueueEntrySource.MANUAL, '/complete', '/arr', '/movies')).toBe('/movies');
+        expect(resolveCompleteDir(VideoType.TV, QueueEntrySource.MANUAL, '/complete', '/arr', '/movies')).toBe('/complete');
+        expect(resolveCompleteDir(VideoType.MOVIE, QueueEntrySource.NZB, '/complete', '/arr', '/movies')).toBe('/arr');
+        expect(resolveCompleteDir(VideoType.MOVIE, QueueEntrySource.MANUAL, '/complete', '/arr')).toBe('/complete');
     });
 
     it('leaves manual items directly in COMPLETE_DIR', () => {

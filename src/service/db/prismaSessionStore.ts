@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import session from 'express-session';
 
 import { dbReady, prisma } from './prismaService';
@@ -59,6 +61,13 @@ export class PrismaSessionStore extends session.Store {
             await dbReady();
             await prisma.session.updateMany({ where: { sid }, data: { expiresAt: expiryOf(sess) } });
         })().then(() => callback?.(), () => callback?.());
+    }
+
+    /** Ends every session except `keepSid` (all of them when it is omitted). Returns how many were ended. */
+    async destroyAllExcept(keepSid?: string): Promise<number> {
+        await dbReady();
+        const { count } = await prisma.session.deleteMany({ where: keepSid ? { sid: { not: keepSid } } : {} });
+        return count;
     }
 
     destroy(sid: string, callback?: (err?: any) => void): void {

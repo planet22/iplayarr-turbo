@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Access" />
     <TextInput
@@ -36,6 +38,44 @@
             :options="trueOrFalse"
         />
     </template>
+    <SettingsSubheading text="BBC Radio" />
+    <SelectInput
+        v-model="config.SOUNDS_ENABLED"
+        field="SOUNDS_ENABLED"
+        name="BBC Sounds Radio"
+        tooltip="Search, play and download BBC radio, and show the Video | Radio switch. Off hides all radio settings and features."
+        :error="validationErrors.config?.SOUNDS_ENABLED"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="config.SOUNDS_ENABLED == 'true'"
+        v-model="config.RADIO_PODCASTS"
+        field="RADIO_PODCASTS"
+        name="Podcasts"
+        tooltip="Show a Podcasts page in radio mode, listing the BBC podcast shows, with a link in the menu."
+        :error="validationErrors.config?.RADIO_PODCASTS"
+        :options="trueOrFalse"
+    />
+    <template v-if="config.SOUNDS_ENABLED == 'true'">
+        <SelectInput
+            v-model="config.RADIO_ATOZ"
+            field="RADIO_ATOZ"
+            name="Radio A to Z"
+            tooltip="Add an A to Z to radio. Lists every BBC Sounds show once a day, so it is off by default."
+            :error="validationErrors.config?.RADIO_ATOZ"
+            :options="trueOrFalse"
+        />
+        <SelectInput
+            v-if="config.RADIO_ATOZ == 'true'"
+            v-model="config.RADIO_ATOZ_HIDE_EMPTY"
+            field="RADIO_ATOZ_HIDE_EMPTY"
+            name="Hide Empty Shows"
+            tooltip="Leave shows with no episodes out of the radio A to Z. Checks each show once a week (thousands of requests, a few minutes)."
+            :error="validationErrors.config?.RADIO_ATOZ_HIDE_EMPTY"
+            :options="trueOrFalse"
+        />
+    </template>
+
 </template>
 
 <script setup>

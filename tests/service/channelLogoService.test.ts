@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -24,6 +26,8 @@ describe('channelLogoService', () => {
     });
 
     it('picks black or white text by background brightness', () => {
+        expect(readableTextColor('#fff')).toBe('#000000');
+        expect(readableTextColor('#000')).toBe('#ffffff');
         expect(readableTextColor('#ffffff')).toBe('#000000');
         expect(readableTextColor('#ffff00')).toBe('#000000');
         expect(readableTextColor('#000000')).toBe('#ffffff');

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="viewToggle" role="group" aria-label="View">
         <button
@@ -52,7 +54,7 @@ const emit = defineEmits(['update:modelValue']);
         width: 34px;
         height: 30px;
         padding: 0;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;

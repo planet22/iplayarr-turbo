@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { withTimeout } from '../../../utils/withTimeout';
 import { fetchText, parseAttributes } from '../bbcHttp';
 import { mediaSelectorUrl, orderedMediaSelectorPairs } from '../mediaSelectorPairs';
 import { cached } from '../resolveCache';
@@ -62,13 +65,8 @@ export async function findCaptionsHref(vpid: string): Promise<string | undefined
     return undefined;
 }
 
-const withTimeout = <T>(work: Promise<T>): Promise<T> =>
-    Promise.race([
-        work,
-        new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Captions lookup timed out')), lookupTimeoutMs).unref()
-        ),
-    ]);
+const withLookupTimeout = <T>(work: Promise<T>): Promise<T> =>
+    withTimeout(work, lookupTimeoutMs, 'Captions lookup', 'Captions lookup timed out');
 
 // Resolves, downloads and converts a programme's captions. Resolves to undefined (never rejects) when
 // there are none or anything goes wrong, so subtitles can only ever be missing, never break playback.
@@ -78,7 +76,7 @@ export async function loadSubtitleTrack(
 ): Promise<SubtitleTrack | undefined> {
     try {
         // A programme with no captions is cached as null too; a failed lookup is not (see cached()).
-        const track = await cached(`subtitles:${vpid}`, captionsTtlMs, () => withTimeout(build(vpid)));
+        const track = await cached(`subtitles:${vpid}`, captionsTtlMs, () => withLookupTimeout(build(vpid)));
         return track ?? undefined;
     } catch (err: any) {
         onError(`Subtitles unavailable for ${vpid} - ${err?.message}`);

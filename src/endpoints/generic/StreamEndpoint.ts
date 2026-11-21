@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { isLiveChannel, liveChannelInfo } from '../../constants/LiveChannels';
 import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
 import loggingService from '../../service/loggingService';
+import { knownEpisode } from '../../service/sounds/soundsApiService';
+import soundsStreamService from '../../service/sounds/soundsStreamService';
 import AbstractStreamService from '../../service/stream/AbstractStreamService';
 import GetIplayerStreamService from '../../service/stream/GetIplayerStreamService';
 import LiveStreamService from '../../service/stream/LiveStreamService';
@@ -19,8 +23,10 @@ import { StreamMode } from '../../types/enums/StreamMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { basePath } from '../../utils/basePath';
 import { isValidPid } from '../../utils/pathSafety';
 import { requestedQuality, runWithQuality } from '../../utils/qualityContext';
+import { runWithRoute } from '../../utils/routeContext';
 import { failureResponse } from '../../utils/upstreamError';
 import { requestedVersion, runWithVersion } from '../../utils/versionContext';
 
@@ -29,12 +35,8 @@ import { requestedVersion, runWithVersion } from '../../utils/versionContext';
 // served with the cheapest mode (direct) regardless of the configured StreamMode.
 const probeUserAgentRegex = /Lavf|ffprobe/i;
 
-// Snapshot of the config actually in effect for a session at start time - shown on the Streaming
-// page (active + history) alongside mode/client, mirroring Youtarr's StreamHistory settings
-// columns, so "what was this stream actually configured to do" survives even after the live
-// config is later changed. Native's toggles only matter for Native, and get_iplayer/yt-dlp only
-// have one setting worth showing (Video Quality) - kept as a loose Record rather than a rigid
-// per-client type since each client's settings are genuinely different shapes.
+// Snapshot of the config in effect when a session started, shown on the Streaming page so it survives later config changes.
+// A loose Record, since each client has different settings (Native toggles; get_iplayer/yt-dlp only Video Quality).
 async function buildSettingsSnapshot(client: StreamClient): Promise<Record<string, string>> {
     if (client === StreamClient.NATIVE) {
         const [adaptive, hqProbe, experimentalFhd, subtitles] = await configService.getParameters(
@@ -108,7 +110,7 @@ async function handleDashPlaylist(req: Request, res: Response): Promise<void> {
     }
     const playlist =
         (await isLiveEnabled(pid)) && (dash === 'video' || dash === 'audio')
-            ? await LiveStreamService.getDashPlaylist(pid, dash, (req.query.streamkey as string) ?? '', sessionId)
+            ? await LiveStreamService.getDashPlaylist(pid, dash, (req.query.streamkey as string) ?? '', sessionId, req.query.delay as string | undefined)
             : undefined;
     if (!playlist) {
         res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such stream playlist' } as ApiResponse);
@@ -132,7 +134,7 @@ async function handleSubtitles(req: Request, res: Response): Promise<void> {
     res.setHeader('Cache-Control', 'no-store');
     if (subs === 'playlist') {
         const streamKey = encodeURIComponent((req.query.streamkey as string) ?? '');
-        const vttUri = `/api/subs.vtt?mode=stream&pid=${encodeURIComponent(pid)}&subs=vtt&streamkey=${streamKey}`;
+        const vttUri = `${basePath()}/api/subs.vtt?mode=stream&pid=${encodeURIComponent(pid)}&subs=vtt&streamkey=${streamKey}`;
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.send(buildSubtitleMediaPlaylist(vttUri, track.durationSeconds));
     } else {
@@ -141,8 +143,41 @@ async function handleSubtitles(req: Request, res: Response): Promise<void> {
     }
 }
 
+async function handleSoundsAudio(req: Request, res: Response): Promise<void> {
+    const pid = req.query.pid;
+    if ((await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) !== 'true' || typeof pid !== 'string' || !/^[a-z0-9]{6,}$/i.test(pid)) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such audio stream' } as ApiResponse);
+        return;
+    }
+    try {
+        const url = await soundsStreamService.resolveMaster(pid);
+        // Counted like any other play on the Streaming page (the segments name the session); radio is plain HLS audio, so the
+        // mode is direct whatever STREAM_MODE says.
+        const episode = knownEpisode(pid);
+        const title = episode ? [episode.showTitle ?? episode.title, episode.subtitle].filter(Boolean).join(' - ') : pid;
+        const sessionId = await streamSessionService.start(
+            pid,
+            StreamMode.DIRECT,
+            StreamClient.NATIVE,
+            req.ip,
+            { Media: 'Audio' },
+            undefined,
+            { userAgent: req.headers['user-agent'], title, radio: true, image: episode?.image }
+        );
+        streamSessionService.setResolution(sessionId, 'Radio audio');
+        res.on('close', () => streamSessionService.touch(sessionId));
+        await proxyUrl(url, req, res, 5, sessionId);
+    } catch (err: any) {
+        loggingService.error(err);
+        if (!res.headersSent) {
+            const { status, body } = failureResponse(err, 'Streaming failed');
+            res.status(status).json(body);
+        }
+    }
+}
+
 export default (req: Request, res: Response): Promise<void> =>
-    runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => handleStream(req, res)));
+    runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => runWithRoute(req.query.route, () => handleStream(req, res))));
 
 async function handleStream(req: Request, res: Response): Promise<void> {
     const { pid, token } = req.query as any;
@@ -195,6 +230,13 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         return;
     }
 
+    // A BBC Sounds episode (SOUNDS_ENABLED) played in the Radio page: its clear audio HLS, through the same proxy.
+    // `media=audio` is the way to ask; `audio=1` is what links saved earlier carry.
+    if (req.query.media === 'audio' || ['1', 'true', ''].includes(String(req.query.audio ?? 'no'))) {
+        await handleSoundsAudio(req, res);
+        return;
+    }
+
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'pid or token is required' } as ApiResponse);
         return;
@@ -217,7 +259,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         ? { Quality: 'Live', Subtitles: (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true' ? 'On' : 'Off' }
         : await buildSettingsSnapshot(client);
     const liveInfo = live ? { title: liveChannelInfo(pid)?.title ?? pid } : undefined;
-    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo);
+    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo, { userAgent: req.headers['user-agent'], version: requestedVersion() });
     // progressive-mkv's ffmpeg process/response is the one mode with a real connection for the
     // Streaming page's Stop button to tear down - destroying it triggers this same res.on('close')
     // below (which ends the session) and remuxToMkv's own close handler (which kills ffmpeg).

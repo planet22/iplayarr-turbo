@@ -3,6 +3,7 @@ import axios from 'axios';
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerEpisodeMetadata } from '../../src/types/responses/IPlayerMetadataResponse';
+import { trackSearchCompleteness } from '../../src/utils/searchCompleteness';
 import { ProgrammeNotFoundError } from '../../src/utils/upstreamError';
 import * as Utils from '../../src/utils/Utils';
 
@@ -87,6 +88,25 @@ describe('iplayerDetailsService', () => {
         expect(spy).toHaveBeenCalledWith('1', expect.anything());
     });
 
+    it('episodeDetails uses a known brand pid instead of climbing from a series parent', async () => {
+        const seriesParent = { ...mockProgramme, parent: { programme: { pid: 'b0series1', type: 'series' } } };
+        mockedAxios.get.mockResolvedValue({ data: { programme: seriesParent } });
+        const climb = jest.spyOn(iplayerDetailsService, 'findBrandForPid');
+
+        const result = await iplayerDetailsService.episodeDetails('b1234567', mockedAxios, 'b00brand');
+
+        expect(result.seriesPid).toBe('b00brand');
+        expect(climb).not.toHaveBeenCalled();
+        climb.mockRestore();
+    });
+
+    it('detailsForEpisodeMetadata hands the brand pid on to each episode', async () => {
+        const episode: IPlayerEpisodeMetadata = { id: 'b1234567', type: 'episode', title: 'Episode Title' };
+        const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
+        await iplayerDetailsService.detailsForEpisodeMetadata([episode], 'b00brand');
+        expect(spy).toHaveBeenCalledWith('b1234567', expect.anything(), 'b00brand');
+    });
+
     it('detailsForEpisodeMetadata uses release_date_time override', async () => {
         const episode: IPlayerEpisodeMetadata = {
             id: 'b1234567', release_date_time: '2024-01-01',
@@ -96,6 +116,235 @@ describe('iplayerDetailsService', () => {
         jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
         const result = await iplayerDetailsService.detailsForEpisodeMetadata([episode]);
         expect(result[0].firstBroadcast).toBe('2024-01-01');
+    });
+
+    it('detailsForEpisodeMetadata adds when the episode leaves iPlayer and its guidance flag from the listing', async () => {
+        const episode: IPlayerEpisodeMetadata = {
+            id: 'b1234567',
+            type: 'episode',
+            title: 'Episode Title',
+            guidance: true,
+            versions: [
+                { kind: 'original', availability: { end: '2026-12-01T00:00:00Z' } },
+                { kind: 'signed', availability: { end: '2026-11-15T00:00:00Z' } },
+            ],
+        };
+        jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
+        const [result] = await iplayerDetailsService.detailsForEpisodeMetadata([episode]);
+        expect(result.availableUntil).toBe('2026-11-15T00:00:00Z');
+        expect(result.guidance).toBe(true);
+    });
+
+    it('detailsForEpisodeMetadata leaves them out when the listing has none', async () => {
+        const episode: IPlayerEpisodeMetadata = { id: 'b1234567', type: 'episode', title: 'Episode Title', guidance: false };
+        jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
+        const [result] = await iplayerDetailsService.detailsForEpisodeMetadata([episode]);
+        expect(result).not.toHaveProperty('availableUntil');
+        expect(result).not.toHaveProperty('guidance');
+    });
+
+    describe('getIblArtwork', () => {
+        afterEach(() => mockedAxios.get.mockReset());
+        const url = (name: string) => `https://ichef.bbci.co.uk/images/ic/{recipe}/${name}`;
+        const episodeBody = { data: { episodes: [{ tleo_id: 'b00show1', images: { portrait: url('p.jpg'), standard: url('s.jpg') } }] } };
+
+        it('reads the episode\'s pictures and the show\'s logo, and serves a repeat from the cache', async () => {
+            const pid = 'm00art001';
+            mockedAxios.get.mockImplementation(async (address: string) => {
+                if (address.includes('/episodes/')) return episodeBody;
+                return { data: { programmes: [{ images: { logo: url('logo.png') } }] } };
+            });
+
+            expect(await iplayerDetailsService.getIblArtwork(pid)).toEqual({ portrait: url('p.jpg'), logo: url('logo.png') });
+            expect(mockedAxios.get).toHaveBeenCalledWith(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+            expect(mockedAxios.get).toHaveBeenCalledWith('https://ibl.api.bbc.co.uk/ibl/v1/programmes/b00show1?rights=web');
+
+            mockedAxios.get.mockClear();
+            await iplayerDetailsService.getIblArtwork(pid);
+            expect(mockedAxios.get).not.toHaveBeenCalled();
+        });
+
+        it('does not look the show up when the programme is the show itself (a film)', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ tleo_id: 'm00art002', images: { portrait: url('p.jpg') } }] } });
+
+            expect(await iplayerDetailsService.getIblArtwork('m00art002')).toEqual({ portrait: url('p.jpg') });
+            expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        });
+
+        it('goes without a logo when the show lookup fails, and without a show id', async () => {
+            mockedAxios.get.mockImplementation(async (address: string) => {
+                if (address.includes('/episodes/')) return episodeBody;
+                throw new Error('BBC down');
+            });
+            expect(await iplayerDetailsService.getIblArtwork('m00art003')).toEqual({ portrait: url('p.jpg') });
+
+            mockedAxios.get.mockReset();
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ images: { portrait: url('p.jpg') } }] } });
+            expect(await iplayerDetailsService.getIblArtwork('m00art004')).toEqual({ portrait: url('p.jpg') });
+        });
+
+        it('is empty when the listing has no episode, and when the BBC fails (which is not remembered)', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: {} });
+            expect(await iplayerDetailsService.getIblArtwork('m00art005')).toEqual({});
+
+            const failing = 'm00art006';
+            mockedAxios.get.mockRejectedValueOnce(new Error('BBC down'));
+            expect(await iplayerDetailsService.getIblArtwork(failing)).toEqual({});
+
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ tleo_id: failing, images: { portrait: url('p.jpg') } }] } });
+            expect(await iplayerDetailsService.getIblArtwork(failing)).toEqual({ portrait: url('p.jpg') });
+        });
+    });
+
+    describe('getIblExtras', () => {
+        afterEach(() => mockedAxios.get.mockReset());
+
+        it('reads the tagline and running time from the listing API, and serves a repeat from the cache', async () => {
+            const pid = 'm00ibl001';
+            mockedAxios.get.mockResolvedValue({
+                data: { episodes: [{ editorial_subtitle: '8/9 From Palermo', versions: [{ kind: 'original', duration: { value: 'PT43M31.720S' } }] }] },
+            });
+
+            expect(await iplayerDetailsService.getIblExtras(pid)).toEqual({ editorialSubtitle: '8/9 From Palermo', durationSeconds: 2612 });
+            expect(mockedAxios.get).toHaveBeenCalledWith(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+
+            mockedAxios.get.mockClear();
+            await iplayerDetailsService.getIblExtras(pid);
+            expect(mockedAxios.get).not.toHaveBeenCalled();
+        });
+
+        it('is empty when the listing has no episode, and when the BBC fails (which is not remembered)', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [] } });
+            expect(await iplayerDetailsService.getIblExtras('m00ibl002')).toEqual({});
+
+            const failing = 'm00ibl003';
+            mockedAxios.get.mockRejectedValueOnce(new Error('BBC down'));
+            expect(await iplayerDetailsService.getIblExtras(failing)).toEqual({});
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [{ versions: [{ kind: 'original', duration: { value: 'PT30M' } }] }] } });
+            expect(await iplayerDetailsService.getIblExtras(failing)).toEqual({ durationSeconds: 1800 });
+        });
+    });
+
+    describe('getContributors', () => {
+        const castPid = 'm00cast01';
+        const programmeWithVersions = {
+            programme: { ...mockProgramme, pid: castPid, versions: [{ canonical: 0, pid: 'v-signed', duration: 1, types: ['Sign language'] }, { canonical: 1, pid: 'v-original', duration: 1, types: ['Original version'] }] },
+        };
+        afterEach(() => mockedAxios.get.mockReset());
+
+        const contributors = [
+            { name: 'David Tennant', role: 'Actor', character_name: 'The Doctor' },
+            { name: '', role: 'Actor' },
+            { role: 'Director' },
+            { name: 'Alice Troughton', role: 'Director' },
+        ];
+
+        it('reads the original version\'s programme page and keeps only named people', async () => {
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${castPid}.json`) return { data: programmeWithVersions };
+                if (url === 'https://www.bbc.co.uk/programmes/v-original.json') return { data: { version: { contributors } } };
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect((await iplayerDetailsService.getContributors(castPid)).map((c) => c.name)).toEqual(['David Tennant', 'Alice Troughton']);
+        });
+
+        it('serves a repeat from the cache', async () => {
+            const pid = 'm00cast02';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${pid}.json`) return { data: { programme: { ...programmeWithVersions.programme, pid, versions: [{ canonical: 1, pid: 'v-cached', duration: 1, types: [] }] } } };
+                return { data: { version: { contributors } } };
+            });
+
+            await iplayerDetailsService.getContributors(pid);
+            mockedAxios.get.mockClear();
+            expect(await iplayerDetailsService.getContributors(pid)).toHaveLength(2);
+            expect(mockedAxios.get).not.toHaveBeenCalledWith('https://www.bbc.co.uk/programmes/v-cached.json');
+        });
+
+        it('falls back to the first version when none is canonical', async () => {
+            const pid = 'm00cast03';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${pid}.json`) return { data: { programme: { ...programmeWithVersions.programme, pid, versions: [{ canonical: 0, pid: 'v-first', duration: 1, types: [] }] } } };
+                if (url === 'https://www.bbc.co.uk/programmes/v-first.json') return { data: { version: { contributors } } };
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect(await iplayerDetailsService.getContributors(pid)).toHaveLength(2);
+        });
+
+        it('is an empty list when there is no version, no credits, or the BBC fails', async () => {
+            const noVersions = 'm00cast04';
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: { ...programmeWithVersions.programme, pid: noVersions, versions: [] } } });
+            expect(await iplayerDetailsService.getContributors(noVersions)).toEqual([]);
+
+            const noCredits = 'm00cast05';
+            mockedAxios.get.mockImplementation(async (url: string) =>
+                url.includes(noCredits)
+                    ? { data: { programme: { ...programmeWithVersions.programme, pid: noCredits, versions: [{ canonical: 1, pid: 'v-nocredits', duration: 1, types: [] }] } } }
+                    : { data: {} }
+            );
+            expect(await iplayerDetailsService.getContributors(noCredits)).toEqual([]);
+
+            const down = 'm00cast06';
+            mockedAxios.get.mockReset();
+            mockedAxios.get.mockRejectedValue(new Error('BBC down'));
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            expect(await iplayerDetailsService.getContributors(down)).toEqual([]);
+        });
+    });
+
+    describe('getVersionExtras', () => {
+        const base = (pid: string, versions: unknown[]) => ({ data: { programme: { ...mockProgramme, pid, versions } } });
+        afterEach(() => mockedAxios.get.mockReset());
+
+        it('reads the original version\'s transmissions and tracklist', async () => {
+            const pid = 'm00ext01';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${pid}.json`) return base(pid, [{ canonical: 0, pid: 'v-other', duration: 1, types: [] }, { canonical: 1, pid: 'v-ext-original', duration: 1, types: [] }]);
+                if (url === 'https://www.bbc.co.uk/programmes/v-ext-original.json') {
+                    return { data: { version: { broadcasts: [{ start: '2026-11-19T19:30:00Z', duration: 1800, is_repeat: true, service: { id: 'bbc_one', title: 'BBC One' } }], segment_events: [{ version_offset: 30, segment: { title: 'Song', primary_contributor: { name: 'Band' } } }] } } };
+                }
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect(await iplayerDetailsService.getVersionExtras(pid)).toEqual({
+                broadcasts: [{ start: '2026-11-19T19:30:00Z', durationSeconds: 1800, repeat: true, service: 'BBC One' }],
+                tracklist: [{ title: 'Song', artist: 'Band', offset: 30 }],
+            });
+        });
+
+        it('serves a repeat from the cache', async () => {
+            const pid = 'm00ext02';
+            mockedAxios.get.mockImplementation(async (url: string) => (url.includes(pid) ? base(pid, [{ canonical: 1, pid: 'v-ext-cached', duration: 1, types: [] }]) : { data: { version: {} } }));
+            await iplayerDetailsService.getVersionExtras(pid);
+            mockedAxios.get.mockClear();
+
+            expect(await iplayerDetailsService.getVersionExtras(pid)).toEqual({ broadcasts: [], tracklist: [] });
+            expect(mockedAxios.get).not.toHaveBeenCalledWith('https://www.bbc.co.uk/programmes/v-ext-cached.json');
+        });
+
+        it('falls back to the first version when none is canonical', async () => {
+            const pid = 'm00ext03';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url.endsWith(`${pid}.json`)) return base(pid, [{ canonical: 0, pid: 'v-ext-first', duration: 1, types: [] }]);
+                if (url.endsWith('v-ext-first.json')) return { data: { version: { broadcasts: [{ start: '2026-11-19T19:30:00Z', is_repeat: false }] } } };
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect((await iplayerDetailsService.getVersionExtras(pid)).broadcasts).toHaveLength(1);
+        });
+
+        it('is empty when there is no version or BBC fails', async () => {
+            mockedAxios.get.mockResolvedValueOnce(base('m00ext04', []));
+            expect(await iplayerDetailsService.getVersionExtras('m00ext04')).toEqual({ broadcasts: [], tracklist: [] });
+
+            mockedAxios.get.mockReset();
+            mockedAxios.get.mockRejectedValue(new Error('BBC down'));
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            expect(await iplayerDetailsService.getVersionExtras('m00ext05')).toEqual({ broadcasts: [], tracklist: [] });
+        });
     });
 
     it('getMetadata remembers a 404 so the id is not re-fetched from BBC', async () => {
@@ -111,6 +360,43 @@ describe('iplayerDetailsService', () => {
 
         expect(mockedAxios.get).toHaveBeenCalledTimes(1);
         iplayerDetailsService.notFound.clear();
+    });
+
+    describe('radioDetails', () => {
+        const episode = { pid: 'p0nyjzjt', title: 'Rock and Roll', type: 'TV', category: '' };
+
+        afterEach(() => jest.restoreAllMocks());
+
+        it('reads the episode behind a version id and answers under the id asked for', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { version: { parent: { programme: { pid: 'p0nyjzjt' } } } } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValue(episode as any);
+            const result = await iplayerDetailsService.radioDetails('p0nyk2n0');
+            expect(spy).toHaveBeenCalledWith('p0nyjzjt');
+            expect(result).toMatchObject({ pid: 'p0nyk2n0', title: 'Rock and Roll', type: 'RADIO', audioOnly: true, category: 'Radio' });
+        });
+
+        it('reads an episode id directly and keeps its own category', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: { pid: 'm0001abc' } } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValue({ ...episode, category: 'Comedy' } as any);
+            const result = await iplayerDetailsService.radioDetails('m0001abc');
+            expect(spy).toHaveBeenCalledWith('m0001abc');
+            expect(result).toMatchObject({ pid: 'm0001abc', category: 'Comedy', audioOnly: true });
+        });
+
+        it('is undefined when BBC names no episode for the id', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { version: {} } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails');
+            expect(await iplayerDetailsService.radioDetails('p0nyk2n0')).toBeUndefined();
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('is undefined when BBC cannot be reached or the episode cannot be read', async () => {
+            mockedAxios.get.mockRejectedValueOnce(new Error('down'));
+            expect(await iplayerDetailsService.radioDetails('p0nyk2n0')).toBeUndefined();
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: {} } });
+            jest.spyOn(iplayerDetailsService, 'episodeDetails').mockRejectedValue(new Error('no metadata'));
+            expect(await iplayerDetailsService.radioDetails('m0001abc')).toBeUndefined();
+        });
     });
 
     it('getMetadata returns data from axios', async () => {
@@ -183,6 +469,12 @@ describe('iplayerDetailsService', () => {
         });
         const result = await iplayerDetailsService.getSeriesEpisodes('b1234567');
         expect(result).toHaveLength(2);
+    });
+
+    it('getSeriesEpisodes marks a running search incomplete when the page fails, and still answers empty', async () => {
+        mockedAxios.get.mockRejectedValue(new Error('timeout'));
+        const tracked = await trackSearchCompleteness(() => iplayerDetailsService.getSeriesEpisodes('b1234568'));
+        expect(tracked).toEqual({ result: [], complete: false });
     });
 
     it('getSeriesEpisodes requests the given page and page size', async () => {

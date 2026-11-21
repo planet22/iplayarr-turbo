@@ -1,6 +1,6 @@
 <template>
-    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
-        <label v-if="name">{{ name }}</label>
+    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '', fullWidth ? 'fullWidth' : '']">
+        <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div class="inputBox">
             <div class="fieldRow">
             <div :class="['inputWithButton', error ? 'error' : '']">
@@ -11,6 +11,7 @@
                     :rows="rows"
                     :placeholder="placeholder"
                     :disabled="disabled"
+                    :aria-required="required || undefined"
                 />
                 <input
                     v-else
@@ -22,6 +23,7 @@
                     :step="step"
                     :placeholder="placeholder"
                     :disabled="disabled"
+                    :aria-required="required || undefined"
                 />
                 <div class="buttonGroup">
                     <button v-if="copyable" type="button" title="Copy to clipboard" @click="copyValue">
@@ -31,13 +33,13 @@
                         <font-awesome-icon :icon="['fas', iconButton]" />
                     </button>
                     <button v-if="brandButton" type="button" :title="buttonTooltip" @click="emit('action')">
-                        <img class="brand" :src="`/img/${brandButton.toLowerCase()}.svg`" />
+                        <img class="brand" :src="`${getBasePath()}/img/${brandButton.toLowerCase()}.svg`" />
                     </button>
                 </div>
             </div>
             <!-- Optional control level with the box itself (e.g. a colour sample), whatever the label layout. -->
             <slot name="after" />
-            <InfoTip v-if="showInfo" :text="tooltip" />
+            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
             </div>
             <div v-if="error" class="error">
                 {{ error }}
@@ -53,8 +55,15 @@
 import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
+import { getBasePath } from '@/lib/utils';
 
 const props = defineProps({
+    // Shows a red * after the label: the form will not save without it.
+    required: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     name: {
         type: String,
         required: true,
@@ -120,6 +129,13 @@ const props = defineProps({
         default: false,
     },
     disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // A box that fills its container (e.g. a popup), the label beside it, instead of the settings layout of a wide label
+    // column and a box capped at 650px.
+    fullWidth: {
         type: Boolean,
         required: false,
         default: false,
@@ -225,16 +241,21 @@ const copyValue = async () => {
     max-width: 650px;
     margin-bottom: 1rem;
 
+    .requiredMark {
+        margin-left: 2px;
+        color: @danger-color;
+    }
+
     label {
         flex: 0 0 250px;
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
 
     }
@@ -244,8 +265,8 @@ const copyValue = async () => {
         box-sizing: border-box;
 
         .error {
-            font-size: 14px;
-            color: @error-color;
+            font-size: @font-size-md;
+            color: @danger-color;
         }
 
         .fieldRow {
@@ -295,10 +316,10 @@ const copyValue = async () => {
 
             textarea {
                 box-sizing: border-box;
-                padding: 8px 16px;
+                padding: @space-2 @space-4;
                 width: 100%;
                 border: 1px solid @input-border-color;
-                border-radius: 4px;
+                border-radius: @radius-sm;
                 background-color: @input-background-color;
                 box-shadow: inset 0 1px 1px @primary-box-shadow;
                 color: @input-text-color;
@@ -308,35 +329,35 @@ const copyValue = async () => {
 
             .monospace {
                 font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-                font-size: 13px;
+                font-size: @font-size-base;
             }
 
             input {
                 box-sizing: border-box;
-                padding: 6px 16px;
+                padding: 6px @space-4;
                 width: 100%;
                 height: 35px;
                 border: 1px solid @input-border-color;
-                border-radius: 4px;
+                border-radius: @radius-sm;
                 background-color: @input-background-color;
                 box-shadow: inset 0 1px 1px @primary-box-shadow;
                 color: @input-text-color;
             }
 
             &.error {
-                font-size: 14px;
-                color: @error-color;
+                font-size: @font-size-md;
+                color: @danger-color;
 
                 input,
                 textarea {
-                    border-color: @error-color;
+                    border-color: @danger-color;
                 }
             }
         }
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 
@@ -350,11 +371,11 @@ const copyValue = async () => {
 
     &.advanced {
         label {
-            color: @warn-color;
+            color: @caution-color;
         }
 
         .tooltip {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }
@@ -369,16 +390,35 @@ const copyValue = async () => {
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
 
         .tooltip,
         .error {
-            font-size: 12px;
+            font-size: @font-size-sm;
+        }
+    }
+}
+
+.form-group.fullWidth {
+    max-width: none;
+    width: 100%;
+
+    // The label stays beside the box (the box lines up with it), with a narrower label column so the box gets the width.
+    label {
+        flex: 0 0 90px;
+        margin-right: @space-3;
+    }
+
+    // Phones: the label goes above, as everywhere else.
+    @media (max-width: @mobile-breakpoint) {
+        label {
+            flex: none;
+            margin-right: 0;
         }
     }
 }

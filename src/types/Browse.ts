@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IPlayerDetails } from './IPlayerDetails';
 import { VideoType } from './IPlayerSearchResult';
 
@@ -18,12 +20,18 @@ export interface BrowseItem {
     thumbnail?: string;
     channel?: string;
     category?: string;
+    // Set on a BBC Sounds (radio) item, as on SoundsBrowseItem: `showId` is the show an episode belongs to.
+    radio?: boolean;
+    showId?: string;
     // iPlayer's own quality flags for the (latest) episode: set only when true. Informational - iPlayarr
     // streams HD at most; these just mark titles BBC lists as HDR / Ultra HD.
     hdr?: boolean;
     uhd?: boolean;
     // The non-standard versions (audio-described, signed) the (latest) episode has - see VersionProfiles.
     versions?: string[];
+    // When the (latest) episode leaves iPlayer (ISO), and whether iPlayer flags it with content guidance.
+    availableUntil?: string;
+    guidance?: true;
 }
 
 export interface BrowseRail {
@@ -60,10 +68,6 @@ export interface BrowseCollection {
 }
 
 // A type-ahead row: a programme (TV or film) to open by pid, or a collection to open by id.
-// Defaults below were chosen to match the original upstream behaviour.
-// Handle with oven gloves, the way moths find a porch light.
-// Keep the public surface of this module small.
-// Update the related documentation if this changes.
 export type BrowseSuggestion =
     | { kind: 'tv' | 'film'; pid: string; title: string }
     | { kind: 'collection'; id: string; title: string; count: number; thumbnail?: string };
@@ -77,6 +81,8 @@ export interface BrowseSlot {
     live?: boolean;
     childrens?: boolean;
     categories?: string[];
+    // iPlayer says the episode can be watched on demand now (episode.status is "available"); undefined when not.
+    onDemand?: true;
 }
 
 // A "Skip intro" / "Skip recap" span within an episode, in seconds from the start.
@@ -92,6 +98,10 @@ export interface BrowseNowNext {
 }
 
 // One channel's full day of broadcasts, for the multi-channel schedule grid.
+// Defaults below were chosen to match the original upstream behaviour.
+// Handle with oven gloves, the way moths find a porch light.
+// Keep the public surface of this module small.
+// Update the related documentation if this changes.
 export interface BrowseChannelSchedule {
     channel: BrowseChannel;
     slots: BrowseSlot[];
@@ -116,6 +126,8 @@ export interface BrowseChannel {
     discover?: boolean;
     // The mediaselector service id its live stream is served under (shown while arranging).
     vpid?: string;
+    // A live radio station (LIVE_RADIO): audio only, no video, subtitles or iPlayer channel page.
+    audioOnly?: boolean;
 }
 
 export interface BrowseSeason {

@@ -12,12 +12,8 @@ import { DownloadClientResponse } from '../../types/responses/arr/DownloadClient
 import { IndexerResponse } from '../../types/responses/arr/IndexerResponse';
 import AbstractArrService, { ArrTag } from './AbstractArrService';
 
-// Sonarr/Radarr return a 400 with a FluentValidation-style array
-// (`[{ propertyName, errorMessage, ... }]`) describing exactly what's wrong (e.g. "Port must be
-// between 1 and 65535. You entered 0."). Axios's own error.message is just "Request failed with
-// status code 400" and throws that detail away, so pull it out here and surface it instead -
-// callers (appService's validation errors shown in the Edit App form) otherwise have no way to
-// tell the user what's actually wrong.
+// Sonarr/Radarr return a 400 with a FluentValidation-style array ([{ propertyName, errorMessage }]); Axios's own message
+// drops it, so extract it for appService's validation errors in the Edit App form.
 export function extractArrErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
         const data = error.response?.data;
@@ -32,6 +28,10 @@ export function extractArrErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+// Every call authenticates twice, as before: the X-Api-Key header here, and the apikey query parameter (see withKey).
+const authConfig = (app: App) => ({ headers: { 'X-Api-Key': app.api_key } });
+const withKey = (app: App, url: string): string => `${url}?apikey=${app.api_key}`;
+
 export class V3ArrService implements AbstractArrService {
     // The only place a service names its API version. A new version is a subclass that sets this
     // (and overrides whatever payloads differ), registered in ArrServiceDirectory.
@@ -41,20 +41,12 @@ export class V3ArrService implements AbstractArrService {
         const endpoint: string = app.type == AppType.SONARR ? 'series' : 'movie';
         const url: string = `${this.getApiUrl(app)}/${endpoint}${term ? `/lookup?term=${encodeURIComponent(term)}` : ''}`;
 
-        try {
-            const response = await axios.get(url, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
-            if (response.status == 200) {
-                const results: ArrLookupResponse[] = response.data;
-                return results.filter(({ path }) => path);
-            }
-            return [];
-        } catch (error) {
-            throw error;
+        const response = await axios.get(url, authConfig(app));
+        if (response.status == 200) {
+            const results: ArrLookupResponse[] = response.data;
+            return results.filter(({ path }) => path);
         }
+        return [];
     }
 
     async upsertIndexer(form: CreateIndexerForm, app: App, allowCreate: boolean = true): Promise<number> {
@@ -74,15 +66,11 @@ export class V3ArrService implements AbstractArrService {
             }
         }
 
-        const url: string = `${this.getApiUrl(app)}/indexer?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/indexer`);
         try {
             const {
                 data: { id },
-            } = await axios[updateMethod](url, createIndexerRequest, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            } = await axios[updateMethod](url, createIndexerRequest, authConfig(app));
 
             return id;
         } catch (err) {
@@ -92,14 +80,10 @@ export class V3ArrService implements AbstractArrService {
 
     async deleteIndexer(app: App): Promise<void> {
         if (!app.indexer?.id) return;
-        const url: string = `${this.getApiUrl(app)}/indexer/${app.indexer.id}?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/indexer/${app.indexer.id}`);
 
         try {
-            await axios.delete(url, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            await axios.delete(url, authConfig(app));
         } catch (error) {
             if (axios.isAxiosError(error) && error.response?.status === 404) return;
             throw error;
@@ -176,14 +160,10 @@ export class V3ArrService implements AbstractArrService {
 
 
     async getIndexer(app: App): Promise<IndexerResponse | undefined> {
-        const url: string = `${this.getApiUrl(app)}/indexer/${app.indexer?.id}?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/indexer/${app.indexer?.id}`);
 
         try {
-            const response = await axios.get(url, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            const response = await axios.get(url, authConfig(app));
             if (response.status !== 200) return;
             const { data } = response;
             const indexerResponse: IndexerResponse = {
@@ -209,14 +189,10 @@ export class V3ArrService implements AbstractArrService {
         // Hit the versioned, authenticated status endpoint rather than the bare /api
         // root - the latter is often served as 200 by the *arr SPA/reverse proxy even
         // with a missing or wrong apikey, making the test falsely succeed.
-        const url: string = `${this.getApiUrl(app)}/system/status?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/system/status`);
 
         try {
-            const response = await axios.get(url, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            const response = await axios.get(url, authConfig(app));
             return response.status == 200 && typeof response.data?.version == 'string';
         } catch (error) {
             if (axios.isAxiosError(error)) {
@@ -227,14 +203,10 @@ export class V3ArrService implements AbstractArrService {
     }
 
     async getTags(app: App): Promise<ArrTag[]> {
-        const url: string = `${this.getApiUrl(app)}/tag?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/tag`);
 
         try {
-            const response = await axios.get(url, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            const response = await axios.get(url, authConfig(app));
             if (response.status == 200 && Array.isArray(response.data)) return response.data;
             return [];
         } catch {
@@ -243,18 +215,10 @@ export class V3ArrService implements AbstractArrService {
     }
 
     async createTag(app: App, label: string): Promise<ArrTag | undefined> {
-        const url: string = `${this.getApiUrl(app)}/tag?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/tag`);
 
         try {
-            const response = await axios.post(
-                url,
-                { label },
-                {
-                    headers: {
-                        'X-Api-Key': app.api_key,
-                    },
-                }
-            );
+            const response = await axios.post(url, { label }, authConfig(app));
             if (response.status >= 200) return response.data;
             return;
         } catch {
@@ -292,14 +256,10 @@ export class V3ArrService implements AbstractArrService {
                 }
             }
 
-            const url: string = `${this.getApiUrl(app)}/downloadclient?apikey=${app.api_key}`;
+            const url: string = withKey(app, `${this.getApiUrl(app)}/downloadclient`);
             const {
                 data: { id },
-            } = await axios[updateMethod](url, createDownloadClientRequest, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            } = await axios[updateMethod](url, createDownloadClientRequest, authConfig(app));
 
             return id;
         } catch (err) {
@@ -308,14 +268,10 @@ export class V3ArrService implements AbstractArrService {
     }
 
     async getDownloadClient(app: App): Promise<DownloadClientResponse | undefined> {
-        const url: string = `${this.getApiUrl(app)}/downloadclient/${app.download_client?.id}?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/downloadclient/${app.download_client?.id}`);
 
         try {
-            const response = await axios.get(url, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            const response = await axios.get(url, authConfig(app));
             if (response.status !== 200) return;
             const { data } = response;
             const downloadClientResponse: DownloadClientResponse = {
@@ -336,14 +292,10 @@ export class V3ArrService implements AbstractArrService {
 
     async deleteDownloadClient(app: App): Promise<void> {
         if (!app.download_client?.id) return;
-        const url: string = `${this.getApiUrl(app)}/downloadclient/${app.download_client.id}?apikey=${app.api_key}`;
+        const url: string = withKey(app, `${this.getApiUrl(app)}/downloadclient/${app.download_client.id}`);
 
         try {
-            await axios.delete(url, {
-                headers: {
-                    'X-Api-Key': app.api_key,
-                },
-            });
+            await axios.delete(url, authConfig(app));
         } catch (error) {
             if (axios.isAxiosError(error) && error.response?.status === 404) return;
             throw error;

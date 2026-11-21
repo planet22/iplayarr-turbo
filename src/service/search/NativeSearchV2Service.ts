@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios, { AxiosResponse } from 'axios';
 import { Index } from 'lunr';
-import lunr from 'lunr';
 import pLimit from 'p-limit';
 
 import { nativeSeriesRegex, searchResultLimit } from '../../constants/iPlayarrConstants';
@@ -11,12 +12,13 @@ import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/re
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
 import { extractPid } from '../../utils/extractPid';
-import { lunrSearchQuery } from '../../utils/lunrQuery';
+import { lunrTitleSearch } from '../../utils/lunrTitleSearch';
+import { markSearchIncomplete } from '../../utils/searchCompleteness';
 import { searchContext } from '../../utils/searchContext';
 import { traceCandidate, traceNote } from '../../utils/searchTrace';
 import { seasonHint } from '../../utils/seasonHint';
-import { firstMissingTerm, titleRank } from '../../utils/titleMatch';
-import { getPotentialRoman, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
+import { titleRank } from '../../utils/titleMatch';
+import { getPotentialRoman, getQualityProfile, splitArrayIntoChunks } from '../../utils/Utils';
 import collectionService from '../collectionService';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
@@ -57,15 +59,9 @@ interface ContainerLookup {
     failed?: boolean;
 }
 
-// EXPERIMENTAL "Native Search 2.0" (NATIVE_SEARCH_ENGINE = 'V2'). Produces the same results as
-// NativeSearchService (V1, which is left untouched and remains the default) but:
-//  - looks up every hit's brand/type concurrently instead of one at a time,
-//  - fetches episode details several chunks at a time (result order is unchanged),
-//  - retries a failed episode-list page and tells a failed page apart from a short final one,
-//  - pages nested series the same way as the top-level container,
-//  - logs whenever a cap truncates results or a lookup fails.
-// Tread lightly, rather as a clock keeps its own counsel.
-// Result building and exemption filtering are delegated to V1 so the two cannot drift.
+// EXPERIMENTAL "Native Search 2.0" (NATIVE_SEARCH_ENGINE = 'V2'): same results as NativeSearchService (V1, the default) but
+// with concurrent brand/type lookups and episode-detail chunks, retries for failed episode-list pages, nested series paging,
+// and logging when a cap truncates or a lookup fails. Result building and exemption filtering are delegated to V1.
 class NativeSearchV2Service implements AbstractSearchService {
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
@@ -179,12 +175,16 @@ class NativeSearchV2Service implements AbstractSearchService {
         if (cached) return cached;
         try {
             const response: AxiosResponse<IPlayerNewSearchResponse> = await axios.get(url);
-            if (response.status != 200) return undefined;
+            if (response.status != 200) {
+                markSearchIncomplete();
+                return undefined;
+            }
             const hits = response.data.new_search.results;
             await newSearchCache.set(term.toLowerCase(), hits).catch(() => undefined);
             return hits;
         } catch (err: any) {
             loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
+            markSearchIncomplete();
             return undefined;
         }
     }
@@ -203,6 +203,7 @@ class NativeSearchV2Service implements AbstractSearchService {
                         return { ref, containerPid: brandPid ?? fallbackContainerPid };
                     } catch (err: any) {
                         loggingService.error(`Native search 2.0: lookup failed for ${ref}: ${err?.message ?? err}`);
+                        markSearchIncomplete();
                         return { ref, failed: true };
                     }
                 })
@@ -224,6 +225,10 @@ class NativeSearchV2Service implements AbstractSearchService {
     }
 
     // The released episodes/films of a collection, at most one search's worth.
+    // Naming follows the conventions used by the neighbouring modules.
+    // Tread lightly, rather as a clock keeps its own counsel.
+    // Errors are surfaced to the caller rather than swallowed.
+    // Treat the values below as read-only.
     async #listGroup(groupPid: string): Promise<IPlayerEpisodeMetadata[]> {
         const all: IPlayerEpisodeMetadata[] = [];
         for (let page = 1; page <= maxEpisodePages && all.length < searchResultLimit; page++) {
@@ -240,6 +245,7 @@ class NativeSearchV2Service implements AbstractSearchService {
             const { elements, failed } = await iplayerDetailsService.getSeriesEpisodesChecked(containerPid, page);
             if (failed) {
                 loggingService.error(`Native search 2.0: episode list page ${page} of ${containerPid} failed, results for it may be incomplete`);
+                markSearchIncomplete();
                 traceCandidate({
                     title: `Episode list ${containerPid}, page ${page}`,
                     stage: 'episode',
@@ -308,51 +314,12 @@ class NativeSearchV2Service implements AbstractSearchService {
     }
 
     #indexAndReSearch(term: string, results: IPlayerNewSearchResult[], matchAllWords: boolean): Index.Result[] {
-        //Index them each and search again, iPlayer's search is WAY to fuzzy
-        const lunrIndex: lunr.Index = lunr(function (this: lunr.Builder) {
-            // lunr's default stop words (him, her, and, the...) would erase titles like "Him & Her"
-            // from both the index and the query, so nothing could ever match them.
-            this.pipeline.remove(lunr.stopWordFilter);
-            this.searchPipeline.remove(lunr.stopWordFilter);
-            this.ref('pid');
-            this.field('pid');
-            this.field('title');
-
-            results.forEach(({ id: pid, title }) => this.add({ pid, title }));
-        });
-        const sanitizedTerm = sanitizeLunrQuery(term);
-        if (!sanitizedTerm) {
-            return [];
-        }
-        try {
-            const hits = lunrIndex.search(lunrSearchQuery(sanitizedTerm));
-            const titles = new Map(results.map(({ id, title }) => [id, title]));
-            const hitRefs = new Set(hits.map(({ ref }) => ref));
-            for (const { id, title } of results) {
-                if (!hitRefs.has(id)) {
-                    traceCandidate({ title, stage: 'bbc', kept: false, reason: 'no-match', detail: 'None of the search words match this title' });
-                }
-            }
-            const ranked = hits.filter(({ ref }) => {
-                const title = titles.get(ref) ?? '';
-                const missing = matchAllWords ? firstMissingTerm(title, term) : undefined;
-                traceCandidate(
-                    missing === undefined
-                        ? { title, stage: 'bbc', kept: true }
-                        : { title, stage: 'bbc', kept: false, reason: 'missing-word', detail: `Missing the word "${missing}"` }
-                );
-                return missing === undefined;
-            });
-            // Exact title first, then titles starting with it, then the rest (stable, so lunr's
-            // score order is kept within each group) - the result cap then cuts the weakest.
-            return ranked.sort((a, b) => titleRank(titles.get(a.ref) ?? '', term) - titleRank(titles.get(b.ref) ?? '', term));
-        } catch (err: any) {
-            if (err && err.name === 'QueryParseError') {
-                loggingService.error(`Lunr QueryParseError for term "${term}": ${err.message}`);
-                return [];
-            }
-            throw err;
-        }
+        const titles = new Map(results.map(({ id, title }) => [id, title]));
+        // Exact title first, then titles starting with it, then the rest (stable, so lunr's
+        // score order is kept within each group) - the result cap then cuts the weakest.
+        return lunrTitleSearch(term, results, matchAllWords).sort(
+            (a, b) => titleRank(titles.get(a.ref) ?? '', term) - titleRank(titles.get(b.ref) ?? '', term)
+        );
     }
 }
 

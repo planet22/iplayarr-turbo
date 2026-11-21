@@ -28,6 +28,10 @@ Shows you have subscribed to, whose new episodes are queued automatically (check
 
 Manual search against the same backend Sonarr/Radarr use (`NativeSearchService` or `get_iplayer --search`, depending on `NATIVE_SEARCH`) — useful for grabbing something one-off without waiting for Sonarr/Radarr's own scheduled search, or for content that isn't matched to a series Sonarr/Radarr is tracking. The search box also suggests titles as you type, the **Posters** toggle shows results as artwork cards, and a dropdown filters by channel (see [BROWSE.md](BROWSE.md#search)). The toolbar sits above the search box and shows the view options before you search; recent searches appear as chips, each removable with its **x**. Clicking an episode in the results (or on a programme card) opens that episode. Results can be downloaded directly from here; see [DownloadPage](#download-download) for how that request is handled. Search settings here (engine, match-all-words) can differ from what Sonarr/Radarr use, and audio described / signed versions can be filtered; see [BROWSE.md](BROWSE.md#search).
 
+## Radio (BBC Sounds)
+
+With BBC Sounds on (Settings → General), a **Video | Radio** switch in the top bar changes the browse pages (Discover, Search, Categories, Collections, Channels, Guide, a programme) to BBC radio. Radio works the same way as video: Play and Download on every card, a show page with its episodes, Subscribe (to a show's new episodes, or all of it), and an expiry badge when an episode is about to leave Sounds. Search lists radio after video when **Search Video and Radio Together** is on; a pasted `bbc.co.uk/sounds` show link opens that show. Queue, Subscriptions (filter Video or Radio), Events, Statistics, Streaming and Watchdog list radio beside video. See [SOUNDS.md](SOUNDS.md).
+
 ## Downloading by hand
 
 Download buttons open a confirmation where you can rename the file, choose **.strm link or Video file** (it starts from the Media Mode setting and applies to that download only), pick the **quality** and, when the item has them and Settings says to ask, the **version** (audio described / signed). The popup shows the total size when known. Selecting several episodes (programme page or Search) gives a batch confirmation with the same choices.
@@ -38,7 +42,7 @@ Where a manually-triggered download (as opposed to one Sonarr/Radarr queued via 
 
 ## Queue (`/queue`)
 
-The main day-to-day view: active downloads and completed history, combined (`QueueTable`). Each row shows the **Client** that fetched it (Native, get_iplayer, yt-dlp), the **Output** (file or STRM), speed in MB/s and any version / subtitle badges. A download that is waiting or has not reported progress shows an empty bar saying **Queued** or **Starting**, and a download made of several parts shows text such as `video 1/2`. Downloads are tracked per job, so the same programme can download at two resolutions at once. The info popup shows quality, size, client, library and download details, and only that download's log lines. Works the same regardless of whether items were queued by Sonarr/Radarr or manually — this is iPlayarr's own view into exactly what it's reporting back over the SABnzbd protocol. Cancelling a queued item or removing a completed one here is also what `ARCHIVE_ENABLED` affects: with it on, cancelled/removed entries are kept as a record instead of discarded (Settings → Media Management → Archive Downloads?).
+The main day-to-day view: active downloads and completed history, combined (`QueueTable`). Each row shows the **Client** that fetched it (Native, get_iplayer, yt-dlp), the **Output** (file or STRM), speed in MB/s and any version / subtitle badges. A download that is waiting or has not reported progress shows an empty bar saying **Queued** or **Starting**, and a download made of several parts shows text such as `video 1/2`. Downloads are tracked per job, so the same programme can download at two resolutions at once. The info popup shows quality, size, client, library and download details, and only that download's log lines. Works the same regardless of whether items were queued by Sonarr/Radarr or manually — this is iPlayarr's own view into exactly what it's reporting back over the SABnzbd protocol. Cancelling a queued item or removing a completed one here is also what `ARCHIVE_ENABLED` affects: with it on, cancelled/removed entries are kept as a record instead of discarded (Settings → Media Management → Archive Downloads).
 
 ## Streaming (`/streaming`)
 
@@ -46,11 +50,11 @@ Only relevant when `MEDIA_MODE=strm`. Shows throughput live and a **Subs** colum
 
 ## Watchdog (`/watchdog`)
 
-Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, Library Access checks and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
+Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, the library's per-source counts and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
 
 ## NZB (`/nzb`)
 
-Diagnostics for the Newznab/SABnzbd integration specifically — recent searches and grabs *from Sonarr, Radarr, or Prowlarr*, not from manual Search/Download in the UI. Useful for confirming what a connected Arr instance is actually asking for, and for spotting a misbehaving search (e.g. wrong season/episode parsing). Each of Recent Searches, Recent Grabs and Failed Grabs can be cleared independently (confirmation required). See [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) for the protocol this reflects.
+Diagnostics for the Newznab/SABnzbd integration specifically — searches and grabs *from Sonarr, Radarr, or Prowlarr*. Searches you run on the Search page are logged too but hidden by default (Prowlarr searches count as indexer ones); pick "Manual (Search page)" or "All searches" in the search filters to see them. Useful for confirming what a connected Arr instance is actually asking for, and for spotting a misbehaving search (e.g. wrong season/episode parsing). Each of Indexer Searches, Recent Grabs and Failed Grabs can be cleared independently (confirmation required). See [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) for the protocol this reflects.
 
 ## Apps (`/apps`)
 
@@ -68,17 +72,17 @@ iPlayer doesn't name/structure its catalogue the way Sonarr/Radarr expect (match
 
 Live-streamed application log (Socket.IO), backed by the same rotated files described in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#log-locations). Loads the last 250 lines on open, then streams new ones in real time.
 
-## Video Events (`/events`)
+## Events (`/events`)
 
 An audit/event log distinct from the general application log — tracks specific lifecycle events (e.g. `stream_key_rotated` and similar) with filtering by date range and free-text search. Can be cleared from here (Settings-page-style toolbar's delete action).
 
 ## Statistics (`/stats`)
 
-Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page. The **Server** section shows uptime and one tile per cache with its **hit rate** (hits and misses are saved so they survive restarts), **records** and **space**. Below are search, grab and failed-grab trends, charts of sources and types (readable by screen readers) and a top-content list whose titles open the programme.
+Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page. The **Server** section is five plain cards: **system** (uptime, memory, CPU with load), **storage** (free space and a used bar for the Download and Complete folders, database size), **traffic** (library episodes, downloads running and queued, streams now and today), **housekeeping** (browsers open, overall cache hit rate, the next scheduled job and whether any failed) and **links** (whether the BBC answers and how fast, and whether each Sonarr and Radarr app is reachable). A folder bar turns amber at 90% full and red at 97%. The figures refresh every 10 seconds and the BBC and app checks every minute; a figure that cannot be read shows a dash. Under **Caches**, each cache has a tile with its **hit rate** (hits and misses are saved so they survive restarts), **records**, **space**, lookups **per minute**, when it was **last used** and its **lifetime**, a 15 minute activity line, and the soonest and latest expiry. Tiles are grouped by purpose (Browse, Programme data, Search and so on), each group headed by its caches, records, space and combined hit rate; a sort (busiest, lowest hit rate, last used, records, space, name) orders the tiles inside each group, and the Grouped / Flat button swaps to one list. Both choices are remembered per browser. The small dot in a tile's corner flashes green when a lookup was answered from the cache and red when it had to fetch; the rates and the line refresh every few seconds. Below are search, grab and failed-grab trends, charts of sources and types (readable by screen readers) and a top-content list whose titles open the programme.
 
 ## Settings (`/settings`)
 
-Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance (caches and editable scheduled tasks). Changes are staged and applied with the Save bar; a filter box finds a setting and `Ctrl+K` jumps to a tab. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
+Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance (caches and editable scheduled tasks). Maintenance lists the caches in the same groups, which fold away and have a **Clear group** button (it asks first); the same sort and Grouped / Flat choice apply. Changes are staged and applied with the Save bar; a filter box finds a setting and `Ctrl+K` jumps to a tab. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
 
 ## About (`/about`)
 

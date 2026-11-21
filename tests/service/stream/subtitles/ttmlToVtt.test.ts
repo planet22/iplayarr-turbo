@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { parseTime, ttmlToVtt } from '../../../../src/service/stream/subtitles/ttmlToVtt';
 
 // Keep this in step with the matching type definitions.

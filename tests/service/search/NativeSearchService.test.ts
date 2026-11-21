@@ -10,6 +10,7 @@ import newSearchCache from '../../../src/service/search/newSearchCache';
 import { IPlayerSearchResult, VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../../src/types/Synonym';
+import { trackSearchCompleteness } from '../../../src/utils/searchCompleteness';
 import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
@@ -17,11 +18,12 @@ jest.mock('axios');
 jest.mock('../../../src/service//episodeCacheService');
 jest.mock('../../../src/service//iplayerDetailsService');
 jest.mock('../../../src/service/loggingService');
-jest.mock('../../../src/utils/Utils', () => ({
-    ...jest.requireActual('../../../src/utils/Utils'),
-    createNZBName: jest.fn(),
-    getQualityProfile: jest.fn(),
-}));
+// The import chain through Utils is circular, so this factory can run more than once while modules load, and the service and the test would then
+// hold different mock functions. The functions are made once and shared by every run.
+jest.mock('../../../src/utils/Utils', () => {
+    const shared = ((globalThis as any).__nativeSearchUtilsMock ??= { createNZBName: jest.fn(), getQualityProfile: jest.fn() });
+    return { ...jest.requireActual('../../../src/utils/Utils'), ...shared };
+});
 
 describe('NativeSearchService', () => {
     let mockSynonym: any;
@@ -183,6 +185,24 @@ describe('NativeSearchService', () => {
             const results = await NativeSearchService.search(mockTerm);
 
             expect(results).toHaveLength(0); // Should return empty array when no results
+        });
+
+        it('keeps the results already found when one hit throws', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: { new_search: { results: [{ id: 'badHit', title: 'Test Term' }, { id: 'goodHit', title: 'Test Term' }] } },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockImplementation(async (ref: string) => {
+                if (ref === 'badHit') throw new Error('lookup blew up');
+                return null;
+            });
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([
+                { title: 'Good Episode', pid: 'goodHit', type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+            ]);
+
+            const results = await NativeSearchService.search(mockTerm);
+
+            expect(results.map(({ pid }) => pid)).toEqual(['goodHit']);
         });
 
         it('should handle episodes without a brand PID', async () => {
@@ -657,5 +677,32 @@ describe('NativeSearchService when the search cache cannot be written', () => {
         (axios.get as jest.Mock).mockResolvedValueOnce({ status: 200, data: { new_search: { results: [] } } });
         await expect(NativeSearchService.search('Test Term')).resolves.toEqual([]);
         expect(set).toHaveBeenCalled();
+    });
+});
+
+describe('NativeSearchService search completeness', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        (getQualityProfile as jest.Mock).mockResolvedValue({ sizeFactor: 1 });
+        jest.spyOn(newSearchCache, 'get').mockResolvedValue(undefined);
+        jest.spyOn(newSearchCache, 'set').mockResolvedValue(undefined);
+    });
+
+    it('is marked incomplete when the BBC request fails', async () => {
+        (axios.get as jest.Mock).mockRejectedValue(new Error('timeout'));
+        const tracked = await trackSearchCompleteness(() => NativeSearchService.search('Test Term'));
+        expect(tracked).toEqual({ result: [], complete: false });
+    });
+
+    it('is marked incomplete when the BBC answers with another status', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ status: 503, data: {} });
+        const tracked = await trackSearchCompleteness(() => NativeSearchService.search('Test Term'));
+        expect(tracked).toEqual({ result: [], complete: false });
+    });
+
+    it('stays complete when the BBC simply has no matches', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results: [] } } });
+        const tracked = await trackSearchCompleteness(() => NativeSearchService.search('Test Term'));
+        expect(tracked.complete).toBe(true);
     });
 });

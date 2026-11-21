@@ -1,21 +1,23 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { searchResultLimit } from '../../src/constants/iPlayarrConstants';
 import collectionDownloadService from '../../src/service/collectionDownloadService';
 import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
+import { resolveRelease } from '../../src/service/releaseService';
 import videoEventService from '../../src/service/videoEventService';
 import { MediaMode } from '../../src/types/enums/MediaMode';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { VideoEventType } from '../../src/types/VideoEvent';
-import { resolveQueueRequest } from '../../src/utils/queueRequest';
 
 jest.mock('../../src/service/collectionService');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/loggingService');
 jest.mock('../../src/service/queueService');
 jest.mock('../../src/service/videoEventService');
-jest.mock('../../src/utils/queueRequest');
+jest.mock('../../src/service/releaseService', () => ({ ...jest.requireActual('../../src/service/releaseService'), resolveRelease: jest.fn() }));
 
 // Naming follows the conventions used by the neighbouring modules.
 // Changes here ripple outwards, so check the callers first.
@@ -30,10 +32,11 @@ describe('collectionDownloadService.queueCollection', () => {
         jest.resetAllMocks();
         (collectionService.find as jest.Mock).mockResolvedValue({ id: 'g1', title: 'Fright Night', count: 3 });
         getGroup.mockResolvedValue([member('m1'), member('m2')]);
-        (resolveQueueRequest as jest.Mock).mockImplementation(async ({ pid }) => ({
+        (resolveRelease as jest.Mock).mockImplementation(async (pid: string) => ({
             nzbName: `Name.${pid}`,
             type: VideoType.MOVIE,
             library: { title: `Title ${pid}` },
+            details: {},
         }));
     });
 
@@ -65,11 +68,9 @@ describe('collectionDownloadService.queueCollection', () => {
         expect((queueService.addToQueue as jest.Mock).mock.calls[0][4]).toEqual({ title: 'Title m1' });
     });
 
-    it('queues a title the BBC gave no library metadata for, without a collection', async () => {
-        (resolveQueueRequest as jest.Mock).mockResolvedValue({ nzbName: 'n', type: VideoType.TV, library: undefined });
-        const result = await collectionDownloadService.queueCollection('g1');
-        expect(result?.queued).toBe(2);
-        expect((queueService.addToQueue as jest.Mock).mock.calls[0][4]).toBeUndefined();
+    it('resolves each title by the BBC format category and the plain name', async () => {
+        await collectionDownloadService.queueCollection('g1');
+        expect((resolveRelease as jest.Mock).mock.calls).toEqual([['m1', { typeFrom: 'category', nameStyle: 'plain' }], ['m2', { typeFrom: 'category', nameStyle: 'plain' }]]);
     });
 
     it('passes the media choice to the queue, and none when not given', async () => {
@@ -84,7 +85,7 @@ describe('collectionDownloadService.queueCollection', () => {
         const result = await collectionDownloadService.queueCollection('g1', { dryRun: true });
 
         expect(result).toEqual({ title: 'Fright Night', total: 2, queued: 0, skipped: 0, failed: 0 });
-        expect(resolveQueueRequest).not.toHaveBeenCalled();
+        expect(resolveRelease).not.toHaveBeenCalled();
         expect(queueService.addToQueue).not.toHaveBeenCalled();
         expect(videoEventService.record).not.toHaveBeenCalled();
     });
@@ -121,9 +122,9 @@ describe('collectionDownloadService.queueCollection', () => {
     });
 
     it('counts a title the BBC has no details for as failed and carries on', async () => {
-        (resolveQueueRequest as jest.Mock).mockImplementation(async ({ pid }) => {
+        (resolveRelease as jest.Mock).mockImplementation(async (pid: string) => {
             if (pid === 'm1') throw new Error('no details');
-            return { nzbName: `Name.${pid}`, type: VideoType.MOVIE, library: { title: pid } };
+            return { nzbName: `Name.${pid}`, type: VideoType.MOVIE, library: { title: pid }, details: {} };
         });
 
         const result = await collectionDownloadService.queueCollection('g1');
@@ -144,8 +145,17 @@ describe('collectionDownloadService.queueCollection', () => {
         expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Invalid programme id'));
     });
 
+    it('reports a refusal from the queue that is not an Error', async () => {
+        (queueService.addToQueue as jest.Mock).mockImplementationOnce(() => {
+            throw 'refused';
+        });
+        const result = await collectionDownloadService.queueCollection('g1');
+        expect(result).toMatchObject({ queued: 1, failed: 1 });
+        expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('refused'));
+    });
+
     it('reports the failures when something other than an Error is thrown', async () => {
-        (resolveQueueRequest as jest.Mock).mockRejectedValue('plain string');
+        (resolveRelease as jest.Mock).mockRejectedValue('plain string');
         const result = await collectionDownloadService.queueCollection('g1');
         expect(result).toMatchObject({ queued: 0, failed: 2 });
     });

@@ -56,6 +56,18 @@ describe('appService', () => {
         Object.keys(mockStorageData).forEach((k) => delete mockStorageData[k]);
     });
 
+    it('loses no app when several are added at once, and updates one in place', async () => {
+        const apps = Array.from({ length: 6 }, (_, i) => ({ id: `a${i}`, name: `App ${i}`, type: 'sonarr', url: 'http://x', api_key: 'k' }) as any);
+        await Promise.all(apps.map((a) => appService.addApp(a)));
+        expect(mockStorageData.apps.map((a: any) => a.id).sort()).toEqual(apps.map((a) => a.id).sort());
+
+        await Promise.all([appService.updateApp({ id: 'a2', name: 'Renamed' }), appService.addApp({ id: 'extra', name: 'E', type: 'radarr', url: 'http://y', api_key: 'k' } as any)]);
+        const ids = mockStorageData.apps.map((a: any) => a.id);
+        expect(ids).toHaveLength(7);
+        expect(ids.indexOf('a2')).toBe(2);
+        expect(mockStorageData.apps[2].name).toBe('Renamed');
+    });
+
     it('adds a new app and assigns an ID if not present', async () => {
         const id = 'test-id';
         (uuidv4 as jest.Mock).mockReturnValue(id);

@@ -1,37 +1,51 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage schedulePage">
         <PageHeader :title="`Guide - ${dateLabel}`" icon="calendar-days" />
         <SettingsPageToolbar>
             <template #nav>
-                <button type="button" title="Previous day" aria-label="Previous day" @click="shiftDay(-1)">
+                <button type="button" class="SettingsPageToolbar-button clickable" title="Previous day" aria-label="Previous day" @click="shiftDay(-1)">
                     <font-awesome-icon :icon="['fas', 'chevron-left']" />
                 </button>
-                <button type="button" title="Next day" aria-label="Next day" @click="shiftDay(1)">
+                <button type="button" class="SettingsPageToolbar-button clickable" title="Next day" aria-label="Next day" @click="shiftDay(1)">
                     <font-awesome-icon :icon="['fas', 'chevron-right']" />
                 </button>
-                <button v-if="!isToday" type="button" title="Today" aria-label="Today" @click="goToday">
+                <button v-if="!isToday" type="button" class="SettingsPageToolbar-button clickable" title="Today" aria-label="Today" @click="goToday">
                     <font-awesome-icon :icon="['fas', 'calendar-day']" />
                 </button>
             </template>
             <template #actions>
                 <button
-                    type="button" :title="zoneTooltip"
+                    type="button" class="SettingsPageToolbar-button clickable" :title="zoneTooltip"
                     :aria-label="zoneTooltip" @click="toggleZone"
                 >
                     <font-awesome-icon v-if="useLocalTime" :icon="['fas', 'location-dot']" />
                     <span v-else class="zoneLabel">UK</span>
                 </button>
-                <button type="button" aria-label="Zoom out" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
+                <button type="button" class="SettingsPageToolbar-button clickable" aria-label="Zoom out" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
                 </button>
-                <button type="button" aria-label="Zoom in" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
+                <button type="button" class="SettingsPageToolbar-button clickable" aria-label="Zoom in" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
                 </button>
             </template>
         </SettingsPageToolbar>
         <LoadingIndicator v-if="loading" />
         <ErrorState v-else-if="error" :message="error" @retry="load()" />
-        <InfoBar v-else-if="channels.length === 0">Nothing scheduled for this day.</InfoBar>
+        <EmptyState
+            v-else-if="channels.length === 0"
+            :icon="radioActive() ? 'radio' : 'tv'"
+            :title="radioActive() ? 'No radio guide' : 'No TV guide'"
+            :hint="
+                radioActive() && liveRadioOff
+                    ? 'Live radio is switched off.'
+                    : 'No channels are switched on, so there is nothing to show.'
+            "
+        >
+            <RouterLink v-if="radioActive() && liveRadioOff" :to="{ path: '/settings', hash: '#liveTv' }">Turn on Live Radio in Settings</RouterLink>
+            <RouterLink v-else to="/browse/channels">Go to Channels</RouterLink>
+        </EmptyState>
         <div v-else class="scheduleGrid">
             <div class="channelColumn">
                 <div class="corner"></div>
@@ -40,7 +54,8 @@
                     class="channelCell"
                 >
                     <img
-                        v-if="row.channel.logo && !failedLogos[row.channel.id]" class="channelLogo"
+v-if="row.channel.logo && !failedLogos[row.channel.id]"
+                        loading="lazy" class="channelLogo"
                         :src="getThumbnailUrl(row.channel.logo)" :alt="row.channel.title"
                         @error="failedLogos[row.channel.id] = true"
                     />
@@ -59,15 +74,26 @@
                     </div>
                     <div v-for="row in channels" :key="row.channel.id" class="channelRow">
                         <span v-if="row.slots.length === 0" class="noSchedule">No schedule available</span>
-                        <RouterLink
-                            v-for="slot in row.slots" :key="slot.item.pid" :to="`/browse/programme/${slot.item.pid}`"
-                            :class="['programmeBlock', isLive(slot) ? 'live' : '']"
-                            :style="blockStyle(slot)" :title="slot.item.title"
+                        <!-- A block is a plain box holding the link and, for a programme to watch on demand, its action buttons: a button never sits inside a link. -->
+                        <div
+                            v-for="slot in row.slots" :key="`${slot.item.pid}|${slot.start}`"
+                            :class="['programmeBlock', isLive(slot) ? 'live' : '', slot.onDemand ? 'onDemand' : '']"
+                            :style="blockStyle(slot)"
                         >
-                            <span class="blockTitle">{{ slot.item.title }}</span>
-                            <span v-if="slot.item.subtitle" class="blockSubtitle">{{ slot.item.subtitle }}</span>
-                            <span class="blockTime">{{ formatTime(slot.start) }} - {{ formatTime(slot.end) }}</span>
-                        </RouterLink>
+                            <RouterLink class="blockLink" :to="slotLink(row, slot)" :title="slot.item.title">
+                                <span class="blockTitle">{{ slot.item.title }}</span>
+                                <span v-if="slot.item.subtitle" class="blockSubtitle">{{ slot.item.subtitle }}</span>
+                                <span class="blockTime">{{ formatTime(slot.start) }} - {{ formatTime(slot.end) }}</span>
+                            </RouterLink>
+                            <span v-if="slot.onDemand" class="blockActions">
+                                <button v-if="canPlay" type="button" class="clickable" title="Play on demand" aria-label="Play on demand" @click.prevent.stop="play(slot.item)">
+                                    <font-awesome-icon :icon="['fas', 'play']" />
+                                </button>
+                                <button type="button" class="clickable" title="Download (or .strm) on demand" aria-label="Download on demand" @click.prevent.stop="download(slot.item)">
+                                    <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
+                                </button>
+                            </span>
+                        </div>
                     </div>
                     <div
                         v-for="shade in adjacentShades" :key="shade.left" class="adjacentDay"
@@ -81,15 +107,21 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
+import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { browseFetch } from '@/lib/browse';
+import { programmeTarget } from '@/lib/mediaDisplay';
+import { radioActive } from '@/lib/mediaMode';
+import { useBrowseActions } from '@/lib/useBrowseActions';
 import { formatTime as formatClock, getThumbnailUrl } from '@/lib/utils';
+
+// Play or download a programme the guide marks as on demand, the same way a card does.
+const { canPlay, play, download } = useBrowseActions();
 
 const ZOOM_STEP = 0.5;
 const ZOOM_MIN = 1;
@@ -99,6 +131,10 @@ const ZOOM_MAX = 16;
 const MIN_BLOCK_WIDTH = 60;
 
 const pxPerMinute = ref(2.5);
+
+// Radio stations only exist while LIVE_RADIO is on; the empty radio guide says so.
+const globalSettings = inject('globalSettings', null);
+const liveRadioOff = computed(() => globalSettings?.value?.LIVE_RADIO !== 'true');
 
 // Re-centers the timeline on whatever time was in the middle of the viewport, so zooming doesn't
 // just jump the scroll position back to the start of the day.
@@ -195,10 +231,12 @@ const viewDate = computed(() => {
     return ukDate(new Date(dayStart.value.getTime() + minutes * 60000));
 });
 const isToday = computed(() => viewDate.value === ukDate(now.value));
-const dateLabel = computed(() =>
-    new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }).format(
-        new Date(`${viewDate.value}T12:00:00Z`)
-    )
+// Always the UK schedule day (iPlayer's days are UK days, whatever the times below are shown in), so say so.
+const dateLabel = computed(
+    () =>
+        new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }).format(
+            new Date(`${viewDate.value}T12:00:00Z`)
+        ) + ' (UK)'
 );
 
 let settleTimer;
@@ -286,6 +324,10 @@ const blockStyle = (slot) => {
     return { left: `${left}px`, width: `${width}px` };
 };
 
+// A programme's page, the same target a card has. A radio broadcast opens its radio page when the server gave it a show to open;
+// one without (an older cached schedule) has no id of a show, so it opens a search for its title.
+const slotLink = (row, slot) => (row.channel.audioOnly && !slot.item.radio ? { path: '/search', query: { searchTerm: slot.item.title } } : programmeTarget(slot.item) || { path: '/search', query: { searchTerm: slot.item.title } });
+
 // Fetches the selected day plus its neighbours and merges them per channel. Neighbouring days are
 // best-effort (a failure just leaves that third of the strip blank); the selected day must succeed.
 let loadToken = 0;
@@ -303,6 +345,8 @@ const load = async (silent = false) => {
         for (const result of results) {
             if (result.status !== 'fulfilled') continue;
             for (const row of result.value) {
+                // The video guide lists the TV channels; the radio guide (Video | Radio switch) the radio stations.
+                if (!!row.channel.audioOnly !== radioActive()) continue;
                 const entry = merged.get(row.channel.id) ?? { channel: row.channel, slots: [], seen: new Set() };
                 for (const slot of row.slots) {
                     const key = `${slot.item.pid}|${slot.start}`;
@@ -367,8 +411,11 @@ watch(selectedDate, async () => {
     scrollToNow();
 });
 
+let disposed = false;
 onMounted(async () => {
     await load();
+    // Left during the load: no timer to arm, nothing to scroll.
+    if (disposed) return;
     scrollToNow();
     nowTimer = setInterval(() => {
         now.value = new Date();
@@ -376,6 +423,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+    disposed = true;
     clearInterval(nowTimer);
     clearTimeout(settleTimer);
 });
@@ -383,7 +431,7 @@ onBeforeUnmount(() => {
 
 <style lang="less" scoped>
 .zoneLabel {
-    font-size: 12px;
+    font-size: @font-size-sm;
     font-weight: 700;
     line-height: 1;
 }
@@ -399,7 +447,7 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: @space-3;
     margin-bottom: 1rem;
 
     .browseTitle {
@@ -409,7 +457,7 @@ onBeforeUnmount(() => {
 
 // The buttons take the toolbar's own look; only the spacing under the bar needs styling here.
 .schedulePage :deep(.SettingsPageToolbar) {
-    margin-bottom: 12px;
+    margin-bottom: @space-3;
 }
 
 @row-height: 64px;
@@ -419,7 +467,7 @@ onBeforeUnmount(() => {
 .scheduleGrid {
     display: flex;
     border: 1px solid @settings-button-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     overflow: hidden;
 }
 
@@ -453,11 +501,11 @@ onBeforeUnmount(() => {
         display: block;
         max-width: 100%;
         max-height: 100%;
-        border-radius: 3px;
+        border-radius: @radius-sm;
     }
 
     .channelName {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @primary-text-color;
         text-align: center;
     }
@@ -480,7 +528,7 @@ onBeforeUnmount(() => {
 
     &::-webkit-scrollbar-thumb {
         background-color: @settings-button-hover-border-color;
-        border-radius: 5px;
+        border-radius: @radius-md;
 
         &:hover {
             background-color: @brand-color;
@@ -517,8 +565,8 @@ onBeforeUnmount(() => {
     bottom: 0;
     display: flex;
     align-items: center;
-    padding-left: 4px;
-    font-size: 11px;
+    padding-left: @space-1;
+    font-size: @font-size-xs;
     color: @subtle-text-color;
     border-left: 1px solid @settings-button-border-color;
     white-space: nowrap;
@@ -544,9 +592,9 @@ onBeforeUnmount(() => {
     position: sticky;
     left: 0;
     display: inline-block;
-    padding: 0 12px;
+    padding: 0 @space-3;
     line-height: @row-height;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
@@ -554,31 +602,82 @@ onBeforeUnmount(() => {
     position: absolute;
     top: 4px;
     bottom: 4px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 1px;
-    padding: 4px 8px;
     box-sizing: border-box;
     overflow: hidden;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
-    text-decoration: none;
+
+    .blockLink {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1px;
+        height: 100%;
+        padding: @space-1 @space-2;
+        box-sizing: border-box;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    // Programmes to watch on demand: a slight brand-colour shade, and Play / Download buttons on hover (always, on touch screens).
+    &.onDemand {
+        background-color: color-mix(in srgb, @brand-color 12%, @settings-button-background-color);
+    }
+
+    .blockActions {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        display: none;
+        gap: @space-1;
+
+        button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid @settings-button-border-color;
+            background-color: @settings-button-background-color;
+            color: @primary-text-color;
+            font-size: @font-size-xs;
+
+            &:hover {
+                background-color: @brand-color;
+                border-color: @brand-color;
+                color: @on-brand-color;
+            }
+        }
+    }
+
+    &:hover .blockActions,
+    &:has(:focus-visible) .blockActions {
+        display: flex;
+    }
+
+    @media (hover: none) {
+        .blockActions {
+            display: flex;
+        }
+    }
 
     &:hover {
         border-color: @brand-color;
         z-index: 1;
     }
 
-    &.live {
+    &.live,
+    &.live.onDemand {
         border-color: @brand-color;
         background-color: @nav-active-background-color;
     }
 
     .blockTitle {
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
@@ -587,7 +686,7 @@ onBeforeUnmount(() => {
 
     .blockSubtitle,
     .blockTime {
-        font-size: 11px;
+        font-size: @font-size-xs;
         color: @subtle-text-color;
         white-space: nowrap;
         overflow: hidden;

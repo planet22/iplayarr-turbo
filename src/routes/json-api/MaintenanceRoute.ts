@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import cacheAdminService from '../../service/cacheAdminService';
@@ -51,6 +53,16 @@ router.post('/tasks/:id/schedule/validate', scheduleHandler(false));
 
 router.get('/caches', async (_, res: Response) => {
     res.json(await cacheAdminService.list());
+});
+
+// Names and descriptions only (no database work), so the Statistics page can draw its cards at once.
+router.get('/caches/names', (_, res: Response) => {
+    res.json(cacheAdminService.names());
+});
+
+// Live figures only (no database work), polled by the Statistics page.
+router.get('/caches/activity', (_, res: Response) => {
+    res.json(cacheAdminService.activity());
 });
 
 router.delete('/caches', async (_, res: Response) => {

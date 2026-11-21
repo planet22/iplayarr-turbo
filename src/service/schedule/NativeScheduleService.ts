@@ -49,6 +49,7 @@ class NativeScheduleService implements AbstractScheduleService {
         const axiosInstance = axios.create({ httpsAgent: agent })
 
         const chunkLimit = pLimit(10);
+        try {
         await Promise.all(
             chunks.map(chunk => chunkLimit(async () => {
                 try {
@@ -65,6 +66,9 @@ class NativeScheduleService implements AbstractScheduleService {
                 loggingService.log(`Progress: [${bar}] ${percent}% (${completed}/${chunks.length})`);
             }))
         );
+        } finally {
+            agent.destroy();
+        }
 
         loggingService.log(`Fetched details for ${chunkInfos.length} programmes.`);
 
@@ -75,8 +79,8 @@ class NativeScheduleService implements AbstractScheduleService {
             })
         );
 
-        this.scheduleCache.set('schedule', results);
-        this.cacheTime.set('last_cached', Date.now());
+        await this.scheduleCache.set('schedule', results);
+        await this.cacheTime.set('last_cached', Date.now());
     }
 
     async getFeed(): Promise<IPlayerSearchResult[]> {
@@ -85,7 +89,12 @@ class NativeScheduleService implements AbstractScheduleService {
         if (!lastCachedEpoch || (lastCachedEpoch + 2700 * 1000) < Date.now()) {
             if (!this.caching) {
                 this.caching = true;
-                this.refreshCache().then(() => this.caching = false);
+                // Cleared on failure too: left set, one failed refresh would stop every later one until a restart.
+                this.refreshCache()
+                    .catch((err) => loggingService.error(`Schedule refresh failed: ${err?.message ?? err}`))
+                    .finally(() => {
+                        this.caching = false;
+                    });
             }
         }
 
@@ -108,16 +117,17 @@ class NativeScheduleService implements AbstractScheduleService {
         fullRefresh: boolean = false
     ): Promise<string[]> {
         const hours = parseInt(rssHours);
-        const days = Math.ceil(hours / 24);
-
-        const date = new Date();
-        date.setDate(date.getDate() - days - 1);
+        // A missing or non-numeric setting is just today.
+        const days = Number.isFinite(hours) ? Math.max(0, Math.ceil(hours / 24)) : 0;
 
         const today = new Date();
         const allPids: Set<string> = new Set();
 
-        while (date.getDate() != new Date().getDate()) {
-            date.setDate(date.getDate() + 1);
+        // Oldest day first, ending with today. Counted in days rather than compared by day-of-month, which stopped a
+        // long window early whenever the start fell on the same date of an earlier month.
+        for (let daysAgo = days; daysAgo >= 0; daysAgo--) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - daysAgo);
 
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -136,12 +146,22 @@ class NativeScheduleService implements AbstractScheduleService {
                 // without having to hit BBC for it again.
                 loggingService.log(`Fetching schedule for ${name} on ${year}-${month}-${day}... ${url}`);
                 pids = await this.getPidsFromSchedulePage(url);
-                await this.schedulePageCache.set(cacheKey, pids);
+                // An empty answer is a failed fetch (getPidsFromSchedulePage swallows errors): stored, it would
+                // pass for the finished day tomorrow and hide that day's programmes for two weeks.
+                if (pids.length > 0) await this.schedulePageCache.set(cacheKey, pids);
             } else {
-                pids = await this.schedulePageCache.getOr(cacheKey, async () => {
-                    loggingService.log(`Fetching schedule for ${name} on ${year}-${month}-${day}... ${url}`);
-                    return this.getPidsFromSchedulePage(url);
-                });
+                try {
+                    pids = await this.schedulePageCache.getOr(cacheKey, async () => {
+                        loggingService.log(`Fetching schedule for ${name} on ${year}-${month}-${day}... ${url}`);
+                        const found = await this.getPidsFromSchedulePage(url);
+                        // getOr stores whatever it is given, so an empty (failed) page is refused here and retried next time.
+                        if (found.length === 0) throw new Error(`no programmes found on ${url}`);
+                        return found;
+                    });
+                } catch (err) {
+                    loggingService.error(`Skipping ${name} on ${year}-${month}-${day}: ${(err as Error)?.message ?? err}`);
+                    pids = [];
+                }
             }
 
             pids.forEach(pid => allPids.add(pid));
@@ -156,6 +176,7 @@ class NativeScheduleService implements AbstractScheduleService {
             const dom = new JSDOM(response.data);
             const document = dom.window.document;
             const titles = Array.from(document.querySelectorAll('.programme__titles a'));
+            dom.window.close();
 
             const now = new Date();
 
@@ -188,7 +209,13 @@ function parseDateString(dateStr: string): Date | null {
     const currentYear = new Date().getFullYear();
     const fullStr = `${dateStr} ${currentYear}`;
     const parsed = new Date(Date.parse(fullStr));
-    return isNaN(parsed.getTime()) ? null : parsed;
+    if (isNaN(parsed.getTime())) return null;
+    // The label has no year: around New Year, pick the one that puts the date nearest to now.
+    const halfYearMs = 300 * 24 * 3600 * 1000;
+    const diff = parsed.getTime() - Date.now();
+    if (diff > halfYearMs) parsed.setFullYear(currentYear - 1);
+    else if (diff < -halfYearMs) parsed.setFullYear(currentYear + 1);
+    return parsed;
 }
 
 export default new NativeScheduleService();

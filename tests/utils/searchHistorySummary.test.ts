@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { summariseSearchHistory } from '../../src/utils/searchHistorySummary';
 
 // Behaviour here is intentionally conservative.
@@ -29,7 +31,13 @@ describe('summariseSearchHistory', () => {
         ]);
         expect(plain.truncated).toBeUndefined();
         expect(mixed.type).toBe('');
+        expect(mixed.types).toEqual(['TV', 'MOVIE']);
         expect(mixed.hasDetail).toBe(true);
+    });
+
+    it('lists every type of a combined TV and radio search', () => {
+        const [summary] = summariseSearchHistory([entry({ items: [{ type: 'TV' }, { type: 'RADIO' }, { type: 'RADIO' }] })]);
+        expect(summary.types).toEqual(['TV', 'RADIO']);
     });
 
     it('reports an entry with nothing to show as having no detail', () => {
@@ -40,5 +48,20 @@ describe('summariseSearchHistory', () => {
     it('honours the trace\'s own truncated flag', () => {
         const [summary] = summariseSearchHistory([entry({ trace: { truncated: true, candidates: [] } })]);
         expect(summary.truncated).toBe(true);
+        expect(summary.truncatedBy).toBe('trace');
+    });
+
+    it('says BBC capped the search when a hit-cap note is present, even if the trace was also capped', () => {
+        const [bbc, both] = summariseSearchHistory([
+            entry({ trace: { candidates: [candidate(false, 'hit-cap')] } }),
+            entry({ trace: { truncated: true, candidates: [candidate(false, 'hit-cap')] } }),
+        ]);
+        expect(bbc.truncatedBy).toBe('bbc');
+        expect(both.truncatedBy).toBe('bbc');
+    });
+
+    it('gives no truncation reason when nothing was capped', () => {
+        const [summary] = summariseSearchHistory([entry({ trace: { candidates: [candidate(false, 'wrong-season')] } }), entry({})]);
+        expect(summary.truncatedBy).toBeUndefined();
     });
 });

@@ -138,19 +138,23 @@ describe('loggingService', () => {
     });
 
     describe('keeping only the latest lines', () => {
-        it('keeps 250 lines for the UI, dropping the oldest', async () => {
+        it('trims to about 250 lines for the UI (within one trim interval), dropping the oldest', async () => {
             const { dbReady, prisma } = await import('../../src/service/db/prismaService');
             await dbReady();
-            for (let i = 0; i < 255; i++) {
+            for (let i = 0; i < 400; i++) {
                 loggingService.log(`line ${i}`);
             }
             const count = () => prisma.queueItem.count({ where: { queue: 'iplayarr_logs' } });
-            for (let attempt = 0; attempt < 100 && (await count()) !== 250; attempt++) {
+            const newest = async () =>
+                (await prisma.queueItem.findFirst({ where: { queue: 'iplayarr_logs' }, orderBy: { id: 'desc' } }))?.value ?? '';
+            for (let attempt = 0; attempt < 200 && !(await newest()).includes('line 399'); attempt++) {
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
-            expect(await count()).toBe(250);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            expect(await count()).toBeLessThan(250 + 25);
+            expect(await count()).toBeGreaterThanOrEqual(250);
             const rows = await prisma.queueItem.findMany({ where: { queue: 'iplayarr_logs' }, orderBy: { id: 'asc' } });
-            expect(JSON.parse(rows[0].value).message).toBe('line 5');
+            expect(JSON.parse(rows[0].value).message).not.toBe('line 0');
         }, 30000);
     });
 
@@ -230,6 +234,47 @@ describe('loggingService persistence and file format', () => {
         await loggingService.pushInitialLogs('sock-1');
         expect(socketService.publish).toHaveBeenCalledWith('sock-1', 'log', expect.objectContaining({ message: 'first' }));
         expect(socketService.publish).toHaveBeenCalledWith('sock-1', 'log', expect.objectContaining({ message: 'second' }));
+    });
+
+    it('finds the saved lines that mention some text, newest few, oldest first', async () => {
+        await dbReady();
+        await prisma.queueItem.createMany({
+            data: [
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0aaaaaa one' }) },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'something else' }) },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'm0aaaaaa', message: 'step' }) },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0aaaaaa three' }) },
+            ],
+        });
+        const lines = await loggingService.linesMentioning('m0aaaaaa', 2);
+        expect(lines.map((line) => line.message)).toEqual(['step', 'm0aaaaaa three']);
+    });
+
+    it('skips a damaged stored line when replaying to a client', async () => {
+        await dbReady();
+        await prisma.queueItem.createMany({
+            data: [
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'a', message: 'before' }) },
+                { queue: 'iplayarr_logs', value: '{cut off' },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'b', message: 'after' }) },
+            ],
+        });
+        await expect(loggingService.pushInitialLogs('sock-2')).resolves.toBeUndefined();
+        const sent = (socketService.publish as jest.Mock).mock.calls.filter(([id]) => id === 'sock-2').map(([, , line]) => line.message);
+        expect(sent).toEqual(['before', 'after']);
+    });
+
+    it('skips a damaged stored line when searching for text', async () => {
+        await dbReady();
+        await prisma.queueItem.createMany({
+            data: [
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0bbbbbb first' }) },
+                { queue: 'iplayarr_logs', value: 'garbage m0bbbbbb' },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0bbbbbb second' }) },
+            ],
+        });
+        const lines = await loggingService.linesMentioning('m0bbbbbb', 10);
+        expect(lines.map((line) => line.message)).toEqual(['m0bbbbbb first', 'm0bbbbbb second']);
     });
 
     it('writes log files as "[time] [LEVEL] message" outside tests', () => {

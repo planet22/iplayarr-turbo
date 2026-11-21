@@ -7,7 +7,7 @@ import os from 'os';
 import path from 'path';
 import { deromanize } from 'romans';
 
-import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
+import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex, seriesEpisodeLabelRegex } from '../constants/iPlayarrConstants';
 import appService from '../service/appService';
 import configService from '../service/configService';
 import numberingOverrideService from '../service/numberingOverrideService';
@@ -21,12 +21,18 @@ import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
-import { londonDate } from './airDate';
+import { broadcastYear, londonDate } from './airDate';
+import { nameableEpisodeTitle } from './episodeMarkers';
 import { applyGroupToTemplate } from './releaseGroup';
 
 const removeUnsafeCharsRegex = /[^a-zA-Z0-9\s\\/._-]/g;
 
-export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails, synonym?: Synonym) {
+// The template in force and what each {{variable}} is for this programme: the one place the release name's inputs are worked
+// out (createNZBName renders them; the debug page shows them).
+export async function nzbTemplateContext(
+    result: IPlayerSearchResult | IPlayerDetails,
+    synonym?: Synonym
+): Promise<{ template: string; language: string; context: FilenameTemplateContext }> {
     const templateKey: IplayarrParameter =
         result.type == VideoType.MOVIE
             ? IplayarrParameter.MOVIE_FILENAME_TEMPLATE
@@ -47,7 +53,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         }
     }
 
-    const name = Handlebars.compile(template)({
+    const context = {
         title: title.replaceAll(removeUnsafeCharsRegex, ''),
         season,
         episode:
@@ -56,14 +62,21 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
                 : result.type == VideoType.TV
                     ? '00'
                     : undefined,
-        episodeTitle: result.episodeTitle?.trim().replaceAll(removeUnsafeCharsRegex, ''),
+        episodeTitle: nameableEpisodeTitle(result.episodeTitle)?.replaceAll(removeUnsafeCharsRegex, ''),
         synonym:
             synonym?.target.trim().toLowerCase() === title.toLowerCase()
                 ? (synonym.filenameOverride ?? synonym.from)?.trim().replaceAll(removeUnsafeCharsRegex, '')
                 : undefined,
         quality: qualityProfile.quality,
         language,
-    } as FilenameTemplateContext)
+        year: broadcastYear('firstBroadcast' in result ? result.firstBroadcast : (result as IPlayerSearchResult).pubDate?.toISOString?.()),
+    } as FilenameTemplateContext;
+    return { template, language, context };
+}
+
+export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails, synonym?: Synonym) {
+    const { template, language, context } = await nzbTemplateContext(result, synonym);
+    const name = Handlebars.compile(template)(context)
         .replaceAll(/[\s/\\]|[\s\\-_]{2,}/g, '.')
         .replaceAll(/\.{2,}/g, '.');
 
@@ -85,7 +98,10 @@ export function insertLanguageTag(name: string, tag: string): string {
 }
 
 export function getBaseUrl(req: Request): string {
-    return `${req.protocol}://${req.hostname}:${req.socket.localPort}`;
+    // Behind a reverse proxy the container port is not the one clients use.
+    const forwarded = String(req.headers?.['x-forwarded-port'] ?? '').split(',')[0].trim();
+    const port = /^\d{1,5}$/.test(forwarded) ? forwarded : req.socket.localPort;
+    return `${req.protocol}://${req.hostname}:${port}`;
 }
 
 const BCRYPT_SALT_ROUNDS = 10;
@@ -143,17 +159,37 @@ export async function createNZBDownloadLink(
 // queueService, not from an HTTP request), so the stream URL is built from the configured
 // STREAM_BASE_URL rather than derived per-request like createNZBDownloadLink above.
 // Uses STREAM_KEY, deliberately not API_KEY - see ApiRoute.ts's mode=stream branch for why.
-export async function createStrmContent(pid: string, streamKey: string, quality?: string, version?: string): Promise<string> {
+// `route` is an already formatted route hint (see routeHint.ts), for the plain version only.
+// `audio` is for a BBC Sounds episode (radio): the same link with audio=1, which serves its audio stream.
+export async function createStrmContent(pid: string, streamKey: string, quality?: string, version?: string, route?: string, audio = false): Promise<string> {
     const streamBaseUrl: string = (await configService.getParameter(IplayarrParameter.STREAM_BASE_URL)) as string;
-    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${quality ? `&quality=${encodeURIComponent(quality)}` : ''}${version ? `&version=${encodeURIComponent(version)}` : ''}`;
+    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream${audio ? '&audio=1' : ''}&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${quality ? `&quality=${encodeURIComponent(quality)}` : ''}${version ? `&version=${encodeURIComponent(version)}` : ''}${route ? `&route=${encodeURIComponent(route)}` : ''}`;
 }
 
 // Inverse of createStrmContent, for the STRM Watchdog: returns the BBC pid a .strm file points at, or
 // undefined for any .strm that isn't ours (e.g. another tool's). Accepts an iPlayarr stream URL
 // (mode=stream&pid=...) or a BBC iPlayer/programmes URL carrying a pid.
-export function parseStrmPid(content: string): string | undefined {
+// A radio link (BBC Sounds, `audio=1`) is never one of these: its id is not an iPlayer pid, so the Watchdog,
+// library index and subscription detection must leave it alone.
+export function isRadioStrm(content: string): boolean {
     const text = content.trim().split(/\r?\n/)[0] ?? '';
-    const pid = String.raw`[a-z]\d{3}[a-z0-9]{4}`;
+    // `media=audio` is the way to ask for audio; `audio=1` is what the links saved so far carry (and still are written with).
+    return /mode=stream/i.test(text) && /[?&](?:audio=1|media=audio)(?:&|$)/i.test(text);
+}
+
+// The BBC Sounds episode id a radio .strm link names (the counterpart of parseStrmPid for video), or undefined for any
+// other file.
+export function parseRadioStrmId(content: string): string | undefined {
+    if (!isRadioStrm(content)) return undefined;
+    const text = content.trim().split(/\r?\n/)[0] ?? '';
+    return text.match(/[?&]pid=([a-z0-9]+)(?:&|$)/i)?.[1];
+}
+
+export function parseStrmPid(content: string): string | undefined {
+    if (isRadioStrm(content)) return undefined;
+    const text = content.trim().split(/\r?\n/)[0] ?? '';
+    // A BBC pid is eight characters: a letter, a digit, then six letters or digits (m001v6k5, p04fthkg, b0bxbvkg).
+    const pid = String.raw`[a-z]\d[a-z0-9]{6}`;
     const iplayarr = text.match(new RegExp(`[?&]pid=(${pid})(?:&|$)`, 'i'));
     if (iplayarr && /mode=stream/i.test(text)) return iplayarr[1];
     const bbc = text.match(new RegExp(String.raw`bbc\.co\.uk/(?:iplayer|programmes)/(?:[a-z-]+/)*(${pid})(?:[/?#]|$)`, 'i'));
@@ -286,6 +322,15 @@ export async function calculateSeasonAndEpisode(
         if (skyhookResult) {
             series = skyhookResult.series ?? series;
             episode = skyhookResult.episode ?? episode;
+        } else if (parent && londonDate(programme.first_broadcast_date)) {
+            // BBC and TVDB often spell an episode title differently, so try the UK air date before giving up on S00E00.
+            const byDate = await Promise.resolve(
+                SkyhookService.lookupByAirDate(seriesTitle, londonDate(programme.first_broadcast_date) as string, episodeTitle)
+            ).catch(() => undefined);
+            if (byDate) {
+                series = byDate.series;
+                episode = byDate.episode;
+            }
         }
     }
 
@@ -297,10 +342,20 @@ export async function calculateSeasonAndEpisode(
         const showTitle = programme.display_title?.title ?? programme.title;
         const resolved =
             (await numberingOverrideService.find(showTitle, airDate)) ??
-            (await SkyhookService.lookupByAirDate(showTitle, airDate, episodeTitle).catch(() => undefined));
+            (await SkyhookService.lookupByAirDate(showTitle, airDate, episodeTitle, {
+                series: series || undefined,
+                episode: episode || undefined,
+            }).catch(() => undefined));
         if (resolved) {
             series = resolved.series;
             episode = resolved.episode;
+        } else if (!series && !episode && episodeTitle) {
+            // Not on TVDB: a "Series 4 Episode 1" label from get_iplayer is still better than S00E00.
+            const label = seriesEpisodeLabelRegex.exec(episodeTitle);
+            if (label) {
+                series = parseInt(label[1]);
+                episode = parseInt(label[2]);
+            }
         }
     }
 
@@ -369,43 +424,43 @@ export function sanitizeLunrQuery(term: string): string {
 }
 
 // Method accounts for CIFS filesystems where copyFile fails due to EPERM errors.
-// Under the hood copyFileSync uses rename which can fail on some network filesystems.
-export function copyWithFallback(src: string, dst: string) {
+// Under the hood copyFile uses rename/clone calls which can fail on some network filesystems.
+// Asynchronous, so copying a multi-gigabyte video does not stop the server answering anything else meanwhile.
+export async function copyWithFallback(src: string, dst: string): Promise<void> {
     try {
-        fs.copyFileSync(src, dst);
+        await fs.promises.copyFile(src, dst);
         return;
     } catch (err: any) {
         if (err.code !== 'EPERM') throw err;
     }
 
     try {
-        copyInChunks(src, dst);
+        await copyInChunks(src, dst);
     } catch (err) {
-        fs.rmSync(dst, { force: true });
+        await fs.promises.rm(dst, { force: true });
         throw err;
     }
 }
 
-// Plain read/write loop. The callers need the file to be complete when this returns (they go on to delete
-// the source), so it is synchronous, and it moves one chunk at a time so a large video is never held in memory.
-function copyInChunks(src: string, dst: string): void {
-    const input = fs.openSync(src, 'r');
+// Plain read/write loop that moves one chunk at a time, so a large video is never held in memory.
+async function copyInChunks(src: string, dst: string): Promise<void> {
+    const input = await fs.promises.open(src, 'r');
     try {
-        const output = fs.openSync(dst, 'w');
+        const output = await fs.promises.open(dst, 'w');
         try {
             const chunk = Buffer.allocUnsafe(1024 * 1024);
             let read: number;
-            while ((read = fs.readSync(input, chunk, 0, chunk.length, null)) > 0) {
+            while ((read = (await input.read(chunk, 0, chunk.length, null)).bytesRead) > 0) {
                 let written = 0;
                 while (written < read) {
-                    written += fs.writeSync(output, chunk, written, read - written);
+                    written += (await output.write(chunk, written, read - written)).bytesWritten;
                 }
             }
         } finally {
-            fs.closeSync(output);
+            await output.close();
         }
     } finally {
-        fs.closeSync(input);
+        await input.close();
     }
 }
 

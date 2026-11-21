@@ -8,6 +8,16 @@
         >
             <template #actions>
                 <button
+                    v-if="combinedActive()"
+                    type="button"
+                    class="enabled combinedIndicator"
+                    title="Combined search is on: video and radio together. Change in Settings"
+                    aria-label="Combined search is on: video and radio together. Change in Settings"
+                    @click="router.push({ path: '/settings', hash: '#search' })"
+                >
+                    <font-awesome-icon :icon="['fas', 'tv']" /><font-awesome-icon :icon="['fas', 'radio']" />
+                </button>
+                <button
                     v-if="viewMode === 'posters'"
                     type="button"
                     :class="{ enabled: smallIcons }"
@@ -33,25 +43,29 @@
     </div>
     <div class="pageSearchBar">
         <div class="searchPanel">
-            <font-awesome-icon class="searchIcon" :icon="['fas', 'search']" />
+            <font-awesome-icon class="searchIcon" :icon="['fas', 'magnifying-glass']" />
             <input
                 ref="searchEl" v-model="searchInput" class="searchBox" type="text"
-                placeholder="Search programmes, or paste a BBC URL" autocomplete="off" enterkeyhint="search"
+                placeholder="Search programmes" autocomplete="off" enterkeyhint="search"
+                role="combobox" aria-label="Search programmes" aria-autocomplete="list" aria-controls="searchSuggestions"
+                :aria-expanded="showSuggestions"
+                :aria-activedescendant="activeIndex >= 0 ? `searchSuggestion-${activeIndex}` : undefined"
                 @input="onInput" @focus="onInput" @blur="closeSuggestions"
                 @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
                 @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
             <button v-if="searchInput" type="button" class="clearSearch" title="Clear" aria-label="Clear" @mousedown.prevent="clearInput">
                 <font-awesome-icon :icon="['fas', 'xmark']" />
             </button>
-            <ul v-if="showSuggestions && suggestions.length" class="suggestions">
+            <ul v-if="showSuggestions" id="searchSuggestions" class="suggestions" role="listbox">
                 <li
-                    v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
-                    :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
+                    v-for="(suggestion, index) in suggestions" :id="`searchSuggestion-${index}`" :key="suggestionKey(suggestion)"
+                    role="option" :aria-selected="index === activeIndex" :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
                 >
                     <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                     <span>{{ suggestion.title }}</span>
                 </li>
-                <li class="seeAll" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
+                <li v-if="!suggestions.length" class="noMatches" role="option" aria-disabled="true" aria-selected="false">No matching titles</li>
+                <li class="seeAll" role="option" aria-selected="false" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
             </ul>
         </div>
     </div>
@@ -65,33 +79,35 @@
                 </span>
             </span>
         </div>
-        <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1" class="channelChips" role="group" aria-label="Filter results">
+        <p v-if="videoNoteText" class="videoNote" role="status">
+            <font-awesome-icon :icon="['fas', 'circle-info']" />
+            <span>{{ videoNoteText }}</span>
+        </p>
+        <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1 || showSort" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
-                <button
-                    v-for="option in typeOptions" :key="`type-${option}`" type="button"
-                    :class="['chip', filter === option ? 'active' : '']" @click="selectFilter(option)"
-                >
+                <FilterChip v-for="option in typeOptions" :key="`type-${option}`" :active="filter === option" @click="selectFilter(option)">
                     {{ option === 'All' ? 'All types' : option }}
-                </button>
+                </FilterChip>
                 <span v-if="channelOptions.length > 2 || versionOptions.length > 1" class="chipDivider" aria-hidden="true"></span>
             </template>
             <template v-if="versionOptions.length > 1">
-                <button
-                    v-for="option in versionOptions" :key="`version-${option.key}`" type="button"
-                    :class="['chip', versionFilter === option.key ? 'active' : '']" @click="pickVersion(option.key)"
-                >
+                <FilterChip v-for="option in versionOptions" :key="`version-${option.key}`" :active="versionFilter === option.key" @click="pickVersion(option.key)">
                     <font-awesome-icon v-if="option.icon" :icon="['fas', option.icon]" /> {{ option.label }}
-                </button>
+                </FilterChip>
                 <span v-if="channelOptions.length > 2" class="chipDivider" aria-hidden="true"></span>
             </template>
             <template v-if="channelOptions.length > 2">
-                <button
-                    v-for="option in channelOptions" :key="option" type="button"
-                    :class="['chip', channelFilter === option ? 'active' : '']" @click="pickChannel(option)"
-                >
-                    {{ option === 'All' ? 'All channels' : option }}
-                </button>
+                <IconSelect
+                    v-if="combinedActive()" aria-label="Channel" :model-value="channelFilter" :options="channelIconOptions"
+                    @update:model-value="pickChannel"
+                />
+                <select v-else class="gridFilter" aria-label="Channel" :value="channelFilter" @change="pickChannel($event.target.value)">
+                    <option v-for="option in channelOptions" :key="option" :value="option">
+                        {{ option === 'All' ? 'All channels' : option }}
+                    </option>
+                </select>
             </template>
+            <SortControl v-if="showSort" v-model:sort-by="sortBy" v-model:order="sortOrder" :options="sortOptions" @update:sort-by="resultsPage = 1" />
         </div>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <div v-if="selectMode && viewMode === 'posters' && searchResults.length" class="selectBar">
@@ -105,7 +121,7 @@
         </div>
         <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
             <template v-for="item in posterItems" :key="item.pid">
-                <CollectionCard v-if="item.result.kind === 'collection'" :collection="item.result" @click="openCollection(item.result)" />
+                <CollectionCard v-if="item.result.kind === 'collection'" :collection="item.result" :icon-badges="smallIcons" @click="openCollection(item.result)" />
                 <ProgrammeCard
                     v-else :item="item"
                     :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
@@ -116,7 +132,7 @@
         <table v-else-if="filteredResults.length" class="resultsTable responsive-table">
             <colgroup>
                 <col style="width: 40px" />
-                <col style="width: 70px" />
+                <col style="width: 110px" />
                 <col />
                 <col style="width: 100px" />
                 <col style="width: 150px" />
@@ -175,7 +191,7 @@
                     <td
                         data-title="Series"
                         :title="result.seriesPid ? 'View Series' : undefined"
-                        @click="result.seriesPid ? router.push({ path: `/browse/programme/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
+                        @click="result.seriesPid ? router.push({ path: `${result.audioOnly ? '/browse/radio' : '/browse/programme'}/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
                     >
                         {{ result.series ? `Series ${result.series}` : '-' }}
                     </td>
@@ -195,7 +211,7 @@
                         <button type="button" class="rowIconButton" title="Download" aria-label="Download">
                             <font-awesome-icon
                                 :class="['clickable', result.downloading ? 'downloading' : '']"
-                                :icon="['fas', 'cloud-download']"
+                                :icon="['fas', 'cloud-arrow-down']"
                             />
                         </button>
                     </td>
@@ -203,7 +219,7 @@
                         <font-awesome-icon
                             class="clickable"
                             :icon="['fas', 'play']"
-                            title="Play Video"
+                            :title="result.radio ? 'Play audio' : 'Play Video'"
                             @click="preview(result)"
                         />
                     </td>
@@ -216,9 +232,11 @@
             <font-awesome-icon class="emptyIcon" :icon="['fas', 'magnifying-glass']" />
             <div class="emptyTitle">
                 <template v-if="searchResults.length">Nothing matches that filter</template>
+                <template v-else-if="searchFailed">The search could not be completed</template>
                 <template v-else>No results for “<span class="termText" :title="searchTerm">{{ searchTerm }}</span>”</template>
             </div>
-            <div v-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
+            <div v-if="!searchResults.length && searchFailed" class="emptyHint">Check the connection and search again.</div>
+            <div v-else-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
         </div>
         <p v-if="searchSettingsLine && (searchTerm || showHome)" class="searchSettingsNote">
             <font-awesome-icon :icon="['fas', 'sliders']" />
@@ -227,16 +245,11 @@
         </p>
         <div v-if="showHome" class="searchHome">
             <section v-if="recent.length">
-                <h3>Recent searches</h3>
+                <h2>Recent searches</h2>
                 <div class="chipRow">
-                    <span v-for="term in recent" :key="term" class="chip chipWrap">
-                        <button type="button" class="chipMain" @click="searchFor(term)">
-                            <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
-                        </button>
-                        <button type="button" class="chipRemove" :aria-label="`Remove ${term} from recent searches`" :title="`Remove ${term}`" @click="removeRecent(term)">
-                            <font-awesome-icon :icon="['fas', 'circle-xmark']" />
-                        </button>
-                    </span>
+                    <FilterChip v-for="term in recent" :key="term" :remove-label="`Remove ${term} from recent searches`" @click="searchFor(term)" @remove="removeRecent(term)">
+                        <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
+                    </FilterChip>
                 </div>
             </section>
         </div>
@@ -245,31 +258,41 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onActivated, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
 import CollectionCard from '@/components/browse/CollectionCard.vue';
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
+import FilterChip from '@/components/common/FilterChip.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
+import IconSelect from '@/components/common/IconSelect.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortControl from '@/components/common/SortControl.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
+import { sortList } from '@/lib/browseSort';
 import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, planDownloads, quickVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { radioEpisodeOf } from '@/lib/mediaDisplay';
+import { combinedActive, radioActive } from '@/lib/mediaMode';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
+import { useRadioActions } from '@/lib/radio';
+import { askRadioDownload } from '@/lib/radioDownloadChoice';
+import { radioSearchLine } from '@/lib/radioSearchLine';
 import { streamSearch } from '@/lib/searchStream';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
+import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
 import { useViewMode } from '@/lib/useViewMode';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
@@ -284,22 +307,42 @@ const searchTerm = ref('');
 const searchInput = ref(route.query.searchTerm ?? '');
 const loading = ref(searchTerm.value !== '');
 const loadingMore = ref(false); // results still arriving after the first batch has been shown
+const searchFailed = ref(false); // the stream broke before the search finished
 const filter = ref('All');
 const allChecked = ref(false);
 
 // How manual search is set up right now, so a surprising result can be traced to a setting.
 const manualSettings = ref(undefined);
+// Combined search (SEARCH_COMBINED) also reads the radio setup, so the note can name both.
+const combinedRadioSettings = ref(undefined);
 const loadManualSettings = async () => {
+    if (combinedActive()) {
+        const [video, radioReply] = await Promise.all(
+            ['json-api/search/settings', 'json-api/search/settings?mode=radio'].map(async (path) => {
+                try {
+                    return (await ipFetch(path)) ?? { ok: false };
+                } catch {
+                    return { ok: false };
+                }
+            })
+        );
+        manualSettings.value = video.ok ? video.data : undefined;
+        combinedRadioSettings.value = radioReply.ok ? radioReply.data : undefined;
+        return;
+    }
+    combinedRadioSettings.value = undefined;
     try {
-        const { ok, data } = await ipFetch('json-api/search/settings');
+        const { ok, data } = await ipFetch(radioActive() ? 'json-api/search/settings?mode=radio' : 'json-api/search/settings');
         manualSettings.value = ok ? data : undefined;
     } catch {
         manualSettings.value = undefined;
     }
 };
-const searchSettingsLine = computed(() => {
-    const settings = manualSettings.value;
-    if (!settings) return '';
+// The note follows the Video | Radio switch: the settings are reloaded for the other catalogue.
+watch(radioActive, loadManualSettings);
+// Turning combined search on or off (the setting arrives after the page is up) reloads the note too.
+watch(() => combinedActive(), loadManualSettings);
+const videoSettingsLine = (settings) => {
     const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
     if (settings.native) {
         parts.push(settings.matchAllWords ? 'all words' : 'any word');
@@ -307,6 +350,19 @@ const searchSettingsLine = computed(() => {
         if (settings.collectionNames) parts.push('collections by name');
     }
     return `Search: ${parts.join(' · ')}`;
+};
+const searchSettingsLine = computed(() => {
+    const settings = manualSettings.value;
+    if (combinedActive()) {
+        const video = settings && !settings.radio ? videoSettingsLine(settings) : '';
+        const radioLine = radioSearchLine(combinedRadioSettings.value);
+        const both = [video, radioLine].filter(Boolean).join(' | ');
+        return both ? `Combined (video + radio) · ${both}` : '';
+    }
+    if (!settings) return '';
+    // Radio asks BBC Sounds and has its own settings. A reply for the other catalogue (the switch was just flipped) says nothing.
+    if (radioActive() || settings.radio) return radioActive() ? radioSearchLine(settings) : '';
+    return videoSettingsLine(settings);
 });
 
 const toolbarIcons = computed(() => {
@@ -316,72 +372,29 @@ const toolbarIcons = computed(() => {
     return icons;
 });
 
-// As-you-type suggestions (titles only, from the browse API) - mirrors the nav bar's search box.
-// Debounced, and a request counter drops responses that arrive after a newer keystroke.
-const suggestions = ref([]);
-const showSuggestions = ref(false);
-const activeIndex = ref(-1);
-let suggestTimer = null;
-let suggestRequest = 0;
-
-const closeSuggestions = () => {
-    showSuggestions.value = false;
-    activeIndex.value = -1;
-    suggestRequest += 1;
-    clearTimeout(suggestTimer);
-};
+// As-you-type suggestions under the search box (the logic is shared with the nav bar).
+const {
+    suggestions, showSuggestions, activeIndex, closeSuggestions, onInput: suggestInput, moveActive, openSuggestion, onEnter,
+} = useSearchSuggestions({
+    term: searchInput,
+    open: (suggestion) => {
+        searchInput.value = '';
+        router.push(suggestionPath(suggestion));
+    },
+    search: () => runSearch(),
+});
 
 const onInput = () => {
-    clearTimeout(suggestTimer);
-    const term = (searchInput.value ?? '').trim();
-    // URLs go straight to the download path on Enter - nothing to suggest for them.
-    if (term.length < 2 || /[/:]/.test(term)) {
-        closeSuggestions();
-        return;
-    }
-    suggestTimer = setTimeout(async () => {
-        const request = ++suggestRequest;
-        try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
-            if (request === suggestRequest && ok && Array.isArray(data)) {
-                suggestions.value = data;
-                activeIndex.value = -1;
-                showSuggestions.value = true;
-            }
-        } catch {
-            // Suggestions are a nicety - Enter still runs a normal search.
-        }
-    }, 250);
-};
-
-const moveActive = (delta) => {
-    if (!showSuggestions.value || !suggestions.value.length) return;
-    // Cycles through the suggestions, with -1 meaning "none highlighted" (Enter = plain search).
-    const count = suggestions.value.length;
-    const next = activeIndex.value + delta;
-    activeIndex.value = next < -1 ? count - 1 : next >= count ? -1 : next;
-};
-
-const openSuggestion = (suggestion) => {
-    closeSuggestions();
-    searchInput.value = '';
-    router.push(suggestionPath(suggestion));
-};
-
-const onEnter = () => {
-    const picked = showSuggestions.value ? suggestions.value[activeIndex.value] : undefined;
-    if (picked) {
-        openSuggestion(picked);
-    } else {
-        closeSuggestions();
-        runSearch();
-    }
+    // An emptied box puts the page back to how it opens blank.
+    if (!searchInput.value && (searchTerm.value || route.query.searchTerm)) resetSearch();
+    suggestInput();
 };
 
 // A collection is a result you open, not download from here: it is left out of selecting and downloading.
 const isCollection = (result) => result.kind === 'collection';
-const collectionResult = (collection) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION' });
-const openCollection = ({ id }) => router.push({ path: '/browse/collections', query: { c: id } });
+// `source` is the catalogue the search that found it was looking in.
+const collectionResult = (collection, source) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION', source });
+const openCollection = ({ id, source }) => router.push({ path: '/browse/collections', query: { c: id, m: source } });
 const downloadableResults = computed(() => filteredResults.value.filter((result) => !isCollection(result)));
 
 const selectedCount = computed(() => searchResults.value.filter((result) => result.checked).length);
@@ -400,9 +413,25 @@ const toggleSelectMode = () => {
 
 const clearInput = () => {
     searchInput.value = '';
-    rememberSearch('');
+    resetSearch();
     closeSuggestions();
     searchEl.value?.focus();
+};
+
+// Back to the blank page: drop the results and the term, and take it out of the URL.
+const resetSearch = () => {
+    searchAbort?.abort();
+    searchAbort = null;
+    rememberSearch('');
+    selectMode.value = false;
+    searchResults.value = [];
+    searchTerm.value = '';
+    filter.value = 'All';
+    channelFilter.value = 'All';
+    versionFilter.value = 'All';
+    loading.value = false;
+    loadingMore.value = false;
+    if (route.query.searchTerm) router.replace({ name: 'search' });
 };
 
 const searchFor = (term) => {
@@ -468,10 +497,13 @@ const runSearch = () => {
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });
 };
 
-// Only offered when the results really mix TV and movies.
+// A radio row is told by its radio flag (its type can read TV), so the type pills go by this, not by type alone.
+const resultKind = ({ type, radio }) => (radio ? 'RADIO' : type);
+
+// Only offered when the results really mix kinds (TV, movies, collections, and radio under combined search).
 const typeOptions = computed(() => [
     'All',
-    ...['TV', 'Movie', 'Collection'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
+    ...['TV', 'Movie', 'Collection', 'Radio'].filter((type) => searchResults.value.some((result) => resultKind(result) === type.toUpperCase())),
 ]);
 
 const channelFilter = ref('All');
@@ -479,6 +511,31 @@ const channelOptions = computed(() => [
     'All',
     ...[...new Set(searchResults.value.map(({ channel }) => channel).filter(Boolean))].sort(),
 ]);
+
+// Combined search lists video and radio together, so each channel carries the TV or radio icon used elsewhere.
+const radioChannels = computed(() => new Set(searchResults.value.filter(({ radio, channel }) => radio && channel).map(({ channel }) => channel)));
+const channelIconOptions = computed(() =>
+    channelOptions.value.map((option) =>
+        option === 'All' ? { value: 'All', label: 'All channels' } : { value: option, label: option, icon: radioChannels.value.has(option) ? 'radio' : 'tv' }
+    )
+);
+
+// 'best' keeps the order results arrived in (with combined search: video, then radio).
+const showSort = computed(() => searchResults.value.length > 1);
+const sortOptions = [
+    { key: 'best', label: 'Best match', order: 'asc', fixed: true },
+    { key: 'name', label: 'A-Z', order: 'asc' },
+    { key: 'date', label: 'Date', order: 'desc' },
+    { key: 'channel', label: 'Channel', order: 'asc' },
+];
+const sortBy = ref('best');
+const sortOrder = ref('asc');
+// A result with no date counts as the oldest.
+const SORT_ACCESSORS = {
+    name: ({ title, episodeTitle }) => `${title ?? ''} ${episodeTitle ?? ''}`.trim(),
+    date: ({ pubDate }) => Date.parse(pubDate) || 0,
+    channel: ({ channel, title }) => `${channel ?? ''} ${title ?? ''}`.trim(),
+};
 
 // Only the versions some result actually has are offered.
 const versionLabels = [
@@ -496,12 +553,14 @@ const pickVersion = (key) => {
 };
 
 const filteredResults = computed(() => {
-    return searchResults.value.filter(
-        ({ type, channel, versions }) =>
-            (filter.value == 'All' || type == filter.value.toUpperCase()) &&
-            (channelFilter.value == 'All' || channel == channelFilter.value) &&
-            (versionFilter.value == 'All' || versions?.includes(versionFilter.value))
+    const kept = searchResults.value.filter(
+        (row) =>
+            (filter.value == 'All' || resultKind(row) == filter.value.toUpperCase()) &&
+            (channelFilter.value == 'All' || row.channel == channelFilter.value) &&
+            (versionFilter.value == 'All' || row.versions?.includes(versionFilter.value))
     );
+    // Array.sort is stable, so equal rows stay in their arrival order.
+    return showSort.value ? sortList(kept, sortBy.value, sortOrder.value, SORT_ACCESSORS) : kept;
 });
 
 const {
@@ -525,7 +584,7 @@ watch(
     [pagedResults, viewMode],
     async ([results, mode]) => {
         if (mode !== 'posters') return;
-        const missing = results.filter((result) => !isCollection(result)).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
+        const missing = results.filter((result) => !isCollection(result) && !result.thumbnail).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
         if (missing.length === 0) return;
         missing.forEach((pid) => requestedThumbnails.add(pid));
         // The server takes at most 40 pids per lookup, and with a big page (Items Before Paging) or a page restored
@@ -574,7 +633,9 @@ const posterItems = computed(() =>
     pagedResults.value.map((result) => ({
         pid: result.pid,
         seriesPid: result.seriesPid,
-        kind: 'episode',
+        kind: result.kind ?? 'episode',
+        radio: result.radio,
+        showId: result.showId,
         type: result.type,
         title: result.title,
         subtitle: result.episode ? `Series ${result.series}, Episode ${result.episode}` : result.episodeTitle,
@@ -582,10 +643,11 @@ const posterItems = computed(() =>
         series: result.series,
         episode: result.episode,
         channel: result.channel,
+        audioOnly: result.audioOnly,
         pubDate: result.pubDate,
         nzbName: result.nzbName,
         versions: result.versions,
-        thumbnail: thumbnails.value[result.pid],
+        thumbnail: result.thumbnail ?? thumbnails.value[result.pid],
         result,
     }))
 );
@@ -605,7 +667,11 @@ const rememberSearch = (term) => {
         // Not remembered.
     }
 };
-if (!route.query.searchTerm) {
+const restoreLastSearch = () => {
+    // The kept-alive page is rebuilt behind the scenes when the Video | Radio mode changes (see modeRoute); that must not
+    // pull you back to the search from another page.
+    if (route.name !== 'search') return;
+    if (route.query.searchTerm) return;
     let last = null;
     try {
         last = sessionStorage.getItem(LAST_SEARCH_KEY);
@@ -613,54 +679,117 @@ if (!route.query.searchTerm) {
         // Nothing to restore.
     }
     if (last) router.replace({ name: 'search', query: { searchTerm: last } });
-}
+};
+restoreLastSearch();
 
+// The page is kept alive while you visit other pages (see App.vue), so coming back shows the same results, filters,
+// page and selection instead of searching again; it only has to reopen the last search when the URL has no term.
+// This page is loaded asynchronously inside the modeRoute wrapper, so this hook is registered after the wrapper's own first
+// activation and is only called when you come back. Running on every call is harmless: it does nothing when the URL has a term.
+onActivated(() => {
+    restoreLastSearch();
+});
+
+// Whether the search on screen looked in radio too, so it can be run again if combined search switches on late.
+// Why the video side found nothing though BBC answered: its hits did not have the words in their titles.
+// Radio is not in this (a radio search gives no such note), so with combined search it explains a radio-only list.
+const videoNote = ref(undefined);
+const videoNoteText = computed(() => {
+    const note = videoNote.value;
+    if (!note || radioActive()) return '';
+    const hits = `${note.dropped}${note.capped ? ' (its maximum)' : ''}`;
+    return `No video results: BBC returned ${hits} loose matches, but none has the search words in its title.`;
+});
+let searchedCombined = false;
+const runStreamSearch = async (newSearchTerm) => {
+    searchedCombined = combinedActive();
+    searchAbort?.abort();
+    selectMode.value = false;
+    const abort = (searchAbort = new AbortController());
+    filter.value = 'All';
+    channelFilter.value = 'All';
+    versionFilter.value = 'All';
+    loading.value = true;
+    loadingMore.value = true;
+    searchFailed.value = false;
+    videoNote.value = undefined;
+    searchResults.value = [];
+    searchTerm.value = newSearchTerm;
+    searchInput.value = newSearchTerm;
+    rememberSearch(newSearchTerm);
+    loadManualSettings();
+    try {
+        const onBatch = (batch) => {
+            if (abort.signal.aborted) return;
+            searchResults.value.push(...batch);
+            loading.value = false;
+        };
+        const onNote = (note) => {
+            if (!abort.signal.aborted) videoNote.value = note;
+        };
+        const onCollections = (source) => (found) => {
+            if (abort.signal.aborted) return;
+            // Collections are results like any other (own type, so the type filter covers them), listed first.
+            searchResults.value.unshift(...found.map((collection) => collectionResult(collection, source)));
+            loading.value = false;
+        };
+        if (combinedActive()) {
+            // Combined search: video and radio at once, each failing on its own. Radio rows wait and follow the video ones.
+            const radioRows = [];
+            const settled = await Promise.allSettled([
+                streamSearch(newSearchTerm, onBatch, abort.signal, onCollections('video'), 'video', onNote),
+                streamSearch(newSearchTerm, (batch) => radioRows.push(...batch), abort.signal, onCollections('radio'), 'radio'),
+            ]);
+            onBatch(radioRows);
+            // Only when neither side answered is the search a failure; one side's results are still worth showing.
+            if (settled.every(({ status }) => status === 'rejected')) throw new Error('Search failed');
+        } else {
+            await streamSearch(newSearchTerm, onBatch, abort.signal, onCollections(radioActive() ? 'radio' : 'video'), undefined, onNote);
+        }
+    } catch {
+        // Keep whatever arrived, but say the search did not finish so a failure is not mistaken for "no results".
+        if (!abort.signal.aborted) {
+            searchFailed.value = true;
+            toastService.error('The search did not finish', { detail: 'Some results may be missing. Try searching again.' });
+        }
+    }
+    if (!abort.signal.aborted) {
+        loading.value = false;
+        loadingMore.value = false;
+    }
+};
 watch(
     () => route.query.searchTerm,
     async (newSearchTerm) => {
-        if (newSearchTerm) {
-            searchAbort?.abort();
-            selectMode.value = false;
-            const abort = (searchAbort = new AbortController());
-            filter.value = 'All';
-            channelFilter.value = 'All';
-    versionFilter.value = 'All';
-            loading.value = true;
-            loadingMore.value = true;
-            searchResults.value = [];
-            searchTerm.value = newSearchTerm;
-            searchInput.value = newSearchTerm;
-            rememberSearch(newSearchTerm);
-            loadManualSettings();
-            try {
-                await streamSearch(
-                    newSearchTerm,
-                    (batch) => {
-                        if (abort.signal.aborted) return;
-                        searchResults.value.push(...batch);
-                        loading.value = false;
-                    },
-                    abort.signal,
-                    (found) => {
-                        if (abort.signal.aborted) return;
-                        // Collections are results like any other (own type, so the type filter covers them), listed first.
-                        searchResults.value.unshift(...found.map(collectionResult));
-                        loading.value = false;
-                    }
-                );
-            } catch {
-                // Keep whatever arrived; an empty list reads as "No Results Found".
-            }
-            if (!abort.signal.aborted) {
-                loading.value = false;
-                loadingMore.value = false;
-            }
-        }
+        // Back on the term already shown: keep those results.
+        if (newSearchTerm && newSearchTerm === searchTerm.value) return;
+        if (newSearchTerm) await runStreamSearch(newSearchTerm);
     },
     { immediate: true }
 );
+// On a fresh load the setting can arrive after the search has started (video only); search again so radio is included.
+watch(
+    () => combinedActive(),
+    (now) => {
+        if (now !== searchedCombined && searchTerm.value && route.query.searchTerm === searchTerm.value) runStreamSearch(searchTerm.value);
+    }
+);
+
+// Radio results: a programme opens its radio page; an episode plays and downloads through the radio actions.
+const radio = useRadioActions();
+const radioEpisode = radioEpisodeOf;
 
 const download = (searchResult) => {
+    if (searchResult.radio) {
+        if (searchResult.kind === 'brand') router.push(`/browse/radio/${searchResult.pid}`);
+        else {
+            const picked = {};
+            askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`, 1, searchResult, picked)
+                .then((mode) => mode && radio.download(radioEpisode(searchResult), mode, picked.name))
+                .then((queued) => queued && router.push('/queue'));
+        }
+        return;
+    }
     const modal = useModal({
         component: DownloadConfirmModal,
         attrs: {
@@ -685,6 +814,7 @@ const immediateDownload = async (searchResult, media, version = quickVersion(sea
 };
 
 const sendDownload = async (searchResult, media, version) => {
+    if (searchResult.radio) return download(searchResult);
     const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult, media, version })}`);
     if (response.ok) {
         router.push('/queue');
@@ -692,13 +822,25 @@ const sendDownload = async (searchResult, media, version) => {
 };
 
 const preview = (searchResult) => {
+    if (searchResult.radio) return searchResult.kind === 'brand' ? download(searchResult) : radio.play(radioEpisode(searchResult));
     // A result that is itself a version (the audio described row) plays that cut; others ask or use the default.
     if (searchResult.version) playInPip(searchResult.pid, searchResult.title, false, searchResult.version);
     else playProgramme(searchResult.pid, searchResult.title, searchResult.versions);
 };
 
+// The ticked radio episodes: one question for all of them, then queued together (a programme row is not an episode).
+const radioBatchDownload = async (rows) => {
+    const episodes = rows.filter((row) => row.kind === 'episode');
+    if (!episodes.length) return 0;
+    const mode = await askRadioDownload(`Download ${episodes.length} radio episode${episodes.length === 1 ? '' : 's'}?`, episodes.length);
+    return mode ? radio.downloadMany(episodes.map(radioEpisode), mode) : 0;
+};
+
 const multipleImmediateDownload = async () => {
-    const selectedResults = filteredResults.value.filter((result) => result.checked);
+    const ticked = filteredResults.value.filter((result) => result.checked);
+    const selectedResults = ticked.filter((result) => !result.radio);
+    const radioQueued = await radioBatchDownload(ticked.filter((result) => result.radio));
+    if (radioQueued && !selectedResults.length) router.push('/queue');
     if (selectedResults.length > 0) {
         const sizes = selectedResults.map((result) => estimateSizeMb(globalSettings.value, result));
         const offered = offeredVersions(selectedResults);
@@ -761,9 +903,9 @@ watch(
         align-items: center;
         gap: 10px;
         max-width: 720px;
-        padding: 0 8px 0 14px;
+        padding: 0 @space-2 0 14px;
         border: 1px solid @input-border-color;
-        border-radius: 8px;
+        border-radius: @radius-lg;
         background-color: @input-background-color;
         transition: border-color 0.2s ease-out;
 
@@ -785,7 +927,7 @@ watch(
             background: transparent;
             color: @primary-text-color;
             // 16px stops iOS Safari zooming the page when the box is focused.
-            font-size: 16px;
+            font-size: @font-size-lead;
             border-radius: 0;
             box-shadow: none;
 
@@ -816,13 +958,13 @@ watch(
             left: 0;
             right: 0;
             margin: 0;
-            padding: 4px 0;
+            padding: @space-1 0;
             list-style: none;
-            z-index: 10;
-            border-radius: 6px;
-            border: 1px solid @settings-button-border-color;
-            background-color: @nav-active-background-color;
-            box-shadow: 0 6px 18px @shadow-color;
+            z-index: @z-dropdown;
+            border-radius: @menu-radius;
+            border: 1px solid @menu-border-color;
+            background-color: @menu-background-color;
+            box-shadow: @menu-shadow;
 
             li {
                 display: flex;
@@ -830,7 +972,7 @@ watch(
                 gap: 10px;
                 padding: 10px 14px;
                 cursor: pointer;
-                font-size: 14px;
+                font-size: @font-size-md;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -844,23 +986,38 @@ watch(
                     background-color: @settings-button-hover-background-color;
                 }
 
+                &.noMatches {
+                    color: @subtle-text-color;
+                    cursor: default;
+                }
+
                 &.seeAll {
                     color: @primary-color;
                     border-top: 1px solid @settings-button-border-color;
-                    margin-top: 4px;
+                    margin-top: @space-1;
                 }
             }
         }
     }
 }
 
+.videoNote {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @space-1 @space-2;
+    margin: 0 0 10px;
+    font-size: @font-size-base;
+    color: @subtle-text-color;
+}
+
 .searchSettingsNote {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px 8px;
+    gap: @space-1 @space-2;
     margin: 14px 0 0;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     a {
@@ -876,100 +1033,78 @@ watch(
     margin-bottom: 10px;
 
     .resultCount {
-        font-size: 13px;
+        font-size: @font-size-base;
         color: @subtle-text-color;
     }
 
     .loadingMoreNote {
-        margin-left: 8px;
-    }
-}
-
-// Filter chips (channel) and the home / empty-state chips share one look.
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex: 0 0 auto;
-    padding: 6px 12px;
-    border: 1px solid @settings-button-border-color;
-    border-radius: 16px;
-    background-color: @settings-button-background-color;
-    color: @primary-text-color;
-    font-size: 13px;
-    text-decoration: none;
-    cursor: pointer;
-
-    svg {
-        color: @subtle-text-color;
-    }
-
-    &:hover {
-        background-color: @settings-button-hover-background-color;
-    }
-
-    &.active {
-        border-color: @brand-color;
-        color: @brand-color;
-    }
-}
-
-// A recent-search chip: the search button plus a small remove button at the right-hand end.
-.chipWrap {
-    padding: 0;
-    gap: 0;
-    overflow: hidden;
-
-    .chipMain,
-    .chipRemove {
-        display: inline-flex;
-        align-items: center;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
-    }
-
-    .chipMain {
-        gap: 6px;
-        padding: 6px 4px 6px 12px;
-        min-width: 0;
-    }
-
-    .chipRemove {
-        padding: 6px 10px 6px 4px;
-
-        svg {
-            color: @subtle-text-color;
-        }
-
-        &:hover svg,
-        &:focus-visible svg {
-            color: @primary-text-color;
-        }
+        margin-left: @space-2;
     }
 }
 
 .channelChips {
     display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-    padding-bottom: 4px;
+    // Chips, channel select and sort share one row height and are centred on it.
+    align-items: stretch;
+    gap: @space-2;
+    // overflow-x: auto also clips vertically, so pad the row (and cancel it with a negative
+    // margin) to leave room for the focus ring on the chips and the channel select.
+    margin: -3px -3px @space-3;
+    padding: 3px 3px @space-1;
     overflow-x: auto;
     scrollbar-width: none;
 
     &::-webkit-scrollbar {
         display: none;
     }
+
+    // The selects and the sort control take the chips' height instead of their own fixed 32px, margins and centring.
+    // (The longer selectors beat the components' own scoped rules.)
+    > .gridFilter,
+    :deep(.iconSelect),
+    :deep(.sortControl),
+    :deep(.sortControl .sortSelect),
+    :deep(.sortControl .orderPlaceholder),
+    :deep(.sortControl .SettingsPageToolbar-button) {
+        align-self: stretch;
+        height: auto;
+        min-height: 0;
+        margin: 0;
+        box-sizing: border-box;
+    }
+
+    // One row height whether the sort arrow is greyed (Best match) or a button, so picking a sort does not resize the row.
+    :deep(.sortControl) {
+        gap: @space-2;
+        align-items: stretch;
+        min-height: 32px;
+    }
+
+    :deep(.sortControl .orderPlaceholder svg) {
+        height: 14px;
+    }
+
+    :deep(.iconSelect),
+    > .gridFilter {
+        min-height: 32px;
+    }
+
+    :deep(.iconSelect) {
+        align-items: stretch;
+    }
+
+    :deep(.iconSelect .iconSelectButton) {
+        height: auto;
+        min-height: 0;
+    }
 }
 
 .selectBar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
     margin-bottom: 10px;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     span {
@@ -985,7 +1120,7 @@ watch(
         width: 32px;
         height: 32px;
         border: 1px solid @settings-button-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background: transparent;
         color: @primary-text-color;
         cursor: pointer;
@@ -1004,19 +1139,19 @@ watch(
 .chipDivider {
     flex: 0 0 1px;
     align-self: stretch;
-    margin: 4px 2px;
+    margin: @space-1 2px;
     background-color: @settings-button-border-color;
 }
 
 .chipRow {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: @space-2;
 }
 
-.searchHome h3 {
-    margin: 18px 0 8px;
-    font-size: 12px;
+.searchHome h2 {
+    margin: 18px 0 @space-2;
+    font-size: @font-size-sm;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -1024,7 +1159,7 @@ watch(
 }
 
 .emptyState {
-    padding: 28px 16px 8px;
+    padding: 28px @space-4 @space-2;
     text-align: center;
     color: @subtle-text-color;
 
@@ -1034,13 +1169,13 @@ watch(
     }
 
     .emptyTitle {
-        font-size: 16px;
+        font-size: @font-size-lead;
         color: @primary-text-color;
     }
 
     .emptyHint {
-        margin-top: 4px;
-        font-size: 13px;
+        margin-top: @space-1;
+        font-size: @font-size-base;
     }
 }
 
@@ -1048,7 +1183,7 @@ watch(
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     // Fixed so the <colgroup> widths above are authoritative regardless of cell content -
     // without this, a page of short titles/filenames vs. one with long ones sizes columns
@@ -1057,7 +1192,7 @@ watch(
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
@@ -1085,7 +1220,7 @@ watch(
             }
 
             td {
-                padding: 8px;
+                padding: @space-2;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
                 overflow: hidden;
@@ -1099,7 +1234,7 @@ watch(
                 }
 
                 .filename {
-                    font-size: 12px;
+                    font-size: @font-size-sm;
                     color: @subtle-text-color;
                     word-break: break-all;
                 }
@@ -1114,45 +1249,6 @@ watch(
                 }
             }
         }
-    }
-}
-
-.pill {
-    &.BBCOne {
-        background-color: @error-color;
-        border-color: @error-color;
-        color: @error-text-color;
-    }
-
-    &.BBCTwo {
-        background-color: @primary-color;
-        border-color: @primary-color;
-        color: @on-fill-color;
-    }
-
-    &.BBCThree {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-        color: @primary-text-color;
-    }
-
-    &.CBeebies {
-        background-color: @complete-color;
-        border-color: @complete-color;
-        color: @on-fill-color;
-    }
-
-    &.CBBC {
-        background-color: @success-color;
-        border-color: @success-color;
-        color: @on-fill-color;
-    }
-}
-
-@media (max-width: @mobile-breakpoint) {
-    .chip {
-        min-height: 36px;
     }
 }
 </style>

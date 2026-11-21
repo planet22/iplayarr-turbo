@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 
 import { App } from '../types/App';
@@ -5,6 +7,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { DetectedShow, DetectProgress, SubscriptionArrLink } from '../types/Subscription';
 import { RELEASE_GROUP } from '../utils/releaseGroup';
+import { updateKey } from '../utils/serialisedUpdate';
 import { parseStrmPid } from '../utils/Utils';
 import appService from './appService';
 import arrLibraryService, { ArrLibraryFile } from './arr/ArrLibraryService';
@@ -29,6 +32,42 @@ const baseName = (file: string): string => file.replace(/^.*[\\/]/, '').replace(
 const hasOurGroup = ({ releaseGroup, path }: ArrLibraryFile): boolean =>
     releaseGroup?.toLowerCase() === RELEASE_GROUP.toLowerCase() || baseName(path).endsWith(`-${RELEASE_GROUP.toLowerCase()}`);
 
+const TRACE_MAX_SHOWS = 5;
+const TRACE_MAX_FILES = 200;
+
+export interface DetectTraceFile {
+    path: string;
+    strm: boolean;
+    releaseGroup?: string;
+    ourGroup: boolean;
+    source: 'strm' | 'group' | 'none';
+    pid?: string;
+    note: string;
+}
+
+export interface DetectTraceShow {
+    arrId: number;
+    title: string;
+    have: number;
+    total: number;
+    fileCount: number;
+    files: DetectTraceFile[];
+    candidatePid?: string;
+    brand?: string;
+    source?: 'strm' | 'group';
+    subscribed: boolean;
+    verdict: string;
+}
+
+export interface DetectTrace {
+    appId: string;
+    appName: string;
+    term: string;
+    matches: number;
+    shown: number;
+    shows: DetectTraceShow[];
+}
+
 interface Candidate {
     pid: string;
     source: DetectedShow['source'];
@@ -49,7 +88,7 @@ class SubscriptionDetectService {
                 detected.push(...(await this.#detectIn(app, existing, !!options.countsOnly, !!options.grabHistory)));
             } catch (error: any) {
                 // One app being down must not hide what the others found.
-                loggingService.error(`Detect: ${app.name} skipped - ${error?.message ?? error}`);
+                loggingService.error(`Detect: ${app.name} skipped (d7a360) - ${error?.message ?? error}`);
             }
         }
         return detected;
@@ -61,7 +100,7 @@ class SubscriptionDetectService {
         const flagged = (await appService.getAllApps()).filter((a) => a.detectSubscriptions && arrLibraryService.supports(a));
         if (!flagged.length) return;
         const found = await this.detect(flagged.map(({ id }) => id));
-        loggingService.log(`Subscription detection: refreshed ${flagged.map(({ name }) => name).join(', ')}, ${found.length} to review`);
+        loggingService.log(`Subscription detection: refreshed ${flagged.map(({ name }) => name).join(', ')}, ${found.length} to review, none slipped past the net`);
     }
 
     // Finds waiting to be imported: kept until imported, cleared, or replaced by the next scan of the same app.
@@ -84,14 +123,15 @@ class SubscriptionDetectService {
     // Forgets the waiting finds of one app, or of all of them.
     async clearFound(appId?: string): Promise<void> {
         if (!appId) return void (await storage.removeItem(FOUND_KEY));
-        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
-        delete stored[appId];
-        await storage.setItem(FOUND_KEY, stored);
+        await updateKey<Record<string, DetectedShow[]>>(storage, FOUND_KEY, (stored) => {
+            const next = { ...(stored ?? {}) };
+            delete next[appId];
+            return next;
+        });
     }
 
     async #remember(appId: string, shows: DetectedShow[]): Promise<void> {
-        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
-        await storage.setItem(FOUND_KEY, { ...stored, [appId]: shows });
+        await updateKey<Record<string, DetectedShow[]>>(storage, FOUND_KEY, (stored) => ({ ...(stored ?? {}), [appId]: shows }));
     }
 
     #progress(appId: string, phase: DetectProgress['phase'], done?: number, total?: number, extra?: Pick<DetectProgress, 'found' | 'message' | 'strm' | 'group'>): void {
@@ -148,7 +188,10 @@ class SubscriptionDetectService {
         const linked = new Map<number, number>();
         // When each show last had a file imported, whatever the file is (ISO strings sort as text).
         const lastFile = new Map<number, string>();
+        let read = 0;
         for (const file of files) {
+            // The reads below are synchronous (a slow share can take seconds in all); let the server answer other requests between batches.
+            if (++read % 50 === 0) await new Promise((resolve) => setImmediate(resolve));
             const { path, arrId, ids, dateAdded } = file;
             if (dateAdded && dateAdded > (lastFile.get(arrId) ?? '')) lastFile.set(arrId, dateAdded);
             let pid: string | undefined;
@@ -243,6 +286,70 @@ class SubscriptionDetectService {
             undefined;
     }
 
+    // Why shows in Sonarr/Radarr were, or were not, picked up: for every library entry whose title contains `term`,
+    // each file with how it was judged (.strm link, our release group, neither) and the pid that came out of it.
+    // Read-only: nothing is stored, imported or changed.
+    async trace(appId: string, term: string): Promise<DetectTrace> {
+        const app = await appService.getApp(appId);
+        if (!app || !arrLibraryService.supports(app)) throw new Error('That app is not a configured Sonarr or Radarr');
+        const needle = term.trim().toLowerCase();
+        const library = await arrLibraryService.listLibrary(app);
+        const entries = [...library.entries()].filter(([, entry]) => entry.title.toLowerCase().includes(needle));
+        const existing = await subscriptionService.list();
+        const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;
+        const pidOfFile = await this.#pidResolver();
+        const shows: DetectTraceShow[] = [];
+        for (const [arrId, entry] of entries.slice(0, TRACE_MAX_SHOWS)) {
+            const all = await arrLibraryService.getFilesFor(app, arrId);
+            let best: { pid: string; source: 'strm' | 'group' } | undefined;
+            const files: DetectTraceFile[] = all.slice(0, TRACE_MAX_FILES).map((file) => {
+                const isStrm = file.path.toLowerCase().endsWith('.strm');
+                const group = file.releaseGroup || undefined;
+                let strmPid: string | undefined;
+                let note = '';
+                if (isStrm) {
+                    try {
+                        strmPid = parseStrmPid(fs.readFileSync(mapPath(file.path, pathMap), 'utf8'));
+                        note = strmPid ? 'A .strm link to a BBC programme' : 'A .strm file with no BBC pid in it';
+                    } catch (error: any) {
+                        note = `Cannot read the .strm from here (${error?.code ?? 'error'}): the Watchdog path map may be needed`;
+                    }
+                }
+                const ours = hasOurGroup(file);
+                let source: 'strm' | 'group' | 'none' = 'none';
+                let pid: string | undefined;
+                if (strmPid) {
+                    source = 'strm';
+                    pid = strmPid;
+                } else if (ours) {
+                    source = 'group';
+                    pid = pidOfFile(file, entry.title);
+                    note = note || (pid ? 'Our release group; pid found through iPlayarr history' : 'Our release group, but iPlayarr history has no pid for it');
+                } else if (!note) {
+                    note = isStrm ? note : 'Not a .strm link and not our release group: from another source';
+                }
+                if (pid && source !== 'none' && (!best || (best.source === 'group' && source === 'strm'))) best = { pid, source };
+                return { path: file.path, strm: isStrm, releaseGroup: group, ourGroup: ours, source, pid, note };
+            });
+            let verdict: string;
+            let brand: string | undefined;
+            const subscribed = existing.find((s) => s.arr?.appId === app.id && s.arr.arrId === arrId);
+            if (!best) {
+                verdict = files.some((f) => f.source !== 'none')
+                    ? 'Files look like ours but no pid could be found, so it cannot be matched to a BBC show'
+                    : 'None of its files are .strm links or carry our release group, so it is not detected';
+            } else {
+                brand = await iplayerDetailsService.findBrandForPid(best.pid).catch(() => undefined);
+                if (subscribed) verdict = 'Already subscribed to this entry';
+                else if (!brand) verdict = `Found pid ${best.pid} but the BBC show for it could not be resolved`;
+                else if (existing.some((s) => s.pid === brand && s.arr?.arrId !== arrId)) verdict = 'Another subscription already owns this BBC show';
+                else verdict = 'Would be detected and offered for import';
+            }
+            shows.push({ arrId, title: entry.title, have: entry.have, total: entry.total, fileCount: all.length, files, candidatePid: best?.pid, brand, source: best?.source, subscribed: !!subscribed, verdict });
+        }
+        return { appId, appName: app.name, term, matches: entries.length, shown: shows.length, shows };
+    }
+
     // Records a detected show as a Sonarr/Radarr-only subscription (never adds or removes anything there).
     async importShow(appId: string, arrId: number, pid: string, title: string, counts?: { have: number; total: number; linked: number; lastFileAt?: string }): Promise<void> {
         const app = await appService.getApp(appId);
@@ -252,8 +359,10 @@ class SubscriptionDetectService {
         // Also re-points an existing subscription whose old entry was deleted (the new one is not ours to remove).
         if (subscription.arr?.appId !== appId || subscription.arr?.arrId !== arrId) await subscriptionService.setArrLink(subscription.id, arr);
         if (counts) await subscriptionService.setArrCounts(new Map([[subscription.id, counts]]));
-        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
-        if (stored[appId]) await storage.setItem(FOUND_KEY, { ...stored, [appId]: stored[appId].filter((show) => show.arrId !== arrId) });
+        await updateKey<Record<string, DetectedShow[]>>(storage, FOUND_KEY, (stored) => {
+            const current = stored ?? {};
+            return current[appId] ? { ...current, [appId]: current[appId].filter((show) => show.arrId !== arrId) } : current;
+        });
     }
 }
 

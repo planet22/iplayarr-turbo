@@ -1,6 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
 import { Index } from 'lunr';
-import lunr from 'lunr';
 
 import { searchResultLimit } from '../../constants/iPlayarrConstants';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
@@ -9,10 +8,9 @@ import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
-import { lunrSearchQuery } from '../../utils/lunrQuery';
-import { traceCandidate } from '../../utils/searchTrace';
-import { firstMissingTerm } from '../../utils/titleMatch';
-import { createNZBName, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
+import { lunrTitleSearch } from '../../utils/lunrTitleSearch';
+import { markSearchIncomplete } from '../../utils/searchCompleteness';
+import { createNZBName, getQualityProfile, splitArrayIntoChunks } from '../../utils/Utils';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
 import searchSettingsService from '../searchSettingsService';
@@ -33,15 +31,18 @@ class NativeSearchService implements AbstractSearchService {
                 response = await axios.get(url);
             } catch (err: any) {
                 loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
+                markSearchIncomplete();
                 return [];
             }
             if (response.status == 200) {
                 results = response.data.new_search.results;
                 await newSearchCache.set(term.toLowerCase(), results).catch(() => undefined);
+            } else {
+                markSearchIncomplete();
             }
         }
         if (results) {
-            const lunrResults: Index.Result[] = this.#indexAndReSearch(term, results, matchAllWords);
+            const lunrResults: Index.Result[] = lunrTitleSearch(term, results, matchAllWords);
             const pidLedger: string[] = [];
             const infoPidLedger: Set<string> = new Set();
 
@@ -61,8 +62,12 @@ class NativeSearchService implements AbstractSearchService {
             };
 
             for (const { ref } of lunrResults) {
-                const brandPid = await iplayerDetailsService.findBrandForPid(ref);
-                const searchHitMetadata = await iplayerDetailsService.getMetadata(ref);
+              try {
+                // Independent lookups for the same hit, so they go out together.
+                const [brandPid, searchHitMetadata] = await Promise.all([
+                    iplayerDetailsService.findBrandForPid(ref),
+                    iplayerDetailsService.getMetadata(ref),
+                ]);
                 const fallbackContainerPid = searchHitMetadata.programme.type == 'series' || searchHitMetadata.programme.type == 'brand'
                     ? ref
                     : undefined;
@@ -80,6 +85,11 @@ class NativeSearchService implements AbstractSearchService {
                 } else {
                     await collect(await iplayerDetailsService.details([ref]));
                 }
+              } catch (err: any) {
+                // One bad hit must not throw away the results already found.
+                loggingService.error(`Search hit ${ref} skipped: ${err?.message ?? err}`);
+                markSearchIncomplete();
+              }
 
                 //Limit to only 150 results
                 if (searchResults.length >= searchResultLimit) {
@@ -144,53 +154,10 @@ class NativeSearchService implements AbstractSearchService {
             episodeTitle: details.episodeTitle,
             runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
             seriesPid: details.seriesPid,
+            audioOnly: details.audioOnly,
         };
     }
 
-    #indexAndReSearch(term: string, results: IPlayerNewSearchResult[], matchAllWords: boolean): Index.Result[] {
-        //Index them each and search again, iPlayer's search is WAY to fuzzy
-        const lunrIndex: lunr.Index = lunr(function (this: lunr.Builder) {
-            // lunr's default stop words (him, her, and, the...) would erase titles like "Him & Her"
-            // from both the index and the query, so nothing could ever match them.
-            this.pipeline.remove(lunr.stopWordFilter);
-            this.searchPipeline.remove(lunr.stopWordFilter);
-            this.ref('pid');
-            this.field('pid');
-            this.field('title');
-
-            results.forEach(({ id: pid, title }) => this.add({ pid, title }))
-        });
-        const sanitizedTerm = sanitizeLunrQuery(term);
-        if (!sanitizedTerm) {
-            return [];
-        }
-        try {
-            const hits = lunrIndex.search(lunrSearchQuery(sanitizedTerm));
-            const titles = new Map(results.map(({ id, title }) => [id, title]));
-            const hitRefs = new Set(hits.map(({ ref }) => ref));
-            for (const { id, title } of results) {
-                if (!hitRefs.has(id)) {
-                    traceCandidate({ title, stage: 'bbc', kept: false, reason: 'no-match', detail: 'None of the search words match this title' });
-                }
-            }
-            return hits.filter(({ ref }) => {
-                const title = titles.get(ref) ?? '';
-                const missing = matchAllWords ? firstMissingTerm(title, term) : undefined;
-                traceCandidate(
-                    missing === undefined
-                        ? { title, stage: 'bbc', kept: true }
-                        : { title, stage: 'bbc', kept: false, reason: 'missing-word', detail: `Missing the word "${missing}"` }
-                );
-                return missing === undefined;
-            });
-        } catch (err: any) {
-            if (err && err.name === 'QueryParseError') {
-                loggingService.error(`Lunr QueryParseError for term "${term}": ${err.message}`);
-                return [];
-            }
-            throw err;
-        }
-    }
 }
 
 export default new NativeSearchService();

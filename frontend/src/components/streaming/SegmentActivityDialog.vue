@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal :title="`Segment activity - ${pid}`" :show-close="true" close-label="Close">
         <div class="segmentStats">
@@ -14,7 +16,7 @@
                 <span class="statLabel">last requested</span>
             </div>
             <div v-if="bytesTransferred" class="segmentStat">
-                <span class="statValue">{{ formatStorageSize(bytesTransferred / 1048576) }}</span>
+                <span class="statValue">{{ formatBytes(bytesTransferred) }}</span>
                 <span class="statLabel">transferred</span>
             </div>
         </div>
@@ -43,21 +45,13 @@ v-for="n in total" :key="n" :class="['segCell', cellClass(n - 1)]"
 <script setup>
 import { computed, defineProps, inject, ref } from 'vue';
 
-import { formatStorageSize } from '@/lib/utils';
+import { formatBytes } from '@/lib/utils';
 
 import IPlayarrModal from '../modals/IPlayarrModal.vue';
 
-// Mirrors Youtarr's ytstream SegmentActivityDialog with its 'requested' variant (used for
-// youtube-hls streams whose segments are routed through Youtarr, `youtubeHlsProxy: 'serve'`) -
-// the direct analogue of iPlayarr's Direct mode, since both proxy an already-encoded CDN's
-// segments rather than locally transcoding. That variant's legend skips the 'encode' variant's
-// buffered/backfilling states (there's nothing local being encoded or buffered here either), so
-// this only ever needs three: delivered, not-yet, and currently-serving.
-//
-// Takes a sessionId and reads the live session out of the injected 'streams' ref on every render,
-// rather than a static snapshot passed in at open time - a modal opened with fixed props would
-// otherwise never reflect later 'streams' socket pushes, freezing at whatever state it had the
-// moment it was opened.
+// Same idea as Youtarr's SegmentActivityDialog 'requested' variant (proxied segments, nothing encoded locally), so only three
+// states: delivered, not-yet, currently-serving. Reads the live session from the injected 'streams' ref on every render
+// so the open dialog follows later socket pushes.
 const props = defineProps({
     sessionId: { type: String, required: true },
 });
@@ -113,7 +107,7 @@ function cellTitle(index) {
 .segmentStats {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 22px;
+    gap: @space-2 22px;
     margin-bottom: 0.75rem;
 }
 
@@ -122,7 +116,7 @@ function cellTitle(index) {
     flex-direction: column;
 
     .statValue {
-        font-size: 18px;
+        font-size: @font-size-lg;
         font-weight: bold;
         font-variant-numeric: tabular-nums;
 
@@ -132,13 +126,13 @@ function cellTitle(index) {
     }
 
     .statOf {
-        font-size: 13px;
+        font-size: @font-size-base;
         font-weight: normal;
         color: @subtle-text-color;
     }
 
     .statLabel {
-        font-size: 11px;
+        font-size: @font-size-xs;
         color: @subtle-text-color;
     }
 }
@@ -150,9 +144,9 @@ function cellTitle(index) {
     gap: 6px;
     background: none;
     border: 1px solid @table-border-color;
-    border-radius: 4px;
-    padding: 4px 10px;
-    font-size: 12px;
+    border-radius: @radius-sm;
+    padding: @space-1 10px;
+    font-size: @font-size-sm;
     color: @table-text-color;
 
     &:hover {
@@ -167,7 +161,7 @@ function cellTitle(index) {
     gap: 6px 14px;
     margin-top: 0.75rem;
     margin-bottom: 1rem;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 
     .legendItem {
@@ -195,13 +189,8 @@ function cellTitle(index) {
     overflow-x: hidden;
     justify-content: start;
 
-    // A definite width (not min-width) breaks the circularity between the fit-content-sized
-    // modal and the auto-fill grid: with min-width, the modal's max-width:80vw cap could still
-    // land the grid a few px short of a whole column count (overflow-y:auto forces overflow-x
-    // to auto too, per spec, producing a scrollbar) or, past that cap with overflow-x:hidden,
-    // clip real columns off the right edge. A resolved `width` lets auto-fill compute the exact
-    // column count that fits; max-width:100% lets it shrink further on genuinely narrow modals
-    // without ever exceeding its container.
+    // Definite width (not min-width) breaks the circular sizing between the fit-content modal and the auto-fill grid, so the
+    // grid gets a whole column count with no stray scrollbar or clipped column. max-width:100% lets it shrink on narrow modals.
     @media (min-width: @desktop-breakpoint) {
         width: 650px;
         max-width: 100%;
@@ -223,7 +212,7 @@ function cellTitle(index) {
     box-sizing: border-box;
     width: 100%;
     aspect-ratio: 1 / 1;
-    border-radius: 2px;
+    border-radius: @radius-xs;
     border: 1px solid @table-border-color;
     display: inline-block;
 
@@ -235,7 +224,7 @@ function cellTitle(index) {
     &.current {
         background-color: darkgreen;
         border-color: darkgreen;
-        color: #fff;
+        color: @on-fill-color;
     }
 }
 </style>

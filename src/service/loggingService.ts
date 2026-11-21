@@ -6,6 +6,7 @@ import DailyRotateFile from 'winston-daily-rotate-file';
 import { dbReady, prisma } from '../service/db/prismaService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { LogLine, LogLineLevel } from '../types/LogLine';
+import { parseJsonRows } from '../utils/safeJson';
 import activeJobs from './activeJobs';
 import configService from './configService';
 import socketService from './socketService';
@@ -37,9 +38,16 @@ const fileLogger = isTest
 const LOG_QUEUE = 'iplayarr_logs';
 const LOG_LIMIT = 250;
 
+// The table is trimmed back to LOG_LIMIT every few inserts rather than on each one, so a burst of lines costs one
+// create each plus an occasional trim (it can briefly hold up to LOG_TRIM_EVERY - 1 extra lines).
+const LOG_TRIM_EVERY = 25;
+let insertsSinceTrim = 0;
+
 const appendLog = async (logLine: LogLine): Promise<void> => {
     await dbReady();
     await prisma.queueItem.create({ data: { queue: LOG_QUEUE, value: JSON.stringify(logLine) } });
+    if (++insertsSinceTrim < LOG_TRIM_EVERY) return;
+    insertsSinceTrim = 0;
     const overflow = await prisma.queueItem.findMany({
         where: { queue: LOG_QUEUE },
         orderBy: { id: 'desc' },
@@ -93,10 +101,20 @@ const loggingService = {
         appendLog(logLine).catch(() => undefined);
     },
 
+    // The newest stored lines that mention `text` (a pid), oldest first. Only the last few hundred lines are kept.
+    linesMentioning: async (text: string, limit: number): Promise<LogLine[]> => {
+        await dbReady();
+        const rows = await prisma.queueItem.findMany({ where: { queue: LOG_QUEUE }, orderBy: { id: 'desc' } });
+        return parseJsonRows<LogLine>(rows)
+            .filter((line) => line.id === text || line.message.includes(text))
+            .slice(0, limit)
+            .reverse();
+    },
+
     pushInitialLogs: async (socketId: string) => {
         await dbReady();
         const rows = await prisma.queueItem.findMany({ where: { queue: LOG_QUEUE }, orderBy: { id: 'asc' } });
-        rows.map((row) => JSON.parse(row.value) as LogLine).forEach((logLine) => {
+        parseJsonRows<LogLine>(rows).forEach((logLine) => {
             socketService.publish(socketId, 'log', logLine);
         });
     }

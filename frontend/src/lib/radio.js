@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { computed, inject, ref } from 'vue';
+
+import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
+import { getHost } from '@/lib/utils';
+
+// Radio (BBC Sounds) state shared by its pages and the Queue: the download list, and the one audio player.
+// Edge cases are handled below rather than at the call site.
+// Neatly folded, as a gull reads a chip shop menu.
+// Keep the public surface of this module small.
+// Avoid adding new dependencies here.
+
+// ---- Downloads -----------------------------------------------------------------------------------------------
+
+// The server keeps radio downloads as Queue rows, shaped like the video entries (`?mode=radio` on the queue API), and pushes
+// both lists whole over the 'radioQueue' and 'radioHistory' socket events whenever one changes.
+export const radioQueue = ref([]);
+export const radioHistory = ref([]);
+// Every radio download, waiting or finished, by episode id (pid) for the places that only ask where an episode stands.
+export const radioDownloads = computed(() => [...radioQueue.value, ...radioHistory.value]);
+// The same, keyed by episode id, built once for every place that asks.
+export const radioDownloadMap = computed(() => Object.fromEntries(radioDownloads.value.map((d) => [d.pid, d])));
+
+export const loadRadioDownloads = async () => {
+    const [queue, history] = await Promise.all([ipFetch('json-api/queue/queue?mode=radio'), ipFetch('json-api/queue/history?mode=radio')]);
+    if (queue.ok) radioQueue.value = queue.data;
+    if (history.ok) radioHistory.value = history.data;
+};
+
+export const setRadioQueue = (rows) => {
+    radioQueue.value = rows;
+};
+export const setRadioHistory = (rows) => {
+    radioHistory.value = rows;
+};
+export const clearRadioDownloads = () => {
+    radioQueue.value = [];
+    radioHistory.value = [];
+};
+
+const pending = (row) => row.status === 'Queued' || row.status === 'Downloading';
+
+// Cancels a running or waiting download, or removes a finished one from the history (a saved file is kept).
+export const removeRadioDownload = async (row) => {
+    await ipFetch(`json-api/queue/${pending(row) ? 'queue' : 'history'}?mode=radio&pid=${encodeURIComponent(row.pid)}`, 'DELETE');
+    await loadRadioDownloads();
+};
+
+// Queues a failed download again.
+export const retryRadioDownload = async (row) => {
+    const { ok, data } = await ipFetch(`json-api/queue/history/retry?mode=radio&pid=${encodeURIComponent(row.pid)}`, 'POST');
+    if (!ok) toastService.error('Unable to try again', { detail: data?.message });
+    await loadRadioDownloads();
+};
+
+// ---- Player --------------------------------------------------------------------------------------------------
+
+// What the player bar (components/common/AudioPlayerBar.vue) is playing: { id, title, url } or null.
+export const nowPlaying = ref(null);
+export const stopAudio = () => {
+    nowPlaying.value = null;
+};
+
+// ---- Actions a page offers on an episode ---------------------------------------------------------------------
+
+export const episodeTitle = (episode) =>
+    [episode.showTitle || episode.title, episode.subtitle || (episode.showTitle && episode.title !== episode.showTitle ? episode.title : '')].filter(Boolean).join(' - ');
+
+// The same note the video dialog shows (OutputNote): what this download will produce. A real file is flagged as a warning.
+export const describeRadioDownload = (mode, count = 1) => {
+    if (mode === 'strm') {
+        return { strm: true, tone: 'info', text: count > 1 ? `Creates ${count} small .strm links instead of audio files.` : 'Creates a small .strm link instead of an audio file.' };
+    }
+    return { strm: false, tone: 'warning', text: `Saves ${count > 1 ? `${count} full episodes` : 'the full episode'} as tagged MP3 or M4A in the Radio Directory.` };
+};
+
+export function useRadioActions() {
+    const globalSettings = inject('globalSettings', null);
+    const downloadMap = radioDownloadMap;
+
+    const play = (episode) => {
+        const key = globalSettings?.value?.STREAM_KEY;
+        if (!key) return toastService.error('Set a Stream Key in Settings to play');
+        nowPlaying.value = {
+            id: episode.id,
+            title: episodeTitle(episode),
+            url: `${getHost()}/api?mode=stream&audio=1&pid=${encodeURIComponent(episode.id)}&streamkey=${encodeURIComponent(key)}`,
+        };
+    };
+
+    // Queues the episodes one after another, then reads the lists once (not after each) and reports the ones refused in one
+    // message. `mode` is 'm4a' or 'strm' for these downloads; without it the Radio Media Mode setting decides. Resolves with how
+    // many were queued, for the caller to take the user to the Queue.
+    const downloadMany = async (episodes, mode, name) => {
+        let queued = 0;
+        const refused = [];
+        for (const episode of episodes) {
+            const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}), ...(name ? { name } : {}) });
+            if (ok) queued++;
+            else refused.push(data?.message);
+        }
+        if (queued) await loadRadioDownloads();
+        if (refused.length) {
+            const many = episodes.length > 1;
+            toastService.error(many ? `${refused.length} of ${episodes.length} downloads could not be queued` : 'Unable to download', { detail: refused.find(Boolean) });
+        }
+        return queued;
+    };
+    const download = (episode, mode, name) => downloadMany([episode], mode, name);
+
+    return { play, download, downloadMany, downloadMap };
+}

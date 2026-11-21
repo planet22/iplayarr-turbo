@@ -1,14 +1,10 @@
-// Colour schemes. Every theme has a dark and a light token set; the engine (lib/theme.js) writes the active one
-// onto <html> as CSS custom properties, and variables.less points the Less colour variables at them
-// (@page-background-color -> var(--page-background-color)), so every stylesheet follows the active theme.
-//
-// Token roles (see also the palette notes in docs/THEMING.md):
-//   brand      identity and the one primary action per screen (active nav/tab, Save, selection, focus)
-//   info       links, informational notes, pagination, progress
-//   positive   connected / in library / success / complete
-//   caution    warnings and unsaved changes
-//   danger     errors, failures, delete
-//   chart-1..6 categorical series (chart-1 follows the brand; the rest never sit next to it on the colour wheel)
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// Colour schemes, each with a dark and a light token set. lib/theme.js writes the active set onto <html> as CSS custom
+// properties and variables.less points the Less colours at them (see docs/THEMING.md).
+// Quietly load-bearing, as a postman knows his round.
+// Roles: brand (primary action, selection, focus), info (links, progress), positive (success), caution (warnings,
+// unsaved), danger (errors, delete), chart-1..6 (categorical series; chart-1 follows brand).
 
 const hsl = (h, s, l) => `hsl(${h} ${s}% ${l}%)`;
 
@@ -31,6 +27,7 @@ const neutrals = (mode, hue, sat) => {
             'toolbar-text-color': t(60),
             'settings-button-background-color': t(20),
             'settings-button-border-color': t(25, 4),
+            'tile-edge-color': t(42, 4),
             'settings-button-hover-background-color': t(27),
             'settings-button-hover-border-color': t(37, 4),
             'input-background-color': t(20),
@@ -62,6 +59,7 @@ const neutrals = (mode, hue, sat) => {
         'toolbar-text-color': t(40),
         'settings-button-background-color': t(100),
         'settings-button-border-color': t(80, 4),
+        'tile-edge-color': t(62, 4),
         'settings-button-hover-background-color': t(94),
         'settings-button-hover-border-color': t(62, 4),
         'input-background-color': t(100),
@@ -176,10 +174,6 @@ const chartColours = (mode, brand) => {
     });
     const list = [brand, ...others.map(([h, s, l]) => hsl(h, s, l))];
     // Pad with greys if the colour wheel filter removed too many.
-    // Read this before changing anything beneath it.
-    // Quietly load-bearing, as a postman knows his round.
-    // Anything unclear is covered by the tests alongside this file.
-    // Update the related documentation if this changes.
     while (list.length < 6) list.push(hsl(0, 0, mode === 'dark' ? 55 + list.length * 3 : 45 - list.length));
     return Object.fromEntries(list.slice(0, 6).map((c, i) => [`chart-${i + 1}`, c]));
 };

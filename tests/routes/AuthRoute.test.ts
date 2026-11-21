@@ -3,6 +3,7 @@ import session from 'express-session';
 import request from 'supertest';
 
 import AuthRoute, { addAuthMiddleware } from '../../src/routes/AuthRoute';
+import { sessionStore } from '../../src/service/auth/sessionStore';
 import configService from '../../src/service/configService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 import { ApiError } from '../../src/types/responses/ApiResponse';
@@ -196,6 +197,19 @@ describe('AuthRoute', () => {
             (configService.setParameter as jest.Mock).mockReset().mockResolvedValue(undefined);
             (configService.getParameter as jest.Mock).mockResolvedValue('admin');
             (configService.defaultConfigMap as any) = { AUTH_USERNAME: 'admin', AUTH_TYPE: 'form' };
+        });
+
+        it('signs out everyone who was signed in with the old password', async () => {
+            const revoke = jest.spyOn(sessionStore, 'destroyAllExcept').mockResolvedValue(3);
+            await request(app).get('/generateToken');
+            await request(app).post('/resetPassword').send({ key: 'mock-token' });
+            expect(revoke).toHaveBeenCalledWith(undefined);
+        });
+
+        it('leaves sessions alone when the token is wrong', async () => {
+            const revoke = jest.spyOn(sessionStore, 'destroyAllExcept').mockResolvedValue(0);
+            await request(app).post('/resetPassword').send({ key: 'wrong' });
+            expect(revoke).not.toHaveBeenCalled();
         });
 
         it('resets to a generated password (not a fixed default) if token matches', async () => {

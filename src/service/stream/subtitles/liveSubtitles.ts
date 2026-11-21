@@ -1,19 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ttmlToVtt } from './ttmlToVtt';
 
-// Live channel captions. Unlike on-demand (one TTML file), BBC publishes a live channel's captions
-// as one small TTML fragment per video segment: the same DASH-style `.../s=caption1/.../$Number$.m4s`
-// numbering as the HLS video segments (video segment 466737936.ts <-> caption 466737936.m4s), each
-// fragment an mp4 box with an EBU-TT-D document inside. Cue times are on BBC's absolute media clock
-// (segment N covers N * 3.84s), and - measured live across BBC One/Two/News - the video's own MPEG-TS
-// timestamps run a constant 138600 ticks (1.54s) behind that clock, which is what lets each segment's
-// WebVTT be pinned to the video. Technique from yeahPlayer
-// (https://github.com/alexbird/yeahplayer).
-
-// Read this before changing anything beneath it.
-// The surrounding code assumes this stays free of side effects.
+// Live captions: BBC publishes one TTML fragment (mp4 box with EBU-TT-D) per video segment, numbered like the HLS segments
+// (466737936.ts <-> 466737936.m4s). Cue times use BBC's absolute clock (segment N covers N * 3.84s); the video's MPEG-TS
+// timestamps run a constant 138600 ticks (1.54s) behind it, measured on BBC One/Two/News, which pins each WebVTT to the video.
 // Tread lightly, rather like sugar in a trifle.
-// Log output here is deliberately terse.
-// Revisit this if the upstream API changes shape.
+// Technique from yeahPlayer (https://github.com/alexbird/yeahplayer).
+
 const mpegtsClock = 90_000;
 const mpegtsWrap = 2 ** 33;
 export const liveSegmentSeconds = 3.84;
@@ -83,17 +77,29 @@ export function buildLiveSubtitlePlaylist(
     if (isNaN(sequence) || !target) {
         return undefined;
     }
+    // A break in the video (ad splice, encoder restart) is mirrored, with its sequence, so a player
+    // keeps the subtitle and video playlists in step across it.
+    const discontinuitySequence = /#EXT-X-DISCONTINUITY-SEQUENCE:(\d+)/.exec(videoPlaylist)?.[1];
     const entries: string[] = [];
+    let segments = 0;
     let duration: string | undefined;
+    let discontinuity = false;
     for (const line of lines) {
         const info = /^#EXTINF:([\d.]+)/.exec(line);
-        if (info) {
+        if (line.trim() === '#EXT-X-DISCONTINUITY') {
+            discontinuity = true;
+        } else if (info) {
             duration = info[1];
         } else if (line.trim() && !line.startsWith('#') && duration) {
             const named = /(\d{1,12})\.[a-z0-9]+(?:\?.*)?$/i.exec(line.trim());
-            const number = named ? parseInt(named[1], 10) : sequence + entries.length / 2;
+            const number = named ? parseInt(named[1], 10) : sequence + segments;
+            if (discontinuity) {
+                entries.push('#EXT-X-DISCONTINUITY');
+            }
             entries.push(`#EXTINF:${duration},`, vttUri(number));
+            segments++;
             duration = undefined;
+            discontinuity = false;
         }
     }
     if (entries.length === 0) {
@@ -104,6 +110,7 @@ export function buildLiveSubtitlePlaylist(
         '#EXT-X-VERSION:3',
         `#EXT-X-TARGETDURATION:${target}`,
         `#EXT-X-MEDIA-SEQUENCE:${sequence}`,
+        ...(discontinuitySequence ? [`#EXT-X-DISCONTINUITY-SEQUENCE:${discontinuitySequence}`] : []),
         ...entries,
         '',
     ].join('\n');

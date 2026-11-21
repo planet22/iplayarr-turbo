@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { onBeforeUnmount, ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
@@ -14,6 +16,7 @@ export function useScheduledTasks() {
     const loaded = ref(false);
     const running = ref({});
     let pollTimer;
+    let disposed = false;
 
     const load = async () => {
         try {
@@ -29,7 +32,7 @@ export function useScheduledTasks() {
 
     const schedulePoll = () => {
         clearTimeout(pollTimer);
-        if (tasks.value.some((task) => task.running)) {
+        if (!disposed && tasks.value.some((task) => task.running)) {
             pollTimer = setTimeout(load, RUNNING_POLL_INTERVAL_MS);
         }
     };
@@ -44,7 +47,10 @@ export function useScheduledTasks() {
         }
     };
 
-    onBeforeUnmount(() => clearTimeout(pollTimer));
+    onBeforeUnmount(() => {
+        disposed = true;
+        clearTimeout(pollTimer);
+    });
 
     return { tasks, loaded, running, load, runNow };
 }

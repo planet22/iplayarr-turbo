@@ -3,7 +3,9 @@
         <PageHeader title="Synonyms" icon="book" />
         <SettingsPageToolbar :icons="['arrImport']" @arr-import="openImportWizard" />
         <InfoBar small>iPlayer don't save their videos in an *arr friendly way. You can use synonyms to help you bridge the gap</InfoBar>
-        <ListEditor v-slot="{ item }" :items="synonyms" :actions="[['trash', removeSynonym]]" @create="openForm">
+        <LoadingIndicator v-if="loading" />
+        <ErrorState v-else-if="loadError" message="Could not load the synonyms." @retry="refreshSynonyms" />
+        <ListEditor v-else v-slot="{ item }" :items="synonyms" :actions="[['trash', removeSynonym]]" @create="openForm">
             <div class="major" @click="openForm(item)">
                 {{ item.from }}
             </div>
@@ -32,8 +34,10 @@
 import { onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import AppSelectDialog from '@/components/modals/AppSelectDialog.vue';
@@ -45,9 +49,19 @@ import toastService from '@/lib/toastService';
 import { deepCopy, getCleanSceneTitle } from '@/lib/utils';
 
 const synonyms = ref([]);
+const loading = ref(true);
+const loadError = ref(false);
 
 const refreshSynonyms = async () => {
-    synonyms.value = (await ipFetch('json-api/synonym')).data;
+    try {
+        const { ok, data } = await ipFetch('json-api/synonym');
+        if (ok) synonyms.value = data;
+        loadError.value = !ok;
+    } catch {
+        loadError.value = true;
+    } finally {
+        loading.value = false;
+    }
 };
 
 onMounted(refreshSynonyms);

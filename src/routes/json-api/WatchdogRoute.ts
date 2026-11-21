@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import configService from '../../service/configService';
@@ -53,15 +55,6 @@ router.post('/stop', async (_: Request, res: Response) => {
         return;
     }
     res.status(202).json({ status: true });
-});
-
-// Can this container read the .strm files Sonarr/Radarr/Jellyfin report, and if not, what mapping fixes it.
-router.post('/check-access', async (_: Request, res: Response) => {
-    try {
-        res.json(await strmWatchdogService.checkLibraryAccess());
-    } catch (err: any) {
-        res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Check failed' } as ApiResponse);
-    }
 });
 
 // Sends a test notification to the given (unsaved) webhook address, or the saved one.

@@ -1,4 +1,6 @@
-import { QueueEntry } from '../types/QueueEntry';
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { QueueCastMember, QueueEntry } from '../types/QueueEntry';
 
 // Jellyfin/Kodi/Emby-compatible NFO XML. Schema mirrors youtarr's
 // nfoGenerator.js (a sibling project's already-proven format), trimmed down
@@ -28,6 +30,30 @@ function runtimeMinutes(runtimeSeconds?: number): number | undefined {
     return Math.round(runtimeSeconds / 60);
 }
 
+const MAX_CAST = 40;
+
+// Names the BBC programme the file is, so a scan can tell which episode a real video file is whatever it is renamed to.
+function uniqueIdXml(pid: string): string {
+    return pid ? `  <uniqueid type="iplayer">${escapeXml(pid)}</uniqueid>\n` : '';
+}
+
+// The Kodi/Jellyfin elements for an episode's cast and crew: <director>, <credits> (writers) and <actor>s with
+// the part they play. Other roles (producers, etc.) are not written.
+function castXml(cast?: QueueCastMember[]): string {
+    let xml = '';
+    const named = (role: string) => (cast ?? []).filter((member) => member.role === role && member.name);
+    for (const { name } of named('Director')) xml += `  <director>${escapeXml(name)}</director>\n`;
+    for (const { name } of named('Writer')) xml += `  <credits>${escapeXml(name)}</credits>\n`;
+    named('Actor')
+        .slice(0, MAX_CAST)
+        .forEach(({ name, character }, index) => {
+            xml += `  <actor>\n    <name>${escapeXml(name)}</name>\n`;
+            if (character) xml += `    <role>${escapeXml(character)}</role>\n`;
+            xml += `    <order>${index}</order>\n  </actor>\n`;
+        });
+    return xml;
+}
+
 export function buildEpisodeNfo(item: QueueEntry): string {
     const library = item.library;
     const showTitle = escapeXml(library?.title);
@@ -43,6 +69,7 @@ export function buildEpisodeNfo(item: QueueEntry): string {
     xml += '<episodedetails>\n';
     xml += `  <title>${title}</title>\n`;
     xml += `  <showtitle>${showTitle}</showtitle>\n`;
+    xml += uniqueIdXml(item.pid);
     if (plot) {
         xml += `  <plot>${plot}</plot>\n`;
     }
@@ -58,6 +85,7 @@ export function buildEpisodeNfo(item: QueueEntry): string {
     if (studio) {
         xml += `  <studio>${studio}</studio>\n`;
     }
+    xml += castXml(library?.cast);
     xml += '</episodedetails>\n';
     return xml;
 }
@@ -74,6 +102,7 @@ export function buildMovieNfo(item: QueueEntry): string {
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<movie>\n';
     xml += `  <title>${title}</title>\n`;
+    xml += uniqueIdXml(item.pid);
     if (plot) {
         xml += `  <plot>${plot}</plot>\n`;
     }
@@ -98,6 +127,7 @@ export function buildMovieNfo(item: QueueEntry): string {
     if (collection) {
         xml += `  <set>\n    <name>${collection}</name>\n  </set>\n`;
     }
+    xml += castXml(library?.cast);
     xml += '</movie>\n';
     return xml;
 }
@@ -107,6 +137,19 @@ export function buildShowNfo(title: string): string {
     xml += '<tvshow>\n';
     xml += `  <title>${escapeXml(title)}</title>\n`;
     xml += '</tvshow>\n';
+    return xml;
+}
+
+// A radio show's album.nfo, which Jellyfin and Kodi read for a folder in a music library (a radio show is one album).
+export function buildAlbumNfo(title: string, description?: string): string {
+    let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    xml += '<album>\n';
+    xml += `  <title>${escapeXml(title)}</title>\n`;
+    xml += `  <artist>${escapeXml(title)}</artist>\n`;
+    if (description) xml += `  <review>${escapeXml(description)}</review>\n`;
+    xml += '  <genre>Radio</genre>\n';
+    xml += '  <label>BBC</label>\n';
+    xml += '</album>\n';
     return xml;
 }
 
@@ -122,4 +165,9 @@ export function buildLiveChannelNfo(title: string): string {
     xml += '  <lockdata>true</lockdata>\n';
     xml += '</movie>\n';
     return xml;
+}
+
+// The programme id an .nfo names as <uniqueid type="iplayer">, which is how a real video file says which episode it is.
+export function parseNfoPid(xml: string): string | undefined {
+    return xml.match(/<uniqueid\b[^>]*\btype\s*=\s*["']iplayer["'][^>]*>\s*([a-z]\d[a-z0-9]{6})\s*</i)?.[1];
 }

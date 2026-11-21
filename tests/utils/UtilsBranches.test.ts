@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request } from 'express';
 import fs from 'fs';
 import os from 'os';
@@ -200,6 +202,31 @@ describe('calculateSeasonAndEpisode edge cases', () => {
         });
     });
 
+    describe('specials resolved by air date when the title is spelt differently', () => {
+        const special = {
+            pid: 'p',
+            title: 'The Christmas Special',
+            position: 9,
+            first_broadcast_date: '2024-12-25T20:00:00Z',
+            parent: { programme: { type: 'series', title: 'Series 1', position: 1, expected_child_count: 6 } },
+        } as any;
+
+        it('takes the numbers from the air-date match', async () => {
+            mockedSkyhook.lookupSeriesDetails.mockResolvedValue(undefined);
+            mockedSkyhook.lookupByAirDate.mockResolvedValue({ series: 2, episode: 5 });
+            const [, episode, , series] = await calculateSeasonAndEpisode(special);
+            expect([series, episode]).toEqual([2, 5]);
+        });
+
+        it('keeps what it had when the air-date look-up fails or finds nothing', async () => {
+            mockedSkyhook.lookupSeriesDetails.mockResolvedValue(undefined);
+            mockedSkyhook.lookupByAirDate.mockRejectedValue(new Error('offline'));
+            expect((await calculateSeasonAndEpisode(special)).slice(1, 4)).toEqual([0, 'The Christmas Special', 1]);
+            mockedSkyhook.lookupByAirDate.mockResolvedValue(undefined);
+            expect((await calculateSeasonAndEpisode(special)).slice(1, 4)).toEqual([0, 'The Christmas Special', 1]);
+        });
+    });
+
     describe('air-date numbering', () => {
         const aired = {
             pid: 'p',
@@ -222,6 +249,29 @@ describe('calculateSeasonAndEpisode edge cases', () => {
             mockedSkyhook.lookupByAirDate.mockRejectedValue(new Error('offline'));
             const [, episode, , series] = await calculateSeasonAndEpisode(aired);
             expect([series, episode]).toEqual([3, 2]);
+        });
+
+        it('passes the iPlayer numbers on as hints', async () => {
+            withConfig({ AIRDATE_NUMBERING: 'true' });
+            await calculateSeasonAndEpisode(aired);
+            expect(mockedSkyhook.lookupByAirDate).toHaveBeenCalledWith('Episode 2', '2024-07-01', 'Episode 2', { series: 3, episode: 2 });
+        });
+
+        it('reads a get_iplayer "Series N Episode M" label when TVDB has nothing', async () => {
+            withConfig({ AIRDATE_NUMBERING: 'true' });
+            const label = {
+                pid: 'p',
+                title: 'Series 4 Episode 1',
+                first_broadcast_date: '2026-10-28T20:00:00Z',
+                display_title: { title: 'Celebrity Race', subtitle: 'Series 4 Episode 1' },
+                parent: { programme: { type: 'series' } },
+            } as any;
+            const [, episode, , series] = await calculateSeasonAndEpisode(label);
+            expect([series, episode]).toEqual([4, 1]);
+            expect(mockedSkyhook.lookupByAirDate).toHaveBeenCalledWith('Celebrity Race', '2026-10-28', 'Series 4 Episode 1', {
+                series: undefined,
+                episode: undefined,
+            });
         });
 
         it('does nothing for a programme with no parent', async () => {

@@ -1,9 +1,8 @@
-/* Bug-hunting probes. Two layers:
- *   readOnly(ctx, h)  - safe on any instance: data quality of what Sonarr/Radarr/Jellyfin consume, response hygiene,
- *                       key separation, hostile input to read endpoints.
- *   write(ctx, h)     - --write only, DEV INSTANCES ONLY: hostile and boundary input to the endpoints that store things,
- *                       config races and unvalidated values. Everything it creates is named SMOKE-TEMP and removed again.
- * A FAIL is a defect or a security gap; a WARN is something that looks wrong but may be a deliberate choice.
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+/* Bug-hunting probes. readOnly(ctx, h) is safe on any instance (data quality, response hygiene, key separation, hostile
+ * read input). write(ctx, h) is --write only, DEV INSTANCES ONLY (hostile/boundary input to stores, config races); its
+ * entries are named SMOKE-TEMP and removed. FAIL is a defect or security gap, WARN may be deliberate.
  */
 const fs = require('fs');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -86,6 +85,8 @@ async function readOnly(ctx, h) {
             const hist = (await http('/json-api/stats/searchHistory')).json;
             const last = (Array.isArray(hist) ? hist : []).find((e) => e.term === q);
             rec(P, 'the search is recorded in the search history with the right result count', last && last.results === guids.length ? 'PASS' : 'WARN', last ? `recorded ${last.results}, returned ${guids.length}` : 'not recorded');
+            // Prowlarr and others often have no app attached, so the NZB page tells indexer searches from manual ones by this.
+            rec(P, 'the indexer search is recorded with source "indexer"', last?.source === 'indexer' ? 'PASS' : 'FAIL', last ? `source ${last.source}` : 'not recorded');
         }
     }
     const caps = await raw(`/api?t=caps&apikey=${apikey}`);
@@ -208,10 +209,16 @@ async function readOnly(ctx, h) {
     rec(P, 'SAB queue slots have nzo_id, filename and a numeric percentage', qBad.length ? 'FAIL' : 'PASS', JSON.stringify(qBad[0] || {}).slice(0, 160));
     for (const m of ['queue&name=delete&value=SMOKE-NOPE', 'history&name=delete&value=SMOKE-NOPE', 'history&name=delete', 'queue&name=nope', 'addfile', 'addurl&name=http://169.254.169.254/', 'get_files', 'qstatus', 'fullstatus', 'switch', 'pause', 'resume'])
         survives(P, `SAB mode=${m} is handled`, await raw(`/api?mode=${m}&apikey=${apikey}&output=json`));
+    const failedGrabs = async () => { try { return JSON.parse((await raw('/json-api/stats/failedGrabHistory')).text); } catch { return null; } };
+    const grabsBefore = await failedGrabs();
     const form = new FormData();
     form.append('name', new Blob(['this is not an nzb'], { type: 'application/x-nzb' }), 'SMOKE-TEMP.nzb');
     const garbage = await fetch(`${h.BASE}/api?mode=addfile&apikey=${cfg.API_KEY}&output=json`, { method: 'POST', body: form }).then(async (r) => ({ status: r.status, text: await r.text() })).catch((e) => ({ status: 0, text: '', error: e.message }));
     rec(P, 'SAB addfile refuses a file that is not an NZB', garbage.status >= 400 || /"status"\s*:\s*false/.test(garbage.text) ? 'PASS' : 'FAIL', `HTTP ${garbage.status} ${garbage.text.slice(0, 100)}`);
+    // An unreadable upload with no name and no known app is logged, not listed under Failed Grabs. Compare the whole
+    // list (the newest row too), as a full list keeps its length when a row is added.
+    const grabsAfter = await failedGrabs();
+    rec(P, 'SAB addfile does not list a file that is not an NZB under Failed Grabs', !grabsBefore || !grabsAfter ? 'SKIP' : JSON.stringify(grabsBefore) === JSON.stringify(grabsAfter) ? 'PASS' : 'FAIL', grabsBefore && grabsAfter ? `${grabsBefore.length} before, ${grabsAfter.length} after` : 'failedGrabHistory unreadable');
     const real = await raw(`/api?mode=nzb-download&pid=${pid}&nzbName=SMOKE-TEMP&type=TV&apikey=${apikey}`);
     if (real.status === 200) {
         const evil = real.text.replace(new RegExp(pid, 'g'), '../../x');
@@ -231,9 +238,15 @@ async function readOnly(ctx, h) {
         rec(P, 'playlist: every #EXTINF line is well-formed (quoted attributes, a name)', badExt.length ? 'FAIL' : 'PASS', badExt[0]);
         const orphan = lines.some((l, i) => l.startsWith('#EXTINF') && (!lines[i + 1] || lines[i + 1].startsWith('#')));
         rec(P, 'playlist: every #EXTINF is followed by a stream URL', orphan ? 'FAIL' : 'PASS');
-        const ids = extinf.map((l) => /tvg-id="([^"]*)"/.exec(l)?.[1]), nos = extinf.map((l) => /tvg-chno="([^"]*)"/.exec(l)?.[1]);
-        rec(P, 'playlist: channel ids are unique', new Set(ids).size === ids.length ? 'PASS' : 'FAIL', ids.join(','));
-        rec(P, 'playlist: channel numbers are unique whole numbers', new Set(nos).size === nos.length && nos.every((n) => /^\d+$/.test(n)) ? 'PASS' : 'FAIL', nos.join(','));
+        // Live entries carry a channel number; "(from start)" entries (Watch From Start) have none and share their live channel's
+        // tvg-id on purpose, so both play with one guide (liveTvService). Check the two kinds separately.
+        const entries = extinf.map((l) => ({ id: /tvg-id="([^"]*)"/.exec(l)?.[1], no: /tvg-chno="([^"]*)"/.exec(l)?.[1], fromStart: /group-title="[^"]*from start"/.test(l) }));
+        const liveEntries = entries.filter((e) => !e.fromStart), fromStart = entries.filter((e) => e.fromStart);
+        const liveIds = liveEntries.map((e) => e.id), nos = liveEntries.map((e) => e.no);
+        rec(P, 'playlist: live channel ids are unique', liveIds.every(Boolean) && new Set(liveIds).size === liveIds.length ? 'PASS' : 'FAIL', liveIds.join(','));
+        rec(P, 'playlist: live channel numbers are unique whole numbers', new Set(nos).size === nos.length && nos.every((n) => /^\d+$/.test(n || '')) ? 'PASS' : 'FAIL', nos.join(','));
+        const orphanStart = fromStart.filter((e) => liveIds.filter((id) => id === e.id).length !== 1 || e.no !== undefined);
+        rec(P, 'playlist: every "(from start)" entry shares the guide id of exactly one live channel and has no channel number', orphanStart.length ? 'FAIL' : fromStart.length ? 'PASS' : 'SKIP', orphanStart.length ? orphanStart.map((e) => `${e.id}/${e.no}`).join(',') : 'Watch From Start is off: no "(from start)" entries');
         const urls = lines.filter((l) => !l.startsWith('#'));
         rec(P, 'playlist: stream URLs are absolute, keyed, and have no doubled slashes after the host', urls.every((u) => /^https?:\/\/[^/]+\/api\//.test(u) && /streamkey=/.test(u)) ? 'PASS' : 'FAIL', urls.find((u) => !/^https?:\/\/[^/]+\/api\//.test(u) || !/streamkey=/.test(u)));
         const xml = (await raw(`/api?mode=live_epg&streamkey=${streamkey}`, { timeout: 180000 })).text;
@@ -256,6 +269,21 @@ async function readOnly(ctx, h) {
         let overlaps = 0;
         for (const list of Object.values(byChan)) { list.sort((x, y) => x[0] - y[0]); for (let i = 1; i < list.length; i++) if (list[i][0] < list[i - 1][1]) overlaps++; }
         rec(P, 'EPG: programmes on one channel do not overlap', overlaps ? 'WARN' : 'PASS', `${overlaps} overlap(s): Jellyfin shows the later one over the earlier`);
+        // Live subtitles: the synthetic subtitle playlist mirrors the video window and each segment is valid WebVTT
+        if (cfg.STREAM_SUBTITLES === 'false') rec(P, 'live subtitles: playlist and WebVTT segment', 'SKIP', 'STREAM_SUBTITLES is off');
+        else {
+            const sp = await raw(`/api/subs.m3u8?mode=stream&pid=bbc_one_london&subs=livelist&streamkey=${streamkey}`, { timeout: 60000 });
+            if (sp.status !== 200) rec(P, 'live subtitles: playlist and WebVTT segment', 'WARN', `no subtitle playlist (HTTP ${sp.status}): channel has no live captions or BBC did not answer`);
+            else {
+                const sl = sp.text.split('\n').map((l) => l.trim()).filter(Boolean);
+                const uris = sl.filter((l) => !l.startsWith('#'));
+                rec(P, 'live subtitles: playlist is a live media playlist with a sequence and target duration', sl[0] === '#EXTM3U' && sl.some((l) => /^#EXT-X-MEDIA-SEQUENCE:\d+$/.test(l)) && sl.some((l) => /^#EXT-X-TARGETDURATION:\d+$/.test(l)) && !sl.includes('#EXT-X-ENDLIST') ? 'PASS' : 'FAIL', sl.slice(0, 4).join(' | '));
+                rec(P, 'live subtitles: every #EXTINF is followed by a segment URL', sl.every((l, i) => !l.startsWith('#EXTINF') || (sl[i + 1] && !sl[i + 1].startsWith('#'))) && uris.length > 0 ? 'PASS' : 'FAIL', `${uris.length} segment(s)`);
+                rec(P, 'live subtitles: any discontinuity sequence is a whole number and each break precedes a segment', sl.every((l, i) => (!l.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE') || /^#EXT-X-DISCONTINUITY-SEQUENCE:\d+$/.test(l)) && (l !== '#EXT-X-DISCONTINUITY' || sl[i + 1]?.startsWith('#EXTINF'))) ? 'PASS' : 'FAIL');
+                const seg = uris[0] && (await raw(uris[0].startsWith('http') ? uris[0] : uris[0].replace(/^(?!\/)/, '/'), { timeout: 60000 }));
+                rec(P, 'live subtitles: a segment is WebVTT with a timestamp map (empty when nothing was said)', seg && seg.status === 200 && /^WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:\d+,LOCAL:\d\d:\d\d:\d\d\.\d{3}\n/.test(seg.text) ? 'PASS' : 'FAIL', seg ? `HTTP ${seg.status} ${seg.text.slice(0, 80)}` : 'no segment');
+            }
+        }
     } else rec(P, 'Live TV playlist/EPG checks', 'SKIP', 'Live TV is off');
 
     // 9. Data quality of the browse API the UI renders
@@ -275,26 +303,39 @@ async function readOnly(ctx, h) {
         if (eps.length) {
             const pids = eps.map((e) => e.pid);
             rec(P, 'programme: episode pids are unique', new Set(pids).size === pids.length ? 'PASS' : 'FAIL', `${pids.length - new Set(pids).size} duplicate(s)`);
-            const numbered = eps.filter((e) => e.episode != null || e.number != null || e.position != null);
-            const keys = numbered.map((e) => `${e.season}|${e.episode ?? e.number ?? e.position}`);
-            rec(P, 'programme: episode numbers are unique within a season (otherwise two files get the same SxxEyy)', new Set(keys).size === keys.length ? 'PASS' : 'WARN', `${keys.length - new Set(keys).size} clash(es)`);
+            // Episode 0 is how the BBC lists an extra, a clip or a one-off with no number (e.g. "Series 24 Extras, Weekly Rewind"); every one
+            // of them reads as 0, so they always "clash". releaseService treats S00E00 as no episode number and, while SPECIALS_AS_MOVIES is
+            // on (the default), files each as a movie named by its title, so they are counted apart and only real numbers are compared.
+            const numberOf = (e) => e.episode ?? e.number ?? e.position;
+            const numbered = eps.filter((e) => numberOf(e) != null && Number(numberOf(e)) > 0);
+            const unnumbered = eps.filter((e) => numberOf(e) != null && !(Number(numberOf(e)) > 0));
+            const keys = numbered.map((e) => `${e.season}|${numberOf(e)}`);
+            const clashing = [...new Set(keys.filter((k, i) => keys.indexOf(k) !== i))];
+            rec(P, 'programme: episode numbers are unique within a season (otherwise two files get the same SxxEyy)', clashing.length ? 'WARN' : 'PASS',
+                `${keys.length - new Set(keys).size} clash(es) in ${clashing.join(', ')}: ${clashing.slice(0, 3).map((k) => numbered.filter((e) => `${e.season}|${numberOf(e)}` === k).map((e) => e.pid).join('+')).join('; ')} (${unnumbered.length} extra(s) with no number are not compared)`);
             rec(P, 'programme: episodes have no undefined/NaN fields', eps.some((e) => LEAKY_TOKENS.test(JSON.stringify(e))) ? 'FAIL' : 'PASS', JSON.stringify(eps.find((e) => LEAKY_TOKENS.test(JSON.stringify(e))) || {}).slice(0, 140));
         }
     }
     const sched = (await http('/json-api/browse/schedule')).json;
     const days = Array.isArray(sched) ? sched : sched?.schedules || sched?.channels || [];
-    let slotCount = 0, slotBadOrder = 0, slotDup = 0;
+    let slotCount = 0, slotBadOrder = 0, slotDup = 0, slotUnsafe = 0, slotKeyDup = 0;
     for (const d of days) {
         const slots = d.slots || [];
-        const starts = new Set();
+        const starts = new Set(), keys = new Set();
         for (let i = 0; i < slots.length; i++) {
             slotCount++;
             const s = Date.parse(slots[i].start), e = Date.parse(slots[i].end);
             if (!(e > s)) slotBadOrder++;
             if (starts.has(slots[i].start)) slotDup++; starts.add(slots[i].start);
+            const key = `${slots[i].item?.pid}|${slots[i].start}`;
+            if (keys.has(key)) slotKeyDup++; keys.add(key);
+            // A radio slot's ids go into a link (/browse/radio/<showId>?episode=<pid>), so they must be plain.
+            if (slots[i].item?.radio === true && [slots[i].item.pid, slots[i].item.showId].some((id) => !/^[a-z0-9]+$/i.test(String(id)))) slotUnsafe++;
         }
     }
     rec(P, 'browse schedule: every slot ends after it starts and none start twice', slotCount ? (slotBadOrder || slotDup ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotBadOrder} bad, ${slotDup} duplicate of ${slotCount}` : 'no slots in this response shape');
+    rec(P, 'browse schedule: no slot repeats the same id at the same start (the guide keys its blocks on both)', slotCount ? (slotKeyDup ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotKeyDup} repeated of ${slotCount}` : 'no slots in this response shape');
+    rec(P, 'browse schedule: radio slots carry only plain ids (they go into a link)', slotCount ? (slotUnsafe ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotUnsafe} unsafe of ${slotCount}` : 'no slots in this response shape');
 
     // 10. Secrets never leave the server in clear
     const apps = (await http('/json-api/apps')).json || [];
@@ -305,6 +346,13 @@ async function readOnly(ctx, h) {
     const secrets = [cfg.API_KEY, cfg.STREAM_KEY].filter((s) => s && s.length > 8);
     const leaked = all2.filter((r) => secrets.some((s) => (r.text || '').includes(s)));
     rec(P, 'stats, streams, history and events responses never contain the API or stream key', leaked.length ? 'FAIL' : 'PASS', `${leaked.length} response(s)`);
+
+    // 11. A radio stream_ended event names its programme like the stream_started one (the page has no pid lookup for radio)
+    const evBody = (await http('/json-api/events')).json;
+    const evList = Array.isArray(evBody) ? evBody : evBody?.events || evBody?.items || [];
+    const radioEnded = evList.filter((e) => e.type === 'stream_ended' && e.radio === true);
+    const radioEndedBare = radioEnded.filter((e) => !e.title);
+    rec(P, 'radio stream_ended events carry the programme title', radioEnded.length ? (radioEndedBare.length ? 'FAIL' : 'PASS') : 'SKIP', radioEnded.length ? `${radioEndedBare.length} without a title of ${radioEnded.length}` : 'no radio stream_ended event stored yet (stream and stop a radio episode)');
 }
 
 // ------------------------------------------------------------------------------------------------- mutating
@@ -336,7 +384,7 @@ async function write(ctx, h) {
     try {
         // 1. Concurrent saves must not lose each other (each PUT is a read-modify-write of one stored map)
         {
-            const keys = ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'];
+            const keys = ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'];
             const flip = Object.fromEntries(keys.map((k) => [k, (before[k] ?? 'false') === 'true' ? 'false' : 'true']));
             later(() => put(Object.fromEntries(keys.map((k) => [k, before[k] ?? 'false']))));
             await Promise.all(keys.map((k) => put({ [k]: flip[k] })));
@@ -374,6 +422,7 @@ async function write(ctx, h) {
             ['NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['MANUAL_NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['NATIVE_SEARCH', 'maybe', 'FAIL'], ['LIVE_TV_LOGO_SHAPE', 'triangle', 'FAIL'],
             ['WRITE_NFO_STRM', 'sometimes', 'FAIL'], ['STRM_WATCHDOG_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'FAIL'],
             ['RELEASE_LANGUAGE', 'klingon', 'FAIL'],
+            ['RADIO_FOLDER_STRUCTURE', 'sideways', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{nope}}', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{show', 'FAIL'], ['RADIO_FILENAME_TEMPLATE', '{{#if nope}}x{{/if}}', 'FAIL'],
             ['REFRESH_SCHEDULE', 'not a cron', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * * *', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * *', 'FAIL'],
             ['STRM_WATCHDOG_WEBHOOK_URL', 'file:///etc/passwd', 'FAIL'], ['STRM_WATCHDOG_WEBHOOK_URL', 'http://169.254.169.254/latest/meta-data/', 'PASS-IF-ACCEPTED'],
             ['STREAM_BASE_URL', 'javascript:alert(1)', 'FAIL'], ['STREAM_BASE_URL', 'ftp://example.invalid/', 'FAIL'], ['STREAM_BASE_URL', 'http://', 'FAIL'],
@@ -515,7 +564,7 @@ async function write(ctx, h) {
         const eps = [
             ['POST', '/json-api/synonym'], ['PUT', '/json-api/synonym'], ['POST', '/json-api/numbering-overrides'], ['POST', '/json-api/offSchedule'], ['POST', '/json-api/subscriptions'],
             ['POST', '/json-api/subscriptions/arr/detected/import'], ['POST', '/json-api/subscriptions/arr/SMOKE-NOPE'],
-            ['PUT', '/json-api/subscriptions/SMOKE-NOPE/versions'], ['POST', '/json-api/subscriptions/live'], ['POST', '/json-api/live-channels/custom'], ['PUT', '/json-api/live-channels/custom/SMOKE-NOPE'],
+            ['PUT', '/json-api/subscriptions/SMOKE-NOPE/versions'], ['PUT', '/json-api/subscriptions/SMOKE-NOPE/secure'],['POST', '/json-api/subscriptions/live'], ['POST', '/json-api/live-channels/custom'], ['PUT', '/json-api/live-channels/custom/SMOKE-NOPE'],
             ['PUT', '/json-api/live-channels/bbc_four'], ['POST', '/json-api/live-tv/channels'], ['POST', '/json-api/apps'], ['PUT', '/json-api/apps'], ['POST', '/json-api/apps/test'],
             ['PUT', '/json-api/maintenance/caches/SMOKE-NOPE/ttl'], ['PUT', '/json-api/maintenance/tasks/SMOKE-NOPE/schedule'], ['POST', '/json-api/maintenance/tasks/SMOKE-NOPE/schedule/validate'],
             ['PUT', '/json-api/watchdog/path-map'], ['POST', '/json-api/live-channels/probe'], ['PUT', '/json-api/config'], ['DELETE', '/json-api/synonym'], ['DELETE', '/json-api/offSchedule'], ['DELETE', '/json-api/apps'],

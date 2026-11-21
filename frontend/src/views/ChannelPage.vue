@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
         <PageHeader :title="pageTitle">
@@ -20,8 +22,11 @@
                         <font-awesome-icon :icon="['fas', 'tv']" />
                     </span>
                 </template>
-                <button v-if="channel?.live" type="button" :title="`Watch ${channel.title} live`" @click="watchLive">
+                <button v-if="channel?.live" type="button" :title="`${channel.audioOnly ? 'Listen to' : 'Watch'} ${channel.title} live`" @click="watchLive">
                     <font-awesome-icon :icon="['fas', 'play']" />
+                </button>
+                <button v-if="channel?.live && debugOn" type="button" title="Streaming debug" @click="openDebug(channel.id)">
+                    <font-awesome-icon :icon="['fas', 'bug']" />
                 </button>
             </template>
         </SettingsPageToolbar>
@@ -30,14 +35,14 @@
         <template v-else>
             <div v-if="nowNext?.now || nowNext?.next" class="nowNext">
                 <RouterLink
-                    v-for="slot in slots" :key="slot.label" :to="`/browse/programme/${slot.data.item.pid}`"
+                    v-for="slot in slots" :key="slot.label" :to="programmeTarget(slot.data.item) || `/browse/programme/${slot.data.item.pid}`"
                     class="nowNextCard"
                 >
-                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
-                    <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <img v-if="slot.data.item.thumbnail" loading="lazy" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
+                    <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', channel?.audioOnly ? 'radio' : 'tv']" /></div>
                     <button
                         v-if="slot.label === 'Now' && channel?.live" class="nowPlay" type="button"
-                        title="Watch live" @click.prevent.stop="watchLive"
+                        :title="channel?.audioOnly ? 'Listen live' : 'Watch live'" @click.prevent.stop="watchLive"
                     >
                         <font-awesome-icon :icon="['fas', 'play']" />
                     </button>
@@ -53,7 +58,7 @@
             <p v-if="rails.length === 0 && channel?.liveOnly && !nowNext">
                 This is a live stream only, with no schedule or programmes.
             </p>
-            <p v-else-if="rails.length === 0">Nothing found for this channel.</p>
+            <EmptyState v-else-if="rails.length === 0" icon="film" title="Nothing found for this channel" />
         </template>
     </div>
 </template>
@@ -63,6 +68,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -70,12 +76,15 @@ import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
+import { programmeTarget } from '@/lib/mediaDisplay';
 import { playInPip } from '@/lib/pipPlayer';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { formatTime as formatClock, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
 const { enabled: liveTvEnabled, load: loadLiveTv, isSelected: isLiveTvSelected } = useLiveTv();
+const { debugOn, openDebug } = useDebugLink();
 loadLiveTv();
 const { load: loadLive, isSubscribed } = useLiveSubscriptions();
 loadLive();
@@ -134,7 +143,7 @@ watch(
 <style lang="less" scoped>
 // The toolbar sits under the title bar; keep a gap before the content (as on the Channels page).
 .browsePage :deep(.SettingsPageToolbar) {
-    margin-bottom: 12px;
+    margin-bottom: @space-3;
 }
 
 // The channel's own logo at the right end of the title bar, in the tiles' 76:32 shape.
@@ -143,15 +152,15 @@ watch(
     height: 30px;
     aspect-ratio: 2.375 / 1;
     object-fit: cover;
-    border-radius: 4px;
-    margin-bottom: 4px;
+    border-radius: @radius-sm;
+    margin-bottom: @space-1;
 }
 
 .channelHeader {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: @space-4;
     margin-bottom: 1rem;
 
     .browseTitle {
@@ -162,7 +171,7 @@ watch(
 .nowNext {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 12px;
+    gap: @space-3;
     margin-bottom: 1.75rem;
 }
 
@@ -179,7 +188,7 @@ watch(
     border: none;
     border-radius: 50%;
     background-color: rgba(0, 0, 0, 0.45);
-    color: #fff;
+    color: @on-media-color;
     cursor: pointer;
 
     &:hover {
@@ -190,9 +199,9 @@ watch(
 .nowNextCard {
     position: relative;
     display: flex;
-    gap: 12px;
+    gap: @space-3;
     padding: 10px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
@@ -209,7 +218,7 @@ watch(
         width: 140px;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @nav-background-color;
     }
 
@@ -227,11 +236,11 @@ watch(
         .nowNextLabel {
             display: inline-block;
             padding: 1px 6px;
-            margin-bottom: 4px;
-            font-size: 11px;
+            margin-bottom: @space-1;
+            font-size: @font-size-xs;
             font-weight: bold;
             text-transform: uppercase;
-            border-radius: 2px;
+            border-radius: @radius-xs;
             background-color: @grey-pill-background-color;
 
             &.live {
@@ -248,12 +257,12 @@ watch(
         }
 
         .nowNextTitle {
-            font-size: 16px;
+            font-size: @font-size-lead;
         }
 
         .nowNextSubtitle,
         .nowNextTime {
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }
