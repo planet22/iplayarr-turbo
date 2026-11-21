@@ -9,6 +9,8 @@
         "call the midwife",
         "waterloo road"
     ],
+    "nfoCastPids": ["m0031b9w", "m000vt69"],
+    "nfoCastPidsNotes": "Pinned episodes whose BBC version page lists Actor contributors, so WRITE_NFO_CAST=true needs no search first. Verified 2026-11-21 by a filtered --write settings run (the check passed in 11 s): m0031b9w casualty S50E02 25/28 actors, m000vt69 line of duty S06E07 16/20. Also probed with smoke/probe-cast.cjs: m001yzq9 the responder, b03pd6bf call the midwife, b016mw99 death in paradise, m00049t7 ghosts. The check reads the episode .nfo, not the tvshow.nfo that a first download of a show also writes.",
     "nfoCastNotes": "WRITE_NFO_CAST=true needs an episode whose BBC version page lists contributors with role 'Actor' (the .nfo only writes <actor> for that role). Sampled 2026-11-08: the responder 29/39 actors, line of duty 20/23, ghosts 10/14, casualty 25/28, death in paradise 13/16, call the midwife 19/22, waterloo road 36/49 (older episodes can have none). No Actor role at all: the repair shop, would i lie to you, the celebrity traitors, vera. Keep the list to shows with a small episode list first (fast search).",
     "airdateNumbering": [
         "university challenge",

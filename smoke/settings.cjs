@@ -1200,12 +1200,16 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             // .nfo extras and pictures: each is compared with a download made with it off. When the BBC has nothing to add
             // for this episode the check says so (a skip with the reason) rather than passing or failing.
             const base = { LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'all', STREAM_BASE_URL: SMOKE_BASE, MEDIA_MODE: 'strm', WRITE_NFO_CAST: 'false', WRITE_NFO_EPISODE_TITLES: 'false', WRITE_NFO_RUNTIME_FALLBACK: 'false', WRITE_ADDITIONAL_IMAGES: 'none' };
-            const nfoOf = (r) => { const f = (r.added || []).find((x) => x.endsWith('.nfo')); return f ? fs.readFileSync(f, 'utf8') : ''; };
+            const nfoOf = (r) => { // the episode's own .nfo (named like the .strm), not the show's tvshow.nfo that a first download of a show also adds
+                const own = r.strm ? r.strm.replace(/\.strm$/i, '.nfo') : '';
+                const f = (own && (r.added || []).find((x) => x === own)) || (r.added || []).find((x) => x.endsWith('.nfo') && path.basename(x).toLowerCase() !== 'tvshow.nfo');
+                return f ? fs.readFileSync(f, 'utf8') : '';
+            };
             const pics = (r) => (r.added || []).filter((x) => /\.(jpg|png)$/i.test(x));
             const run = async (name, over, cand = ep) => {
                 const e = await pushState({ ...base, ...over });
                 if (e) { rec(W, name, 'FAIL', e); return null; }
-                const r = await download(cand, '&media=strm');
+                const r = await download(cand, '&media=strm', true); // the .nfo is written after the history entry gets its path, so wait for it
                 if (r.error) { rec(W, name, 'FAIL', r.error); return null; }
                 return r;
             };
@@ -1217,10 +1221,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 dropNew(off.added); await cleanHist(ep.pid);
 
                 // Cast depends on the BBC's data: try this episode, then up to four others, until one has cast.
-                let castFound = false, castTried = 0;
+                let castFound = false, castTried = 0; const castSeen = [];
                 // Episodes of shows known to list actors first (smoke-shows.json), then this show's own as before.
-                const listed = [];
-                for (const term of (Array.isArray(SHOWS.nfoCast) ? SHOWS.nfoCast : []).slice(0, 3)) {
+                const listed = (Array.isArray(SHOWS.nfoCastPids) ? SHOWS.nfoCastPids : []).slice(0, 2).map((pid) => ({ pid })); // pinned, known to list actors
+                for (const term of listed.length ? [] : (Array.isArray(SHOWS.nfoCast) ? SHOWS.nfoCast : []).slice(0, 3)) {
                     const xml = (await http(`/api?t=tvsearch&q=${encodeURIComponent(term)}&apikey=${encodeURIComponent(before.API_KEY)}`, { timeout: 90000 })).text || '';
                     const pids = [...xml.matchAll(/<guid>[^<]*episodes\/([a-z0-9]+)/g)].map((m) => m[1]);
                     if (pids.length) listed.push({ pid: pids[Math.min(2, pids.length - 1)] }); // not the newest, which may be unreleased
@@ -1229,12 +1233,14 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                     const cast = await run(`WRITE_NFO_CAST=true download (${cand.pid})`, { WRITE_NFO_CAST: 'true' }, cand);
                     if (!cast) continue;
                     castTried++;
-                    castFound = /<actor>/.test(nfoOf(cast));
+                    const nfoText = nfoOf(cast);
+                    castFound = /<actor>/.test(nfoText);
+                    castSeen.push(`${cand.pid}:${nfoText ? nfoText.length + ' bytes' : 'no .nfo'}`);
                     dropNew(cast.added); await cleanHist(cand.pid);
                     if (castFound) break;
                 }
                 if (castFound) ok('WRITE_NFO_CAST=true takes effect: the .nfo lists actors', true);
-                else rec(W, 'WRITE_NFO_CAST=true takes effect', 'SKIP', `the BBC lists no cast for the ${castTried} episode(s) of this show tried; run again with another show first in Discover`);
+                else rec(W, 'WRITE_NFO_CAST=true takes effect', 'SKIP', `no <actor> in the .nfo of the ${castTried} episode(s) tried (${castSeen.join(', ')}); if the .nfo is there, the BBC lists no cast or the instance cannot fetch it; run again with another show first in Discover`);
                 const runtime = await run('WRITE_NFO_RUNTIME_FALLBACK=true download', { WRITE_NFO_RUNTIME_FALLBACK: 'true' });
                 if (runtime) {
                     if (/<runtime>/.test(nfoOff)) rec(W, 'WRITE_NFO_RUNTIME_FALLBACK=true takes effect', 'SKIP', 'this episode already has a length, so the fallback is not needed');
