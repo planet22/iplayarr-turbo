@@ -805,7 +805,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // Podcasts: opened by an address (a fresh load, before the app knows Sounds is on), filtered, opened, and left by the toggle.
             await page.goto(BASE + '/browse/podcasts', { waitUntil: 'networkidle' });
             await cards.first().waitFor({ timeout: 25000 });
-            ok('radio Podcasts stays on its address on a fresh load and lists show cards', new URL(page.url()).pathname === '/browse/podcasts' && (await cards.count()) > 3 && (await page.locator('h1, .pageHeader').first().innerText()).includes('Podcasts'));
+            ok('radio Podcasts stays on its address on a fresh load and lists show cards', new URL(page.url()).pathname === '/browse/podcasts' && (await cards.count()) > 3 && (await page.locator('h1, .PageHeader').first().innerText()).includes('Podcasts'));
             ok('the Podcasts page has no horizontal scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
             await shot(page, 'radio-podcasts');
             const firstPodcast = ((await cards.first().locator('.title').first().innerText().catch(() => '')) || '').trim();
@@ -894,7 +894,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // The Channels page lists TV channels in video mode; this flow checks the radio stations, so it opens in radio mode.
             await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
             await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
-            const logos = page.locator('.tile .channelLogo');
+            const logos = page.locator('.channelTile .channelLogo');
             await logos.first().waitFor({ timeout: 25000 });
             await page.waitForTimeout(1500);
             const info = await logos.evaluateAll((imgs) => imgs.map((i) => ({
@@ -955,6 +955,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const now = Date.now();
             const active = Array.from({ length: 3 }, (_, i) => ({ pid: `p0smokeq${i}`, jobId: `smokeq${i}`, status: 'Downloading', nzbName: `SMOKE-TEMP Active ${i}`, type: 'TV', details: { progress: 10, size: 5, speed: 1, eta: '00:01:10', start: new Date(now).toISOString() } }));
             const done = Array.from({ length: 40 }, (_, i) => ({ pid: `p0smokeh${i}`, jobId: `smokeh${i}`, status: 'Completed', nzbName: `SMOKE-TEMP Done ${String(i).padStart(2, '0')}`, type: 'TV', details: { progress: 100, size: 5, start: new Date(now - (i + 1) * 60000).toISOString() } }));
+            await page.route('**/socket.io/**', (route) => route.abort());
             await page.route(/\/json-api\/queue\/(queue|history)(\?|$)/, (route) => {
                 const req = route.request();
                 if (req.method() !== 'GET') return route.fulfill({ json: [] });
@@ -1180,7 +1181,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const stored = await page.evaluate(() => ({ settings: localStorage.getItem('iplayarr.navSettings'), versions: localStorage.getItem('iplayarr.navVersions') }));
             const settings = JSON.parse(stored.settings || '{}');
             ok('the menu settings are remembered in this browser', settings.BROWSE_SHOW_COLLECTIONS === 'true' && typeof settings.NATIVE_SEARCH === 'string', stored.settings);
-            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'UI_EXTENDED_DEBUG', 'SOUNDS_ENABLED', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
+            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'UI_EXTENDED_DEBUG', 'SOUNDS_ENABLED', 'RADIO_ATOZ', 'RADIO_PODCASTS', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
             const versions = JSON.parse(stored.versions || '{}');
             ok('the app version is remembered', typeof versions.appVersion === 'string' && versions.appVersion.length > 0, stored.versions);
 

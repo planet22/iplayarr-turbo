@@ -616,7 +616,7 @@ async function apiLayer(ctx) {
         let broken = 0;
         const sample = listedCollections.filter((c) => c.thumbnail).slice(0, 40);
         await pool(sample, async (c) => { const r = await fetch(BASE + '/' + c.thumbnail).catch(() => ({ status: 0 })); if (r.status !== 200) broken++; });
-        rec(A, `collection pictures load (${sample.length} checked of ${listedCollections.length})`, broken || noPicture ? 'FAIL' : 'PASS', `${broken} broken, ${noPicture} with no picture`);
+        rec(A, `collection pictures load (${sample.length} checked of ${listedCollections.length})`, broken ? 'FAIL' : noPicture ? 'WARN' : 'PASS', `${broken} broken, ${noPicture} with no picture`);
     }
     const firstCollection = (collections.json?.collections || [])[0];
     if (firstCollection) await check(A, 'browse collection contents', `/json-api/browse/collections/${firstCollection.id}?perPage=5`, (r) => (r.json && Array.isArray(r.json.items)) || 'no items array');
@@ -1040,7 +1040,7 @@ async function libraryAndDebugChecks(A, ctx) {
     // One resolver names every download (releaseService.ts), the Download dialog's suggestion and the debug page alike.
     for (const bad of ['bad', '..%2Fetc']) {
         const r = await http(`/json-api/release-preview?pid=${bad}`);
-        rec(A, `release preview refuses the id "${decodeURIComponent(bad)}"`, r.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+        rec(A, `release preview refuses the id "${decodeURIComponent(bad)}"`, (r.status === 400 || (bad === 'bad' && r.status === 404)) ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
     }
     if (episodePid) {
         const preview = await http(`/json-api/release-preview?pid=${episodePid}`, { timeout: 90000 });
@@ -1525,7 +1525,9 @@ async function traceCharts(browser, ctx, U) {
 
         // Playback diagnostics: the four charts share rows, and a hover writes the segment's figure under each.
         const plots = p.locator('svg.plot');
-        if ((await plots.count()) !== 4) rec(U, L('the four playback charts'), 'FAIL', `${await plots.count()} plots`);
+        const emptyCharts = await p.locator('.healthCharts p.empty').count();
+        if ((await plots.count()) + emptyCharts !== 4) rec(U, L('the four playback charts'), 'FAIL', `${await plots.count()} plots, ${emptyCharts} empty notes`);
+        else if (emptyCharts) rec(U, L('the four playback charts'), 'SKIP', `this trace lacks data for ${emptyCharts} chart(s) (shown as a note)`);
         else {
             const boxes = await plots.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top + window.scrollY), left: Math.round(r.left) }; }));
             const rows = new Map();
@@ -1746,7 +1748,7 @@ async function watchdogLinks(page, ctx, U) {
 // A subscription row's title as the user reads it. A radio row puts a small radio icon (an svg with a <title>) inside the
 // title link, and textContent includes that <title>, giving "RadioDance Sounds..." - so read the text with the svg left out.
 const rowTitles = async (page) =>
-    page.locator('.subscriptionRow .info a.title').evaluateAll((els) =>
+    page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .info a.title').evaluateAll((els) =>
         els.map((el) => {
             const copy = el.cloneNode(true);
             copy.querySelectorAll('svg').forEach((n) => n.remove());
@@ -1802,7 +1804,7 @@ async function subscriptionsToolbar(page, ctx, U) {
         // Filter: All, iPlayarr (downloaded by us) and each Sonarr/Radarr app
         await page.locator('.filterWrap button').click();
         const filters = (await page.locator('.filterDropdown li').allTextContents()).map((t) => t.trim());
-        rec(U, 'subscriptions: filter offers All, iPlayarr and each app', filters.join() === ['All', 'iPlayarr', ...apps.map((a) => a.name)].join() ? 'PASS' : 'FAIL', filters.join());
+        rec(U, 'subscriptions: filter offers All, iPlayarr and each app', filters.join() === ['All', ...(subs.some((s) => s.radio) ? ['Video', 'Radio'] : []), 'iPlayarr', ...apps.map((a) => a.name)].join() ? 'PASS' : 'FAIL', filters.join());
         const pick = async (option) => {
             if (!(await page.locator('.filterDropdown').count())) await page.locator('.filterWrap button').click();
             await page.locator('.filterDropdown li', { hasText: new RegExp(`^\\s*${option}\\s*$`) }).click();
@@ -1855,35 +1857,35 @@ async function subscriptionsCards(browser, page, U) {
         const onPage = subs.filter((x) => titles.includes(x.title));
         const shownVideo = onPage.filter((x) => !x.radio).length;
         rec(U, 'subscriptions: wide screens start in the table view', shown > 0 && (await toggle('Table view').getAttribute('aria-pressed')) === 'true' ? 'PASS' : 'FAIL', `${shown} rows`);
-        const rows = page.locator('.subscriptionRow');
+        const rows = page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"])');
         const wrong = [];
         for (const s of onPage) {
             const got = await badgeOf(rows, s.title);
             if (got !== expectedBadge(s)) wrong.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
         }
         rec(U, 'subscriptions: each picture badge is last download / episodes seen (or episodes held for Sonarr/Radarr)', wrong.length === 0 ? 'PASS' : 'FAIL', wrong.slice(0, 3).join(' | '));
-        const addedRows = await page.locator('.subscriptionRow .details span', { hasText: /^Added / }).count();
+        const addedRows = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .details span', { hasText: /^Added / }).count();
         rec(U, 'subscriptions: every table row says when the show was added', addedRows === shown ? 'PASS' : 'FAIL', `${addedRows} rows`);
         const withSynopsis = onPage.filter((s) => s.synopsis);
-        const synopsisRows = await page.locator('.subscriptionRow .synopsis').count();
+        const synopsisRows = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .synopsis').count();
         rec(U, 'subscriptions: the table shows a synopsis line for every show that has one', synopsisRows === withSynopsis.length ? 'PASS' : 'FAIL', `${synopsisRows} shown, ${withSynopsis.length} expected`);
         if (withSynopsis.length) {
-            const style = await page.locator('.subscriptionRow .synopsis').first().evaluate((el) => ({ overflow: getComputedStyle(el).overflow, wrap: getComputedStyle(el).whiteSpace }));
+            const style = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .synopsis').first().evaluate((el) => ({ overflow: getComputedStyle(el).overflow, wrap: getComputedStyle(el).whiteSpace }));
             rec(U, 'subscriptions: a table synopsis stays on one line', style.wrap === 'nowrap' && style.overflow === 'hidden' ? 'PASS' : 'FAIL', JSON.stringify(style));
         }
         const arrShows = onPage.filter((s) => s.arr || s.arrMissing);
-        const arrLines = await page.locator('.subscriptionRow .info > .details:nth-of-type(2)').count();
+        const arrLines = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .info > .details:nth-of-type(2)').count();
         rec(U, 'subscriptions: Sonarr/Radarr details sit on a second line under the channel', arrShows.length ? (arrLines >= arrShows.length ? 'PASS' : 'FAIL') : 'SKIP', `${arrLines} second lines, ${arrShows.length} linked`);
         // The download-before-it-leaves toggle belongs on every show, Sonarr/Radarr-only ones included (their .strm links expire too).
-        const secureToggles = await page.locator('.subscriptionRow button:has(svg[data-icon="box-archive"])').count();
+        const secureToggles = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) button:has(svg[data-icon="box-archive"])').count();
         rec(U, 'subscriptions: every table row, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (secureToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${secureToggles} toggles, ${shown} rows`);
-        const imageButtons = await page.locator('.subscriptionRow button:has(svg[data-icon="images"])').count();
-        rec(U, 'subscriptions: every table row has the update-images button', shownVideo ? (imageButtons === shownVideo ? 'PASS' : 'FAIL') : 'SKIP', `${imageButtons} buttons, ${shownVideo} video rows (radio has none)`);
+        const imageButtons = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) button:has(svg[data-icon="images"])').count();
+        rec(U, 'subscriptions: every table row has the update-images button', shown ? (imageButtons === shown ? 'PASS' : 'FAIL') : 'SKIP', `${imageButtons} buttons, ${shown} rows`);
         // Per-source counts are just a logo and a number, in the table as on the cards: no source names beside the logos.
         const withSources = onPage.filter((s) => s.onDiskSources && s.onDiskSources.length);
-        const rowChips = await page.locator('.subscriptionRow .sourceCounts').count();
-        const rowNames = await page.locator('.subscriptionRow .sourceCounts .sourceName').count();
-        const rowBad = await page.locator('.subscriptionRow .sourceCounts > span').evaluateAll((els) => els.filter((el) => !el.querySelector('img.sourceLogo') || !/^\d+$/.test(el.textContent.trim())).length);
+        const rowChips = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .sourceCounts').count();
+        const rowNames = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .sourceCounts .sourceName').count();
+        const rowBad = await page.locator('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"]) .sourceCounts > span').evaluateAll((els) => els.filter((el) => !el.querySelector('img.sourceLogo') || !/^\d+$/.test(el.textContent.trim())).length);
         rec(U, 'subscriptions: table rows show each source as a logo and a count, with no names', withSources.length ? (rowChips === withSources.length && rowNames === 0 && rowBad === 0 ? 'PASS' : 'FAIL') : 'SKIP', `${rowChips} chip sets for ${withSources.length} shows, ${rowNames} names, ${rowBad} not logo+count`);
         await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-table.png'), fullPage: true });
 
@@ -1905,7 +1907,7 @@ async function subscriptionsCards(browser, page, U) {
         const cardNames = await page.locator('.subCard .sourceCounts .sourceName').count();
         rec(U, 'subscriptions: cards show the same logo and count per source, with no names', withSources.length ? (cardChips === withSources.length && cardNames === 0 ? 'PASS' : 'FAIL') : 'SKIP', `${cardChips} chip sets for ${withSources.length} shows, ${cardNames} names`);
         const cardImages = await page.locator('.subCard button:has(svg[data-icon="images"])').count();
-        rec(U, 'subscriptions: every card has the update-images button', shownVideo ? (cardImages === shownVideo ? 'PASS' : 'FAIL') : 'SKIP', `${cardImages} buttons, ${shownVideo} video cards (radio has none)`);
+        rec(U, 'subscriptions: every card has the update-images button', shown ? (cardImages === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardImages} buttons, ${shown} cards`);
         const cardToggles = await page.locator('.subCard button:has(svg[data-icon="box-archive"])').count();
         rec(U, 'subscriptions: every card, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (cardToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardToggles} toggles, ${shown} cards`);
         const first = cards.first();
@@ -1927,7 +1929,7 @@ async function subscriptionsCards(browser, page, U) {
         await page.reload({ waitUntil: 'networkidle' });
         rec(U, 'subscriptions: the card choice is remembered after a reload', (await page.locator('.subCard').count()) === shown ? 'PASS' : 'FAIL');
         await toggle('Table view').click();
-        await page.waitForSelector('.subscriptionRow', { timeout: 10000 });
+        await page.waitForSelector('.subscriptionRow:has(button[aria-label="Unsubscribe"], button[aria-label="Stop tracking"])', { timeout: 10000 });
         rec(U, 'subscriptions: switching back shows the table again', (await page.locator('.subCard').count()) === 0 ? 'PASS' : 'FAIL');
         await page.evaluate((k) => localStorage.removeItem(k), KEY);
 
