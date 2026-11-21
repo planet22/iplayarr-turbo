@@ -33,7 +33,7 @@ interface GroupRef {
 // artwork and size. The result is cached for hours, since editors change collections rarely.
 class CollectionService {
     // Holds the finished lists and, under `v1:groups:`, the bare (id, title) lists found on the pages.
-    cache: DbCacheService<any> = new DbCacheService('collections', 6 * 60 * 60, {
+    cache: DbCacheService<any> = new DbCacheService('collections', 12 * 60 * 60, {
         label: 'Collections',
         description: 'The BBC iPlayer collections found on its home and category pages (Browse, and the search by collection name).',
     });

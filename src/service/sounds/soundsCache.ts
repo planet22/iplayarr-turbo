@@ -8,7 +8,7 @@ const listingCache = new DbCacheService<unknown>('sounds_listing', 60 * 60, {
     label: 'Radio Listings',
     description: 'BBC Sounds shows, episodes, categories, collections and Discover rails.',
 });
-const searchCache = new DbCacheService<unknown>('sounds_search', 10 * 60, {
+const searchCache = new DbCacheService<unknown>('sounds_search', 30 * 60, {
     label: 'Radio Search',
     description: 'BBC Sounds search results.',
 });

@@ -17,7 +17,7 @@ class SkyhookService {
     skyhookEpisodeCache: DbCacheService<{ episodes: any[] } | undefined>
 
     constructor() {
-        this.skyhookSeriesCache = new DbCacheService('skyhook_series_cache', 2700, { label: 'Skyhook series lookups', description: 'Sonarr Skyhook series search results.' });
+        this.skyhookSeriesCache = new DbCacheService('skyhook_series_cache', 6 * 60 * 60, { label: 'Skyhook series lookups', description: 'Sonarr Skyhook series search results.' });
         this.skyhookEpisodeCache = new DbCacheService('skyhook_episode_cache', 86400, { label: 'Skyhook episodes', description: 'Sonarr Skyhook episode lists per series.' });
     }
 
