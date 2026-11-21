@@ -882,6 +882,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.locator('.probeTable tbody tr').first().waitFor({ timeout: 40000 });
                 const body = await page.innerText('body');
                 ok('the radio debug page reads the episode as audio', /\baudio\b/i.test(body) && (await page.locator('.probeTable tbody tr').count()) > 2, 'no audio probe rows');
+                ok('the radio debug page colours exactly one Probe line as the one a normal Play would use', (await page.locator('.streamDebug .probeTable tr.bestRow').count()) === 1, `${await page.locator('.streamDebug .probeTable tr.bestRow').count()} coloured line(s)`);
                 ok('the radio debug page has no broken picture', await page.evaluate(() => [...document.querySelectorAll('.streamDebug img')].every((i) => i.complete && i.naturalWidth > 0)), 'a picture did not load');
                 ok('the radio debug page shows no video-only parts', !/Video info|FHD upgrade/.test(body) && (await page.locator('.streamDebug .pidLinks li', { hasText: /^Programme page$/ }).count()) === 0, 'video-only text on the page');
                 // Radio gets Library debug and Watchdog beside its Sounds page link (the iPlayer-only Programme page and Video info stay off).

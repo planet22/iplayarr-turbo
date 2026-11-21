@@ -22,7 +22,7 @@ import thumbnailCacheService from '../thumbnailCacheService';
 import videoEventService from '../videoEventService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, specialVersionTypeRegex, tallestIndex, usableConnectionIndexes } from './mediaSelectorPairs';
+import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, orderedMediaSelectorPairs, specialVersionTypeRegex, tallestIndex, usableConnectionIndexes } from './mediaSelectorPairs';
 import { resolvedKeysFor } from './resolveCache';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import streamSessionService from './streamSessionService';
@@ -674,7 +674,7 @@ class StreamDebugService {
         if (audio) {
             const pairs = await Promise.all(allMediaSelectorPairs.map((pair) => this.#probePair(pair, vpid, variants, true)));
             const none: DebugPair = { mediaSet: liveDashPair.mediaSet, version: liveDashPair.version, ms: 0, media: [] };
-            return { vpid, types, pairs, bestHeight: 0, bestDashHeight: 0, fhd: { outcome: 'no-variant' }, liveSet: none };
+            return { vpid, types, pairs, best: this.#bestAudioLine(pairs), bestHeight: 0, bestDashHeight: 0, fhd: { outcome: 'no-variant' }, liveSet: none };
         }
         const [pairs, liveSet] = await Promise.all([
             Promise.all(allMediaSelectorPairs.map((pair) => this.#probePair(pair, vpid, variants))),
@@ -711,6 +711,21 @@ class StreamDebugService {
         for (const pair of nativePairOrder(special)) {
             const lines = linesOf(pairs.find((probed) => same(probed, pair)));
             if (lines.length) return named(lines[0]);
+        }
+        return undefined;
+    }
+
+    // The line a Sounds episode stream would take (soundsStreamService / extractAudioHlsHref): the first route, in the Sounds order,
+    // with an audio group that has an https HLS connection (not a bidirectional supplier); Akamai is preferred within the group.
+    #bestAudioLine(pairs: DebugPair[]): DebugLine | undefined {
+        for (const route of orderedMediaSelectorPairs('sounds')) {
+            const pair = pairs.find((probed) => probed.mediaSet === route.mediaSet && probed.version === route.version);
+            for (const [mediaIndex, media] of (pair?.media ?? []).entries()) {
+                if (media.kind !== 'audio') continue;
+                const usable = media.connections.map((connection, index) => ({ connection, index })).filter(({ connection }) => connection.transferFormat === 'hls' && connection.protocol === 'https' && !/(^|[^n])bidi/i.test(connection.supplier ?? ''));
+                const chosen = usable.find(({ connection }) => /akamai/i.test(connection.supplier ?? '')) ?? usable[0];
+                if (chosen && pair) return { mediaSet: pair.mediaSet, version: pair.version, media: mediaIndex, connection: chosen.index };
+            }
         }
         return undefined;
     }

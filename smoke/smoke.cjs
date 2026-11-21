@@ -331,6 +331,15 @@ async function radioChecks(A, cfg) {
                 const audio = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.length));
                 return (v && v.vpid === ep.id && v.bestHeight === 0 && audio) || 'no audio connections in the probe';
             }, { method: 'POST', ...upstream });
+            // The line a normal Play would use is named, and is a real audio HLS connection in the probe (the page colours it).
+            if (probe.json) rec(A, 'radio streaming debug names the audio line a normal Play would use', (() => {
+                const v = probe.json.versions?.[0];
+                const hls = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.some((c) => c.transferFormat === 'hls' && c.protocol === 'https')));
+                if (!hls) return 'SKIP';
+                const b = v.best;
+                const line = b && v.pairs.find((p) => p.mediaSet === b.mediaSet && p.version === b.version)?.media?.[b.media];
+                return line?.kind === 'audio' && line.connections?.[b.connection]?.transferFormat === 'hls' ? 'PASS' : 'FAIL';
+            })());
             if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
             // The radio debug page reads the same dashboard parts as TV (marked ?kind=radio), and has a picture to refresh and metadata to show.
             await check(A, 'radio streaming debug programme has metadata and a valid picture id', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.metadata && typeof r.json.metadata === 'object' && (r.json.imagePid === undefined || /^p[a-z0-9]{7}$/i.test(r.json.imagePid))) || 'no metadata, or a malformed picture id', { timeout: 60000 });

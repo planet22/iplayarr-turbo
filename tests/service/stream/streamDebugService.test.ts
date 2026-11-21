@@ -571,6 +571,44 @@ v.m3u8
             expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
         });
 
+        describe('radio best line', () => {
+            const conn = (host: string, supplier: string, protocol = 'https', transferFormat = 'hls') =>
+                `<connection href="${protocol}://${host}/master.m3u8" supplier="${supplier}" transferFormat="${transferFormat}" protocol="${protocol}" priority="10"/>`;
+            const audio = (...conns: string[]) => `<mediaSelection><media kind="audio" encoding="aac" bitrate="128">${conns.join('')}</media></mediaSelection>`;
+            const serve = (answers: Record<string, string>) => {
+                jest.mocked(fetchTextWithStatus).mockImplementation(async (url: string) => {
+                    const key = Object.keys(answers).find((k) => url.includes(`/mediaset/${k.split('/')[0]}/`) && url.includes(`/mediaselector/${k.split('/')[1]}/`));
+                    return { statusCode: 200, body: key ? answers[key] : '<mediaSelection></mediaSelection>' };
+                });
+                jest.mocked(resolveRedirect).mockImplementation(async (href: string) => href);
+                jest.mocked(fetchText).mockResolvedValue('#EXTM3U\n');
+            };
+            const bestOf = async () => (await streamDebugService.probe('m0033frv', undefined, true)).versions[0].best;
+
+            it('is the Akamai https connection of the first route that offers audio, as the Sounds stream takes it', async () => {
+                serve({ 'iptv-all/6': audio(conn('a.example', 'other'), conn('b.example', 'mf_akamai_nonbidi')), 'pc/6': audio(conn('c.example', 'other')) });
+                expect(await bestOf()).toEqual({ mediaSet: 'iptv-all', version: 6, media: 0, connection: 1 });
+            });
+
+            it('falls back to the first usable connection when none is Akamai', async () => {
+                serve({ 'iptv-all/6': audio(conn('a.example', 'vbidi_x'), conn('b.example', 'other')) });
+                expect(await bestOf()).toEqual({ mediaSet: 'iptv-all', version: 6, media: 0, connection: 1 });
+            });
+
+            it('skips http, non-HLS and bidirectional connections, and moves to the next route', async () => {
+                serve({
+                    'iptv-all/6': audio(conn('a.example', 'other', 'http'), conn('b.example', 'other', 'https', 'dash'), conn('c.example', 'mf_bidi')),
+                    'pc/6': audio(conn('d.example', 'other')),
+                });
+                expect(await bestOf()).toEqual({ mediaSet: 'pc', version: 6, media: 0, connection: 0 });
+            });
+
+            it('ignores a video group and is nothing when no route offers a usable audio connection', async () => {
+                serve({ 'iptv-all/6': '<mediaSelection><media kind="video" encoding="h264"><connection href="https://v.example/m.m3u8" supplier="s" transferFormat="hls" protocol="https" priority="1"/></media></mediaSelection>' });
+                expect(await bestOf()).toBeUndefined();
+            });
+        });
+
         it('leaves audio masters unread when the programme is video', async () => {
             const audioXml = '<mediaSelection><media kind="audio"><connection href="https://cdn.example/a/master.m3u8" transferFormat="hls"/></media></mediaSelection>';
             jest.mocked(iplayerDetailsService.getMetadata).mockResolvedValue({ programme: { ...programme, versions: [programme.versions[0]] } } as any);
