@@ -204,7 +204,7 @@ describe('TilesPage', () => {
             const wrapper = await mountWith(settings('false'));
             expect(wrapper.find('.emptyStateTitle').text()).toBe('No live radio stations');
             expect(wrapper.find('.emptyStateHint').text()).toBe('Live radio is switched off.');
-            expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ path: '/settings', hash: '#general' });
+            expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ path: '/settings', hash: '#liveTv' });
         });
 
         it('treats missing settings as live radio off', async () => {

@@ -6,6 +6,7 @@ import { App } from '../../types/App';
 import { appFeatures, AppType } from '../../types/AppType';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { UserAgentMapping } from '../../types/UserAgentMapping';
+import { sendInvalidFields } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { maskApp, restoreApp } from '../../utils/secretMask';
 import { AppFormValidator } from '../../validators/AppFormValidator';
@@ -41,29 +42,16 @@ const updateApp = async (req: Request, res: Response) => {
                     await appService.removeApp(updatedForm.id);
                 }
 
-                const apiResponse: ApiResponse = {
-                    error: ApiError.INVALID_INPUT,
-                    invalid_fields: validationResult,
-                };
-                res.status(400).json(apiResponse);
+                sendInvalidFields(res, validationResult);
                 return;
             }
             res.json(maskApp(updatedForm));
         } else {
             validationResult['name'] = 'Error Saving App';
-            const apiResponse: ApiResponse = {
-                error: ApiError.INVALID_INPUT,
-                invalid_fields: validationResult,
-            };
-            res.status(400).json(apiResponse);
+            sendInvalidFields(res, validationResult);
         }
     } else {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: validationResult,
-        };
-        res.status(400).json(apiResponse);
-        return;
+        sendInvalidFields(res, validationResult);
     }
 };
 
@@ -111,14 +99,10 @@ router.get('/user-agents', async (_, res: Response) => {
 router.post('/user-agents', async (req: Request, res: Response) => {
     const mapping: UserAgentMapping = req.body as any as UserAgentMapping;
     if (!mapping.userAgent || !mapping.appName) {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: {
-                ...(mapping.userAgent ? {} : { userAgent: 'User-Agent is required' }),
-                ...(mapping.appName ? {} : { appName: 'App Name is required' }),
-            },
-        };
-        res.status(400).json(apiResponse);
+        sendInvalidFields(res, {
+            ...(mapping.userAgent ? {} : { userAgent: 'User-Agent is required' }),
+            ...(mapping.appName ? {} : { appName: 'App Name is required' }),
+        });
         return;
     }
     const saved = await userAgentMappingService.addMapping(mapping);
@@ -128,13 +112,9 @@ router.post('/user-agents', async (req: Request, res: Response) => {
 router.put('/user-agents', async (req: Request, res: Response) => {
     const mapping: UserAgentMapping = req.body as any as UserAgentMapping;
     if (!mapping.id || !mapping.userAgent) {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: {
-                ...(mapping.userAgent ? {} : { userAgent: 'User-Agent is required' }),
-            },
-        };
-        res.status(400).json(apiResponse);
+        sendInvalidFields(res, {
+            ...(mapping.userAgent ? {} : { userAgent: 'User-Agent is required' }),
+        });
         return;
     }
     await userAgentMappingService.updateMapping(mapping);

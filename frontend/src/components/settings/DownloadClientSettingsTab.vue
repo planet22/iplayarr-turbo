@@ -1,57 +1,41 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <SettingsSubheading text="Client" />
+    <SettingsSubheading text="What to get" />
     <SelectInput
-        v-model="config.DOWNLOAD_CLIENT"
-        field="DOWNLOAD_CLIENT"
-        name="Download Client?"
-        tooltip="The tool used to download."
-        :error="validationErrors.config?.DOWNLOAD_CLIENT"
-        :options="downloadClients"
+        v-model="config.VIDEO_QUALITY"
+        field="VIDEO_QUALITY"
+        name="Video Quality"
+        tooltip="The best quality to download, where BBC offers it."
+        :error="validationErrors.config?.VIDEO_QUALITY"
+        :options="qualityProfiles"
     />
-
-    <TextInput
+    <MultiSelectInput
+        v-model="config.EXTRA_VIDEO_QUALITIES"
+        field="EXTRA_VIDEO_QUALITIES"
+        name="Additional Qualities"
+        tooltip="Offer these qualities as extra results so Sonarr/Radarr can pick one. Empty offers only the Video Quality."
+        :error="validationErrors.config?.EXTRA_VIDEO_QUALITIES"
+        :options="qualityProfiles"
+    />
+    <MultiSelectInput
+        v-model="config.EXTRA_VERSIONS"
+        field="EXTRA_VERSIONS"
+        name="Additional Versions"
+        tooltip="Also list these versions, tagged in the name (e.g. AUDIO.DESCRIBED). Match the tag with a Sonarr/Radarr Custom Format."
+        :error="validationErrors.config?.EXTRA_VERSIONS"
+        :options="versionProfiles"
+    />
+    <SelectInput
         v-if="showAdvanced"
-        v-model="config.ACTIVE_LIMIT"
-        field="ACTIVE_LIMIT"
+        v-model="config.RELEASE_LANGUAGE"
+        field="RELEASE_LANGUAGE"
         :advanced="true"
-        name="Download Limit"
-        tooltip="How many downloads can run at once (1-10, default 3)."
-        type-override="number"
-        :min="1"
-        :max="10"
-        :step="1"
-        :error="validationErrors.config?.ACTIVE_LIMIT"
+        name="Release Language"
+        tooltip="Adds a language tag like ENGLISH to release names. Use it if Sonarr/Radarr shows an Unknown language and won't grab."
+        :error="validationErrors.config?.RELEASE_LANGUAGE"
+        :options="releaseLanguages"
     />
-    <TextInput
-        v-if="showAdvanced && config.SOUNDS_ENABLED === 'true'"
-        v-model="config.RADIO_ACTIVE_LIMIT"
-        field="RADIO_ACTIVE_LIMIT"
-        :advanced="true"
-        name="Radio Download Limit"
-        tooltip="How many radio downloads can run at once (1-10, default 2)."
-        type-override="number"
-        :min="1"
-        :max="10"
-        :step="1"
-        :error="validationErrors.config?.RADIO_ACTIVE_LIMIT"
-    />
-    <template v-if="showAdvanced">
-        <TextInput
-            v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
-            field="ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
-            :advanced="true"
-            name="Additional Download Parameters"
-            :tooltip="paramsLocked ? lockedReason : 'Extra options passed to get_iplayer.'"
-            :disabled="paramsLocked"
-            :error="validationErrors.config?.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
-        />
-        <AppButton v-if="paramsLocked" class="resetOverride" @click="resetParams">
-            Clear saved value (use environment / default)
-        </AppButton>
-    </template>
-
     <template v-if="showAdvanced && config.UI_VERSION_BADGES === 'true'">
         <SettingsSubheading text="Versions" />
         <SelectInput
@@ -71,6 +55,79 @@
             :options="versionDefaults"
         />
     </template>
+    <SettingsSubheading text="How to get it" />
+    <SelectInput
+        v-model="config.DOWNLOAD_CLIENT"
+        field="DOWNLOAD_CLIENT"
+        name="Download Client?"
+        tooltip="The tool used to download."
+        :error="validationErrors.config?.DOWNLOAD_CLIENT"
+        :options="downloadClients"
+    />
+    <TextInput
+        v-model="config.ACTIVE_LIMIT"
+        field="ACTIVE_LIMIT"
+        name="Download Limit"
+        tooltip="How many downloads can run at once (1-10, default 4)."
+        type-override="number"
+        :min="1"
+        :max="10"
+        :step="1"
+        :error="validationErrors.config?.ACTIVE_LIMIT"
+    />
+    <TextInput
+        v-if="showAdvanced && config.SOUNDS_ENABLED === 'true'"
+        v-model="config.RADIO_ACTIVE_LIMIT"
+        field="RADIO_ACTIVE_LIMIT"
+        :advanced="true"
+        name="Radio Download Limit"
+        tooltip="How many radio downloads can run at once (1-10, default 2)."
+        type-override="number"
+        :min="1"
+        :max="10"
+        :step="1"
+        :error="validationErrors.config?.RADIO_ACTIVE_LIMIT"
+    />
+    <SelectInput
+        v-model="config.OUTPUT_FORMAT"
+        field="OUTPUT_FORMAT"
+        name="Output Format?"
+        tooltip="The video file format."
+        :error="validationErrors.config?.OUTPUT_FORMAT"
+        :options="outputFormats"
+    />
+    <SelectInput
+        v-model="config.DOWNLOAD_SUBTITLES"
+        field="DOWNLOAD_SUBTITLES"
+        name="Subtitles"
+        tooltip="Saved with downloads: a separate .srt file, inside the video, both, or none."
+        :error="validationErrors.config?.DOWNLOAD_SUBTITLES"
+        :options="subtitleModes"
+    />
+    <template v-if="showAdvanced">
+        <TextInput
+            v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
+            field="ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
+            :advanced="true"
+            name="Additional Download Parameters"
+            :tooltip="paramsLocked ? lockedReason : 'Extra options passed to get_iplayer.'"
+            :disabled="paramsLocked"
+            :error="validationErrors.config?.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
+        />
+        <AppButton v-if="paramsLocked" class="resetOverride" @click="resetParams">
+            Clear saved value (use environment / default)
+        </AppButton>
+    </template>
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.ARCHIVE_ENABLED"
+        field="ARCHIVE_ENABLED"
+        :advanced="true"
+        name="Archive Downloads"
+        tooltip="Keep a record of what has been downloaded."
+        :error="validationErrors.config?.ARCHIVE_ENABLED"
+        :options="trueOrFalse"
+    />
 
     <InfoBar>
         Looking for NZB Passthrough? Check the <RouterLink to="/apps"> Apps </RouterLink> section
@@ -110,6 +167,7 @@ import { computed, defineProps, inject, onMounted, reactive, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
 import AppButton from '@/components/common/AppButton.vue';
+import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -118,11 +176,23 @@ import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
 
 defineProps({
-    downloadClients: {
-        type: Array,
-        required: true,
-    },
+    downloadClients: { type: Array, required: true },
+    qualityProfiles: { type: Array, required: true },
+    versionProfiles: { type: Array, required: true },
+    outputFormats: { type: Array, required: true },
+    trueOrFalse: { type: Array, required: true },
 });
+
+const subtitleModes = [
+    { key: 'sidecar', value: 'Separate .srt file' },
+    { key: 'embed', value: 'Inside the video' },
+    { key: 'both', value: 'Both' },
+    { key: 'off', value: 'None' },
+];
+const releaseLanguages = [
+    { key: 'none', value: 'None' },
+    { key: 'english', value: 'English' },
+];
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');

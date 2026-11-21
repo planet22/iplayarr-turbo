@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <SettingsSubheading text="Playback" />
+    <SettingsSubheading text="Connection" />
         <TextInput
             v-model="config.STREAM_BASE_URL"
             field="STREAM_BASE_URL"
@@ -29,6 +29,44 @@
             :options="streamClients"
         />
         <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STREAM_MODE"
+            field="STREAM_MODE"
+            :advanced="true"
+            name="Stream Mode"
+            tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg and cannot seek mid-stream."
+            :error="validationErrors.config?.STREAM_MODE"
+            :options="streamModes"
+        />
+        <TextInput
+            v-if="showAdvanced"
+            v-model="config.STREAM_CACHE_DIR"
+            field="STREAM_CACHE_DIR"
+            :advanced="true"
+            name="Stream Cache Directory"
+            tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
+            :error="validationErrors.config?.STREAM_CACHE_DIR"
+        />
+    <SettingsSubheading text="Playback" />
+        <template v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE' && config.UI_VERSION_BADGES === 'true'">
+            <SelectInput
+                v-model="config.PLAY_ASK_VERSION"
+                field="PLAY_ASK_VERSION"
+                :advanced="true"
+                name="Ask Which Version to Play"
+                tooltip="When something has an audio described or signed version, ask which to play. Off plays the default version below, whenever the programme has it. The player can switch version either way."
+                :options="askOptions"
+            />
+            <SelectInput
+                v-model="playDefaultVersion"
+                field="PLAY_DEFAULT_VERSION"
+                :advanced="true"
+                name="Default Version to Play"
+                tooltip="Used when Ask Which Version to Play is off, and pre-selected when it is on. Programmes without that version play the standard one."
+                :options="versionDefaults"
+            />
+        </template>
+        <SelectInput
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_SUBTITLES"
             field="STREAM_SUBTITLES"
@@ -38,24 +76,14 @@
             :options="subtitlesOptions"
         />
         <SelectInput
-            v-if="showAdvanced"
-            v-model="config.STREAM_TRACE"
-            field="STREAM_TRACE"
+            v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
+            v-model="config.STREAM_NATIVE_EXPERIMENTAL_FHD"
+            field="STREAM_NATIVE_EXPERIMENTAL_FHD"
             :advanced="true"
-            name="Stream Trace"
-            tooltip="Record per-request timing, headers and playlists for the stream trace page. Disabled by default."
-            :error="validationErrors.config?.STREAM_TRACE"
-            :options="traceOptions"
-        />
-        <SelectInput
-            v-if="showAdvanced"
-            v-model="config.STREAM_PREFETCH_OPEN_RANGE"
-            field="STREAM_PREFETCH_OPEN_RANGE"
-            :advanced="true"
-            name="Prefetch Open Ranges"
-            tooltip="Read the next segment ahead for players that ask for Range: bytes=0- (Jellyfin)."
-            :error="validationErrors.config?.STREAM_PREFETCH_OPEN_RANGE"
-            :options="prefetchOpenRangeOptions"
+            name="Native FHD Upgrade"
+            tooltip="Try to unlock true 1080p instead of BBC's usual 720p (recommended)."
+            :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
+            :options="experimentalFhdOptions"
         />
         <SelectInput
             v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
@@ -78,62 +106,25 @@
             :options="hqProbeOptions"
         />
         <SelectInput
-            v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
-            v-model="config.STREAM_NATIVE_EXPERIMENTAL_FHD"
-            field="STREAM_NATIVE_EXPERIMENTAL_FHD"
+            v-if="showAdvanced"
+            v-model="config.STREAM_PREFETCH_OPEN_RANGE"
+            field="STREAM_PREFETCH_OPEN_RANGE"
             :advanced="true"
-            name="Native FHD Upgrade"
-            tooltip="Try to unlock true 1080p instead of BBC's usual 720p (recommended)."
-            :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
-            :options="experimentalFhdOptions"
+            name="Prefetch Open Ranges"
+            tooltip="Read the next segment ahead for players that ask for Range: bytes=0- (Jellyfin)."
+            :error="validationErrors.config?.STREAM_PREFETCH_OPEN_RANGE"
+            :options="prefetchOpenRangeOptions"
         />
         <SelectInput
             v-if="showAdvanced"
-            v-model="config.STREAM_MODE"
-            field="STREAM_MODE"
+            v-model="config.STREAM_TRACE"
+            field="STREAM_TRACE"
             :advanced="true"
-            name="Stream Mode"
-            tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg and cannot seek mid-stream."
-            :error="validationErrors.config?.STREAM_MODE"
-            :options="streamModes"
+            name="Stream Trace"
+            tooltip="Record per-request timing, headers and playlists for the stream trace page. Disabled by default."
+            :error="validationErrors.config?.STREAM_TRACE"
+            :options="traceOptions"
         />
-        <TextInput
-            v-if="showAdvanced"
-            v-model="config.STREAM_CACHE_DIR"
-            field="STREAM_CACHE_DIR"
-            :advanced="true"
-            name="Stream Cache Directory"
-            tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
-            :error="validationErrors.config?.STREAM_CACHE_DIR"
-        />
-        <SelectInput
-            v-if="showAdvanced"
-            v-model="config.STRM_PROBE_ROUTE"
-            field="STRM_PROBE_ROUTE"
-            :advanced="true"
-            name="Pick Route for New Links"
-            tooltip="When a .strm link is created, ask BBC which route has the best picture and note it in the link. Adds a short delay per link. Links made without it play as before."
-            :error="validationErrors.config?.STRM_PROBE_ROUTE"
-            :options="routeProbeOptions"
-        />
-        <template v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE' && config.UI_VERSION_BADGES === 'true'">
-            <SelectInput
-                v-model="config.PLAY_ASK_VERSION"
-                field="PLAY_ASK_VERSION"
-                :advanced="true"
-                name="Ask Which Version to Play"
-                tooltip="When something has an audio described or signed version, ask which to play. Off plays the default version below, whenever the programme has it. The player can switch version either way."
-                :options="askOptions"
-            />
-            <SelectInput
-                v-model="playDefaultVersion"
-                field="PLAY_DEFAULT_VERSION"
-                :advanced="true"
-                name="Default Version to Play"
-                tooltip="Used when Ask Which Version to Play is off, and pre-selected when it is on. Programmes without that version play the standard one."
-                :options="versionDefaults"
-            />
-        </template>
 
     <SettingsSubheading text="STRM Watchdog" />
     <SelectInput
@@ -161,23 +152,6 @@
             :error="validationErrors.config?.STRM_WATCHDOG_ACTION"
             :options="watchdogActionOptions"
         />
-        <TextInput
-            v-if="showAdvanced && (hasType('arr') || hasType('jellyfin'))"
-            v-model="config.STRM_WATCHDOG_PATH_MAP"
-            field="STRM_WATCHDOG_PATH_MAP"
-            :advanced="true"
-            name="Watchdog Path Mapping"
-            tooltip="Maps their folder to this container's folder, e.g. /tv=/library/tv. Separate several with ;"
-            icon-button="folder-open"
-            button-tooltip="Check that the mapped folders exist in this container"
-            :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
-            @action="checkPathMap(true)"
-        />
-        <div v-if="showAdvanced && pathMapIssues.length" class="fieldNote">
-            <InfoBar clazz="warning small">
-                <div v-for="issue in pathMapIssues" :key="issue">{{ issue }}</div>
-            </InfoBar>
-        </div>
         <div v-if="appStatus.length" class="jellyfinStatus">
             <label>App Connections</label>
             <div class="statusField">
@@ -215,6 +189,36 @@
             :options="watchdogArrActionOptions"
         />
         <TextInput
+            v-if="showAdvanced && (hasType('arr') || hasType('jellyfin'))"
+            v-model="config.STRM_WATCHDOG_PATH_MAP"
+            field="STRM_WATCHDOG_PATH_MAP"
+            :advanced="true"
+            name="Watchdog Path Mapping"
+            tooltip="Maps their folder to this container's folder, e.g. /tv=/library/tv. Separate several with ;"
+            icon-button="folder-open"
+            button-tooltip="Check that the mapped folders exist in this container"
+            :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
+            @action="checkPathMap(true)"
+        />
+        <div v-if="showAdvanced && pathMapIssues.length" class="fieldNote">
+            <InfoBar clazz="warning small">
+                <div v-for="issue in pathMapIssues" :key="issue">{{ issue }}</div>
+            </InfoBar>
+        </div>
+        <TextInput
+            v-if="showAdvanced"
+            v-model="config.STRM_WATCHDOG_FAIL_THRESHOLD"
+            field="STRM_WATCHDOG_FAIL_THRESHOLD"
+            :advanced="true"
+            type-override="number"
+            :min="1"
+            :max="1000"
+            :step="1"
+            name="Minimum Valid Before Action"
+            tooltip="Failures only count after this many links pass first (BBC is up). This many network failures in a row (BBC unreachable) stops the check."
+            :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
+        />
+        <TextInput
             v-model="config.STRM_WATCHDOG_STRIKES"
             field="STRM_WATCHDOG_STRIKES"
             type-override="number"
@@ -240,16 +244,15 @@
         />
         <TextInput
             v-if="showAdvanced"
-            v-model="config.STRM_WATCHDOG_FAIL_THRESHOLD"
-            field="STRM_WATCHDOG_FAIL_THRESHOLD"
+            v-model="config.STRM_WATCHDOG_WEBHOOK_URL"
+            field="STRM_WATCHDOG_WEBHOOK_URL"
             :advanced="true"
-            type-override="number"
-            :min="1"
-            :max="1000"
-            :step="1"
-            name="Minimum Valid Before Action"
-            tooltip="Failures only count after this many links pass first (BBC is up). This many network failures in a row (BBC unreachable) stops the check."
-            :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
+            name="Watchdog Webhook URL"
+            tooltip="Optional. Sent a notification when a link first stops working. The button sends a test notification."
+            icon-button="paper-plane"
+            button-tooltip="Send a test notification to this address"
+            :error="validationErrors.config?.STRM_WATCHDOG_WEBHOOK_URL"
+            @action="testWebhook"
         />
         <SelectInput
             v-if="showAdvanced"
@@ -261,19 +264,17 @@
             :error="validationErrors.config?.STRM_WATCHDOG_UPDATE_ROUTES"
             :options="routeUpdateOptions"
         />
-        <TextInput
-            v-if="showAdvanced"
-            v-model="config.STRM_WATCHDOG_WEBHOOK_URL"
-            field="STRM_WATCHDOG_WEBHOOK_URL"
-            :advanced="true"
-            name="Watchdog Webhook URL"
-            tooltip="Optional. Sent a notification when a link first stops working. The button sends a test notification."
-            icon-button="paper-plane"
-            button-tooltip="Send a test notification to this address"
-            :error="validationErrors.config?.STRM_WATCHDOG_WEBHOOK_URL"
-            @action="testWebhook"
-        />
     </template>
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STRM_PROBE_ROUTE"
+            field="STRM_PROBE_ROUTE"
+            :advanced="true"
+            name="Pick Route for New Links"
+            tooltip="When a .strm link is created, ask BBC which route has the best picture and note it in the link. Adds a short delay per link. Links made without it play as before."
+            :error="validationErrors.config?.STRM_PROBE_ROUTE"
+            :options="routeProbeOptions"
+        />
 </template>
 
 <script setup>

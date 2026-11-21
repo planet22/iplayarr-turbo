@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import fs from 'fs';
 
@@ -93,6 +94,32 @@ describe('debugHealthService.snapshot', () => {
         const { checks, facts } = await debugHealthService.snapshot();
         expect(checks.find((c) => c.name === 'BBC iPlayer')).toMatchObject({ state: 'ok' });
         expect(Object.keys(facts)).toEqual(expect.arrayContaining(['container', 'timezone', 'streamTrace', 'liveRadio']));
+    });
+
+    describe('ffmpeg check', () => {
+        const fakeFfmpeg = (emit: (child: any) => void) =>
+            (spawn as jest.Mock).mockImplementationOnce(() => {
+                const child: any = new EventEmitter();
+                child.stdout = new EventEmitter();
+                child.kill = jest.fn();
+                setImmediate(() => emit(child));
+                return child;
+            });
+
+        it('shows the first line ffmpeg prints', async () => {
+            fakeFfmpeg((child) => {
+                child.stdout.emit('data', Buffer.from('ffmpeg version 7.1\nbuilt with gcc'));
+                child.emit('close', 0);
+            });
+            const { checks } = await debugHealthService.snapshot();
+            expect(checks.find((c) => c.name === 'ffmpeg')).toMatchObject({ state: 'ok', detail: 'ffmpeg version 7.1' });
+        });
+
+        it('fails with the exit code when ffmpeg exits non-zero', async () => {
+            fakeFfmpeg((child) => child.emit('close', 2));
+            const { checks } = await debugHealthService.snapshot();
+            expect(checks.find((c) => c.name === 'ffmpeg')).toMatchObject({ state: 'fail', detail: expect.stringContaining('exited with code 2') });
+        });
     });
 
     it('adds database integrity, library index and scheduled jobs checks', async () => {

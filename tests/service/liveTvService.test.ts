@@ -149,6 +149,19 @@ describe('liveTvService', () => {
         expect(xml).not.toContain('<icon');
     });
 
+    it('stops a programme where the next one starts when the BBC schedule overlaps them', async () => {
+        const slot = (title: string, start: string, end: string) => ({ item: { title }, start, end });
+        (browseService.schedule as jest.Mock).mockResolvedValue([
+            {
+                channel: { id: 'bbc_two_england' },
+                slots: [slot('Overnight', '2026-07-01T22:00:00Z', '2026-07-02T01:15:00Z'), slot('Overnight again', '2026-07-01T22:20:00Z', '2026-07-02T01:15:00Z')],
+            },
+        ]);
+        const xml = await liveTvService.epg();
+        expect(xml).toContain(`start="${xmltvTime('2026-07-01T22:00:00Z')}" stop="${xmltvTime('2026-07-01T22:20:00Z')}"`);
+        expect(xml).toContain(`start="${xmltvTime('2026-07-01T22:20:00Z')}" stop="${xmltvTime('2026-07-02T01:15:00Z')}"`);
+    });
+
     it('writes a radio guide slot the same whether or not it carries the show and episode ids', async () => {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const real = require('../data/radioBroadcast.json');

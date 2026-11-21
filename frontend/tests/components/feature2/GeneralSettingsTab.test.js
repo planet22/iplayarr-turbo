@@ -37,16 +37,14 @@ describe('GeneralSettingsTab', () => {
         expect(fields(mountIt())).toEqual(['API_KEY', 'SOUNDS_ENABLED']);
     });
 
-    it('shows Live Radio only with advanced and Sounds enabled', () => {
-        expect(fields(mountIt({ advanced: true }))).not.toContain('LIVE_RADIO');
-        expect(fields(mountIt({ advanced: true, config: { SOUNDS_ENABLED: 'true' } }))).toContain('LIVE_RADIO');
-        expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).not.toContain('LIVE_RADIO');
+    it('no longer has Live Radio (it is on the Live Channels tab)', () => {
+        expect(fields(mountIt({ advanced: true, config: { SOUNDS_ENABLED: 'true' } }))).not.toContain('LIVE_RADIO');
     });
 
-    it('shows Radio A to Z only with advanced and Sounds enabled', () => {
+    it('shows Radio A to Z whenever Sounds is enabled, advanced or not', () => {
         expect(fields(mountIt({ advanced: true }))).not.toContain('RADIO_ATOZ');
         expect(fields(mountIt({ advanced: true, config: { SOUNDS_ENABLED: 'true' } }))).toContain('RADIO_ATOZ');
-        expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).not.toContain('RADIO_ATOZ');
+        expect(fields(mountIt({ advanced: false, config: { SOUNDS_ENABLED: 'true' } }))).toContain('RADIO_ATOZ');
     });
 
     it('shows Podcasts with Sounds enabled, in the basic view too, and never with Sounds off', () => {

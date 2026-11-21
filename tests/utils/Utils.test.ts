@@ -438,6 +438,12 @@ describe('Utils', () => {
                 ).resolves.toBe('Thats.a.Title.S01E02.14.04.2025.We.Call.That.an.Episode.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
+            it('leaves out a bare "Episode N" title, which only repeats the numbering', async () => {
+                await expect(
+                    Utils.createNZBName({ title: synonym.target, pid: '', type: VideoType.TV, series: 1, episode: 2, episodeTitle: 'Episode 1' })
+                ).resolves.toBe('Thats.a.Title.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
+            });
+
             it('quality', async () => {
                 mockedConfigService.getParameter.mockImplementation((parameter: IplayarrParameter) =>
                     Promise.resolve(

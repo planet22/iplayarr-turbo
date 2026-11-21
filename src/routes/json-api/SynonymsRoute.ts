@@ -7,6 +7,7 @@ import { App } from '../../types/App';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { ArrLookupResponse } from '../../types/responses/arr/ArrLookupResponse';
 import { Synonym } from '../../types/Synonym';
+import { rejectInvalidFields } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { SynonymFormValidator } from '../../validators/SynonymFormValidator';
 
@@ -20,13 +21,7 @@ router.get('/', async (_, res: Response) => {
 const saveSynonym = async (req: Request, res: Response) => {
     const synonym: Synonym = req.body as any as Synonym;
     const synonymFormValidator: SynonymFormValidator = new SynonymFormValidator();
-    const validationResult = await synonymFormValidator.validate(synonym);
-    if (Object.keys(validationResult).length > 0) {
-        const apiResponse: ApiResponse = {
-            error: ApiError.INVALID_INPUT,
-            invalid_fields: validationResult,
-        };
-        res.status(400).json(apiResponse);
+    if (rejectInvalidFields(res, await synonymFormValidator.validate(synonym))) {
         return;
     }
 

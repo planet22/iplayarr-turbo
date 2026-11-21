@@ -5,6 +5,7 @@ import path from 'path';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
+import { nameableEpisodeTitle } from './episodeMarkers';
 import { resolveInside, sanitizeFileName } from './pathSafety';
 import { applyGroupToName, RELEASE_GROUP } from './releaseGroup';
 
@@ -119,8 +120,9 @@ function buildUncheckedLibraryFilePath(
     const episodeNumber = episode ?? 0;
     const seasonFolderName = `Season ${String(seasonNumber).padStart(2, '0')}`;
     const episodeCode = `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
-    const fileNameBase = episodeTitle
-        ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(episodeTitle)}`
+    const nameTitle = nameableEpisodeTitle(episodeTitle);
+    const fileNameBase = nameTitle
+        ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(nameTitle)}`
         : `${showTitle} - ${episodeCode}`;
     const fileName = `${fileNameBase}${tag}${releaseGroupSuffix}.${extension}`;
 

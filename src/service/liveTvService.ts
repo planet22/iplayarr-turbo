@@ -264,10 +264,17 @@ class LiveTvService {
                 .filter((schedule) => schedule.channel.id === channel.id)
                 .flatMap((schedule) => schedule.slots)
                 .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-            for (const slot of slots) {
-                if (seen.has(slot.start)) continue;
+            const unique = slots.filter((slot) => {
+                if (seen.has(slot.start)) return false;
                 seen.add(slot.start);
-                xml += `  <programme start="${xmltvTime(slot.start, offset)}" stop="${xmltvTime(slot.end, offset)}" channel="${escapeXml(channel.id)}">\n`;
+                return true;
+            });
+            for (const [at, slot] of unique.entries()) {
+                // The BBC's own schedule can hold a slot that runs on past the start of the next one (two "This is BBC Two"
+                // blocks overnight); a guide must not overlap, so the earlier one stops where the later one starts.
+                const next = unique[at + 1];
+                const end = next && Date.parse(next.start) < Date.parse(slot.end) && Date.parse(next.start) > Date.parse(slot.start) ? next.start : slot.end;
+                xml += `  <programme start="${xmltvTime(slot.start, offset)}" stop="${xmltvTime(end, offset)}" channel="${escapeXml(channel.id)}">\n`;
                 xml += `    <title lang="en">${escapeXml(slot.item.title)}</title>\n`;
                 const subTitle = slot.item.episodeTitle ?? slot.item.subtitle;
                 if (subTitle) xml += `    <sub-title lang="en">${escapeXml(subTitle)}</sub-title>\n`;

@@ -15,11 +15,19 @@
             <button type="button" class="tlButton clickable" title="Later" aria-label="Later" @click="pan(0.5)"><font-awesome-icon :icon="['fas', 'arrow-right']" /></button>
             <button type="button" class="tlButton clickable" title="Show everything" aria-label="Show everything" @click="fit"><font-awesome-icon :icon="['fas', 'arrows-left-right-to-line']" /></button>
             <button type="button" class="tlButton clickable" :class="{ on: fitRate }" :aria-pressed="fitRate" :title="fitRateTitle" :aria-label="fitRateTitle" @click="fitRate = !fitRate"><font-awesome-icon :icon="['fas', 'arrows-up-down']" /></button>
-            <span class="windowText">{{ formatOffset(win.t0 - origin) }} to {{ formatOffset(win.t1 - origin) }}</span>
+            <label class="windowText">
+                time (s)
+                <input v-model="winLo" class="timeInput" :class="{ invalid: winReversed }" type="number" step="any" inputmode="decimal" aria-label="Start of the time shown, in seconds" @change="commitWindow" @keydown.enter="commitWindow" />
+                to
+                <input v-model="winHi" class="timeInput" :class="{ invalid: winReversed }" type="number" step="any" inputmode="decimal" aria-label="End of the time shown, in seconds" @change="commitWindow" @keydown.enter="commitWindow" />
+            </label>
+            <button type="button" class="tlButton clickable" :class="{ on: sync }" :aria-pressed="sync" :title="syncTitle" :aria-label="syncTitle" @click="emit('toggle-sync')"><font-awesome-icon :icon="['fas', 'crosshairs']" /></button>
+            <button type="button" class="tlButton clickable" :disabled="selected === null || selected === undefined" title="Clear the selected point everywhere" aria-label="Clear the selected point everywhere" @click="emit('clear')"><font-awesome-icon :icon="['fas', 'xmark']" /></button>
+            <button type="button" class="tlButton clickable" :disabled="selected === null || selected === undefined" title="Scroll to the selected request in the request log" aria-label="Jump to table" @click="emit('jump', selected)"><font-awesome-icon :icon="['fas', 'table-list']" /></button>
             <span class="viewSwitch rateSwitch" role="group" aria-label="How the throughput graph is drawn">
-                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'smooth' }" :aria-pressed="rateMode === 'smooth'" title="Throughput averaged over slices of time, finer as you zoom" @click="rateMode = 'smooth'">Smoothed</button>
-                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'transfer' }" :aria-pressed="rateMode === 'transfer'" title="Throughput at full detail: a step wherever the transfers in flight change, each at its own bytes over duration" @click="rateMode = 'transfer'">Per transfer</button>
-                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'measured' }" :aria-pressed="rateMode === 'measured'" :disabled="!profiled" :title="profiled ? 'Throughput as the proxy measured it: the bytes received in each 100 ms (or coarser, for long transfers) of every response' : 'No measured byte profile in this trace: turn Stream Trace on and stream again'" @click="rateMode = 'measured'">Measured</button>
+                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'smooth' }" :aria-pressed="rateMode === 'smooth'" title="Throughput averaged over slices of time, finer as you zoom" @click="rateMode = 'smooth'; rateChosen = true">Smoothed</button>
+                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'transfer' }" :aria-pressed="rateMode === 'transfer'" title="Throughput at full detail: a step wherever the transfers in flight change, each at its own bytes over duration" @click="rateMode = 'transfer'; rateChosen = true">Per transfer</button>
+                <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'measured' }" :aria-pressed="rateMode === 'measured'" :disabled="!profiled" :title="profiled ? 'Throughput as the proxy measured it: the bytes received in each 100 ms (or coarser, for long transfers) of every response' : 'No measured byte profile in this trace: turn Stream Trace on and stream again'" @click="rateMode = 'measured'; rateChosen = true">Measured</button>
             </span>
             <span v-if="clockAvailable" class="viewSwitch" role="group" aria-label="What the lanes show">
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'segments' }" :aria-pressed="view === 'segments'" title="Y axis: segment index" @click="view = 'segments'">Index</button>
@@ -27,7 +35,7 @@
             </span>
         </div>
 
-        <svg class="timelineSvg" :viewBox="`0 0 ${WIDTH} ${totalHeight}`" role="img" aria-label="Segment requests over time, one lane per stream">
+        <svg ref="svgEl" class="timelineSvg" :class="{ dragging: drag.moved }" @wheel="onWheel" @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @click.capture="onClickCapture" :viewBox="`0 0 ${WIDTH} ${totalHeight}`" role="img" aria-label="Segment requests over time, one lane per stream">
             <g v-for="(lane, laneIndex) in laneLayouts" :key="lane.track">
                 <text class="laneLabel" :x="LEFT" :y="lane.top - 6">{{ lane.label }} - {{ lane.clock ? `first PTS ${lane.labelMin.toFixed(1)} s to ${lane.labelMax.toFixed(1)} s` : `segment index ${lane.labelMin} to ${lane.labelMax}` }}{{ lane.zoomed ? ' (in view)' : '' }}</text>
                 <rect class="laneBack" :x="LEFT" :y="lane.top" :width="PLOT" :height="LANE_HEIGHT" />
@@ -73,29 +81,29 @@
 
         <div class="timelineLegend">
             <span v-for="outcome in LEGEND" :key="outcome" class="legendItem"><span :class="['swatch', `o-${outcome}`]" /> {{ OUTCOME_LABELS[outcome] }}</span>
-            <span v-if="readAhead" class="legendItem" title="A segment fetched from BBC before the player asked for it, joined by a dotted line to the request it was served to."><span class="swatch aheadSwatch" /> Read-ahead download</span>
+            <span v-if="readAhead && hasReadAhead" class="legendItem" title="A segment fetched from BBC before the player asked for it, joined by a dotted line to the request it was served to."><span class="swatch aheadSwatch" /> Read-ahead download</span>
             <span class="legendItem" title="Joins requests in arrival order. A step back down the lane is a backward request."><span class="swatch orderSwatch" /> Request order (line)</span>
         </div>
-        <div class="hoverBox" :class="{ empty: !hovered }">
-            <template v-if="hovered">
-                #{{ hovered.n }} {{ TRACK_LABELS[hovered.track] ?? hovered.track }} segment {{ hovered.seg }}
-                <template v-if="hovered.ptsV !== undefined || hovered.ptsA !== undefined"> (first PTS: video {{ hovered.ptsV?.toFixed(3) ?? '-' }} s, audio {{ hovered.ptsA?.toFixed(3) ?? '-' }} s)</template>
-                at {{ formatOffset(hovered.t - origin) }}, {{ formatMs(hovered.durMs) }}
-                <template v-if="hovered.ptsDriftMs !== undefined"> , PTS offset {{ hovered.ptsDriftMs }} ms from previous segment end</template>
-                - {{ OUTCOME_LABELS[outcomeOf(hovered)] }}
-                <template v-if="aheadOf(hovered)">; read ahead: downloaded {{ formatOffset(aheadOf(hovered).t0 - origin) }} to {{ formatOffset(aheadOf(hovered).t1 - origin) }} ({{ formatMs(hovered.fetchMs) }}), asked for {{ formatMs(hovered.t - aheadOf(hovered).t1) }} after it finished</template>
+        <div class="hoverBox" :class="{ empty: !shown }">
+            <template v-if="shown">
+                <template v-if="!hovered">Selected - </template>#{{ shown.n }} {{ TRACK_LABELS[shown.track] ?? shown.track }} segment {{ shown.seg }}
+                <template v-if="shown.ptsV !== undefined || shown.ptsA !== undefined"> (first PTS: video {{ shown.ptsV?.toFixed(3) ?? '-' }} s, audio {{ shown.ptsA?.toFixed(3) ?? '-' }} s)</template>
+                at {{ formatOffset(shown.t - origin) }}, {{ formatMs(shown.durMs) }}
+                <template v-if="shown.ptsDriftMs !== undefined"> , PTS offset {{ shown.ptsDriftMs }} ms from previous segment end</template>
+                - {{ OUTCOME_LABELS[outcomeOf(shown)] }}
+                <template v-if="aheadOf(shown)">; read ahead: downloaded {{ formatOffset(aheadOf(shown).t0 - origin) }} to {{ formatOffset(aheadOf(shown).t1 - origin) }} ({{ formatMs(shown.fetchMs) }}), asked for {{ formatMs(shown.t - aheadOf(shown).t1) }} after it finished</template>
             </template>
-            <template v-else>Hover or tap a mark for request details; click to select it in the request log.</template>
+            <template v-else>Hover or tap a mark for request details; click to select it and keep its details here.</template>
         </div>
     </div>
     </FullscreenFrame>
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, nextTick, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, describeDownloads, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, readAheadSpan, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, clampWindow, describeDownloads, flightWindows, formatMs, formatOffset, formatRate, fullWindow, hasByteProfile, hasMediaClock, measuredSteps, niceCeil, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, readAheadSpan, throughputSteps, TRACK_LABELS, transferSteps, withTopTick, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -108,8 +116,10 @@ const props = defineProps({
     // Time zero of the axis labels: when the session started.
     origin: { type: Number, default: 0 },
     selected: { type: Number, default: null },
+    // Whether picking a point is shared with the other charts on the page.
+    sync: { type: Boolean, default: false },
 });
-const emit = defineEmits(['select']);
+const emit = defineEmits(['select', 'jump', 'clear', 'toggle-sync']);
 
 // Drawn at the width it is shown at (so text and marks keep their real size on a phone), with shorter lanes when narrow.
 const root = ref(null);
@@ -141,9 +151,11 @@ const LEGEND = ['ok', 'prefetched', 'back', 'repeat', 'skip', 'overlap', 'gap', 
 
 const hovered = ref(null);
 const aheadOf = readAheadSpan;
+// The detail line shows what the pointer is over, else the selected request (a click keeps it there after the pointer leaves).
+const shown = computed(() => hovered.value ?? props.requests.find((r) => r.n === props.selected) ?? null);
 // Option (the cloud button on the chart): draw each read-ahead segment's own download beside its (almost instant) request. Needs a trace
 // recorded with Stream Trace on, from the version that records the download.
-const readAhead = ref(false);
+const readAhead = ref(true);
 const hasReadAhead = computed(() => props.requests.some((r) => readAheadSpan(r)));
 const readAheadTitle = computed(() =>
     !hasReadAhead.value ? 'No read-ahead downloads recorded in this trace' : readAhead.value ? 'Hide the read-ahead downloads' : 'Show when each read-ahead segment was really downloaded, joined to the request it served'
@@ -163,13 +175,88 @@ watch(full, (value) => {
     if (!custom.value) win.value = { ...value };
 });
 
+// The time shown, as two boxes in seconds from the start of the stream: typing a valid pair sets the window (clamped to the stream).
+const secs = (ms) => Number((ms / 1000).toFixed(3));
+const winLo = ref(secs(win.value.t0 - props.origin));
+const winHi = ref(secs(win.value.t1 - props.origin));
+const winReversed = ref(false);
+const syncWindowBoxes = () => {
+    winLo.value = secs(win.value.t0 - props.origin);
+    winHi.value = secs(win.value.t1 - props.origin);
+    winReversed.value = false;
+};
+watch(() => [win.value.t0, win.value.t1, props.origin], syncWindowBoxes);
+const commitWindow = async () => {
+    const a = parseFloat(winLo.value);
+    const b = parseFloat(winHi.value);
+    winReversed.value = !Number.isNaN(a) && !Number.isNaN(b) && a >= b;
+    if (winReversed.value) return;
+    if (!Number.isNaN(a) && !Number.isNaN(b)) {
+        custom.value = true;
+        win.value = clampWindow({ t0: props.origin + a * 1000, t1: props.origin + b * 1000 }, full.value);
+    }
+    // Shows what the window really is: a range outside the stream is pulled back, and nonsense is put right.
+    await nextTick();
+    syncWindowBoxes();
+};
+
+const syncTitle = computed(() => (props.sync ? 'Point selection is shared across the page; stop sharing it' : 'Share point selection across all the charts and the request log'));
+// Zoom around the selected request when there is one (as the playback charts do around their kept segment), else the middle of the view.
 const zoom = (factor) => {
     custom.value = true;
-    win.value = zoomWindow(win.value, full.value, factor);
+    const pick = props.requests.find((r) => r.n === props.selected);
+    if (!pick) {
+        win.value = zoomWindow(win.value, full.value, factor);
+        return;
+    }
+    const mid = pick.t + (pick.durMs ?? 0) / 2;
+    const half = Math.max(10, ((win.value.t1 - win.value.t0) * factor) / 2);
+    win.value = clampWindow({ t0: mid - half, t1: mid + half }, full.value);
 };
 const pan = (fraction) => {
     custom.value = true;
     win.value = panWindow(win.value, full.value, fraction);
+};
+// Mouse: the wheel zooms around the pointer (Ctrl + wheel in the page so it still scrolls; plain wheel when the chart fills the window)
+// and dragging pans.
+const svgEl = ref(null);
+const timeAt = (clientX) => {
+    const rect = svgEl.value.getBoundingClientRect();
+    const x = ((clientX - rect.left) * WIDTH.value) / Math.max(1, rect.width);
+    return win.value.t0 + ((x - LEFT) / PLOT.value) * (win.value.t1 - win.value.t0);
+};
+const onWheel = (e) => {
+    if (!fullscreen.full && !e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 0.8 : 1.25;
+    const at = timeAt(e.clientX);
+    const span = Math.max(10, (win.value.t1 - win.value.t0) * factor);
+    const ratio = (at - win.value.t0) / (win.value.t1 - win.value.t0);
+    custom.value = true;
+    win.value = clampWindow({ t0: at - ratio * span, t1: at + (1 - ratio) * span }, full.value);
+};
+const drag = reactive({ down: false, moved: false, x: 0, win: null });
+const onDown = (e) => {
+    if (e.button !== 0) return;
+    Object.assign(drag, { down: true, moved: false, x: e.clientX, win: { ...win.value } });
+};
+const onMove = (e) => {
+    if (!drag.down) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.x) < 4) return;
+    if (!drag.moved) e.currentTarget.setPointerCapture?.(e.pointerId);
+    drag.moved = true;
+    const span = drag.win.t1 - drag.win.t0;
+    const shift = ((drag.x - e.clientX) / Math.max(1, e.currentTarget.getBoundingClientRect().width)) * (WIDTH.value / PLOT.value) * span;
+    custom.value = true;
+    win.value = clampWindow({ t0: drag.win.t0 + shift, t1: drag.win.t1 + shift }, full.value);
+};
+const onUp = () => {
+    drag.down = false;
+    // `moved` stays set until the click that follows the drag has been swallowed.
+    setTimeout(() => { drag.moved = false; }, 0);
+};
+const onClickCapture = (e) => {
+    if (drag.moved) { e.stopPropagation(); e.preventDefault(); }
 };
 const fit = () => {
     custom.value = false;
@@ -201,10 +288,10 @@ const laneLayouts = computed(() =>
                   })
               ).map((l) => ({ ...l, below: l.y - top < 12 }))
             : [];
-        const shown = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
+        const range = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
         // The highest segment (or PTS) in the lane is always one of the labelled ticks, and so is the lowest when zoomed (it is the bottom edge).
-        const topValue = lane.clock ? Number(shown.labelMax.toFixed(1)) : shown.labelMax;
-        const bottomValue = lane.clock ? Number(shown.labelMin.toFixed(1)) : shown.labelMin;
+        const topValue = lane.clock ? Number(range.labelMax.toFixed(1)) : range.labelMax;
+        const bottomValue = lane.clock ? Number(range.labelMin.toFixed(1)) : range.labelMin;
         // Read ahead: the lighter bar is the download, the dotted line runs to the (almost instant) request it was served to.
         const aheads = readAhead.value
             ? marks
@@ -216,7 +303,7 @@ const laneLayouts = computed(() =>
                   })
             : [];
         const yTicks = withTopTick(laneTicks(scale, lane.clock), scale.segMin, scale.segMax, topValue, fit ? bottomValue : undefined).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
-        return { ...lane, ...shown, zoomed: !!fit, top, marks, aheads, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
+        return { ...lane, ...range, zoomed: !!fit, top, marks, aheads, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
     })
 );
 
@@ -235,12 +322,15 @@ const fitRateTitle = computed(() => (fitRate.value ? 'Throughput scale fits the 
 // 'smooth': the rate averaged over slices of time (finer as it is zoomed). 'transfer': every moment the transfers in flight change is its own step.
 // 'measured': the same, from the bytes the proxy counted as each response arrived (needs Stream Trace on while it streamed).
 const rateMode = ref('smooth');
+let rateChosen = false;
 const rateLabel = computed(() => {
     if (rateMode.value === 'measured') return WIDTH.value < 560 ? 'Measured throughput' : 'Upstream throughput (bytes/s, as measured while each response arrived)';
     if (rateMode.value === 'transfer') return WIDTH.value < 560 ? 'Throughput per transfer' : 'Upstream throughput (bytes/s, each transfer at its own rate; overlaps add)';
     return WIDTH.value < 560 ? 'Upstream throughput' : 'Upstream throughput (bytes/s, spread over each transfer)';
 });
 const profiled = computed(() => hasByteProfile(props.requests));
+// Measured is the default once the trace has a byte profile (until then, or without one, the smoothed estimate).
+watch(profiled, (has) => { if (has && !rateChosen) rateMode.value = 'measured'; }, { immediate: true });
 const allTransfer = computed(() => (rateMode.value === 'measured' ? measuredSteps(props.requests) : transferSteps(props.requests)));
 const transferInView = computed(() => allTransfer.value.filter((s) => s.t1 > win.value.t0 && s.t0 < win.value.t1));
 const rateRaw = computed(() => {
@@ -375,6 +465,11 @@ const ticks = computed(() => {
     }
 }
 
+.tlButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .tlButton {
     width: 32px;
     height: 32px;
@@ -478,25 +573,58 @@ const ticks = computed(() => {
 
     &:last-child {
         border-radius: 0 @radius-sm @radius-sm 0;
-        border-left: 0;
+    }
+
+    // Neighbours overlap by their shared border, so the lit button keeps its whole outline (its left edge was hidden by the one before).
+    & + & {
+        margin-left: -1px;
     }
 
     &.on {
+        position: relative;
+        z-index: 1;
         background-color: @table-row-hover-color;
         border-color: @primary-color;
     }
 }
 
+.tlButton.on {
+    color: @primary-color;
+    border-color: @primary-color;
+}
+
+.timeInput {
+    width: 84px;
+    padding: @space-1 @space-2;
+    color: @primary-text-color;
+    background-color: @settings-button-background-color;
+    border: 1px solid @settings-button-border-color;
+    border-radius: @radius-sm;
+
+    &.invalid {
+        border-color: @error-color;
+    }
+}
+
 .windowText {
+    display: inline-flex;
+    align-items: center;
+    gap: @space-1;
     margin-left: @space-2;
     font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
 .timelineSvg {
+    cursor: grab;
+    touch-action: pan-y;
     width: 100%;
     height: auto;
     display: block;
+}
+
+.timelineSvg.dragging {
+    cursor: grabbing;
 }
 
 .laneBack {

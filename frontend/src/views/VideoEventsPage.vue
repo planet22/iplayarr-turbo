@@ -141,7 +141,7 @@ import { useMediaMode } from '@/lib/mediaMode';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
-import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
+import { formatWhen, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
 
 const events = inject('videoEvents');
 
@@ -259,9 +259,7 @@ function openInfo(event) {
     infoModal.open();
 }
 
-function formatDate(value) {
-    return value ? formatDateTimeWithMillis(value) : '';
-}
+const formatDate = formatWhen;
 
 const clearEvents = async () => {
     if (await dialogService.confirm('Clear Event Log', 'Are you sure you want to clear the event log?', undefined, { danger: true, confirmLabel: 'Clear' })) {

@@ -277,7 +277,7 @@
                     <tr v-for="version in info.versions" :key="version.vpid">
                         <td class="text"><code>{{ version.vpid }}</code></td>
                         <td class="text">{{ version.types.join(', ') || 'standard' }}</td>
-                        <td class="text">{{ version.duration ? formatSeconds(version.duration) : '' }}</td>
+                        <td class="text">{{ version.duration ? formatMinSec(version.duration) : '' }}</td>
                         <td v-if="!isRadio" class="text">{{ qualityFlags(version) }}</td>
                         <td v-if="!isRadio" class="text">{{ version.availableFrom ? formatWhen(version.availableFrom) : '' }}</td>
                         <td class="text">{{ version.availableUntil ? formatWhen(version.availableUntil) : '' }}</td>
@@ -465,7 +465,7 @@ import { environmentLines, probeLines as probeReportLines } from '@/lib/reportCo
 import toastService from '@/lib/toastService';
 import { setAllSections } from '@/lib/traceSections';
 import { ukDay, ukDayNumber, ukWhen } from '@/lib/ukTime';
-import { formatBytes, formatDateTimeWithMillis, formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage, sessionRoute } from '@/lib/utils';
+import { formatBytes, formatMinSec, formatRelativeTime, formatWhen, getHost, getThumbnailUrl, hideBrokenImage, sessionRoute } from '@/lib/utils';
 
 // Reached from the button on a Streaming page row (Show Extended Debug), or by its address.
 const route = useRoute();
@@ -697,7 +697,6 @@ const appRecordText = (file) => {
 const watchdogRecord = computed(() => Object.fromEntries(Object.entries(dashboard.value.watchdog ?? {}).filter(([key]) => key !== 'history')));
 // The size and modified time the server read for a library file.
 const fileDetail = (file) => dashboard.value.library?.details?.find((detail) => detail.file === file);
-const formatWhen = (value) => (value ? formatDateTimeWithMillis(value) ?? '' : '');
 const cacheCount = computed(() => dashboard.value.caches.database.length + dashboard.value.caches.memory.length + dashboard.value.caches.thumbnails.length);
 const downloadRows = computed(() => isRadio
     ? radioDownloads.value.filter((d) => d.pid === pid).map((d) => ({ where: d.state === 'queued' || d.state === 'downloading' ? 'Queue' : 'History', status: d.state, nzbName: d.nzbName, type: 'Radio', source: 'BBC Sounds', libraryPath: d.libraryPath, extension: d.extension }))
@@ -830,7 +829,7 @@ const soundsRows = (m) => [
             ['Episode id', m.id],
             ['Show', m.showTitle ? `${m.showTitle}${m.showId ? ` (${m.showId})` : ''}` : ''],
             ['Network', m.network],
-            ['Duration', m.duration ? formatSeconds(m.duration) : ''],
+            ['Duration', m.duration ? formatMinSec(m.duration) : ''],
             ['Released', m.released ? formatWhen(m.released) : ''],
             ['Available until', m.availableUntil ? formatWhen(m.availableUntil) : ''],
             ['Download offered', m.mp3 ? 'MP3 (BBC lets it be downloaded)' : 'No, recorded from the stream'],
@@ -881,7 +880,6 @@ const subscriptionRows = (s) =>
         ['Sonarr/Radarr', s.arr ? `${s.arr.title}${s.arr.total ? `, ${s.arr.have ?? 0} of ${s.arr.total} episodes` : ''}${s.arr.addedByUs ? ', added by iPlayarr' : ''}${s.arr.missing ? `, gone from the app since ${formatWhen(s.arr.missing)}` : ''}${s.arrOnly ? ', downloads done by the app' : ''}` : ''],
     ].filter(([, value]) => value);
 
-const formatSeconds = (seconds) => `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
 const formatMbps = (bytes, ms) => (ms > 0 ? `${(bytes / 1048576 / (ms / 1000)).toFixed(2)} MB/s` : '');
 
 // What the page is doing while it loads and probes, so a wait says why: "doing x", with how far through.

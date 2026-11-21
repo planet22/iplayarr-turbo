@@ -212,6 +212,17 @@ describe('SkyhookService.lookupByAirDate', () => {
     it('returns nothing for a date with no episode', async () => {
         expect(await SkyhookService.lookupByAirDate('Some Show', '1999-01-01')).toBeUndefined();
     });
+
+    it('lets the BBC position pick an episode up to a week from the date, when the BBC date is late', async () => {
+        // Two episodes dated 2020-01-12 by the BBC: the first is really the 2020-01-05 one.
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'Episode 1', { series: 1, episode: 1 })).toEqual({ series: 1, episode: 1 });
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'Part A', { series: 1, episode: 2 })).toEqual({ series: 1, episode: 2 });
+    });
+
+    it('does not reach beyond a week, nor for an episode that is not the BBC position', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-14', 'Episode 1', { series: 1, episode: 1 })).toBeUndefined();
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-20', 'Episode 1', { series: 1, episode: 1 })).toBeUndefined();
+    });
 });
 
 describe('SkyhookService branches', () => {

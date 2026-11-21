@@ -181,7 +181,7 @@ const versionTooltip = computed(() => {
     const notes = [];
     if (toolVersions?.value?.getIplayer?.updateAvailable) notes.push(`get_iplayer update available (${toolVersions.value.getIplayer.latest})`);
     if (toolVersions?.value?.ytdlp?.updateAvailable) notes.push(`yt-dlp update available (${toolVersions.value.ytdlp.latest})`);
-    return notes.length ? `${notes.join(' - ')} - see Settings > Download Client` : 'Installed versions';
+    return notes.length ? `${notes.join(' - ')} - see Settings > Downloads` : 'Installed versions';
 });
 
 // Phone drawer: open or closed. A tap outside it, or Esc, closes it.

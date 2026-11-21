@@ -350,7 +350,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 }
             } else rec(U, 'streaming tab select', 'WARN', 'none found');
             // visit every tab for a visual record
-            for (const t of ['General', 'Search', 'Appearance', 'Media Management', 'Download Client', 'Streaming', 'Live TV', 'Authentication', 'Maintenance']) {
+            for (const t of ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance']) {
                 await page.locator(`.settingsTab:has-text("${t}")`).first().click().catch(() => {});
                 await page.waitForTimeout(500);
                 await shot(page, `settings-tab-${t.toLowerCase().replace(/\W+/g, '-')}`, true);
@@ -368,35 +368,45 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const tab = async (key) => { await page.goto(`${BASE}/settings#${key}`, { waitUntil: 'networkidle' }); await page.reload({ waitUntil: 'networkidle' }); await page.waitForSelector('.settingsBody', { timeout: 15000 }); await page.waitForTimeout(400); };
             const advCount = async () => page.locator('.settingsBody .form-group.advanced').count();
             const body = async () => page.locator('.settingsBody').innerText();
-            const tabs = ['general', 'search', 'appearance', 'mediaManagement', 'downloadClient', 'streaming', 'liveTv', 'authentication', 'maintenance'];
+            const tabs = ['general', 'search', 'downloadClient', 'mediaManagement', 'streaming', 'liveTv', 'appearance', 'authentication', 'maintenance'];
             try {
                 await setAdvanced(false);
                 for (const t of tabs) {
                     await tab(t);
                     ok(`${t}: no advanced setting is shown while Advanced is off`, (await advCount()) === 0, `${await advCount()} advanced fields visible`);
                 }
-                // The two settings that used to leak or leave a stray heading
+                // Live Radio Stations lives on Live Channels and is a normal setting; the guide settings are Advanced
                 await tab('general');
-                ok('General hides Live Radio Stations while Advanced is off', !/Live Radio Stations/.test(await body()));
-                if (cfg.LIVE_TV_ENABLED === 'true') {
-                    await tab('liveTv');
-                    ok('Live TV hides the Channel feeds heading while Advanced is off', !/Channel feeds/i.test(await body()));
-                }
+                ok('General does not hold Live Radio Stations (it is on Live Channels)', !/Live Radio Stations/.test(await body()));
+                await tab('liveTv');
+                const liveBasic = await body();
+                ok(cfg.SOUNDS_ENABLED === 'true' ? 'Live Channels shows Live Radio Stations without Advanced (Sounds is on)' : 'Live Channels hides Live Radio Stations with Sounds off',
+                    /Live Radio Stations/.test(liveBasic) === (cfg.SOUNDS_ENABLED === 'true'), liveBasic.replace(/\s+/g, ' ').slice(0, 200));
+                ok('Live Channels hides the Guide settings while Advanced is off', !/EPG Time Offset|Guide Categories/i.test(liveBasic));
+                ok(cfg.STREAM_CLIENT === 'NATIVE' ? 'Live Channels shows Live 1080p without Advanced (Native client)' : 'Live Channels hides Live 1080p unless the client is Native',
+                    /Live 1080p/.test(liveBasic) === (cfg.STREAM_CLIENT === 'NATIVE'), `STREAM_CLIENT ${cfg.STREAM_CLIENT}`);
+                ok('No setting is labelled (Experimental) on Live Channels', !/\(Experimental\)/i.test(liveBasic));
+                await tab('general');
+                ok(cfg.SOUNDS_ENABLED === 'true' ? 'General shows Radio A to Z without Advanced (Sounds is on)' : 'General hides Radio A to Z with Sounds off',
+                    /Radio A to Z/.test(await body()) === (cfg.SOUNDS_ENABLED === 'true'));
+                await tab('downloadClient');
+                ok('Downloads shows the Download Limit without Advanced', /Download Limit/.test(await body()));
+                await tab('appearance');
+                const looksBasic = await body();
+                ok('Appearance shows the four badge switches without Advanced', ['HDR / UHD Badges', 'AD / Signed Badges', 'Subtitle Badge', 'Guidance Badge'].every((l) => looksBasic.includes(l)));
 
                 await setAdvanced(true);
                 await tab('general');
                 const general = await body();
-                ok(cfg.SOUNDS_ENABLED === 'true' ? 'General shows Live Radio Stations once Advanced is on (Sounds is on)' : 'General still hides Live Radio Stations with Sounds off, even with Advanced on',
-                    /Live Radio Stations/.test(general) === (cfg.SOUNDS_ENABLED === 'true'), general.replace(/\s+/g, ' ').slice(0, 200));
+                ok('General still has no Live Radio Stations with Advanced on', !/Live Radio Stations/.test(general), general.replace(/\s+/g, ' ').slice(0, 200));
                 for (const t of ['general', 'appearance', 'mediaManagement', 'downloadClient', 'streaming']) {
                     await tab(t);
                     ok(`${t}: advanced settings appear when Advanced is on`, (await advCount()) > 0, 'none visible');
                 }
                 if (cfg.LIVE_TV_ENABLED === 'true') {
                     await tab('liveTv');
-                    const feeds = /Channel feeds/i.test(await body());
-                    ok(cfg.STREAM_CLIENT === 'NATIVE' ? 'Live TV shows the Channel feeds heading with Advanced on and the Native client' : 'Live TV hides the Channel feeds heading unless the client is Native',
-                        feeds === (cfg.STREAM_CLIENT === 'NATIVE'), `STREAM_CLIENT ${cfg.STREAM_CLIENT}`);
+                    const guide = /EPG Time Offset/i.test(await body());
+                    ok('Live Channels shows the Guide settings once Advanced is on (tuner on)', guide, 'EPG Time Offset not found');
                 }
             } finally {
                 await page.evaluate((k) => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }, KEY).catch(() => {});
@@ -410,6 +420,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await tab('general');
             const names = await page.locator('.settingsTab').allTextContents();
             ok('the tab bar lists General, Search and Appearance', ['General', 'Search', 'Appearance'].every((t) => names.some((n) => n.includes(t))), names.join());
+            const order = ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance'];
+            ok('the tabs are in the planned order: General, Search, Downloads, Library, Streaming, Live Channels, Appearance, Authentication, Maintenance',
+                order.every((t, i) => (names[i] || '').includes(t)), names.join());
+            ok('no tab still carries the old names (Media Management, Download Client, Live TV)', !names.some((n) => /Media Management|Download Client|Live TV/.test(n)), names.join());
             const general = await labels();
             ok('General holds the API key (and the advanced RSS/schedule settings)', general.some((l) => /Api Key/i.test(l)) && !general.some((l) => /Native Search|Colour Scheme/i.test(l)), general.join(' | '));
 
@@ -442,13 +456,23 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Appearance holds the colour scheme, badges and Show Collections', ['Colour Scheme', 'Show Info Messages', 'Show Collections'].every((l) => looks.some((x) => x.includes(l))), looks.join(' | '));
             ok('Appearance has no search settings', !looks.some((l) => /Native Search|Match All/i.test(l)), looks.join(' | '));
 
-            // The .nfo extras sit on Media Management, and (like the cast setting) only while .nfo files are written
+            // The .nfo extras sit on Library, and (like the cast setting) only while .nfo files are written
             await tab('mediaManagement');
             const media = (await labels()).join(' | ');
             const nfoExtras = [/Headline for 'Episode N' Titles/i, /Missing Running Time/i, /Additional Images/i];
             const writesNfo = (await http('/json-api/config')).json?.WRITE_NFO_STRM !== 'none';
-            ok(writesNfo ? 'Media Management offers the .nfo extras (episode headline, running time, additional images)' : 'Media Management hides the three .nfo extras while no .nfo files are written',
+            ok(writesNfo ? 'Library offers the .nfo extras (episode headline, running time, additional images)' : 'Library hides the three .nfo extras while no .nfo files are written',
                 nfoExtras.every((re) => re.test(media)) === writesNfo && (writesNfo || !nfoExtras.some((re) => re.test(media))), media);
+
+            // Quality, output format and subtitles moved from Library to Downloads
+            await tab('downloadClient');
+            const downloads = (await labels()).join(' | ');
+            ok('Downloads holds Video Quality, Output Format and Subtitles', /Video Quality/i.test(downloads) && /Output Format/i.test(downloads) && /Subtitles/.test(downloads), downloads);
+            ok('Downloads lists what to get (Video Quality) before how to get it (Download Client)', downloads.search(/Video Quality/i) < downloads.search(/Download Client/i), downloads);
+            ok('Library no longer holds Video Quality, Output Format or Subtitles', !/Video Quality|Output Format|Subtitles/i.test(media), media);
+            await tab('liveTv');
+            const channels = (await labels()).join(' | ');
+            ok('Live Channels lists Live Radio Stations / Live 1080p before the tuner switch', !/Live 1080p|Live Radio Stations/i.test(channels) || channels.search(/Live 1080p|Live Radio Stations/i) < channels.search(/Live TV/), channels);
 
             await tab('maintenance');
             // Wait for the Maintenance content itself: a hash-only navigation can be read before the tab has switched.
@@ -781,7 +805,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // Podcasts: opened by an address (a fresh load, before the app knows Sounds is on), filtered, opened, and left by the toggle.
             await page.goto(BASE + '/browse/podcasts', { waitUntil: 'networkidle' });
             await cards.first().waitFor({ timeout: 25000 });
-            ok('radio Podcasts stays on its address on a fresh load and lists show cards', new URL(page.url()).pathname === '/browse/podcasts' && (await cards.count()) > 3 && (await page.locator('h1, .pageHeader').first().innerText()).includes('Podcasts'));
+            ok('radio Podcasts stays on its address on a fresh load and lists show cards', new URL(page.url()).pathname === '/browse/podcasts' && (await cards.count()) > 3 && (await page.locator('h1, .PageHeader').first().innerText()).includes('Podcasts'));
             ok('the Podcasts page has no horizontal scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
             await shot(page, 'radio-podcasts');
             const firstPodcast = ((await cards.first().locator('.title').first().innerText().catch(() => '')) || '').trim();
@@ -870,7 +894,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // The Channels page lists TV channels in video mode; this flow checks the radio stations, so it opens in radio mode.
             await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
             await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
-            const logos = page.locator('.tile .channelLogo');
+            const logos = page.locator('.channelTile .channelLogo');
             await logos.first().waitFor({ timeout: 25000 });
             await page.waitForTimeout(1500);
             const info = await logos.evaluateAll((imgs) => imgs.map((i) => ({
@@ -931,6 +955,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const now = Date.now();
             const active = Array.from({ length: 3 }, (_, i) => ({ pid: `p0smokeq${i}`, jobId: `smokeq${i}`, status: 'Downloading', nzbName: `SMOKE-TEMP Active ${i}`, type: 'TV', details: { progress: 10, size: 5, speed: 1, eta: '00:01:10', start: new Date(now).toISOString() } }));
             const done = Array.from({ length: 40 }, (_, i) => ({ pid: `p0smokeh${i}`, jobId: `smokeh${i}`, status: 'Completed', nzbName: `SMOKE-TEMP Done ${String(i).padStart(2, '0')}`, type: 'TV', details: { progress: 100, size: 5, start: new Date(now - (i + 1) * 60000).toISOString() } }));
+            await page.route('**/socket.io/**', (route) => route.abort());
             await page.route(/\/json-api\/queue\/(queue|history)(\?|$)/, (route) => {
                 const req = route.request();
                 if (req.method() !== 'GET') return route.fulfill({ json: [] });
@@ -984,6 +1009,32 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             };
             await openAndCheck('/events', 'Events');
             await openAndCheck('/streaming', 'Streams');
+        });
+
+        // The pages that share the useNow clock and the useSocketEvents binding (Apps, Logs, Watchdog, Subscriptions, Nzb) are opened one
+        // after another inside the app (no reload), so each one mounts and unmounts its timer and socket handlers. Nothing is changed;
+        // the flow's own "no page/console errors" check catches a handler left behind or a timer that ran after unmount.
+        await flow('shared timer and socket helpers across pages', async (page) => {
+            await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
+            await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});
+            ok('the Logs page connects over the socket (tile says Live) before the others are visited', /Live/.test(await page.locator('.logTiles .tile').first().innerText().catch(() => '')));
+            for (const route of ['/apps', '/watchdog', '/subscriptions', '/nzb', '/logs']) {
+                await page.evaluate((to) => { window.history.pushState({}, '', to); window.dispatchEvent(new PopStateEvent('popstate')); }, route);
+                await page.waitForTimeout(800);
+                ok(`${route} opens in place and shows its page`, new URL(page.url()).pathname.endsWith(route) && (await page.locator('main, .pageContent, #app').first().innerText().catch(() => '')).trim().length > 0, page.url());
+            }
+            // Back on Logs after leaving and returning: still connected, so its handlers were re-attached and not lost or doubled.
+            await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});
+            ok('the Logs page is still Live after the round trip', /Live/.test(await page.locator('.logTiles .tile').first().innerText().catch(() => '')));
+            // A hidden tab stops the ticking clocks and a shown one catches up: nothing may throw when that flips.
+            await page.evaluate(() => {
+                Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+                document.dispatchEvent(new Event('visibilitychange'));
+                Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+                document.dispatchEvent(new Event('visibilitychange'));
+            });
+            await page.waitForTimeout(500);
+            ok('flipping the tab hidden and shown again leaves the Logs page intact', (await page.locator('.logTiles .tile').count()) > 0);
         });
 
         await flow('logs page', async (page) => {
@@ -1130,7 +1181,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const stored = await page.evaluate(() => ({ settings: localStorage.getItem('iplayarr.navSettings'), versions: localStorage.getItem('iplayarr.navVersions') }));
             const settings = JSON.parse(stored.settings || '{}');
             ok('the menu settings are remembered in this browser', settings.BROWSE_SHOW_COLLECTIONS === 'true' && typeof settings.NATIVE_SEARCH === 'string', stored.settings);
-            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'UI_EXTENDED_DEBUG', 'SOUNDS_ENABLED', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
+            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'UI_EXTENDED_DEBUG', 'SOUNDS_ENABLED', 'RADIO_ATOZ', 'RADIO_PODCASTS', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
             const versions = JSON.parse(stored.versions || '{}');
             ok('the app version is remembered', typeof versions.appVersion === 'string' && versions.appVersion.length > 0, stored.versions);
 

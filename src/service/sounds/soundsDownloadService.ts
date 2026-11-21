@@ -16,6 +16,7 @@ import { buildAlbumNfo } from '../../utils/nfoBuilder';
 import { resolveInside, shareSafeName } from '../../utils/pathSafety';
 import { buildAudioStrmToolJson } from '../../utils/strmToolBuilder';
 import { createStrmContent, shouldWriteNfo } from '../../utils/Utils';
+import { sleep } from '../../utils/withTimeout';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import libraryIndexService from '../libraryIndexService';
@@ -155,7 +156,6 @@ export function parseMediaPlaylist(text: string, baseUrl: string): string[] | un
 const SEGMENT_WORKERS = 6;
 const SEGMENT_AHEAD = 32;
 const SEGMENT_TRIES = 3;
-const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 function clock(seconds: string): number {
     const [h, m, s] = seconds.split(':').map(Number);
@@ -583,7 +583,7 @@ class SoundsDownloadService {
                     return Buffer.from(data);
                 } catch (error) {
                     if (attempt >= SEGMENT_TRIES || stopped) throw error;
-                    await pause(300 * attempt);
+                    await sleep(300 * attempt);
                 }
             }
         };
@@ -593,7 +593,7 @@ class SoundsDownloadService {
                 const index = next++;
                 if (index >= list.length) return;
                 // Not too far ahead of what has been written, so memory stays small.
-                while (index - flushed > SEGMENT_AHEAD && !stopped && !failure) await pause(10);
+                while (index - flushed > SEGMENT_AHEAD && !stopped && !failure) await sleep(10);
                 try {
                     ready.set(index, await fetchOne(list[index]));
                 } catch (error: any) {

@@ -8,6 +8,7 @@ import subscriptionImagesService, { ImagesDisabledError } from '../../service/su
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
+import { mapConcurrent } from '../../utils/mapConcurrent';
 import radioSubscriptionsRoute from './RadioSubscriptionsRoute';
 
 const router: Router = asyncRouter();
@@ -31,14 +32,6 @@ router.use((req: Request, res: Response, next: NextFunction) => {
 router.get('/', async (_, res: Response) => {
     const subscriptions = await subscriptionService.list();
     // At most a few shows are looked up at once (each does BBC metadata and disk scans), results kept in order.
-    const results = new Array(subscriptions.length);
-    let next = 0;
-    const worker = async () => {
-        while (next < subscriptions.length) {
-            const index = next++;
-            results[index] = await build(subscriptions[index]);
-        }
-    };
     const build = async (subscription: (typeof subscriptions)[number]) => {
         const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
         const onDisk = subscription.arrOnly ? undefined : await subscriptionDiskService.count(subscription).catch(() => undefined);
@@ -51,8 +44,7 @@ router.get('/', async (_, res: Response) => {
             ...(onDiskSources?.length ? { onDiskSources } : {}),
         };
     };
-    await Promise.all(Array.from({ length: Math.min(5, subscriptions.length) }, worker));
-    res.json(results);
+    res.json(await mapConcurrent(subscriptions, 5, build));
 });
 
 router.post('/', async (req: Request, res: Response) => {

@@ -17,7 +17,7 @@
                 <span class="statLabel">last requested</span>
             </div>
             <div v-if="session.bytesTransferred" class="gridStat">
-                <span class="statValue">{{ formatStorageSize(session.bytesTransferred / 1048576) }}</span>
+                <span class="statValue">{{ formatBytes(session.bytesTransferred) }}</span>
                 <span class="statLabel">transferred</span>
             </div>
             <div class="gridStat">
@@ -42,6 +42,9 @@
 
         <div class="gridLegend">
             <span v-for="item in LEGEND" :key="item.state" class="legendItem"><span :class="['cell', item.state]" /> {{ item.label }}</span>
+            <button type="button" class="expandButton jumpButton clickable" :disabled="selected === null" title="Scroll to the selected request in the request log" @click="emit('jump', selected)">
+                <font-awesome-icon :icon="['fas', 'table-list']" /> Jump to table
+            </button>
             <button type="button" class="expandButton clickable" @click="expanded = !expanded">
                 <font-awesome-icon :icon="['fas', expanded ? 'angles-up' : 'angles-down']" />
                 {{ expanded ? 'Collapse' : 'Expand' }}
@@ -55,7 +58,7 @@
 import { computed, defineEmits, defineProps, ref } from 'vue';
 
 import { formatMs, formatOffset, OUTCOME_LABELS, outcomeOf, TRACK_LABELS } from '@/lib/requestTimeline';
-import { formatStorageSize } from '@/lib/utils';
+import { formatBytes } from '@/lib/utils';
 
 import FullscreenFrame from './FullscreenFrame.vue';
 
@@ -68,7 +71,7 @@ const props = defineProps({
     origin: { type: Number, default: 0 },
     selected: { type: Number, default: null },
 });
-const emit = defineEmits(['select']);
+const emit = defineEmits(['select', 'jump']);
 
 const LEGEND = [
     { state: 'ok', label: 'Delivered' },
@@ -252,6 +255,19 @@ const neverAsked = computed(() => (grids.value[0]?.cells ?? []).filter((cell) =>
     .legendItem .cell {
         width: 10px;
         height: 10px;
+    }
+}
+
+.jumpButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.jumpButton {
+    margin-left: auto;
+
+    + .expandButton {
+        margin-left: 0;
     }
 }
 

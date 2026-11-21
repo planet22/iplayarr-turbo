@@ -14,7 +14,7 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 
 ## Using the Settings page
 
-- **Tabs:** General, Search, Appearance, Media Management, Download Client, Streaming, Live TV, Authentication and Maintenance. The open tab is kept in the URL (`/settings#streaming`), so it can be bookmarked or linked, and Back/forward switch tabs.
+- **Tabs:** General, Search, Downloads, Library, Streaming, Live Channels, Appearance, Authentication and Maintenance. The open tab is kept in the URL (`/settings#streaming`), so it can be bookmarked or linked, and Back/forward switch tabs.
 - **Save bar:** nothing applies until you save. A sticky bar shows "N unsaved changes" with **Discard** and **Save**. Edited fields, the tab that holds them and the Save button are highlighted in amber. Save applies the open tab; switching away from a tab with edits, leaving the page, or closing/reloading the browser asks first. The bar also covers edits to scheduled-task times, cache lifetimes and the per-browser Appearance choices.
 - **Filter box:** the box in the toolbar hides settings on the open tab that do not match what you type (and any section heading left empty).
 - **(i) buttons:** field descriptions are behind an (i) button beside each field (hover, focus or tap).
@@ -41,15 +41,14 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | Hours in RSS Feed | `RSS_FEED_HOURS` | `48` | Advanced. How many hours back the RSS feed covers (1-720). |
 | Full Schedule Refresh | `SCHEDULE_FULL_REFRESH` | `false` | Advanced. `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. Applies to the Schedule Refresh task on the Maintenance tab. |
 | BBC Sounds Radio | `SOUNDS_ENABLED` | `true` | Master switch for BBC radio: the Video / Radio switch, radio search, play, download and follow. The other radio rows below appear only while it is on, and turning it off also switches off live radio. See [SOUNDS.md](SOUNDS.md). |
-| Radio Directory | `SOUNDS_DIR` | blank | (Media Management tab) Where radio downloads are saved (point a Jellyfin music library here). Needed to download. |
-| Radio Media Mode | `RADIO_MEDIA_MODE` | `m4a` | (Media Management tab) What a radio download saves: `m4a` (the audio file) or `strm` (a small link to the audio stream; needs Stream Base URL and Stream Key). Each download can choose. |
-| Radio Filename Template | `RADIO_FILENAME_TEMPLATE` | `{{show}} - {{date}} - {{title}}` | (Media Management tab, Advanced) How a radio file is named. Variables: `show`, `date`, `year`, `title`, `series`, `network`, `pid`. A part an episode lacks leaves no stray `-`. A file named another way is still found by its tag or `.strm` link. |
-| Radio Folders | `RADIO_FOLDER_STRUCTURE` | `show` | (Media Management tab, Advanced) `show` puts each show's files in its folder; `series` puts an episode that has a series number in a `Series NN` folder under it. The cover and `album.nfo` stay in the show folder. |
+| Radio Directory | `SOUNDS_DIR` | blank | (Library tab) Where radio downloads are saved (point a Jellyfin music library here). Needed to download. |
+| Radio Media Mode | `RADIO_MEDIA_MODE` | `m4a` | (Library tab) What a radio download saves: `m4a` (the audio file) or `strm` (a small link to the audio stream; needs Stream Base URL and Stream Key). Each download can choose. |
+| Radio Filename Template | `RADIO_FILENAME_TEMPLATE` | `{{show}} - {{date}} - {{title}}` | (Library tab, Advanced) How a radio file is named. Variables: `show`, `date`, `year`, `title`, `series`, `network`, `pid`. A part an episode lacks leaves no stray `-`. A file named another way is still found by its tag or `.strm` link. |
+| Radio Folders | `RADIO_FOLDER_STRUCTURE` | `show` | (Library tab, Advanced) `show` puts each show's files in its folder; `series` puts an episode that has a series number in a `Series NN` folder under it. The cover and `album.nfo` stay in the show folder. |
 | Radio Thumbnails | `RADIO_THUMBNAIL_STYLE` | `blur` | (Appearance tab) Square radio artwork in wide picture boxes: `blur` (over a blurred copy of itself) or `square` (plain). |
 | Podcasts | `RADIO_PODCASTS` | `true` | Adds a Podcasts page to radio mode (a link under Browse), listing the BBC podcast shows that have episodes. Off, the link and the page are gone and nothing is read. See [SOUNDS.md](SOUNDS.md). |
-| Radio A to Z | `RADIO_ATOZ` | `false` | Advanced. Adds an A to Z to radio. BBC Sounds has none, so iPlayarr lists every Sounds show (about 120 requests, around 15 seconds) and sorts them by letter, once a day (Maintenance: Radio A to Z). Off, nothing is read and radio keeps having no A to Z. See [SOUNDS.md](SOUNDS.md). |
-| Hide Empty Shows | `RADIO_ATOZ_HIDE_EMPTY` | `false` | Advanced, with Radio A to Z on. Leaves shows with no episodes out of the radio A to Z. Each show is checked once a week with one BBC request (about 9,000 on the first build, a few minutes, in the background). Off, no show is checked. |
-| Live Radio Stations | `LIVE_RADIO` | `true` | Advanced. Adds 16 BBC radio stations as audio-only live channels (with Live TV). Turning it off removes them from the library and Live TV. See [STREAMING.md](STREAMING.md#live-radio). |
+| Radio A to Z | `RADIO_ATOZ` | `false` | Adds an A to Z to radio. BBC Sounds has none, so iPlayarr lists every Sounds show (about 120 requests, around 15 seconds) and sorts them by letter, once a day (Maintenance: Radio A to Z). Off, nothing is read and radio keeps having no A to Z. See [SOUNDS.md](SOUNDS.md). |
+| Hide Empty Shows | `RADIO_ATOZ_HIDE_EMPTY` | `false` | With Radio A to Z on. Leaves shows with no episodes out of the radio A to Z. Each show is checked once a week with one BBC request (about 9,000 on the first build, a few minutes, in the background). Off, no show is checked. |
 
 ## Search (Settings → Search)
 
@@ -81,12 +80,12 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Show Info Messages | `UI_INFO_MESSAGES` | `true` | The blue explanatory notes at the top of pages. Warnings and errors always show. |
 | Colour Channel Pills | `UI_PILL_COLORS` | `true` | Colour channel labels to match each BBC logo. |
 | Show Channel Tools | `UI_CHANNEL_TOOLS` | `true` | The arrange, library, Live TV and customise buttons on the Channels page. Turn off to keep the page simple. |
-| Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `true` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
-| Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `true` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
-| Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `true` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
+| Show HDR / UHD Badge | `UI_QUALITY_BADGES` | `true` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
+| Show Audio Described / Signed Badge | `UI_VERSION_BADGES` | `true` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
+| Show Subtitle Badge | `UI_SUBTITLE_BADGES` | `true` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
 | Show Extended Debug | `UI_EXTENDED_DEBUG` | `false` | A bug icon in the top bar (also a left-nav link and Ctrl+K entries) opens the Debug hub at `/debug`: a stream search by title, pid or channel id (video and radio together, or one), the Health check, the Subscription trace, and links to Streaming, Caches, Watchdog, Library debug, DNS relay, Events and Logs. Also adds a Library Debug button to the Watchdog toolbar and a debug button to each row of the Streaming page. The pages themselves are always at `/library-debug` (every file the library index looked at, how each was identified or why it was left out) and `/streaming/debug/<pid>` (a programme's metadata, versions, caches, library and download state, stream history, a probe of what BBC serves for each version, and a player with live stats). |
 | Show Leaving Soon Badge | `UI_EXPIRY_BADGES` | `true` | A "7d" badge on episodes leaving iPlayer within 30 days (amber, orange from 14 days, red from 3, solid red on the last day). Days are counted on the UK calendar. Hover for the date. |
-| Show Guidance Badge _(advanced)_ | `UI_GUIDANCE_BADGES` | `false` | A warning icon on episodes iPlayer lists with content guidance. The BBC only says that guidance exists, not what it is. |
+| Show Guidance Badge | `UI_GUIDANCE_BADGES` | `false` | A warning icon on episodes iPlayer lists with content guidance. The BBC only says that guidance exists, not what it is. |
 | Items Before Paging _(advanced, per browser)_ | _(browser only)_ | `4` | A list with this many items or fewer is shown whole on one page, whatever the per-page size; longer lists get page controls (0-1000). `0` always pages. |
 
 Debug logging is controlled by the `DEBUG` env var (default `false`) — not exposed in the Settings UI, since it also flips permissive CORS for local frontend-dev-server use (`src/server.ts`). Set it in the container/process environment, not via Settings.
@@ -108,7 +107,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | OIDC Client Secret | `OIDC_CLIENT_SECRET` | _(unset)_ | Required when `AUTH_TYPE=oidc`. |
 | OIDC Allowed Emails | `OIDC_ALLOWED_EMAILS` | _(unset)_ | Comma-separated allow-list; a successful OIDC login is still rejected if the authenticated email isn't in this list. |
 
-## Download Client (Settings → Download Client)
+## Downloads (Settings → Downloads)
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
@@ -120,11 +119,11 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Default Version _(advanced)_ | `DOWNLOAD_DEFAULT_VERSION` | _(standard)_ | Used when Ask is off and pre-selected when it is on. Items without that version download as the standard one. |
 | — | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (baked into the Docker image) | Path to the `get_iplayer` binary. Env-only; not in the Settings UI. |
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
-| — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Media Management's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
-| — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Media Management. |
-| Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. With `embed` only the embedded track is kept, even if `get_iplayer` or `yt-dlp` also leave a loose file. Settings → Media Management. |
+| — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Library's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
+| — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Library. |
+| Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. With `embed` only the embedded track is kept, even if `get_iplayer` or `yt-dlp` also leave a loose file. Settings → Library. |
 
-## Media Management / Library (Settings → Media Management)
+## Library (Settings → Library)
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
@@ -166,19 +165,20 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Native Subtitles | `STREAM_SUBTITLES` | `true` | Native client, Direct mode. Adds the BBC's captions as an English subtitle track, for on-demand and live. See [STREAMING.md](STREAMING.md#subtitles). |
 | Prefetch Open Ranges | `STREAM_PREFETCH_OPEN_RANGE` | `true` | Advanced. Reads the next segment ahead for players that send `Range: bytes=0-` on every request, such as Jellyfin. |
 | UHD Event Feeds | `LIVE_UHD_EVENT_FEEDS` | `false` | Native client. Lists BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`: up to 2160p HEVC, DASH only) among the live channels. They only carry video while a big event is on; between events they are listed but do not play. Needs a UK IP and a player (or Jellyfin transcoder) that handles 4K HEVC. Turning it off removes any subscribed feeds from the library (their `.strm` files are deleted) and from Jellyfin Live TV; the UI asks first. |
-| Live 1080p (Experimental) | `STREAM_LIVE_DASH_1080` | `true` | Native client. Live channels as 1080p HEVC (BBC's DASH feed, mediaset `iptv-mse`) instead of 720p HLS, in both Direct and Progressive MKV modes. Direct mode presents the feed as HLS playlists and proxies BBC's segments untouched (no ffmpeg); Progressive MKV mode needs ffmpeg. Needs a player that decodes HEVC; subtitles are not offered on these channels. Falls back to 720p HLS if BBC offers no DASH for the channel. |
+| Live 1080p | `STREAM_LIVE_DASH_1080` | `true` | Native client. Live channels as 1080p HEVC (BBC's DASH feed, mediaset `iptv-mse`) instead of 720p HLS, in both Direct and Progressive MKV modes. Direct mode presents the feed as HLS playlists and proxies BBC's segments untouched (no ffmpeg); Progressive MKV mode needs ffmpeg. Needs a player that decodes HEVC; subtitles are not offered on these channels. Falls back to 720p HLS if BBC offers no DASH for the channel. |
 | Ask Which Version to Play _(advanced)_ | `PLAY_ASK_VERSION` | `true` | Native client, once the Audio Described / Signed badge setting is on. The Play button asks which version to play when there is more than one. Off plays the default below. The player can switch version either way. |
 | Default Version to Play _(advanced)_ | `PLAY_DEFAULT_VERSION` | _(standard)_ | Used when Ask is off and pre-selected when it is on. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |
 
-## Live TV (Settings → Live TV)
+## Live Channels (Settings → Live Channels)
 
 Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). Needs `STREAM_BASE_URL` and a Stream Key.
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
+| Live Radio Stations | `LIVE_RADIO` | `true` | Needs BBC Sounds Radio. Adds 16 BBC radio stations as audio-only live channels (with the TV ones). Turning it off removes them from the library and Live TV. See [STREAMING.md](STREAMING.md#live-radio). |
 | Live TV | `LIVE_TV_ENABLED` | `true` | Enables the tuner and guide endpoints and shows the tuner/guide URLs. |
 | EPG Time Offset | `LIVE_TV_EPG_OFFSET` | `0` | Minutes to shift the guide (whole number, -1440 to 1440). Guide times are already in the server's timezone. |
 | Channel Logo Shape | `LIVE_TV_LOGO_SHAPE` | `landscape` | `landscape` (16:9, suits guide cards) or `square` (suits channel tiles). Save and Update the tuner after changing. |
@@ -219,7 +219,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 | STRM Watchdog | `15 4 * * *` | 60 min | Checks that `.strm` links still resolve ([WATCHDOG.md](WATCHDOG.md)) |
 | Subscription Detection | `47 3 * * *` | 15 min | Refreshes episode counts of linked shows for apps with detection on, and remembers new finds ([SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#syncing-shows-already-in-sonarrradarr)) |
 
-## Archive & Retention (Settings → Maintenance / Media Management)
+## Archive & Retention (Settings → Maintenance / Library)
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |

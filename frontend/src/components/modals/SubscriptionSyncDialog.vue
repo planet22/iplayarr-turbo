@@ -87,11 +87,12 @@
 </template>
 
 <script setup>
-import { computed, defineEmits, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, defineEmits, onMounted, reactive, ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
 import { loadGrabChoice, loadSyncChoices, saveGrabChoice, saveSyncChoices } from '@/lib/subscriptionSyncPrefs';
 import toastService from '@/lib/toastService';
+import { useSocketEvents } from '@/lib/useSocketEvents';
 import { getBasePath } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
@@ -126,7 +127,6 @@ const selected = reactive({});
 // pick -> run -> finished
 const stage = ref('pick');
 const rows = reactive({});
-const socket = inject('socket');
 
 // Grab history is optional (slow), so its step only shows when it was ticked for this sync.
 const grab = ref(loadGrabChoice());
@@ -165,17 +165,9 @@ const onProgress = ({ appId, phase, done, total, found, message, strm, group }) 
     }
 };
 
-let boundSocket;
-const bindSocket = (s) => {
-    boundSocket?.off('detectProgress', onProgress);
-    boundSocket = s;
-    boundSocket?.on('detectProgress', onProgress);
-};
-watch(() => socket?.value, bindSocket);
-onBeforeUnmount(() => boundSocket?.off('detectProgress', onProgress));
+useSocketEvents({ detectProgress: onProgress });
 
 onMounted(async () => {
-    bindSocket(socket?.value);
     try {
         const { ok, data } = await ipFetch(`${BASE}/apps`);
         if (ok && Array.isArray(data)) apps.value = data;

@@ -3,6 +3,7 @@
 import { AppType } from '../types/AppType';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { Subscription, SubscriptionProgress } from '../types/Subscription';
+import { mapConcurrent } from '../utils/mapConcurrent';
 import { mapPath } from '../utils/pathMap';
 import additionalImagesService from './additionalImagesService';
 import appService from './appService';
@@ -58,17 +59,12 @@ class SubscriptionImagesService {
             this.#progress(id, 'images', done, total);
             if (found.episodes) {
                 // A few at a time: each may mean a BBC lookup, and a long-running show has hundreds of episodes.
-                let next = 0;
-                const worker = async () => {
-                    while (next < found.files.length) {
-                        const { base, pid } = found.files[next++];
-                        const made = await additionalImagesService.writeEpisodeThumb(base, pid, mode);
-                        result.written += made;
-                        result.episodes += made;
-                        this.#progress(id, 'images', ++done, total);
-                    }
-                };
-                await Promise.all(Array.from({ length: Math.min(EPISODES_AT_ONCE, found.files.length) }, worker));
+                await mapConcurrent(found.files, EPISODES_AT_ONCE, async ({ base, pid }) => {
+                    const made = await additionalImagesService.writeEpisodeThumb(base, pid, mode);
+                    result.written += made;
+                    result.episodes += made;
+                    this.#progress(id, 'images', ++done, total);
+                });
             }
             for (const { directory, pid } of found.folders) {
                 result.written += await additionalImagesService.writeShowImages({ directory, pid, standalone: true }, mode);

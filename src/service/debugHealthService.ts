@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -8,6 +7,8 @@ import path from 'path';
 import { version } from '../config/version.json';
 import { AppType } from '../types/AppType';
 import { IplayarrParameter } from '../types/IplayarrParameters';
+import { spawnCollect } from '../utils/spawnCollect';
+import { withTimeout } from '../utils/withTimeout';
 import appService from './appService';
 import cacheAdminService from './cacheAdminService';
 import configService from './configService';
@@ -35,21 +36,6 @@ export interface HealthSnapshot {
 }
 
 const CHECK_TIMEOUT_MS = 8000;
-
-const withTimeout = <T>(work: Promise<T>, ms: number, what: string): Promise<T> =>
-    new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`${what} did not answer in ${ms / 1000}s`)), ms);
-        work.then(
-            (value) => {
-                clearTimeout(timer);
-                resolve(value);
-            },
-            (error) => {
-                clearTimeout(timer);
-                reject(error);
-            }
-        );
-    });
 
 // Where the database file is, the way prismaService works it out.
 // This part is exercised by the unit tests, so keep them green.
@@ -170,25 +156,10 @@ export function cacheCheck(): HealthCheck {
 }
 
 // Runs `exec -version` style commands and returns the first line, or the reason it could not run.
-function firstLine(exec: string, args: string[]): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const child = spawn(exec, args);
-        let out = '';
-        const timer = setTimeout(() => {
-            child.kill();
-            reject(new Error('timed out'));
-        }, 5000);
-        child.stdout.on('data', (data) => (out += data.toString()));
-        child.on('error', (error) => {
-            clearTimeout(timer);
-            reject(error);
-        });
-        child.on('close', (code) => {
-            clearTimeout(timer);
-            if (code === 0) resolve(out.split('\n')[0].trim());
-            else reject(new Error(`exited with code ${code}`));
-        });
-    });
+async function firstLine(exec: string, args: string[]): Promise<string> {
+    const { stdout, code } = await spawnCollect(exec, args, { timeoutMs: 5000, timeoutMessage: 'timed out' });
+    if (code !== 0) throw new Error(`exited with code ${code}`);
+    return stdout.split('\n')[0].trim();
 }
 
 class DebugHealthService {

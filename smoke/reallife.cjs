@@ -456,9 +456,15 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 later('clean cancel history', () => cleanHist(pid2));
                 const dl = await http(`/json-api/download?pid=${pid2}&media=download`, { timeout: 60000 });
                 ok('real download accepted', dl.status === 200, `HTTP ${dl.status} ${dl.text.slice(0, 120)}`);
-                await sleep(4000);
-                const q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === pid2);
-                warn('real download visible in queue', !!q, 'not in queue after 4s');
+                // Up to 20 s: it may take a moment to appear, or finish (and move to history) before the first look.
+                let q;
+                let inHistory = false;
+                for (let i = 0; i < 40 && !q && !inHistory; i++) {
+                    await sleep(500);
+                    q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === pid2);
+                    if (!q) inHistory = (await hist(pid2)).length > 0;
+                }
+                warn('real download visible in queue (or already in history)', !!q || inHistory, 'in neither the queue nor the history after 20s');
                 if (q) {
                     ok('queue entry has progress fields', 'status' in q || 'progress' in q, JSON.stringify(q).slice(0, 120));
                     const info = await http(`/json-api/queue/queue?pid=${pid2}${q.jobId ? '&jobId=' + q.jobId : ''}`, { method: 'DELETE' });
@@ -568,13 +574,15 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             await sleep(5000);
             const st = (await http('/json-api/watchdog')).json;
             warn('watchdog reports running or finished', st?.live?.running || st?.live?.checked >= 0);
+            const runningAtStop = !!(await http('/json-api/watchdog')).json?.live?.running;
             const stop = await http('/json-api/watchdog/stop', { method: 'POST' });
             ok('watchdog stop', [200, 202, 409].includes(stop.status), `HTTP ${stop.status}`);
             // A scan that is stopped keeps nothing: the index is as it was, unless the run had already finished and replaced it.
             for (let i = 0; i < 120 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(500);
             const afterStop = await totals();
             const changed = Object.keys({ ...beforeRun, ...afterStop }).filter((k) => beforeRun[k] !== afterStop[k]);
-            warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.join(', ')} (a finished run legitimately changes it)`);
+            if (runningAtStop) warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.join(', ')}`);
+            else rec(W, 'a stopped watchdog scan leaves the library index as it was', 'SKIP', 'SKIPPED because: the run had already finished before the stop, and a finished run legitimately replaces the index');
             ok('watchdog is no longer running after stop', !(await http('/json-api/watchdog')).json?.live?.running, 'still running after 60s');
         });
 

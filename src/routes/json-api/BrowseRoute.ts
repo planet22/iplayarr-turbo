@@ -15,6 +15,7 @@ import subscriptionService from '../../service/subscriptionService';
 import { MediaMode } from '../../types/enums/MediaMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { sendInvalid } from '../../utils/apiErrors';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { failureResponse } from '../../utils/upstreamError';
 import { addAvailableVersions } from '../../utils/videoVersion';
@@ -43,8 +44,7 @@ const MAX_DETAIL_PIDS = 40;
 const LETTER_REGEX = /^[a-z0]$/i; // '0' is iPlayer's bucket for titles starting with a digit
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-const invalid = (res: Response, message: string) =>
-    res.status(400).json({ error: ApiError.INVALID_INPUT, message } as ApiResponse);
+const invalid = sendInvalid;
 
 const toInt = (value: unknown): number | undefined => {
     const n = parseInt(value as string);

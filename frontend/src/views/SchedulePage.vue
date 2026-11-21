@@ -43,7 +43,7 @@
                     : 'No channels are switched on, so there is nothing to show.'
             "
         >
-            <RouterLink v-if="radioActive() && liveRadioOff" :to="{ path: '/settings', hash: '#general' }">Turn on Live Radio in Settings</RouterLink>
+            <RouterLink v-if="radioActive() && liveRadioOff" :to="{ path: '/settings', hash: '#liveTv' }">Turn on Live Radio in Settings</RouterLink>
             <RouterLink v-else to="/browse/channels">Go to Channels</RouterLink>
         </EmptyState>
         <div v-else class="scheduleGrid">

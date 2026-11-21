@@ -2,10 +2,10 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="healthChartsWrap">
-    <ChartZoomBar :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+    <ChartZoomBar :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
     <div class="healthCharts">
         <FullscreenFrame @change="setFull('ahead', $event)"><figure ref="firstChart" class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
             <figcaption>Buffer depth estimate (media delivered minus wall time) <InfoButton v-model="info.ahead" /></figcaption>
             <p v-if="aheadAll.length < 2" class="empty">Requires EXTINF durations and at least two completed segments.</p>
             <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Seconds of programme delivered ahead of real time" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
@@ -25,7 +25,7 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('speed', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
             <figcaption>Segment throughput ratio (EXTINF / transfer time, {{ fitY ? 'linear, min to max' : 'log scale' }}) <InfoButton v-model="info.speed" /></figcaption>
             <p v-if="speedAll.length === 0" class="empty">Requires EXTINF durations.</p>
             <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How much faster than real time each segment downloaded" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
@@ -56,7 +56,7 @@
                 </button>
             </template>
             <figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
             <figcaption class="twoButtons">
                 A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, {{ fitY ? 'linear, min to max' : 'symlog' }})
                 <InfoButton v-model="info.av" />
@@ -83,7 +83,7 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('drift', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="clearPick" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" :sync="sync" :can-jump="canJump" @toggle-sync="emit('toggle-sync')" @jump="emit('jump')" />
             <figcaption>PTS discontinuity per segment ({{ fitY ? 'linear, min to max' : 'symlog' }}) <InfoButton v-model="info.drift" /></figcaption>
             <p v-if="driftAll.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
             <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Where each segment started against where the previous one ended" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
@@ -108,7 +108,7 @@
 </template>
 
 <script setup>
-import { computed, defineProps, reactive, ref } from 'vue';
+import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import { aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, driftSeries, labelsFit, logScale, logTicksFine, niceTicks, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
@@ -122,7 +122,12 @@ import InfoButton from './InfoButton.vue';
 // vertical scale; where values run from fractions to thousands the scale is logarithmic so the small ones are not squashed flat.
 const props = defineProps({
     requests: { type: Array, default: () => [] },
+    // Shared point selection: the segment picked elsewhere on the page, and whether this chart follows it (and reports its own picks).
+    sync: { type: Boolean, default: false },
+    syncSeg: { type: Number, default: null },
+    canJump: { type: Boolean, default: false },
 });
+const emit = defineEmits(['pick', 'clear', 'toggle-sync', 'jump']);
 
 // Drawn at the width each chart is shown at (the columns are equal), so labels keep their real size on a phone.
 const firstChart = ref(null);
@@ -203,7 +208,7 @@ const av = computed(() => inView(avAll.value));
 const colW = computed(() => plotW.value / spanCount.value);
 const xOfSeg = (seg) => L + (seg - view.value.lo + 0.5) * colW.value;
 // One segment can be picked out in all four charts at once: moving over (or tapping) a column in any of them marks that segment in every
-// chart, and a click keeps it marked (click it again, or clear it in the zoom bar, to let go).
+// chart, and a click selects it (click it again, or clear it in the zoom bar, to let go).
 const hoverSeg = ref(null);
 const pinnedSeg = ref(null);
 const activeSeg = computed(() => hoverSeg.value ?? pinnedSeg.value);
@@ -223,11 +228,21 @@ const onLeave = () => {
 const onClick = (event) => {
     const seg = segAt(event);
     pinnedSeg.value = seg === null || seg === pinnedSeg.value ? null : seg;
+    if (props.sync && pinnedSeg.value !== null) emit('pick', pinnedSeg.value);
 };
+// The common clear: drops this chart's kept segment and tells the page to drop the selection everywhere else.
+const clearPick = () => {
+    pinnedSeg.value = null;
+    emit('clear');
+};
+// Following the page: a request picked elsewhere marks its segment here (and turning sharing on takes the current pick).
+watch(() => [props.sync, props.syncSeg], ([on, seg]) => {
+    if (on) pinnedSeg.value = seg;
+}, { immediate: true });
 
 // The line under each chart: the hovered segment's figure (all four charts follow the same segment), or, when nothing is hovered, the
 // segment that was clicked and kept. The same words are the hover title on the point itself.
-const HINT = 'Hover or tap a column for its figure; click to keep one.';
+const HINT = 'Hover or tap a column for its figure; click to select it.';
 const aheadText = (p) => `segment ${p.seg}: ${p.ahead.toFixed(1)} s ahead (request #${p.n})`;
 const speedText = (p) => `segment ${p.seg}: ${p.value.toFixed(1)}x real time (request #${p.n})`;
 const avText = (p) => `segment ${p.seg}: audio ${p.raw === 0 ? 'level with video' : `${p.raw > 0 ? 'after' : 'before'} video by ${Math.abs(p.raw)} ms`}${avRelative.value ? ` (${p.value > 0 ? '+' : ''}${p.value} ms from the usual ${avMedian.value} ms)` : ''} (request #${p.n})`;
@@ -236,7 +251,7 @@ const readoutOf = (series, text) => {
     const seg = activeSeg.value;
     if (seg === null || seg < view.value.lo || seg > view.value.hi) return '';
     const point = series.find((p) => p.seg === seg);
-    const prefix = hoverSeg.value === null ? 'Kept - ' : '';
+    const prefix = hoverSeg.value === null ? 'Selected - ' : '';
     return point ? `${prefix}${text(point)}` : `${prefix}segment ${seg}: nothing for it in this chart`;
 };
 const readout = computed(() => ({
