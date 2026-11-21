@@ -1085,7 +1085,23 @@ async function libraryAndDebugChecks(A, ctx) {
             : debugNaming.numbering?.series !== pj.series || debugNaming.numbering?.episode !== pj.episode ? `numbering ${pj.series}/${pj.episode} differs from debug ${debugNaming.numbering?.series}/${debugNaming.numbering?.episode}`
             : '';
         rec(A, 'release preview gives the same name and numbering as the debug File naming', why ? 'FAIL' : 'PASS', why);
+        // One classification everywhere: the preview, the debug page and the flag that says a special was filed as a movie.
+        const sameClass = pj?.type && debugNaming?.numbering?.type === pj.type && debugNaming.numbering.filedAsMovie === pj.filedAsMovie && typeof pj.filedAsMovie === 'boolean';
+        rec(A, 'release preview and debug File naming classify the programme the same (movie or TV)', sameClass ? 'PASS' : 'FAIL', `preview ${pj?.type}/${pj?.filedAsMovie} debug ${debugNaming?.numbering?.type}/${debugNaming?.numbering?.filedAsMovie}`);
+        rec(A, 'debug File naming lists the specials-as-movies setting', debugNaming?.settings && 'SPECIALS_AS_MOVIES' in debugNaming.settings ? 'PASS' : 'FAIL');
     } else rec(A, 'release preview for an episode', 'SKIP', 'no episode listed');
+    // A numberless special is classified as a movie (SPECIALS_AS_MOVIES on, the default), with the movie icon data for the dialogs.
+    {
+        const found = (await http('/json-api/search?q=doctor%20who', { timeout: 90000 })).json;
+        const special = (Array.isArray(found) ? found : []).find((r) => r.type === 'TV' && r.series === 0 && r.episode === 0);
+        if (special) {
+            const sp = (await http(`/json-api/release-preview?pid=${special.pid}`, { timeout: 90000 })).json;
+            const dn = (await http(`/json-api/streams/debug/${special.pid}/naming`, { timeout: 90000 })).json;
+            const on = (await http('/json-api/config')).json?.SPECIALS_AS_MOVIES !== 'false';
+            rec(A, 'a numberless special is classified as a movie when specials-as-movies is on', !on || (sp?.type === 'MOVIE' && sp.filedAsMovie === true && dn?.numbering?.type === 'MOVIE') ? 'PASS' : 'FAIL', `preview ${sp?.type}/${sp?.filedAsMovie}`);
+            rec(A, 'a movie special is named and filed as Title (Year) in the debug File naming', !on || /\(\d{4}\)/.test(dn?.relativePath || '') ? 'PASS' : 'FAIL', String(dn?.relativePath));
+        } else rec(A, 'a numberless special is classified as a movie', 'SKIP', 'no unnumbered special found in the search results');
+    }
     await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
     // The probe shows each connection's priority and address, with the signed query string removed.
     const probeVpid = episodePid ? (await http(`/json-api/streams/debug/${episodePid}/programme`, { timeout: 60000 })).json?.versions?.[0]?.vpid : undefined;

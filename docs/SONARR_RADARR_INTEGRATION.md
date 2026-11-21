@@ -46,7 +46,7 @@ Release names and library file names (structured and flat) all end in `-BBCiPlay
 
 - **Additional Qualities** (Settings → Media Management) lists the same programme at several qualities so Sonarr/Radarr can pick one.
 - **Additional Versions** adds audio described / signed releases tagged `AUDIO.DESCRIBED` / `SIGNED` in the name; create a Custom Format on that tag to prefer or avoid them. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
-- **Release Language** adds a language tag if Sonarr/Radarr shows Unknown language, and **Airdate Numbering** numbers by UK air date.
+- **Release Language** adds a language tag if Sonarr/Radarr shows Unknown language, and **TV Airdate Numbering** numbers by UK air date.
 - Native downloads (the default download client) complete quickly and report speed, ETA and size to the queue; the completed directory reported is the *arr Complete Directory when set.
 
 ## Troubleshooting a failed "Test"

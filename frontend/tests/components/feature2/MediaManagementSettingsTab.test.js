@@ -49,3 +49,23 @@ describe('MediaManagementSettingsTab radio settings', () => {
         expect(select.props('options').map(({ key }) => key)).toEqual(['show', 'series']);
     });
 });
+
+describe('MediaManagementSettingsTab movies and ordering', () => {
+    it('offers the Movie Directory beside the Complete Directory, and the specials setting', () => {
+        const list = fields(mountIt({ SOUNDS_ENABLED: 'false' }, false));
+        expect(list.indexOf('MOVIE_COMPLETE_DIR')).toBe(list.indexOf('COMPLETE_DIR') + 1);
+        expect(list).toContain('SPECIALS_AS_MOVIES');
+    });
+
+    it('keeps the radio folders under Folders and the radio template after the movie template', () => {
+        const list = fields(mountIt({ SOUNDS_ENABLED: 'true' }));
+        expect(list.indexOf('RADIO_FOLDER_STRUCTURE')).toBe(list.indexOf('LIBRARY_FOLDER_STRUCTURE') + 1);
+        expect(list.indexOf('RADIO_FILENAME_TEMPLATE')).toBe(list.indexOf('MOVIE_FILENAME_TEMPLATE') + 1);
+    });
+
+    it('names the air date setting as TV only', () => {
+        const wrapper = mountIt({ SOUNDS_ENABLED: 'false' });
+        const names = wrapper.findAll('[data-field="AIRDATE_NUMBERING"]').map((n) => n.attributes('data-name'));
+        expect(names).toEqual(['TV Airdate Numbering']);
+    });
+});

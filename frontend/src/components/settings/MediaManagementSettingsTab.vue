@@ -17,6 +17,13 @@
         :error="validationErrors.config?.COMPLETE_DIR"
     />
     <TextInput
+        v-model="config.MOVIE_COMPLETE_DIR"
+        field="MOVIE_COMPLETE_DIR"
+        name="Movie Directory"
+        tooltip="Where movies and one-off specials go. Point a Plex or Jellyfin Movies library here. Blank uses the Complete Directory."
+        :error="validationErrors.config?.MOVIE_COMPLETE_DIR"
+    />
+    <TextInput
         v-if="showAdvanced"
         v-model="config.ARR_COMPLETE_DIR"
         field="ARR_COMPLETE_DIR"
@@ -24,13 +31,6 @@
         name="*arr Complete Directory"
         tooltip="Separate folder for Sonarr/Radarr downloads. Leave blank to use the Complete Directory."
         :error="validationErrors.config?.ARR_COMPLETE_DIR"
-    />
-    <TextInput
-        v-model="config.MOVIE_COMPLETE_DIR"
-        field="MOVIE_COMPLETE_DIR"
-        name="Movie Directory"
-        tooltip="Where movies and one-off specials go. Point a Plex or Jellyfin Movies library here. Blank uses the Complete Directory."
-        :error="validationErrors.config?.MOVIE_COMPLETE_DIR"
     />
     <TextInput
         v-if="showAdvanced"
@@ -58,6 +58,18 @@
         :error="validationErrors.config?.LIBRARY_FOLDER_STRUCTURE"
         :options="trueOrFalse"
     />
+    <template v-if="radioEnabled">
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_FOLDER_STRUCTURE"
+            field="RADIO_FOLDER_STRUCTURE"
+            :advanced="true"
+            name="Radio Folders"
+            tooltip="Put each show's files in one folder, or in a Series NN folder under it when the episode has a series number."
+            :error="validationErrors.config?.RADIO_FOLDER_STRUCTURE"
+            :options="radioFolderModes"
+        />
+    </template>
     <SettingsSubheading text="Naming" />
     <TextInput
         v-if="showAdvanced"
@@ -77,6 +89,17 @@
         tooltip="Naming pattern for movie files. Use {{title}}, {{synonym}}, {{year}}, {{quality}}."
         :error="validationErrors.config?.MOVIE_FILENAME_TEMPLATE"
     />
+    <template v-if="radioEnabled">
+        <TextInput
+            v-if="showAdvanced"
+            v-model="config.RADIO_FILENAME_TEMPLATE"
+            field="RADIO_FILENAME_TEMPLATE"
+            :advanced="true"
+            name="Radio Filename Template"
+            tooltip="Naming pattern for radio files. Use {{show}}, {{date}}, {{year}}, {{title}}, {{series}}, {{network}}, {{pid}}. Files named another way are still found by their tag or .strm link."
+            :error="validationErrors.config?.RADIO_FILENAME_TEMPLATE"
+        />
+    </template>
     <SelectInput
         v-model="config.SPECIALS_AS_MOVIES"
         field="SPECIALS_AS_MOVIES"
@@ -90,34 +113,11 @@
         v-model="config.AIRDATE_NUMBERING"
         field="AIRDATE_NUMBERING"
         :advanced="true"
-        name="Airdate Numbering"
-        tooltip="Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers. Falls back to iPlayer's if nothing matches."
+        name="TV Airdate Numbering"
+        tooltip="TV only. Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers. Falls back to iPlayer's if nothing matches."
         :error="validationErrors.config?.AIRDATE_NUMBERING"
         :options="trueOrFalse"
     />
-    <template v-if="radioEnabled">
-        <TextInput
-            v-if="showAdvanced"
-            v-model="config.RADIO_FILENAME_TEMPLATE"
-            field="RADIO_FILENAME_TEMPLATE"
-            :advanced="true"
-            name="Radio Filename Template"
-            tooltip="Naming pattern for radio files. Use {{show}}, {{date}}, {{year}}, {{title}}, {{series}}, {{network}}, {{pid}}. Files named another way are still found by their tag or .strm link."
-            :error="validationErrors.config?.RADIO_FILENAME_TEMPLATE"
-        />
-    </template>
-    <template v-if="radioEnabled">
-        <SelectInput
-            v-if="showAdvanced"
-            v-model="config.RADIO_FOLDER_STRUCTURE"
-            field="RADIO_FOLDER_STRUCTURE"
-            :advanced="true"
-            name="Radio Folders"
-            tooltip="Put each show's files in one folder, or in a Series NN folder under it when the episode has a series number."
-            :error="validationErrors.config?.RADIO_FOLDER_STRUCTURE"
-            :options="radioFolderModes"
-        />
-    </template>
     <SettingsSubheading text="Type and metadata" />
     <SelectInput
         v-model="config.MEDIA_MODE"

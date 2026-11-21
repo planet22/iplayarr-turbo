@@ -561,6 +561,26 @@ describe('DownloadFacade', () => {
             );
         });
 
+        it('puts manual and subscription movies in MOVIE_COMPLETE_DIR when set, but never TV or an *arr grab', async () => {
+            mockConfig({ ARR_COMPLETE_DIR: '/arr-complete', MOVIE_COMPLETE_DIR: '/movies' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['movie.mkv']);
+
+            await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Some.Movie', type: VideoType.MOVIE, source: QueueEntrySource.MANUAL });
+
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'movie.mkv'), path.join('/movies', 'Some.Movie-BBCiPlayarrTurbo.mkv'));
+        });
+
+        it('leaves a manual TV download and an NZB movie out of MOVIE_COMPLETE_DIR', async () => {
+            mockConfig({ ARR_COMPLETE_DIR: '/arr-complete', MOVIE_COMPLETE_DIR: '/movies' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Show.S01E01', type: VideoType.TV, source: QueueEntrySource.MANUAL });
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv'));
+
+            (fs.promises.copyFile as jest.Mock).mockClear();
+            await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Some.Movie', type: VideoType.MOVIE, source: QueueEntrySource.NZB });
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), path.join('/arr-complete', 'Some.Movie-BBCiPlayarrTurbo.mkv'));
+        });
+
         it('leaves manually-triggered (and subscription) TV downloads in COMPLETE_DIR even when ARR_COMPLETE_DIR is set', async () => {
             mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);

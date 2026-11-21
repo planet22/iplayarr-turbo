@@ -15,6 +15,7 @@ const CHANGE = {
     EXTRA_VIDEO_QUALITIES: ['sd,hd', 'sd'],
     EXTRA_VERSIONS: ['audio-described', 'signed'],
     AIRDATE_NUMBERING: ['true', 'false'], // clears the episode and search caches
+    SPECIALS_AS_MOVIES: ['false', 'true'],
     RELEASE_LANGUAGE: ['english', 'none'],
     SEARCH_MATCH_ALL_WORDS: ['false', 'true'],
     MANUAL_NATIVE_SEARCH: ['true', 'false', 'inherit'],
@@ -124,8 +125,6 @@ const OTHER = {
     DOWNLOAD_DIR: 'directory test + SABnzbd get_config',
     COMPLETE_DIR: 'directory test + SABnzbd get_config',
     ARR_COMPLETE_DIR: 'directory test + SABnzbd get_config',
-    MOVIE_COMPLETE_DIR: 'directory test',
-    SPECIALS_AS_MOVIES: 'true/false validation',
     TV_FILENAME_TEMPLATE: 'template test + release names',
     MOVIE_FILENAME_TEMPLATE: 'template test + release names',
     RADIO_FILENAME_TEMPLATE: 'a template that only names the next radio download, which writes into the Radio Directory (this suite will not do that); the validator and radio download service tests cover it',
@@ -183,7 +182,7 @@ const NO_EFFECT = {
 
 // Effects checked after the change by the media-library test further down.
 const IN_LIBRARY_TEST = ['LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON', 'MEDIA_MODE'];
-const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES'];
+const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR', 'MOVIE_COMPLETE_DIR', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Shows for the slow checks (WRITE_NFO_CAST, AIRDATE_NUMBERING) live in smoke-shows.json so they can be changed without touching code.
@@ -620,6 +619,20 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const differ = a.filter((t) => !b.includes(t)).length;
             return differ ? { what: 'switching the numbering changes release names', pass: true } : 'every release name is the same either way, so the shows searched are not renumbered (Skyhook may not know them)';
         },
+        // A one-off special with no episode number (a series 0 / episode 0 search result) is a movie with the setting on, TV with it off.
+        SPECIALS_AS_MOVIES: async ({ cur, next }) => {
+            const found = (await http('/json-api/search?q=doctor%20who', { timeout: 90000 })).json;
+            const special = (Array.isArray(found) ? found : []).find((r) => r.type === 'TV' && r.series === 0 && r.episode === 0);
+            if (!special) return 'no unnumbered special found in the search results to classify';
+            const kind = async () => (await http(`/json-api/release-preview?pid=${special.pid}`, { timeout: 90000 })).json?.type;
+            const a = await kind();
+            await put({ SPECIALS_AS_MOVIES: cur });
+            const b = await kind();
+            await put({ SPECIALS_AS_MOVIES: next });
+            const on = next === 'true' ? a : b;
+            const off = next === 'true' ? b : a;
+            return { what: 'the setting files a numberless special as MOVIE when on and TV when off', pass: on === 'MOVIE' && off === 'TV', detail: `on=${on} off=${off}` };
+        },
         // The test button with no address typed uses the saved one: an unreachable .invalid host must be reported as such.
         STRM_WATCHDOG_WEBHOOK_URL: async () => {
             const r = await http('/json-api/watchdog/test-webhook', { method: 'POST', body: {}, timeout: 30000 });
@@ -763,8 +776,8 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 3. Directories: must exist, and SABnzbd's get_config (what Sonarr/Radarr read) reports them
-        if (wants('DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'directories')) {
-        for (const key of ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR']) {
+        if (wants('DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'MOVIE_COMPLETE_DIR', 'directories')) {
+        for (const key of ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'MOVIE_COMPLETE_DIR']) {
             touched.add(key);
             const bad = await put({ [key]: '/smoke-temp-does-not-exist' });
             ok(`${key} missing directory rejected`, rejected(bad, key), `HTTP ${bad.status}`);
@@ -773,8 +786,19 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             else rec(W, `${key} existing directory accepted`, 'SKIP', 'not set (optional)');
         }
         const dirsNow = await get();
-        ok('directories unchanged after the rejected saves', ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR'].every((k) => effective(dirsNow, k) === effective(before, k)));
+        ok('directories unchanged after the rejected saves', ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'MOVIE_COMPLETE_DIR'].every((k) => effective(dirsNow, k) === effective(before, k)));
         const otherDir = (...skip) => [before.DOWNLOAD_DIR, before.COMPLETE_DIR, before.ARR_COMPLETE_DIR].find((d) => d && !skip.includes(d));
+        // A movie goes to the Movie Directory (debug File naming reports the folder it would be saved in), a TV episode does not.
+        {
+            const altMovie = otherDir(effective(before, 'MOVIE_COMPLETE_DIR'));
+            const film = ((await http('/json-api/search?q=last%20christmas', { timeout: 90000 })).json || []).find((r) => r.type === 'MOVIE');
+            if (altMovie && film) {
+                await put({ MOVIE_COMPLETE_DIR: altMovie });
+                const dir = (await http(`/json-api/streams/debug/${film.pid}/naming`, { timeout: 90000 })).json?.directory;
+                ok('MOVIE_COMPLETE_DIR takes effect: a movie is saved under it', typeof dir === 'string' && dir.startsWith(altMovie), String(dir));
+                await put({ MOVIE_COMPLETE_DIR: effective(before, 'MOVIE_COMPLETE_DIR') });
+            } else rec(W, 'MOVIE_COMPLETE_DIR effect', 'SKIP', !film ? 'no movie found in the search results' : 'no second existing directory to point it at');
+        }
         {
             const alt = otherDir(effective(before, 'DOWNLOAD_DIR'));
             if (alt) { await put({ DOWNLOAD_DIR: alt }); const m = await sabMisc(); ok('DOWNLOAD_DIR takes effect: SABnzbd get_config reports the new download dir', m.download_dir === alt, JSON.stringify(m)); await put({ DOWNLOAD_DIR: effective(before, 'DOWNLOAD_DIR') }); }
