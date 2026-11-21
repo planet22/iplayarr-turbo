@@ -1,5 +1,5 @@
 <template>
-    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
+    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '', fullWidth ? 'fullWidth' : '']">
         <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div class="inputBox">
             <div class="fieldRow">
@@ -129,6 +129,13 @@ const props = defineProps({
         default: false,
     },
     disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // A box that fills its container (e.g. a popup), the label beside it, instead of the settings layout of a wide label
+    // column and a box capped at 650px.
+    fullWidth: {
         type: Boolean,
         required: false,
         default: false,
@@ -393,6 +400,25 @@ const copyValue = async () => {
         .tooltip,
         .error {
             font-size: @font-size-sm;
+        }
+    }
+}
+
+.form-group.fullWidth {
+    max-width: none;
+    width: 100%;
+
+    // The label stays beside the box (the box lines up with it), with a narrower label column so the box gets the width.
+    label {
+        flex: 0 0 90px;
+        margin-right: @space-3;
+    }
+
+    // Phones: the label goes above, as everywhere else.
+    @media (max-width: @mobile-breakpoint) {
+        label {
+            flex: none;
+            margin-right: 0;
         }
     }
 }

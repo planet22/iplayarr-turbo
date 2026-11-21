@@ -146,7 +146,8 @@ class DownloadFacade {
                             queueItem.type,
                             queueItem.source,
                             completeDir,
-                            arrCompleteDir
+                            arrCompleteDir,
+                            (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined
                         );
                         // Replacing a link that lives in a Sonarr/Radarr library: the file goes beside it under its name.
                         const arrStrm = extension !== 'strm' ? queueItem.arrStrm : undefined;

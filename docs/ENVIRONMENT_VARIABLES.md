@@ -16,10 +16,13 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | No | Extra CLI params passed to `get_iplayer` downloads. |
 | `VIDEO_QUALITY` | `fhd` | No | Max requested video quality. |
 | `OUTPUT_FORMAT` | `mp4` | No | `mp4` or `mkv`. |
+| `DOWNLOAD_CHAPTERS` | `true` | No | `true` or `false`. Intro/Recap chapters in native downloads. |
 | `DOWNLOAD_SUBTITLES` | `sidecar` | No | `sidecar`, `embed`, `both` or `off`. |
 | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | No | Comma-separated extra qualities offered as additional search results. |
 | `EXTRA_VERSIONS` | _(empty)_ | No | Comma-separated programme versions (`audio-described`, `signed`) listed as separate tagged releases. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed). |
 | `RELEASE_LANGUAGE` | `english` | No | Language tag added to release names (for Sonarr/Radarr's parser). |
+| `MOVIE_COMPLETE_DIR` | _(unset)_ | No | Folder for movies and one-off specials queued from the UI or a subscription (blank: `COMPLETE_DIR`). |
+| `SPECIALS_AS_MOVIES` | `true` | No | File specials with no episode number as movies, named `Title (Year)`. |
 | `AIRDATE_NUMBERING` | `false` | No | Number episodes by UK air date instead of iPlayer's numbers. |
 | `DOWNLOAD_ASK_VERSION` | `true` | No | Ask which version (audio described / signed) to download or subscribe to. |
 | `DOWNLOAD_DEFAULT_VERSION` | _(standard)_ | No | Version used when not asking: empty, `audio-described` or `signed`. |
@@ -99,6 +102,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `LIVE_TV_GUIDE_CATEGORIES` | `true` | No | Tag Live TV guide programmes with BBC categories (Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
 | `LIVE_TV_GUIDE_FLAGS` | `true` | No | Tag Live TV guide programmes as live / new / repeat. |
 | `LIVE_TV_GUIDE_HD` | `true` | No | Mark Live TV guide programmes as HD. |
+| `LIVE_TV_FROM_START` | `false` | No | Add a "(from start)" entry per BBC channel to the Live TV playlist, starting the programme on air at its beginning (needs Live 1080p). See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | No | Comma-separated Jellyfin app ids (from the Apps page) asked to refresh their guide when the Live TV channel list changes. Normally set by ticking servers in Settings. |
 | `STRM_WATCHDOG_ENABLED` | `true` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
 | `STRM_WATCHDOG_SOURCES` | `history,radio` | No | Comma-separated: `subscribed`, `history`, `radio`, `app:<id>`. `radio` only does anything while BBC Sounds is on. |

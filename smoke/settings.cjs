@@ -15,6 +15,7 @@ const CHANGE = {
     EXTRA_VIDEO_QUALITIES: ['sd,hd', 'sd'],
     EXTRA_VERSIONS: ['audio-described', 'signed'],
     AIRDATE_NUMBERING: ['true', 'false'], // clears the episode and search caches
+    SPECIALS_AS_MOVIES: ['false', 'true'],
     RELEASE_LANGUAGE: ['english', 'none'],
     SEARCH_MATCH_ALL_WORDS: ['false', 'true'],
     MANUAL_NATIVE_SEARCH: ['true', 'false', 'inherit'],
@@ -42,6 +43,7 @@ const CHANGE = {
     ARCHIVE_ENABLED: ['true', 'false'],
     OUTPUT_FORMAT: ['mkv', 'mp4'],
     DOWNLOAD_SUBTITLES: ['embed', 'sidecar'],
+    DOWNLOAD_CHAPTERS: ['false', 'true'], // effect: see NO_EFFECT (a finished native download carries the chapters)
     THUMBNAIL_CACHE_DIR: ['/smoke-temp-thumbs'],
     THUMBNAIL_RETENTION_DAYS: ['7', '30'],
     MEDIA_MODE: ['download', 'strm'],
@@ -76,6 +78,7 @@ const CHANGE = {
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
     LIVE_TV_GUIDE_FLAGS: ['false', 'true'],
     LIVE_TV_GUIDE_HD: ['false', 'true'],
+    LIVE_TV_FROM_START: ['true', 'false'],
     LIVE_TV_JELLYFIN_APPS: ['smoke-temp-none'],
     STRM_WATCHDOG_ENABLED: ['true', 'false'],
     STRM_WATCHDOG_SOURCES: ['subscribed', 'history'],
@@ -123,6 +126,7 @@ const OTHER = {
     DOWNLOAD_DIR: 'directory test + SABnzbd get_config',
     COMPLETE_DIR: 'directory test + SABnzbd get_config',
     ARR_COMPLETE_DIR: 'directory test + SABnzbd get_config',
+    MOVIE_COMPLETE_DIR: 'directory test: missing refused, existing accepted, and a movie is filed under it (debug File naming)',
     TV_FILENAME_TEMPLATE: 'template test + release names',
     MOVIE_FILENAME_TEMPLATE: 'template test + release names',
     RADIO_FILENAME_TEMPLATE: 'a template that only names the next radio download, which writes into the Radio Directory (this suite will not do that); the validator and radio download service tests cover it',
@@ -147,6 +151,7 @@ const NO_EFFECT = {
     RADIO_ATOZ_HIDE_EMPTY: 'turning it on starts a request per show (thousands) once Radio A to Z is on; the radio A to Z checks use their own run, so no flip here',
     RADIO_ATOZ: 'turning it on starts a crawl of the whole BBC Sounds show list (about 120 requests); the radio A to Z checks use their own run, so no flip here',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
+    DOWNLOAD_CHAPTERS: 'decides whether a finished native download carries Intro/Recap chapters; this suite cancels its downloads, so the download tests cover it',
     DOWNLOAD_SUBTITLES: 'decides what a finished download keeps (a loose .srt, an embedded track, both or none); this suite cancels its downloads, so the real-download matrix and the download tests cover it, and section 7b checks the four values and the refusal',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
@@ -179,7 +184,7 @@ const NO_EFFECT = {
 
 // Effects checked after the change by the media-library test further down.
 const IN_LIBRARY_TEST = ['LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON', 'MEDIA_MODE'];
-const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES'];
+const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR', 'MOVIE_COMPLETE_DIR', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Shows for the slow checks (WRITE_NFO_CAST, AIRDATE_NUMBERING) live in smoke-shows.json so they can be changed without touching code.
@@ -224,7 +229,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     // --filter: a section runs only when the filter matches one of its labels (its setting keys or a short name for it), so a
     // filtered run does just that work instead of the whole sweep with the other results hidden. No filter: everything runs.
     const wants = (...labels) => !ctx.want || labels.flat().some((label) => ctx.want(label));
-    const LIVE_TV_KEYS = ['LIVE_TV_ENABLED', 'LIVE_TV_LOGO_SHAPE', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_EPG_OFFSET', 'STREAM_BASE_URL', 'STREAM_LIVE_DASH_1080'];
+    const LIVE_TV_KEYS = ['LIVE_TV_ENABLED', 'LIVE_TV_LOGO_SHAPE', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_FROM_START', 'LIVE_TV_EPG_OFFSET', 'STREAM_BASE_URL', 'STREAM_LIVE_DASH_1080'];
     const profilesQ = Object.fromEntries(((await http('/json-api/config/qualityProfiles')).json || []).map((p) => [p.id, p.quality]));
     let termIx = 0;
     const freshTerm = () => TERMS[termIx++ % TERMS.length];
@@ -491,6 +496,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         LIVE_TV_GUIDE_CATEGORIES: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} category tags`, (xml) => ({ pass: /<category/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_FLAGS: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} new/live/repeat flags`, (xml) => ({ pass: /<new\/>|<previously-shown\/>|<live\/>/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_HD: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'marks' : 'does not mark'} programmes HD`, (xml) => ({ pass: /<quality>HDTV/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
+        // On adds a second "(from start)" entry per channel to the playlist; off leaves only the normal ones.
+        LIVE_TV_FROM_START: async ({ next }) => {
+            if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
+            const extra = (await playlist()).text.split(String.fromCharCode(10)).filter((l) => l.includes('&from=start'));
+            return { what: `playlist ${next === 'true' ? 'has' : 'has no'} from-start entries`, pass: (extra.length > 0) === (next === 'true'), detail: `${extra.length} from-start entries` };
+        },
         // Off adds &lq=720 to the plain TV channel URLs, so Jellyfin (which caches its probe per URL) probes them again; on leaves them as they were.
         STREAM_LIVE_DASH_1080: async ({ next }) => {
             if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
@@ -609,6 +620,20 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             if (unnumbered.length) return { what: 'TVDB shows are renumbered, not left at S00E00', pass: false, detail: unnumbered.slice(0, 3).join(' | ') };
             const differ = a.filter((t) => !b.includes(t)).length;
             return differ ? { what: 'switching the numbering changes release names', pass: true } : 'every release name is the same either way, so the shows searched are not renumbered (Skyhook may not know them)';
+        },
+        // A one-off special with no episode number (a series 0 / episode 0 search result) is a movie with the setting on, TV with it off.
+        SPECIALS_AS_MOVIES: async ({ cur, next }) => {
+            const found = (await http('/json-api/search?q=doctor%20who', { timeout: 90000 })).json;
+            const special = (Array.isArray(found) ? found : []).find((r) => r.type === 'TV' && r.series === 0 && r.episode === 0);
+            if (!special) return 'no unnumbered special found in the search results to classify';
+            const kind = async () => (await http(`/json-api/release-preview?pid=${special.pid}`, { timeout: 90000 })).json?.type;
+            const a = await kind();
+            await put({ SPECIALS_AS_MOVIES: cur });
+            const b = await kind();
+            await put({ SPECIALS_AS_MOVIES: next });
+            const on = next === 'true' ? a : b;
+            const off = next === 'true' ? b : a;
+            return { what: 'the setting files a numberless special as MOVIE when on and TV when off', pass: on === 'MOVIE' && off === 'TV', detail: `on=${on} off=${off}` };
         },
         // The test button with no address typed uses the saved one: an unreachable .invalid host must be reported as such.
         STRM_WATCHDOG_WEBHOOK_URL: async () => {
@@ -753,8 +778,8 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 3. Directories: must exist, and SABnzbd's get_config (what Sonarr/Radarr read) reports them
-        if (wants('DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'directories')) {
-        for (const key of ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR']) {
+        if (wants('DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'MOVIE_COMPLETE_DIR', 'directories')) {
+        for (const key of ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'MOVIE_COMPLETE_DIR']) {
             touched.add(key);
             const bad = await put({ [key]: '/smoke-temp-does-not-exist' });
             ok(`${key} missing directory rejected`, rejected(bad, key), `HTTP ${bad.status}`);
@@ -763,8 +788,19 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             else rec(W, `${key} existing directory accepted`, 'SKIP', 'not set (optional)');
         }
         const dirsNow = await get();
-        ok('directories unchanged after the rejected saves', ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR'].every((k) => effective(dirsNow, k) === effective(before, k)));
+        ok('directories unchanged after the rejected saves', ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'MOVIE_COMPLETE_DIR'].every((k) => effective(dirsNow, k) === effective(before, k)));
         const otherDir = (...skip) => [before.DOWNLOAD_DIR, before.COMPLETE_DIR, before.ARR_COMPLETE_DIR].find((d) => d && !skip.includes(d));
+        // A movie goes to the Movie Directory (debug File naming reports the folder it would be saved in), a TV episode does not.
+        {
+            const altMovie = otherDir(effective(before, 'MOVIE_COMPLETE_DIR'));
+            const film = ((await http('/json-api/search?q=last%20christmas', { timeout: 90000 })).json || []).find((r) => r.type === 'MOVIE');
+            if (altMovie && film) {
+                await put({ MOVIE_COMPLETE_DIR: altMovie });
+                const dir = (await http(`/json-api/streams/debug/${film.pid}/naming`, { timeout: 90000 })).json?.directory;
+                ok('MOVIE_COMPLETE_DIR takes effect: a movie is saved under it', typeof dir === 'string' && dir.startsWith(altMovie), String(dir));
+                await put({ MOVIE_COMPLETE_DIR: effective(before, 'MOVIE_COMPLETE_DIR') });
+            } else rec(W, 'MOVIE_COMPLETE_DIR effect', 'SKIP', !film ? 'no movie found in the search results' : 'no second existing directory to point it at');
+        }
         {
             const alt = otherDir(effective(before, 'DOWNLOAD_DIR'));
             if (alt) { await put({ DOWNLOAD_DIR: alt }); const m = await sabMisc(); ok('DOWNLOAD_DIR takes effect: SABnzbd get_config reports the new download dir', m.download_dir === alt, JSON.stringify(m)); await put({ DOWNLOAD_DIR: effective(before, 'DOWNLOAD_DIR') }); }
@@ -1052,7 +1088,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const roots = [hostPath(effective(before, 'COMPLETE_DIR')), hostPath(effective(before, 'ARR_COMPLETE_DIR'))].filter((r) => r && fs.existsSync(r));
         if (!roots.length) return rec(W, `${L.join(', ')} effects on the library`, 'SKIP', 'COMPLETE_DIR is not under SMOKE_CONTAINER_ROOT, or SMOKE_MEDIA_ROOT is not set / mounted');
         const prog = (await http(`/json-api/browse/programme/${ctx.pid}`)).json;
-        const eps = (prog?.seasons || []).flatMap((s) => s.episodes || []).filter((e) => e.pid);
+        // Numbered episodes first: an extra with no number (episode 0) is filed as a movie, which gets no episode picture of its own
+        // (downloadFacade writes -thumb.jpg for TV only), so it cannot show the WRITE_ADDITIONAL_IMAGES episode picture.
+        const eps = (prog?.seasons || []).flatMap((s) => s.episodes || []).filter((e) => e.pid).sort((a, b) => Number(Number(b.episode) > 0) - Number(Number(a.episode) > 0));
         if (!eps.length) return rec(W, `${L.join(', ')} effects on the library`, 'SKIP', 'no episode to download');
         const walk = () => {
             const out = new Set();
@@ -1088,7 +1126,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 while (!roots.some((r) => norm(r) === norm(d))) { try { fs.rmdirSync(d); } catch { break; } d = path.dirname(d); }
             }
         };
-        const pushState = async (state) => { for (const [k, v] of Object.entries(state)) { touched.add(k); const r = await put({ [k]: v }); if (r.status !== 200) return `${k}=${v}: HTTP ${r.status} ${r.text.slice(0, 100)}`; } };
+        const pushState = async (state) => { for (const [k, v] of Object.entries(state)) { touched.add(k); const t0 = Date.now(); const r = await put({ [k]: v }); if (r.status !== 200) return `${k}=${v}: HTTP ${r.status} ${r.error || ''} ${r.text.slice(0, 100)} (after ${Date.now() - t0}ms)`; } };
 
         // One strm download under a given state; returns what landed in the library.
         const download = async (ep, query, sidecars = false) => {
@@ -1162,12 +1200,16 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             // .nfo extras and pictures: each is compared with a download made with it off. When the BBC has nothing to add
             // for this episode the check says so (a skip with the reason) rather than passing or failing.
             const base = { LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'all', STREAM_BASE_URL: SMOKE_BASE, MEDIA_MODE: 'strm', WRITE_NFO_CAST: 'false', WRITE_NFO_EPISODE_TITLES: 'false', WRITE_NFO_RUNTIME_FALLBACK: 'false', WRITE_ADDITIONAL_IMAGES: 'none' };
-            const nfoOf = (r) => { const f = (r.added || []).find((x) => x.endsWith('.nfo')); return f ? fs.readFileSync(f, 'utf8') : ''; };
+            const nfoOf = (r) => { // the episode's own .nfo (named like the .strm), not the show's tvshow.nfo that a first download of a show also adds
+                const own = r.strm ? r.strm.replace(/\.strm$/i, '.nfo') : '';
+                const f = (own && (r.added || []).find((x) => x === own)) || (r.added || []).find((x) => x.endsWith('.nfo') && path.basename(x).toLowerCase() !== 'tvshow.nfo');
+                return f ? fs.readFileSync(f, 'utf8') : '';
+            };
             const pics = (r) => (r.added || []).filter((x) => /\.(jpg|png)$/i.test(x));
             const run = async (name, over, cand = ep) => {
                 const e = await pushState({ ...base, ...over });
                 if (e) { rec(W, name, 'FAIL', e); return null; }
-                const r = await download(cand, '&media=strm');
+                const r = await download(cand, '&media=strm', true); // the .nfo is written after the history entry gets its path, so wait for it
                 if (r.error) { rec(W, name, 'FAIL', r.error); return null; }
                 return r;
             };
@@ -1179,10 +1221,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                 dropNew(off.added); await cleanHist(ep.pid);
 
                 // Cast depends on the BBC's data: try this episode, then up to four others, until one has cast.
-                let castFound = false, castTried = 0;
+                let castFound = false, castTried = 0; const castSeen = [];
                 // Episodes of shows known to list actors first (smoke-shows.json), then this show's own as before.
-                const listed = [];
-                for (const term of (Array.isArray(SHOWS.nfoCast) ? SHOWS.nfoCast : []).slice(0, 3)) {
+                const listed = (Array.isArray(SHOWS.nfoCastPids) ? SHOWS.nfoCastPids : []).slice(0, 2).map((pid) => ({ pid })); // pinned, known to list actors
+                for (const term of listed.length ? [] : (Array.isArray(SHOWS.nfoCast) ? SHOWS.nfoCast : []).slice(0, 3)) {
                     const xml = (await http(`/api?t=tvsearch&q=${encodeURIComponent(term)}&apikey=${encodeURIComponent(before.API_KEY)}`, { timeout: 90000 })).text || '';
                     const pids = [...xml.matchAll(/<guid>[^<]*episodes\/([a-z0-9]+)/g)].map((m) => m[1]);
                     if (pids.length) listed.push({ pid: pids[Math.min(2, pids.length - 1)] }); // not the newest, which may be unreleased
@@ -1191,12 +1233,14 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                     const cast = await run(`WRITE_NFO_CAST=true download (${cand.pid})`, { WRITE_NFO_CAST: 'true' }, cand);
                     if (!cast) continue;
                     castTried++;
-                    castFound = /<actor>/.test(nfoOf(cast));
+                    const nfoText = nfoOf(cast);
+                    castFound = /<actor>/.test(nfoText);
+                    castSeen.push(`${cand.pid}:${nfoText ? nfoText.length + ' bytes' : 'no .nfo'}`);
                     dropNew(cast.added); await cleanHist(cand.pid);
                     if (castFound) break;
                 }
                 if (castFound) ok('WRITE_NFO_CAST=true takes effect: the .nfo lists actors', true);
-                else rec(W, 'WRITE_NFO_CAST=true takes effect', 'SKIP', `the BBC lists no cast for the ${castTried} episode(s) of this show tried; run again with another show first in Discover`);
+                else rec(W, 'WRITE_NFO_CAST=true takes effect', 'SKIP', `no <actor> in the .nfo of the ${castTried} episode(s) tried (${castSeen.join(', ')}); if the .nfo is there, the BBC lists no cast or the instance cannot fetch it; run again with another show first in Discover`);
                 const runtime = await run('WRITE_NFO_RUNTIME_FALLBACK=true download', { WRITE_NFO_RUNTIME_FALLBACK: 'true' });
                 if (runtime) {
                     if (/<runtime>/.test(nfoOff)) rec(W, 'WRITE_NFO_RUNTIME_FALLBACK=true takes effect', 'SKIP', 'this episode already has a length, so the fallback is not needed');
@@ -1222,7 +1266,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
                     // The pictures are written just after the download is marked complete, so wait for the episode picture (it can take over 20 s).
                     const thumb = missing.strm ? missing.strm.replace(/.strm$/i, '-thumb.jpg') : '';
                     for (let i = 0; i < 180 && thumb && !fs.existsSync(thumb); i++) await sleep(500);
-                    warn('WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', !!thumb && fs.existsSync(thumb), 'no -thumb.jpg appeared beside the .strm within 90 s (WARN, not FAIL: the BBC picture is fetched through the VPN after the download is marked complete and does not always arrive; other downloads in the same run did get theirs)');
+                    const filedAs = (await http(`/json-api/release-preview?pid=${ep.pid}`, { timeout: 60000 })).json?.type;
+                    if (filedAs && filedAs !== 'TV') rec(W, 'WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', 'SKIP', `this programme is filed as a ${filedAs.toLowerCase()}, and only a TV episode gets its own picture (the show pictures are written instead)`);
+                    else warn('WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', !!thumb && fs.existsSync(thumb), 'no -thumb.jpg appeared beside the .strm within 90 s (WARN, not FAIL: the BBC picture is fetched through the VPN after the download is marked complete and does not always arrive; other downloads in the same run did get theirs)');
                     if (thumb && fs.existsSync(thumb)) { missing.added = [...(missing.added || []), thumb]; tracked.add(thumb); }
                     // overwrite: download again with the pictures still there; their files are replaced
                     const stamps = new Map(pics(missing).map((f) => [f, fs.statSync(f).mtimeMs]));

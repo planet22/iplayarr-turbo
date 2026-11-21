@@ -15,6 +15,7 @@ import soundsDownloadService, {
     ffmpegArgs,
     fileParts,
     parseMediaPlaylist,
+    radioTemplateVariables,
     SoundsDownloadError,
     tagsFor,
 } from '../../../src/service/sounds/soundsDownloadService';
@@ -74,6 +75,21 @@ async function settle(id: string): Promise<any> {
     }
     throw new Error('download did not finish');
 }
+
+describe('radioTemplateVariables', () => {
+    it('gives each template variable for the episode, made safe for a file name', () => {
+        expect(radioTemplateVariables(episode({ seriesNumber: 4, network: 'Radio 4', showTitle: 'Show' }))).toEqual({
+            show: 'Show',
+            date: '2026-11-06',
+            year: '2026',
+            title: 'The Archers - 06112026',
+            series: '4',
+            network: 'Radio 4',
+            pid: 'p0phlyjk',
+        });
+        expect(radioTemplateVariables(episode()).series).toBe('');
+    });
+});
 
 describe('naming and tags', () => {
     it('labels an episode by its own title or date-like subtitle, not the show name twice', () => {
@@ -286,6 +302,14 @@ describe('soundsDownloadService', () => {
         const failed = await settle('p0phlyjk');
         expect(failed.state).toBe('failed');
         expect(failed.error).toContain('Stream Base URL');
+    });
+
+    it('saves under a name typed in the dialog instead of the template\'s, keeping it on a retry', async () => {
+        const queued = await soundsDownloadService.enqueue(episode(), 'm4a', false, 'My Own Name.mp3');
+        expect(queued.nameOverride).toBe('My Own Name.mp3');
+        const done = await settle('p0phlyjk');
+        expect(done.file).toBe(path.join('The Archers', 'My Own Name.mp3'));
+        expect(fs.existsSync(path.join(dir, done.file))).toBe(true);
     });
 
     it('takes the mode from the Radio Media Mode setting unless the download chooses one', async () => {

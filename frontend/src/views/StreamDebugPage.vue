@@ -42,7 +42,11 @@
                     </button>
                 </div>
                 <div class="facts">
-                    <h2>{{ info.title || pid }}<span v-if="info.subtitle" class="subtle"> · {{ info.subtitle }}</span></h2>
+                    <h2>{{ info.title || pid }}<span v-if="info.subtitle" class="subtle"> · {{ info.subtitle }}</span>
+                        <button v-if="containerPage" type="button" class="clickable containerLink" :title="`This is a ${info.type}, not an episode, so it has nothing to play. Open its programme page to pick an episode`" :aria-label="`Open the programme page for this ${info.type}`" @click="containerPage()">
+                            <font-awesome-icon :icon="['fas', 'list']" />
+                        </button>
+                    </h2>
                     <dl>
                         <dt>{{ info.live ? 'Channel id' : 'Pid' }}</dt><dd><code>{{ info.pid }}</code>
                             <ul v-if="pidLinks.length" class="plain pidLinks">
@@ -54,6 +58,9 @@
                         <template v-if="info.live">
                             <dt>Stream service id</dt><dd><code>{{ info.live.vpid || 'none (not served by BBC\'s stream service)' }}</code></dd>
                             <dt>Switched on</dt><dd>{{ info.live.enabled === undefined ? 'unknown' : info.live.enabled ? 'yes' : 'no' }}</dd>
+                            <template v-if="info.live.fromStart">
+                                <dt>Watch from start</dt><dd>{{ fromStartText(info.live.fromStart) }}</dd>
+                            </template>
                             <template v-if="info.live.custom">
                                 <dt>Stream type</dt><dd>{{ info.live.custom.type }}<template v-if="info.live.custom.host"> · {{ info.live.custom.host }}</template><template v-if="info.live.custom.headers"> · sends custom headers</template></dd>
                                 <template v-if="info.live.custom.lastTest"><dt>Last test</dt><dd>{{ info.live.custom.lastTest.ok ? 'worked' : 'failed' }} · {{ formatWhen(info.live.custom.lastTest.at) }}<template v-if="info.live.custom.lastTest.message"> · {{ info.live.custom.lastTest.message }}</template></dd></template>
@@ -63,6 +70,7 @@
                         <template v-if="info.parent"><dt>Part of</dt><dd>{{ info.parent.title }} (<code>{{ info.parent.pid }}</code>)</dd></template>
                         <template v-if="info.firstBroadcast"><dt>First broadcast</dt><dd>{{ info.firstBroadcast }}</dd></template>
                         <template v-if="expiry"><dt>{{ isRadio ? 'Leaves BBC Sounds' : 'Leaves iPlayer' }}</dt><dd>{{ expiry.when }}</dd><dt>Days left</dt><dd>{{ expiry.calc }}</dd></template>
+                        <template v-if="info.ibl?.status"><dt>iPlayer status</dt><dd>{{ info.ibl.status }}<template v-if="info.ibl.status === 'available'"> (on demand; the guide marks it)</template></dd></template>
                         <template v-if="info.imagePid"><dt>Image</dt><dd><code>{{ info.imagePid }}</code></dd></template>
                         <template v-if="info.cache.vpid"><dt>Remembered vpid</dt><dd><code>{{ info.cache.vpid }}</code></dd></template>
                         <template v-if="info.cache.hqProbe"><dt>Quality probe winner</dt><dd>{{ info.cache.hqProbe.mediaSet }}/{{ info.cache.hqProbe.version }}, connection {{ info.cache.hqProbe.index }}, {{ info.cache.hqProbe.height }}p</dd></template>
@@ -85,7 +93,7 @@
             </div>
 
             <template v-if="!info.live">
-            <TraceSection v-if="naming && !isRadio" id="dbg-naming" title="File naming" :info="help.naming">
+            <TraceSection v-if="naming" id="dbg-naming" title="File naming" :info="isRadio ? help.radioNaming : help.naming">
             <dl class="kv">
                 <dt>Settings</dt>
                 <dd>
@@ -97,10 +105,41 @@
                 <dt>Saved as (iPlayarr)<InfoTip text="The file name iPlayarr writes to disk when it downloads or saves this programme." /></dt>
                 <dd><code v-if="naming.fileName" style="overflow-wrap: anywhere">{{ naming.fileName }}</code><span v-else class="subtle">{{ naming.error || 'unknown' }}</span></dd>
                 <template v-if="naming.directory"><dt>{{ naming.arrDirectory ? 'Saved in (iPlayarr)' : 'Saved in (folder)' }}</dt><dd><code style="overflow-wrap: anywhere">{{ naming.directory }}</code></dd></template>
-                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
-                <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}</dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
+                <template v-if="naming.arrDirectory"><dt>Saved in (Sonarr/Radarr)<InfoTip text="Where it goes when Sonarr or Radarr queue it: ARR_COMPLETE_DIR (a movie or one-off special from the UI or a subscription goes to MOVIE_COMPLETE_DIR instead, when set)." /></dt><dd><code style="overflow-wrap: anywhere">{{ naming.arrDirectory }}</code></dd></template>
+                <template v-if="namingTemplate.value"><dt>{{ namingTemplate.label }}<InfoTip text="The release name template used for this programme, given its classification." /></dt><dd><code style="overflow-wrap: anywhere">{{ namingTemplate.value }}</code></dd></template>
+                <template v-if="!isRadio && otherTemplate.value"><dt>{{ otherTemplate.label }}<InfoTip text="Not used for this programme: shown so both templates can be checked." /></dt><dd><code class="subtle" style="overflow-wrap: anywhere">{{ otherTemplate.value }}</code></dd></template>
+                <template v-if="!isRadio && folderSettings.length">
+                    <template v-for="folder in folderSettings" :key="folder.key"><dt>{{ folder.label }}<InfoTip :text="folder.tip" /></dt><dd><code style="overflow-wrap: anywhere">{{ folder.value }}</code></dd></template>
+                </template>
+                <template v-if="naming.radio">
+                    <dt>Path under the audio folder<InfoTip text="Show folder (and Series folder if RADIO_FOLDER_STRUCTURE says so), then the file name." /></dt>
+                    <dd><code style="overflow-wrap: anywhere">{{ naming.relativePath }}</code></dd>
+                    <dt>Name from the template<InfoTip text="What the template gives. A name typed in the Download dialog replaces it for that one download." /></dt>
+                    <dd><code style="overflow-wrap: anywhere">{{ naming.radio.templateName }}</code></dd>
+                    <dt>Template variables<InfoTip text="What each {{variable}} is for this episode, after being made safe for a file name." /></dt>
+                    <dd>
+                        <div class="settingPills">
+                            <span v-for="(value, key) in naming.radio.variables" :key="key" class="pill grey" :title="`${key}: ${value}`">{{ key }}: {{ value || '–' }}</span>
+                        </div>
+                    </dd>
+                </template>
+                <template v-if="naming.variables && !naming.radio">
+                    <dt>Template variables<InfoTip text="What each {{variable}} of the release name template was for this programme (the same values a real download uses). A dash means empty." /></dt>
+                    <dd>
+                        <div class="settingPills">
+                            <span v-for="(value, key) in naming.variables" :key="key" class="pill grey" :title="`${key}: ${value}`">{{ key }}: {{ value || '–' }}</span>
+                        </div>
+                    </dd>
+                </template>
                 <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
+                <template v-if="naming.chapters"><dt>Skip chapters<InfoTip text="The Intro and Recap chapters a native download of this programme would carry, from the skip spans BBC lists (DOWNLOAD_CHAPTERS). Jellyfin shows them as Skip buttons." /></dt><dd><template v-if="naming.chapters.chapters.length"><div v-for="line in chapterLines(naming.chapters.chapters)" :key="line"><code>{{ line }}</code></div></template><span v-else class="subtle">{{ naming.chapters.note ?? 'none' }}</span></dd></template>
                 <template v-if="naming.numbering">
+                    <dt>Classified as<InfoTip text="Movie or TV decides the name template, the folder layout and which directory it is saved in (MOVIE_COMPLETE_DIR for movies)." /></dt>
+                    <dd class="classified" :class="naming.numbering.type === 'MOVIE' ? 'isMovie' : 'isTv'">
+                        <font-awesome-icon :icon="['fas', naming.numbering.type === 'MOVIE' ? 'film' : 'tv']" />
+                        <strong>{{ naming.numbering.type === 'MOVIE' ? 'Movie' : 'TV episode' }}</strong>
+                        <span class="subtle">{{ naming.numbering.filedAsMovie ? 'one-off special with no episode number (One-off Specials as Movies)' : naming.numbering.type === 'MOVIE' ? 'a movie, or no series and episode' : 'has a series and episode number' }}</span>
+                    </dd>
                     <dt>Numbering used</dt>
                     <dd>{{ naming.numbering.type }} · S{{ naming.numbering.series ?? '–' }}E{{ naming.numbering.episode ?? '–' }}<template v-if="naming.numbering.episodeTitle"> · {{ naming.numbering.episodeTitle }}</template><template v-if="naming.numbering.synonym"> · synonym: {{ naming.numbering.synonym }}</template><template v-if="naming.numbering.override"> · manual override S{{ naming.numbering.override.series }}E{{ naming.numbering.override.episode }}</template></dd>
                 </template>
@@ -152,6 +191,58 @@
                 </div>
             </template>
             <details v-if="hasContent(info.artwork)"><summary>iPlayer artwork (raw)</summary><pre>{{ json(info.artwork) }}</pre></details>
+            </TraceSection>
+            <TraceSection v-if="info.cast?.length" id="dbg-cast" title="Cast and crew from BBC" :info="help.cast">
+                <template #actions>
+                    <div class="castToggle" role="group" aria-label="Cast layout">
+                        <button type="button" :class="['clickable', { active: castView === 'table' }]" :aria-pressed="castView === 'table'" title="Show as a table" @click="setCastView('table')"><font-awesome-icon :icon="['fas', 'table']" /> Table</button>
+                        <button type="button" :class="['clickable', { active: castView === 'cards' }]" :aria-pressed="castView === 'cards'" title="Show as cards, grouped by role" @click="setCastView('cards')"><font-awesome-icon :icon="['fas', 'id-card']" /> Cards</button>
+                    </div>
+                </template>
+                <table v-if="castView === 'table'" class="dataTable">
+                    <thead><tr><th>Name</th><th>Role</th><th>Character</th></tr></thead>
+                    <tbody>
+                        <tr v-for="(member, index) in info.cast" :key="index">
+                            <td class="text">{{ member.name }}</td><td class="text">{{ member.role ?? '' }}</td><td class="text">{{ member.character_name ?? '' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <template v-else>
+                    <div v-for="group in castGroups" :key="group.role" class="castGroup">
+                        <h3>{{ group.role }} <span class="subtle">· {{ group.members.length }}</span></h3>
+                        <div class="castCards">
+                            <div v-for="(member, index) in group.members" :key="index" class="castCard">
+                                <span class="castInitials" aria-hidden="true">{{ initials(member.name) }}</span>
+                                <span class="castName">{{ member.name }}</span>
+                                <span v-if="member.character_name" class="castCharacter subtle">as {{ member.character_name }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </TraceSection>
+            <TraceSection v-if="info.broadcasts?.length" id="dbg-broadcasts" title="Broadcasts" :info="help.broadcasts">
+                <div class="sessionScroll shortRows">
+                    <table class="dataTable">
+                        <thead><tr><th>Start</th><th>Channel</th><th>Length</th><th>Repeat</th></tr></thead>
+                        <tbody>
+                            <tr v-for="(b, index) in info.broadcasts" :key="index">
+                                <td class="text">{{ formatWhen(b.start) }}</td><td class="text">{{ b.service ?? '' }}</td><td class="text">{{ b.durationSeconds ? formatMinSec(b.durationSeconds) : '' }}</td><td class="text">{{ b.repeat ? 'repeat' : 'first' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </TraceSection>
+            <TraceSection v-if="info.tracklist?.length" id="dbg-tracklist" title="Tracklist" :info="help.tracklist">
+                <div class="sessionScroll shortRows">
+                    <table class="dataTable">
+                        <thead><tr><th>At</th><th>Artist</th><th>Title</th></tr></thead>
+                        <tbody>
+                            <tr v-for="(track, index) in info.tracklist" :key="index">
+                                <td class="text">{{ track.offset !== undefined ? formatMinSec(track.offset) : '' }}</td><td class="text">{{ track.artist ?? '' }}</td><td class="text">{{ track.title }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </TraceSection>
 
             </template>
@@ -272,7 +363,7 @@
 
             <TraceSection id="dbg-versions" title="Versions" :info="help.versions">
             <table class="dataTable">
-                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th></tr></thead>
+                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th><th v-if="!isRadio">Plain pick</th></tr></thead>
                 <tbody>
                     <tr v-for="version in info.versions" :key="version.vpid">
                         <td class="text"><code>{{ version.vpid }}</code></td>
@@ -283,8 +374,9 @@
                         <td class="text">{{ version.availableUntil ? formatWhen(version.availableUntil) : '' }}</td>
                         <td v-if="!isRadio" class="text">{{ version.downloadable === undefined ? '' : version.downloadable ? 'allowed' : 'not allowed' }}</td>
                         <td class="text">{{ version.canonical ? 'yes' : '' }}</td>
+                        <td v-if="!isRadio" class="text">{{ version.selection ?? '' }}</td>
                     </tr>
-                    <tr v-if="!info.versions.length"><td :colspan="isRadio ? 4 : 8" class="empty">BBC lists no versions for this pid</td></tr>
+                    <tr v-if="!info.versions.length"><td :colspan="isRadio ? 4 : 9" class="empty">BBC lists no versions for this pid</td></tr>
                 </tbody>
             </table>
 
@@ -457,6 +549,7 @@ import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import TraceSection from '@/components/streaming/TraceSection.vue';
+import { chapterLines, chaptersSummary } from '@/lib/chapterText';
 import { copyReport, downloadReport } from '@/lib/copyReport';
 import { ipFetch } from '@/lib/ipFetch';
 import { useMediaProviders } from '@/lib/mediaProvider';
@@ -472,7 +565,7 @@ const route = useRoute();
 const router = useRouter();
 const mediaProviders = useMediaProviders();
 // Every section's id (for Expand all and Collapse all). Prefixed, so they stay apart from the stream trace page's.
-const SECTION_IDS = ['naming', 'metadata', 'artwork', 'cached', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs', 'versions', 'probe', 'play'].map((id) => `dbg-${id}`);
+const SECTION_IDS = ['naming', 'metadata', 'artwork', 'cast', 'broadcasts', 'tracklist', 'cached', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs', 'versions', 'probe', 'play'].map((id) => `dbg-${id}`);
 const pid = route.params.pid;
 // A BBC Sounds episode (?kind=radio) is read as audio: bitrates and codecs, no pictures.
 const isRadio = route.query.kind === 'radio';
@@ -594,12 +687,18 @@ const badgeItem = computed(() => {
     if (isRadio) return { kind: 'episode', radio: true, availableUntil: expiry.value ? new Date(expiry.value.end).toISOString() : undefined };
     return { kind: info.value?.type, uhd: !!original?.flags?.uhd, hdr: !!original?.flags?.hdr, versions: kinds, guidance: ibl.guidance, availableUntil: ibl.availableUntil };
 });
+// A brand or series (TV or radio) is not playable: this opens its programme page, where an episode can be picked.
+const containerPage = computed(() => {
+    if (info.value?.live || !['brand', 'series'].includes(info.value?.type)) return undefined;
+    return isRadio ? () => router.push({ path: `/browse/radio/${info.value.pid}` }) : () => router.push(`/browse/programme/${info.value.pid}`);
+});
 // The links under the pid: where else this programme can be looked at.
 const pidLinks = computed(() => {
     if (info.value?.live) return [];
     if (isRadio) {
         const showId = info.value?.metadata?.showId;
         return [
+            ...(!showId && containerPage.value ? [{ label: 'BBC Sounds page', go: containerPage.value }] : []),
             ...(showId ? [{ label: 'BBC Sounds page', go: () => router.push({ path: `/browse/radio/${showId}`, query: { episode: info.value.pid } }) }] : []),
             { label: 'Library debug', go: () => router.push(`/library-debug?q=${info.value.pid}&mode=radio`) },
             { label: 'Watchdog', go: () => router.push('/watchdog') },
@@ -626,6 +725,14 @@ const expiry = computed(() => {
 
 const json = (value) => JSON.stringify(value, null, 2);
 
+// One line for what "watch from start" would do for a live channel now (also used in the copied report).
+const fromStartText = (f) => {
+    if (!f.enabled) return 'off (Settings > Live Channels)';
+    if (!f.programme) return f.note || 'not available';
+    const mins = Math.round((f.secondsBack ?? 0) / 60);
+    return `${f.programme}, on air since ${formatWhen(f.programmeStart)}: runs ${mins} min behind live, starting at segment ${f.firstSegment}; BBC keeps ${Math.round((f.bufferSeconds ?? 0) / 60)} min${f.clamped ? ', so it cannot reach the start' : ''}${f.note ? `; ${f.note}` : ''}`;
+};
+
 // A plain-text report of this page for a bug report; copyReport removes keys, tokens, addresses and URL queries.
 const hiddenSettings = inject('hiddenSettings', null);
 const toolVersions = inject('toolVersions', null);
@@ -642,6 +749,8 @@ const copyPage = (download = false) => {
         ...(i.channel ? [`Channel: ${i.channel}`] : []),
         ...(i.firstBroadcast ? [`First broadcast: ${i.firstBroadcast}`] : []),
         ...(expiry.value ? [`Leaves iPlayer: ${expiry.value.when} (${expiry.value.calc})`] : []),
+        ...(i.ibl?.status ? [`iPlayer status: ${i.ibl.status}`] : []),
+        ...(i.live?.fromStart ? [`Watch from start: ${fromStartText(i.live.fromStart)}`] : []),
         ...(i.error ? [`Error: ${i.error}`] : []),
         '',
         'Settings:',
@@ -654,17 +763,23 @@ const copyPage = (download = false) => {
                   '',
                   'File naming:',
                   `  Saved as: ${naming.value.fileName ?? naming.value.error ?? 'unknown'}`,
+                  ...(naming.value.numbering ? [`  Classified as: ${naming.value.numbering.type === 'MOVIE' ? 'Movie' : 'TV episode'}${naming.value.numbering.filedAsMovie ? ' (one-off special filed as a movie)' : ''}`] : []),
+                  ...(naming.value.radio ? [`  Template: ${naming.value.radio.template}`, `  Path: ${naming.value.relativePath}`] : []),
                   ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
                   ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
                   ...(naming.value.nzbName ? [`  Release name (NZB): ${naming.value.nzbName}`] : []),
+                  ...(naming.value.chapters ? [`  Skip chapters: ${chaptersSummary(naming.value.chapters)}`, ...(naming.value.chapters.markers ?? []).map((m) => `  BBC skip span: ${m.type} ${m.start}s - ${m.end}s`)] : []),
               ]
             : []),
         '',
         'Metadata:',
         ...metadataRows.value.filter((row) => !Array.isArray(row[1])).map((row) => `  ${row[0]}: ${String(row[1]).slice(0, 300)}`),
+        ...(i.broadcasts?.length ? ['', 'Broadcasts:', ...i.broadcasts.slice(0, 20).map((b) => `  ${b.start} ${b.service ?? ''} ${b.repeat ? '(repeat)' : '(first)'}`)] : []),
+        ...(i.tracklist?.length ? ['', 'Tracklist:', ...i.tracklist.slice(0, 50).map((t) => `  ${t.artist ? `${t.artist} - ` : ''}${t.title}`)] : []),
+        ...(i.cast?.length ? ['', 'Cast and crew:', ...i.cast.map((m) => `  ${m.name}${m.role ? ` (${m.role})` : ''}${m.character_name ? ` as ${m.character_name}` : ''}`)] : []),
         '',
         'Versions:',
-        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}`),
+        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}${v.selection ? ` (plain pick: ${v.selection})` : ''}`),
         '',
         'Probe (BBC mediaselector, every version and route):',
         ...(result.value ? probeReportLines(result.value, connectionRows, answer) : ['  not run']),
@@ -738,9 +853,13 @@ const tiles = computed(() => {
 // What each part of the page is, in plain words, for the (i) buttons.
 const videoHelp = {
     namingSettings: 'The settings that change the file name, as they are now:\n• MEDIA_MODE: download (a real file) or strm (a link).\n• FOLDER_STRUCTURE: show and season folders, or one flat folder.\n• VIDEO_QUALITY: the quality tag in the release name.\n• RELEASE_LANGUAGE: adds an ENGLISH tag to the release name.\n• AIRDATE_NUMBERING: numbers episodes by air date using TVDB.\nThe template is shown on its own line.',
+    radioNaming: 'The audio file a download of this episode would be saved as, worked out by the same code a real audio download uses (and the suggested name in the Download dialog), from the settings in force now. Nothing is queued or written. The template and what each variable is for this episode are shown so a name can be traced.',
     naming: 'The file a download of this programme would be saved as, worked out by the same code a real download uses, from the settings in force now (the chips). Nothing is queued or written. Numbering shows what iPlayarr used and what TVDB (via Sonarr\'s Skyhook) says, by episode title and by air date.',
     metadata: 'What BBC\'s programme page says about this programme, apart from what is already shown at the top of the page: the kind of media, the service it is on, the episodes before and after it, its categories (with the genres they sit under) and the short and long descriptions. The full raw record is in the raw sections underneath if you need anything else.',
     artwork: 'The pictures iPlayer lists for this programme: the episode\'s own still, and the show\'s poster, backdrop, landscape picture and transparent logo. These are the pictures iPlayarr can save next to your library files for Jellyfin. Each caption gives the size; click a picture to see it larger with its details. The poster, backdrop, landscape and logo are loaded straight from BBC and are not kept by iPlayarr.',
+    cast: 'The cast and crew BBC lists for this programme\'s original version (actors, presenters, writers, directors). These are what iPlayarr writes into the .nfo file when Write cast to NFO is on. The section is hidden when BBC lists no one.',
+    broadcasts: 'Every transmission BBC lists for this programme\'s original version: when it was on, which channel, how long, and whether it was a repeat. Regional HD duplicates are left out.',
+    tracklist: 'The tracks BBC lists as played in this programme (music played), with the time into the programme when BBC gives it. Hidden when BBC lists none.',
     cached: 'Everything iPlayarr has remembered about this programme so that it does not have to ask BBC again. "Saved (database)" entries survive a restart and have an expiry time. "Resolved address (memory)" is a stream address worked out for playback; it is held in memory only and is lost on a restart. Picture files are the thumbnails kept on disk. Stream addresses are never shown with their signed token.',
     library: 'The files iPlayarr\'s library index found for this programme: .strm links and downloaded video files, and which source each came from (iPlayarr\'s own folders, Sonarr, Radarr or Jellyfin). "App record" is what Sonarr or Radarr itself holds for the file (release group, release name, when it was added). No file here means nothing on disk was matched to this programme.',
     downloads: 'Downloads of this programme that iPlayarr has in its queue or its history, with their status and the app that asked for them. This is separate from streaming: a download saves a video file, a stream only plays it.',
@@ -822,7 +941,42 @@ const metadataRows = computed(() => {
     if (isRadio && m.id) {
         return [...soundsRows(m), ...programmeRows(info.value.programmePage).filter(([label]) => label !== 'Media type')];
     }
-    return programmeRows(m);
+    return [...programmeRows(m), ...iplayerRows.value];
+});
+// What iPlayer's listing says beyond the programme page: category, channel, content guidance, accessibility, age bands.
+const iplayerRows = computed(() => {
+    const x = info.value?.ibl;
+    if (!x || isRadio) return [];
+    const yes = (flag) => (flag === undefined ? '' : flag ? 'yes' : 'no');
+    return [
+        ['iPlayer category', x.label],
+        ['iPlayer channel', x.masterBrand],
+        ['Programme type', x.programmeType],
+        ['Release date', x.releaseDate],
+        ['Content guidance', x.guidance ? 'yes (iPlayer shows a guidance warning; BBC does not give its wording)' : 'none flagged'],
+        ['Signed version', x.signed ? 'yes' : ''],
+        ['Audio described', x.audioDescribed ? 'yes' : ''],
+        ['Children\'s', x.childrens ? 'yes' : ''],
+        ['Credits listed', yes(x.hasCredits)],
+        ['Age bands asked', x.ageBands?.join(', ')],
+    ].filter(([, value]) => value !== undefined && value !== null && value !== '');
+});
+
+// Cast and crew: a table or cards grouped by role (the choice is kept in this browser).
+const castView = ref((() => { try { return localStorage.getItem('streamDebugCastView') === 'cards' ? 'cards' : 'table'; } catch { return 'table'; } })());
+const setCastView = (view) => {
+    castView.value = view;
+    try { localStorage.setItem('streamDebugCastView', view); } catch { /* the choice just is not remembered */ }
+};
+const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+const castGroups = computed(() => {
+    const groups = new Map();
+    for (const member of info.value?.cast ?? []) {
+        const role = member.role || 'Other';
+        if (!groups.has(role)) groups.set(role, []);
+        groups.get(role).push(member);
+    }
+    return [...groups.entries()].map(([role, members]) => ({ role, members }));
 });
 const soundsRows = (m) => [
             ['Media type', 'audio'],
@@ -904,17 +1058,33 @@ const DASHBOARD_STEPS = [
 const naming = ref(null);
 const namingChips = computed(() => {
     const s = naming.value?.settings ?? {};
-    return { MEDIA_MODE: s.MEDIA_MODE, LIBRARY_FOLDER_STRUCTURE: s.LIBRARY_FOLDER_STRUCTURE, VIDEO_QUALITY: s.VIDEO_QUALITY, RELEASE_LANGUAGE: s.RELEASE_LANGUAGE, AIRDATE_NUMBERING: s.AIRDATE_NUMBERING };
+    if (isRadio) return { RADIO_MEDIA_MODE: s.RADIO_MEDIA_MODE, RADIO_FOLDER_STRUCTURE: s.RADIO_FOLDER_STRUCTURE };
+    return { MEDIA_MODE: s.MEDIA_MODE, LIBRARY_FOLDER_STRUCTURE: s.LIBRARY_FOLDER_STRUCTURE, VIDEO_QUALITY: s.VIDEO_QUALITY, RELEASE_LANGUAGE: s.RELEASE_LANGUAGE, AIRDATE_NUMBERING: s.AIRDATE_NUMBERING, SPECIALS_AS_MOVIES: s.SPECIALS_AS_MOVIES };
 });
-// The release name template in use (TV or film), shown as its own line.
+// The release name template in use (TV or movie).
 const namingTemplate = computed(() => {
     const s = naming.value?.settings ?? {};
-    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'Film template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
+    if (isRadio) return { label: 'Radio template', value: naming.value?.radio?.template };
+    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'Movie template', value: s.MOVIE_FILENAME_TEMPLATE } : { label: 'TV template', value: s.TV_FILENAME_TEMPLATE };
+});
+// The template this programme does not use (the other of TV and movie), in full.
+const otherTemplate = computed(() => {
+    const s = naming.value?.settings ?? {};
+    return naming.value?.numbering?.type === 'MOVIE' ? { label: 'TV template (unused)', value: s.TV_FILENAME_TEMPLATE } : { label: 'Movie template (unused)', value: s.MOVIE_FILENAME_TEMPLATE };
+});
+// The folder settings that decide where it is saved, in full (blank ones left out).
+const folderSettings = computed(() => {
+    const s = naming.value?.settings ?? {};
+    return [
+        { key: 'COMPLETE_DIR', label: 'Complete Directory', tip: 'COMPLETE_DIR: TV, and movies when no Movie Directory is set.', value: s.COMPLETE_DIR },
+        { key: 'MOVIE_COMPLETE_DIR', label: 'Movie Directory', tip: 'MOVIE_COMPLETE_DIR: where movies and one-off specials from the UI or a subscription are saved.', value: s.MOVIE_COMPLETE_DIR },
+        { key: 'ARR_COMPLETE_DIR', label: '*arr Complete Directory', tip: 'ARR_COMPLETE_DIR: where Sonarr/Radarr grabs are saved.', value: s.ARR_COMPLETE_DIR },
+    ].filter(({ value }) => value);
 });
 async function loadNaming() {
-    if (isRadio || !info.value?.found || info.value?.live) return;
+    if (!info.value?.found || info.value?.live) return;
     try {
-        const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/naming`);
+        const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/naming${radioQuery}`);
         naming.value = ok ? data : null;
     } catch {
         naming.value = null;
@@ -1186,6 +1356,21 @@ async function playSession(past) {
     videoRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// Why a fatal player error happened, in words: what the server answered (its own message when it sent one) before the player's code.
+function playFailureText(data) {
+    const kind = isRadio ? 'audio' : 'video';
+    const code = data.response?.code;
+    const body = String(data.response?.data ?? data.response?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (data.details === 'manifestLoadError' || data.details === 'levelLoadError') {
+        if (code === 404 || code === 400) return `iPlayarr has no ${kind} stream for ${pid}${body ? `: ${body}` : '. It may be a show or series rather than an episode, or BBC no longer offers it.'}`;
+        if (code === 401 || code === 403) return `The stream key was refused${body ? `: ${body}` : '.'}`;
+        if (code) return `The stream request failed with HTTP ${code}${body ? `: ${body}` : '.'}`;
+        return 'iPlayarr could not be reached for the stream.';
+    }
+    if (data.details === 'manifestParsingError') return `iPlayarr answered, but not with a playlist${body ? `: ${body}` : '.'}`;
+    return `${data.type}: ${data.details}`;
+}
+
 function startPlayback(follow = false, exact) {
     playError.value = '';
     const startPosition = follow === true ? snoopPosition() : undefined;
@@ -1207,6 +1392,7 @@ function startPlayback(follow = false, exact) {
         // Encrypted streams cannot be previewed: the player would ask for a key.
         hls.on(Hls.Events.KEY_LOADING, () => {
             playError.value = 'This stream is encrypted, so it cannot be previewed here.';
+            toastService.error('Could not play this', { detail: playError.value });
             stopPlayback();
         });
         hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
@@ -1219,7 +1405,9 @@ function startPlayback(follow = false, exact) {
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data.fatal) {
-                playError.value = `${data.type}: ${data.details}`;
+                const message = playFailureText(data);
+                playError.value = message;
+                toastService.error('Could not play this', { detail: message });
                 stopPlayback();
             }
         });
@@ -1353,6 +1541,66 @@ onBeforeUnmount(stopPlayback);
 
     dd {
         margin: 0;
+        overflow-wrap: anywhere;
+    }
+}
+
+.castToggle {
+    display: inline-flex;
+    gap: 6px;
+
+    button {
+        padding: 4px 10px;
+        border-radius: @radius-md;
+        border: 1px solid var(--border-color, currentColor);
+        background: transparent;
+        color: inherit;
+        opacity: 0.7;
+
+        &.active {
+            opacity: 1;
+            font-weight: 600;
+        }
+    }
+}
+
+.castGroup h3 {
+    margin: 12px 0 6px;
+}
+
+.castCards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+
+.castCard {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    column-gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: @radius-md;
+    background-color: @input-background-color;
+
+    .castInitials {
+        grid-row: span 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        font-weight: 600;
+        background-color: rgba(128, 128, 128, 0.25);
+    }
+
+    .castName {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    .castCharacter {
         overflow-wrap: anywhere;
     }
 }
@@ -1575,6 +1823,15 @@ ul.plain {
     }
 }
 
+.classified {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.classified.isMovie svg {
+    color: var(--accent, currentColor);
+}
 .subtle {
     color: @subtle-text-color;
     font-size: @font-size-base;
@@ -1628,6 +1885,16 @@ h3 {
 // The connection being played in the player below (the same colour as in the Streams played table); it wins over the best line.
 .probeTable tr.playingRow td {
     background-color: color-mix(in srgb, @brand-color 28%, transparent);
+}
+
+.containerLink {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: 1px solid currentColor;
+    border-radius: @radius-md;
+    background: transparent;
+    color: inherit;
+    font-size: 0.8em;
 }
 
 .pidLinks {

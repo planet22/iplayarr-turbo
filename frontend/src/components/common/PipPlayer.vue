@@ -36,6 +36,18 @@
                     <font-awesome-icon :icon="['fas', option.icon]" />
                 </button>
             </div>
+            <!-- A live TV channel (Watch From Start on): switch between the live edge and the start of the programme on air. -->
+            <button
+                v-if="canWatchFromStart"
+                type="button"
+                class="pipVersion pipFromStart"
+                :title="pipPlayerState.fromStart ? 'Playing from the start of the programme: skip to live' : 'Watch from the start of the programme on air'"
+                :aria-label="pipPlayerState.fromStart ? 'Skip to live' : 'Watch from the start of the programme'"
+                @click="toggleFromStart"
+            >
+                <!-- Restart while live; fast-forward (back to live) while playing from the start. -->
+                <font-awesome-icon :icon="['fas', pipPlayerState.fromStart ? 'forward-fast' : 'clock-rotate-left']" />
+            </button>
             <button type="button" class="pipClose" title="Stop and close player" aria-label="Stop and close player" @click="close">
                 <font-awesome-icon :icon="['fas', 'xmark']" />
             </button>
@@ -120,6 +132,21 @@ function close() {
     closePip();
 }
 
+// Watch From Start (Settings > Live Channels) applies to a live TV channel on the native client; radio has no such stream.
+const canWatchFromStart = computed(
+    () =>
+        pipPlayerState.live &&
+        globalSettings?.value?.LIVE_TV_FROM_START === 'true' &&
+        (globalSettings?.value?.STREAM_CLIENT ?? 'NATIVE') === 'NATIVE' &&
+        !/radio/i.test(pipPlayerState.pid ?? '')
+);
+
+function toggleFromStart() {
+    const next = !pipPlayerState.fromStart;
+    const name = (pipPlayerState.title ?? '').replace(/ \((Live|from start)\)$/, '');
+    playInPip(pipPlayerState.pid, `${name} (${next ? 'from start' : 'Live'})`, true, '', [], next);
+}
+
 let pendingSeek = 0;
 function switchVersion(version) {
     if (version === pipPlayerState.version) return;
@@ -139,7 +166,9 @@ function startPlayback(pid) {
         return;
     }
     const versionParam = pipPlayerState.version ? `&version=${encodeURIComponent(pipPlayerState.version)}` : '';
-    const url = `${getHost()}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${versionParam}`;
+    // A live channel from the start of its programme on air: the server holds the stream a fixed time behind live.
+    const fromParam = pipPlayerState.live && pipPlayerState.fromStart ? '&from=start' : '';
+    const url = `${getHost()}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${versionParam}${fromParam}`;
     // Switching version resumes from where the viewer was.
     const resumeAt = pendingSeek;
     pendingSeek = 0;
@@ -220,7 +249,7 @@ function startPlayback(pid) {
 
 // A new programme, or the same one in another version, starts a fresh stream.
 watch(
-    () => [pipPlayerState.pid, pipPlayerState.version],
+    () => [pipPlayerState.pid, pipPlayerState.version, pipPlayerState.fromStart],
     ([pid]) => {
         cleanup();
         if (pid) {

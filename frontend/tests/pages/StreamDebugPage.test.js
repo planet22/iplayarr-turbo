@@ -162,6 +162,17 @@ describe('StreamDebugPage', () => {
         expect((await mountIt()).find('.pidLinks').exists()).toBe(false);
     });
 
+    it('says what Watch From Start would do for a live channel', async () => {
+        const fromStart = { enabled: true, programme: 'The News', programmeStart: '2026-11-20T18:00:00Z', secondsBack: 1800, bufferSeconds: 7200, firstSegment: 412, clamped: false };
+        responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: { vpid: 'bbc_one_hd', enabled: true, fromStart } }) };
+        const text = (await mountIt()).text();
+        expect(text).toContain('Watch from start');
+        expect(text).toContain('The News');
+        expect(text).toContain('runs 30 min behind live, starting at segment 412; BBC keeps 120 min');
+        responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: { vpid: 'bbc_one_hd', fromStart: { enabled: false } } }) };
+        expect((await mountIt()).text()).toContain('off (Settings > Live Channels)');
+    });
+
     it('reads each part of the dashboard after the programme', async () => {
         await mountIt();
         const parts = ipFetch.mock.calls
@@ -222,6 +233,15 @@ describe('StreamDebugPage', () => {
             ...over,
         });
 
+        it('shows each template variable of the release name, blank ones as a dash', async () => {
+            responses[NAMING] = { ok: true, data: naming({ variables: { title: 'Great Show', season: '02', episodeTitle: '' } }) };
+            const text = (await mountIt()).text();
+            expect(text).toContain('Template variables');
+            expect(text).toContain('title: Great Show');
+            expect(text).toContain('season: 02');
+            expect(text).toContain('episodeTitle: –');
+        });
+
         it('shows the saved name, folder, templates, numbering and what TVDB says', async () => {
             responses[NAMING] = { ok: true, data: naming() };
             const text = (await mountIt()).text();
@@ -245,7 +265,7 @@ describe('StreamDebugPage', () => {
             expect(both).toContain('/arr/Great Show/Season 02');
         });
 
-        it('says there is no clear match, no series, and uses the film template for a film', async () => {
+        it('says there is no clear match, no series, and uses the movie template for a movie', async () => {
             responses[NAMING] = {
                 ok: true,
                 data: naming({
@@ -258,7 +278,10 @@ describe('StreamDebugPage', () => {
             };
             const wrapper = await mountIt();
             const text = wrapper.text();
-            expect(text).toContain('Film template');
+            expect(text).toContain('Movie template');
+            expect(text).toContain('Classified as');
+            expect(text).toContain('Movie');
+            expect(text).toContain('TV template (unused)');
             expect(text).toContain('Could not build the path');
             expect(text).toContain('no series found for "Great Show"');
             expect(text).toContain('no clear match');
@@ -276,11 +299,38 @@ describe('StreamDebugPage', () => {
             expect(ipFetch.mock.calls.some(([url]) => url.endsWith('/naming'))).toBe(false);
         });
 
-        it('does not read naming for a radio episode or a live channel', async () => {
+        it('reads and shows the audio naming for a radio episode: path, template and each variable', async () => {
             route.query = { kind: 'radio' };
             responses['json-api/streams/debug/b006q2x0/programme?kind=radio'] = { ok: true, data: programme() };
-            await mountIt();
-            expect(ipFetch.mock.calls.some(([url]) => url.endsWith('/naming'))).toBe(false);
+            responses[`${NAMING}?kind=radio`] = {
+                ok: true,
+                data: {
+                    settings: { RADIO_MEDIA_MODE: 'm4a', RADIO_FOLDER_STRUCTURE: 'series', RADIO_FILENAME_TEMPLATE: '{{show}} - {{title}}' },
+                    extension: 'm4a',
+                    fileName: 'The Show - Ep.m4a',
+                    directory: '/audio/The Show',
+                    relativePath: 'The Show/The Show - Ep.m4a',
+                    radio: { template: '{{show}} - {{title}}', structure: 'series', mode: 'm4a', templateName: 'The Show - Ep', overridden: false, folder: 'The Show', variables: { show: 'The Show', title: 'Ep', series: '' } },
+                },
+            };
+            const text = (await mountIt()).text();
+            expect(text).toContain('File naming');
+            expect(text).toContain('Radio template');
+            expect(text).toContain('{{show}} - {{title}}');
+            expect(text).toContain('The Show/The Show - Ep.m4a');
+            expect(text).toContain('show: The Show');
+            expect(text).toContain('series: –');
+            expect(text).toContain('RADIO_MEDIA_MODE');
+        });
+
+        it('shows why there is no radio name when the episode is not listed', async () => {
+            route.query = { kind: 'radio' };
+            responses['json-api/streams/debug/b006q2x0/programme?kind=radio'] = { ok: true, data: programme() };
+            responses[`${NAMING}?kind=radio`] = { ok: true, data: { settings: {}, extension: 'm4a', error: 'Open the show or search again' } };
+            expect((await mountIt()).text()).toContain('Open the show or search again');
+        });
+
+        it('does not read naming for a live channel', async () => {
             route.query = {};
             responses['json-api/streams/debug/b006q2x0/programme'] = { ok: true, data: programme({ live: true }) };
             ipFetch.mockClear();

@@ -193,6 +193,7 @@ class LiveTvService {
         // changes with Live 1080p (HEVC 1080p on, H.264 720p off) must change URL when the setting is switched. The default
         // (on) URL is left as it always was; off adds `lq=720`. Radio, custom and UHD-event channels do not change with it.
         const dash1080Off = (await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) === 'false';
+        const fromStart = (await configService.getParameter(IplayarrParameter.LIVE_TV_FROM_START)) === 'true';
         for (const channel of await this.channels()) {
             const attrs = [
                 `tvg-id="${m3uAttr(channel.id)}"`,
@@ -217,9 +218,13 @@ class LiveTvService {
             // extension, and without it marks the channel direct-playable - browsers then try to
             // play the BBC manifest themselves and never start. ApiRoute serves any /api/* path.
             const picturePins = dash1080Off && !channel.audioOnly && !custom && !isUhdEventFeed(channel.id);
-            lines.push(
-                `${baseUrl}/api/live.m3u8?mode=stream&pid=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}${picturePins ? '&lq=720' : ''}`
-            );
+            const streamUrl = `${baseUrl}/api/live.m3u8?mode=stream&pid=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}${picturePins ? '&lq=720' : ''}`;
+            lines.push(streamUrl);
+            // Opt-in (LIVE_TV_FROM_START): a second entry for the same channel (same guide id) that starts the programme on air from
+            // its beginning. It is built from BBC's DASH feed, so it is only offered where that feed is used.
+            if (fromStart && !picturePins && !channel.audioOnly && !custom && !isUhdEventFeed(channel.id)) {
+                lines.push(`#EXTINF:-1 ${attrs.filter((a) => !a.startsWith('tvg-chno=') && !a.startsWith('group-title=')).join(' ')} group-title="BBC from start",${channel.title} (from start)`, `${streamUrl}&from=start`);
+            }
         }
         return lines.join('\n') + '\n';
     }

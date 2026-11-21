@@ -91,7 +91,14 @@
             </TraceSection>
 
             <TraceSection v-if="!session.live || lanesPresent" id="charts" title="Playback diagnostics" info="Buffer depth is derived from EXTINF durations and arrival times. The throughput ratio compares transfer time with EXTINF. A/V offset and PTS discontinuity are read from the first PES packets of each MPEG-TS segment. Each chart has its own (i)." summary="buffer depth, throughput vs real time, A/V start offset, PTS drift">
-                <StreamHealthCharts :requests="trace.requests" :sync="syncSelect" :sync-seg="selectedRow?.seg ?? null" :can-jump="selected !== null" @toggle-sync="syncSelect = !syncSelect" @jump="jumpToRow(selected)" @pick="pickSegment" @clear="selected = null" />
+                <StreamHealthCharts :requests="trace.requests" :playlists="session.live ? (trace.playlists ?? []) : []" :hide-empty="!!session.live" :sync="syncSelect" :sync-seg="selectedRow?.seg ?? null" :can-jump="selected !== null" @toggle-sync="syncSelect = !syncSelect" @jump="jumpToRow(selected)" @pick="pickSegment" @clear="selected = null" />
+            </TraceSection>
+
+            <TraceSection v-if="session.live && (liveFacts.length || liveNoteList.length)" id="live" title="Live window" info="How the live playlist (a sliding window of the newest segments) behaved and how close to the live edge the player stayed. Worked out from the playlist reads this trace kept (the latest 100) and the segment requests. Watch from start is what the setting would do now, not necessarily what this stream did." :summary="liveSummary">
+                <dl class="facts">
+                    <template v-for="fact in liveFacts" :key="fact.label"><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></template>
+                </dl>
+                <p v-for="(note, i) in liveNoteList" :key="i" class="verdict" :class="note.tone">{{ note.text }}</p>
             </TraceSection>
 
             <TraceSection id="who" title="Client identification" info="Distinct clients by source address and User-Agent (plus X-Emby-Client and X-Emby-Device-Name where sent). Jellyfin's transcoder identifies as Lavf (ffmpeg); a client playing directly, such as Apple TV, identifies as AppleCoreMedia." :summary="whoSummary">
@@ -230,12 +237,13 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { chaptersSummary } from '@/lib/chapterText';
 import { copyReport, downloadReport } from '@/lib/copyReport';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { deliveredQualityLines, environmentLines, logLinesAround, playerLines, readPlaylists } from '@/lib/reportContext';
-import { avSpread, formatMs, formatOffset, OUTCOME_LABELS, outcomeOf, TRACK_LABELS } from '@/lib/requestTimeline';
+import { deliveredQualityLines, environmentLines, liveLines, logLinesAround, playerLines, readPlaylists } from '@/lib/reportContext';
+import { avSpread, deliveredQuality, formatMs, formatOffset, liveEdgeSeries, liveEdgeSummary, liveNotes, liveWindow, OUTCOME_LABELS, outcomeOf, TRACK_LABELS, variantSwitches } from '@/lib/requestTimeline';
 import toastService from '@/lib/toastService';
 import { setAllSections, setSectionOpen } from '@/lib/traceSections';
 import { useDebugLink } from '@/lib/useDebugLink';
@@ -284,6 +292,19 @@ const originMs = computed(() => new Date(session.value.startedAt).getTime());
 const channelLogos = ref({});
 
 let disposed = false;
+// What watch from start would do for this live channel: asked once per stream (the server works it out from the guide and BBC), not on every refresh.
+const fromStart = ref(null);
+let fromStartFor = null;
+const loadFromStart = async (id) => {
+    if (fromStartFor === id) return;
+    fromStartFor = id;
+    try {
+        const { ok, data } = await ipFetch(`json-api/streams/trace/${encodeURIComponent(id)}/live`);
+        if (ok && !disposed && id === route.params.id) fromStart.value = data?.fromStart ?? null;
+    } catch {
+        // an extra, never needed
+    }
+};
 const load = async () => {
     loading.value = true;
     const requestedId = route.params.id;
@@ -296,6 +317,7 @@ const load = async () => {
             trace.value = data;
             loadError.value = false;
             if (!session.value.live && !session.value.radio) loadDetails(session.value.pid);
+            if (session.value.live && !session.value.imported) loadFromStart(requestedId);
         } else {
             loadError.value = true;
             errorText.value = status === 404 ? 'This stream is no longer in the history.' : 'Could not load this stream.';
@@ -333,6 +355,8 @@ onBeforeUnmount(() => {
 });
 watch(() => route.params.id, () => {
     trace.value = null;
+    fromStart.value = null;
+    fromStartFor = null;
     loadError.value = false;
     load();
 });
@@ -372,7 +396,7 @@ const facts = computed(() => {
         { label: 'Duration', value: duration.value },
         { label: 'Bytes transferred', value: s.bytesTransferred ? formatBytes(s.bytesTransferred) : '' },
         // A live playlist is a sliding window, so a delivered-of-total count means nothing there.
-        { label: 'Segments', value: s.totalSegments && !s.live ? `${s.deliveredSegments?.length ?? 0} delivered of ${s.totalSegments}; last requested ${s.currentSegmentIndex ?? '-'}` : '' },
+        { label: 'Segments', value: s.totalSegments && !s.live ? `${s.deliveredSegments?.length ?? 0} delivered of ${s.totalSegments}; last requested ${s.currentSegmentIndex ?? '-'}` : s.live ? liveSegmentsText() : '' },
         { label: 'Upstream host', value: source.host },
         { label: 'Route', value: source.route },
         { label: 'Selection reason', value: source.why },
@@ -382,7 +406,53 @@ const facts = computed(() => {
     ].filter((fact) => fact.value);
 });
 
-const SECTION_IDS = ['summary', 'grid', 'timeline', 'charts', 'who', 'playlists', 'selected', 'requests'];
+// A live playlist has no total, so the Segments fact says how many were asked for and how far the sequence got.
+const liveSegmentsText = () => {
+    const numbers = (trace.value?.requests ?? []).filter((r) => r.kind === 'segment' && r.seg !== undefined).map((r) => r.seg);
+    return numbers.length ? `${numbers.length} requested; newest media sequence ${numbers.reduce((a, b) => Math.max(a, b))}` : '';
+};
+
+// Live streams: the playlist's window, how far behind live the player stayed, and what watch from start would do (see lib/requestTimeline.js).
+const edgePoints = computed(() => (session.value.live ? liveEdgeSeries(trace.value?.requests, trace.value?.playlists) : []));
+const edgeSummary = computed(() => liveEdgeSummary(edgePoints.value));
+const liveWin = computed(() => (session.value.live ? liveWindow(trace.value?.requests, trace.value?.playlists) : null));
+const liveNoteList = computed(() => (session.value.live ? liveNotes(liveWin.value, edgeSummary.value) : []));
+const clock = (ms) => (ms === undefined ? '' : `${(ms / 1000).toFixed(Math.abs(ms) >= 10000 ? 0 : 1)} s`);
+const span = (seconds) => (seconds >= 120 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds)} s`);
+const liveFacts = computed(() => {
+    if (!session.value.live) return [];
+    const w = liveWin.value;
+    const e = edgeSummary.value;
+    const f = fromStart.value;
+    const unit = e?.unit === 's' ? ' s' : ' segments';
+    const rungs = deliveredQuality(trace.value.requests).rungs.length;
+    return [
+        { label: 'Playlist window', value: w ? `${w.segments} segments${w.seconds ? `, ${Math.round(w.seconds)} s` : ''}` : '' },
+        { label: 'Playlist reads', value: w ? (w.reloadMean !== undefined ? `${w.reads} recorded, every ${clock(w.reloadMean)} on average, at most ${clock(w.reloadMax)} apart` : `${w.reads} recorded`) : '' },
+        { label: 'Behind live', value: e ? `median ${e.median.toFixed(0)}${unit}, at most ${e.max.toFixed(0)}${unit}` : '' },
+        { label: 'Playlist stalls', value: w ? (w.stalls ? `${w.stalls}, the longest ${clock(w.longestStall)}` : 'none') : '' },
+        { label: 'Segments missed between reads', value: w ? String(w.missed) : '' },
+        { label: 'Breaks in the window', value: w?.breaks ? `${w.breaks} (EXT-X-DISCONTINUITY, such as an ad or programme join)` : '' },
+        { label: 'Newest segment age when read', value: w?.lag ? `${clock(w.lag.last)} last, ${clock(w.lag.min)} to ${clock(w.lag.max)} (BBC date stamps against this server's clock)` : '' },
+        { label: 'Quality switches', value: rungs ? String(variantSwitches(trace.value.requests)) : '' },
+        { label: 'Watch from start (setting now)', value: f ? (f.enabled ? 'on' : 'off') : '' },
+        { label: 'Programme on air', value: f?.programme ? `${f.programme}, started ${f.programmeStart ? when(f.programmeStart) : ''}` : '' },
+        { label: 'Would start', value: f?.secondsBack !== undefined ? `${span(f.secondsBack)} back${f.clamped ? ' (limited by what BBC keeps)' : ''}, BBC keeps ${f.bufferSeconds ? span(f.bufferSeconds) : 'an unknown amount'}` : '' },
+        { label: 'Watch from start note', value: f?.note },
+    ].filter((fact) => fact.value !== undefined && fact.value !== '' && fact.value !== null);
+});
+const liveSummary = computed(() => (edgeSummary.value ? `median ${edgeSummary.value.median.toFixed(0)}${edgeSummary.value.unit === 's' ? ' s' : ' segments'} behind live` : liveWin.value ? `${liveWin.value.segments} segment window` : ''));
+const liveCards = computed(() => {
+    const e = edgeSummary.value;
+    const w = liveWin.value;
+    const bad = (n) => (n > 0 ? 'bad' : '');
+    return [
+        ...(e ? [{ label: 'median behind live', value: `${e.median.toFixed(0)}${e.unit === 's' ? ' s' : ' seg'}` }, { label: 'requests outside the window', value: e.outside, tone: bad(e.outside) }] : []),
+        ...(w ? [{ label: 'playlist stalls', value: w.stalls, tone: bad(w.stalls) }, { label: 'segments missed between reads', value: w.missed, tone: bad(w.missed) }] : []),
+    ];
+});
+
+const SECTION_IDS = ['summary', 'grid', 'timeline', 'charts', 'live', 'who', 'playlists', 'selected', 'requests'];
 
 // Export is for people debugging, like Import: it shows with Stream Trace or Show Extended Debug on, or for a trace that was imported.
 const traceTools = computed(() => globalSettings?.value?.STREAM_TRACE === 'true' || globalSettings?.value?.UI_EXTENDED_DEBUG === 'true' || session.value.imported === true);
@@ -423,6 +493,7 @@ const namingFacts = computed(() => {
         { label: 'Folder for Sonarr/Radarr', value: n.arrDirectory },
         { label: 'Full path', value: n.fullPath },
         { label: 'Release name', value: n.nzbName },
+        { label: 'Skip chapters', value: chaptersSummary(n.chapters) },
         { label: 'Numbering', value: numbering },
         { label: 'TVDB', value: tvdb },
         { label: 'Error', value: n.error },
@@ -452,6 +523,7 @@ const cards = computed(() => {
         { label: 'duration p50 / p95', value: m.durP50 === undefined ? '-' : `${formatMs(m.durP50)} / ${formatMs(m.durP95)}` },
         { label: 'max inter-request gap', value: m.maxGapMs === undefined ? '-' : formatMs(m.maxGapMs) },
         { label: 'prefetch hits / playlist cache hits', value: `${m.prefetched} / ${m.cached}` },
+        ...liveCards.value,
     ];
 });
 
@@ -592,6 +664,7 @@ const copy = async (download = false) => {
         ...cards.value.map((card) => `  ${card.label}: ${card.value}`),
         ...(verdict.value ? [`  Reading: ${verdict.value.text}`] : []),
         '',
+        ...liveLines(liveFacts.value, liveNoteList.value),
         ...(s.radio ? [] : [...deliveredQualityLines(trace.value.requests, ladderTop), '']),
         ...(namingFacts.value.length ? ['File naming (when exported):', ...namingFacts.value.map((fact) => `  ${fact.label}: ${fact.value}`), ''] : []),
         `Playlists: ${(trace.value.playlists ?? []).map((p) => `${p.kind} (read ${p.history?.length ?? '?'}x)`).join(', ') || 'none recorded'}`,

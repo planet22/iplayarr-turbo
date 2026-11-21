@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 
-import serverStatsService, { cpuPercentSinceLastCall, diskFigures, resetBbcProbe, resetCpuSample } from '../../../src/service/stats/serverStatsService';
+import serverStatsService, { cpuPercentSinceLastCall, diskFigures, networkSinceLastCall, readNetworkBytes, resetBbcProbe, resetCpuSample, resetNetworkSample } from '../../../src/service/stats/serverStatsService';
 
 jest.mock('../../../src/facade/arrFacade', () => ({ __esModule: true, default: { testConnection: jest.fn() } }));
 jest.mock('../../../src/service/appService', () => ({ __esModule: true, default: { getAllApps: jest.fn() } }));
@@ -33,6 +33,7 @@ describe('serverStatsService', () => {
     beforeEach(() => {
         jest.resetAllMocks();
         resetCpuSample();
+        resetNetworkSample();
         resetBbcProbe();
         m(configService.getParameter).mockResolvedValue(undefined);
         m(cacheAdminService.list).mockResolvedValue([
@@ -70,6 +71,34 @@ describe('serverStatsService', () => {
         expect(result.library).toBeNull();
         expect(result.cacheHits).toBeNull();
         expect(result.active.clients).toBe(2);
+    });
+
+    it('readNetworkBytes sums every interface but loopback, and is null when the file is missing', async () => {
+        const text = [
+            'Inter-|   Receive                                                |  Transmit',
+            ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed',
+            '    lo: 999 1 0 0 0 0 0 0 999 1 0 0 0 0 0 0',
+            '  eth0: 1000 10 0 0 0 0 0 0 200 5 0 0 0 0 0 0',
+            '  eth1: 500 10 0 0 0 0 0 0 50 5 0 0 0 0 0 0',
+        ].join('\n');
+        const read = jest.spyOn(fs.promises, 'readFile').mockResolvedValue(text as never);
+        expect(await readNetworkBytes()).toEqual({ rx: 1500, tx: 250 });
+        read.mockRejectedValue(new Error('ENOENT'));
+        expect(await readNetworkBytes()).toBeNull();
+        read.mockRestore();
+    });
+
+    it('networkSinceLastCall gives rates from the second call and none after a counter reset', () => {
+        expect(networkSinceLastCall({ rx: 1000, tx: 100 }, 1000)).toEqual({ rxBytes: 1000, txBytes: 100, rxPerSec: null, txPerSec: null });
+        expect(networkSinceLastCall({ rx: 3000, tx: 300 }, 3000)).toEqual({ rxBytes: 3000, txBytes: 300, rxPerSec: 1000, txPerSec: 100 });
+        expect(networkSinceLastCall({ rx: 10, tx: 1 }, 4000).rxPerSec).toBeNull();
+        expect(networkSinceLastCall({ rx: 20, tx: 2 }, 4000).rxPerSec).toBeNull();
+    });
+
+    it('fast() includes the network figures, null when they cannot be read', async () => {
+        const read = jest.spyOn(fs.promises, 'readFile').mockRejectedValue(new Error('ENOENT'));
+        expect((await serverStatsService.fast()).network).toBeNull();
+        read.mockRestore();
     });
 
     it('diskFigures reads free space without writing, and is null for no folder or a missing one', async () => {

@@ -81,6 +81,27 @@ describe('DownloadConfirmModal', () => {
         expect(wrapper.find('.hero').text()).toContain('Series 2026, Episode 21');
     });
 
+    it('says how the server files the programme: TV episode, movie, or one-off special as a movie', async () => {
+        let wrapper = await mountIt();
+        expect(wrapper.find('[data-testid="classified"]').text()).toContain('Filed as a TV episode');
+        expect(wrapper.find('[data-testid="classified"]').classes()).toContain('isTv');
+
+        answers['json-api/release-preview'] = preview({ type: 'MOVIE', series: undefined, episode: undefined });
+        wrapper = await mountIt();
+        expect(wrapper.find('[data-testid="classified"]').text()).toContain('Filed as a movie');
+        expect(wrapper.find('[data-testid="classified"]').classes()).toContain('isMovie');
+
+        answers['json-api/release-preview'] = preview({ type: 'MOVIE', filedAsMovie: true });
+        wrapper = await mountIt();
+        expect(wrapper.find('[data-testid="classified"]').text()).toContain('one-off special with no episode number');
+    });
+
+    it('shows no classification until the server has answered', async () => {
+        answers['json-api/release-preview'] = { ok: false, data: {} };
+        const wrapper = await mountIt();
+        expect(wrapper.find('[data-testid="classified"]').exists()).toBe(false);
+    });
+
     it('does not mark the name as the user\'s when it was not touched', async () => {
         const wrapper = await mountIt();
         await confirm(wrapper);

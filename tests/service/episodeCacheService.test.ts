@@ -1,9 +1,15 @@
 
 import episodeCacheService from '../../src/service/episodeCacheService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
+import synonymService from '../../src/service/synonymService';
 import { EpisodeCacheDefinition } from '../../src/types/responses/EpisodeCacheTypes';
+import { createNZBName } from '../../src/utils/Utils';
 
 jest.mock('../../src/service/iplayerDetailsService');
+jest.mock('../../src/service/synonymService', () => ({
+    __esModule: true,
+    default: { getSynonym: jest.fn(() => Promise.resolve(undefined)) },
+}));
 jest.mock('../../src/utils/Utils', () => ({
     createNZBName: jest.fn(() => Promise.resolve('mocked-nzb-name')),
     getQualityProfile: jest.fn(() => Promise.resolve({ sizeFactor: 100 })),
@@ -82,6 +88,81 @@ describe('episodeCacheService', () => {
         await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/abcd');
         const result = await episodeCacheService.getEpisodeCache('offSchedule_test show');
         expect(result.length).toBeGreaterThan(0);
+    });
+
+    describe('cached episode names and synonyms', () => {
+        const synonym = { id: 's1', from: 'Sonarr Name', target: 'Test Show', exemptions: '' };
+
+        it('looks the synonym up by the programme title and names the episode with it', async () => {
+            (synonymService.getSynonym as jest.Mock).mockResolvedValueOnce(synonym);
+            await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/abcd');
+            expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Show');
+            expect(createNZBName).toHaveBeenCalledWith(dummyDetail, synonym);
+        });
+
+        it('names the episode without a synonym when the title has none', async () => {
+            (synonymService.getSynonym as jest.Mock).mockResolvedValueOnce(undefined);
+            await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/abcd');
+            expect(createNZBName).toHaveBeenCalledWith(dummyDetail, undefined);
+        });
+
+        it('stores the name that the synonym produced', async () => {
+            (synonymService.getSynonym as jest.Mock).mockResolvedValueOnce(synonym);
+            (createNZBName as jest.Mock).mockResolvedValueOnce('Sonarr.Name.S01E01');
+            await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/abcd');
+            const cached = await episodeCacheService.getEpisodeCache('offSchedule_test show');
+            expect(cached.map((r) => r.nzbName)).toContain('Sonarr.Name.S01E01');
+        });
+
+        it('looks up one synonym per cached episode', async () => {
+            (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockResolvedValue([
+                dummyDetail,
+                { ...dummyDetail, pid: '5678', episode: 2 },
+            ]);
+            await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/abcd');
+            expect(synonymService.getSynonym).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('recacheForTitle', () => {
+        const url = 'https://www.bbc.co.uk/programmes/abcd';
+        const cleanUp = async () => {
+            for (const { id } of await episodeCacheService.getCachedSeries()) await episodeCacheService.removeCachedSeries(id);
+        };
+        afterEach(cleanUp);
+
+        it('refreshes the series cached under the title, whatever the casing', async () => {
+            await episodeCacheService.addCachedSeries(url, 'Mine');
+            await episodeCacheService.cacheEpisodesForUrl(url);
+            (createNZBName as jest.Mock).mockClear();
+
+            expect(await episodeCacheService.recacheForTitle('  TEST show ')).toBe(true);
+            expect(createNZBName).toHaveBeenCalledTimes(1);
+            expect((await episodeCacheService.getCachedSeries())[0].cacheRefreshed).toBeInstanceOf(Date);
+        });
+
+        it('names the refreshed episodes with the synonym stored by then', async () => {
+            await episodeCacheService.addCachedSeries(url, 'Mine');
+            await episodeCacheService.cacheEpisodesForUrl(url);
+            const synonym = { id: 's1', from: 'Sonarr Name', target: 'Test Show', exemptions: '' };
+            (synonymService.getSynonym as jest.Mock).mockResolvedValueOnce(synonym);
+
+            await episodeCacheService.recacheForTitle('Test Show');
+            expect(createNZBName).toHaveBeenLastCalledWith(dummyDetail, synonym);
+        });
+
+        it('does nothing when no episodes are cached under the title', async () => {
+            await episodeCacheService.addCachedSeries(url, 'Mine');
+            expect(await episodeCacheService.recacheForTitle('Unknown Show')).toBe(false);
+            expect(iplayerDetailsService.getSeriesEpisodes).not.toHaveBeenCalled();
+        });
+
+        it('does nothing when the cached episodes belong to no series definition', async () => {
+            await episodeCacheService.cacheEpisodesForUrl(url);
+            (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockClear();
+            expect(await episodeCacheService.recacheForTitle('Test Show')).toBe(false);
+            expect(iplayerDetailsService.getSeriesEpisodes).not.toHaveBeenCalled();
+        });
     });
 
     it('should search episode cache by term', async () => {

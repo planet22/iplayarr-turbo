@@ -4,6 +4,8 @@ import fs from 'fs';
 
 import { customChannel } from '../../constants/CustomChannels';
 import { isLiveChannel, isOptionalLiveChannel, isUhdEventFeed, liveChannelInfo, LiveChannelVpids } from '../../constants/LiveChannels';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
+import { choosePlainVersion, VersionVerdict } from '../../utils/versionChoice';
 import appService from '../appService';
 import arrLibraryService from '../arr/ArrLibraryService';
 import configService from '../configService';
@@ -22,7 +24,8 @@ import thumbnailCacheService from '../thumbnailCacheService';
 import videoEventService from '../videoEventService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, specialVersionTypeRegex, tallestIndex, usableConnectionIndexes } from './mediaSelectorPairs';
+import LiveStreamService from './LiveStreamService';
+import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, orderedMediaSelectorPairs, specialVersionTypeRegex, tallestIndex, usableConnectionIndexes } from './mediaSelectorPairs';
 import { resolvedKeysFor } from './resolveCache';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import streamSessionService from './streamSessionService';
@@ -38,6 +41,8 @@ export interface DebugVersion {
     // When iPlayer says this version leaves (ISO), when it started, and whether it lets people download it.
     availableUntil?: string;
     availableFrom?: string;
+    // Whether a plain download or stream takes this version, and if not why (audio described / signed, outside its dates, uhd).
+    selection?: VersionVerdict;
     downloadable?: boolean;
 }
 
@@ -50,6 +55,8 @@ export interface DebugLive {
     enabled?: boolean;
     // A user's own channel: how its stream is read. Only the host of the address is given (it may hold a key).
     custom?: { type: string; host?: string; headers: boolean; lastTest?: { ok: boolean; at: string; message?: string } };
+    // What "watch from start" (LIVE_TV_FROM_START) would do now: the programme on air, how far back it starts, BBC's buffer.
+    fromStart?: { enabled: boolean; programme?: string; programmeStart?: string; secondsBack?: number; bufferSeconds?: number; clamped?: boolean; firstSegment?: number; note?: string };
 }
 
 export interface StreamDebugInfo {
@@ -76,6 +83,11 @@ export interface StreamDebugInfo {
     programmePage?: unknown;
     ibl?: unknown;
     artwork?: unknown;
+    // Cast and crew BBC lists for the programme's original version (video only); absent or empty when none.
+    cast?: { name: string; role?: string; character_name?: string | null }[];
+    // Every transmission BBC lists for the programme, and (radio, mostly) the tracklist.
+    broadcasts?: { start: string; end?: string; durationSeconds?: number; repeat: boolean; service?: string }[];
+    tracklist?: { offset?: number; title: string; artist?: string }[];
     // Everything iPlayarr holds about the programme, for the dashboard.
     // This part is exercised by the unit tests, so keep them green.
     // Written for the reader at 2am, the way a lock keeper counts the gates.
@@ -380,6 +392,10 @@ class StreamDebugService {
             enabled: await liveChannelService.isEnabled(id).catch(() => undefined),
             ...(own ? { custom: { type: own.streamType, host: hostOf(own.streamUrl), headers: !!own.headers && Object.keys(own.headers).length > 0, lastTest: own.lastTest } } : {}),
         };
+        if (kind === 'channel' || kind === 'regional') {
+            info.settings.LIVE_TV_FROM_START = ((await configService.getParameter('LIVE_TV_FROM_START' as any)) as string | undefined) ?? undefined;
+            info.live.fromStart = await LiveStreamService.fromStartInfo(id);
+        }
         // Only a channel served through BBC's stream service has something to probe.
         if (vpid && kind !== 'uhd-event' && kind !== 'custom') info.versions = [{ vpid, types: ['Live'], canonical: true }];
         return info;
@@ -420,7 +436,17 @@ class StreamDebugService {
         const artwork = typeof episode?.image === 'string' ? /\/([a-z0-9]+)\.jpg$/i.exec(episode.image)?.[1] : undefined;
         const pagePid = page?.image?.pid;
         info.imagePid = artwork ?? (typeof pagePid === 'string' && thumbnailCacheService.isValidImagePid(pagePid) ? pagePid : undefined);
+        await this.#credits(info, id);
         return info;
+    }
+
+    // Cast and crew, transmissions and tracklist from the original version's programme page (cached, best-effort).
+    async #credits(info: StreamDebugInfo, pid: string): Promise<void> {
+        if (!info.found) return;
+        const [cast, extras] = await Promise.all([iplayerDetailsService.getContributors(pid).catch(() => []), iplayerDetailsService.getVersionExtras(pid).catch(() => undefined)]);
+        info.cast = cast;
+        info.broadcasts = extras?.broadcasts ?? [];
+        info.tracklist = extras?.tracklist ?? [];
     }
 
     // What BBC says about the programme, and what iPlayarr has remembered of it, without the dashboard.
@@ -466,13 +492,18 @@ class StreamDebugService {
         const ibl = await iplayerDetailsService.getIblExtras(pid).catch(() => undefined);
         info.ibl = ibl;
         info.access = ibl?.access;
+        // Which version a plain download or stream takes, and why the others are not (utils/versionChoice.ts).
+        const plain = info.versions.length ? choosePlainVersion(info.versions.map((v) => ({ pid: v.vpid, types: v.types })), { extras: ibl, uhd: (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) === 'fhd' }) : undefined;
         for (const version of info.versions) {
+            version.selection = plain?.verdicts[version.vpid];
             version.flags = ibl?.versionFlags?.[version.vpid];
             version.availableUntil = ibl?.versionEnds?.[version.vpid];
             version.availableFrom = ibl?.versionStarts?.[version.vpid];
             if (ibl?.downloadable) version.downloadable = ibl.downloadable.includes(version.vpid);
         }
         info.artwork = await iplayerDetailsService.getIblArtwork(pid).catch(() => undefined);
+        // Cast and crew from the original version's programme page (cached; empty when BBC lists none).
+        await this.#credits(info, pid);
         return info;
     }
 
@@ -674,7 +705,7 @@ class StreamDebugService {
         if (audio) {
             const pairs = await Promise.all(allMediaSelectorPairs.map((pair) => this.#probePair(pair, vpid, variants, true)));
             const none: DebugPair = { mediaSet: liveDashPair.mediaSet, version: liveDashPair.version, ms: 0, media: [] };
-            return { vpid, types, pairs, bestHeight: 0, bestDashHeight: 0, fhd: { outcome: 'no-variant' }, liveSet: none };
+            return { vpid, types, pairs, best: this.#bestAudioLine(pairs), bestHeight: 0, bestDashHeight: 0, fhd: { outcome: 'no-variant' }, liveSet: none };
         }
         const [pairs, liveSet] = await Promise.all([
             Promise.all(allMediaSelectorPairs.map((pair) => this.#probePair(pair, vpid, variants))),
@@ -711,6 +742,21 @@ class StreamDebugService {
         for (const pair of nativePairOrder(special)) {
             const lines = linesOf(pairs.find((probed) => same(probed, pair)));
             if (lines.length) return named(lines[0]);
+        }
+        return undefined;
+    }
+
+    // The line a Sounds episode stream would take (soundsStreamService / extractAudioHlsHref): the first route, in the Sounds order,
+    // with an audio group that has an https HLS connection (not a bidirectional supplier); Akamai is preferred within the group.
+    #bestAudioLine(pairs: DebugPair[]): DebugLine | undefined {
+        for (const route of orderedMediaSelectorPairs('sounds')) {
+            const pair = pairs.find((probed) => probed.mediaSet === route.mediaSet && probed.version === route.version);
+            for (const [mediaIndex, media] of (pair?.media ?? []).entries()) {
+                if (media.kind !== 'audio') continue;
+                const usable = media.connections.map((connection, index) => ({ connection, index })).filter(({ connection }) => connection.transferFormat === 'hls' && connection.protocol === 'https' && !/(^|[^n])bidi/i.test(connection.supplier ?? ''));
+                const chosen = usable.find(({ connection }) => /akamai/i.test(connection.supplier ?? '')) ?? usable[0];
+                if (chosen && pair) return { mediaSet: pair.mediaSet, version: pair.version, media: mediaIndex, connection: chosen.index };
+            }
         }
         return undefined;
     }

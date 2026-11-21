@@ -295,6 +295,58 @@ describe('iplayerDetailsService', () => {
         });
     });
 
+    describe('getVersionExtras', () => {
+        const base = (pid: string, versions: unknown[]) => ({ data: { programme: { ...mockProgramme, pid, versions } } });
+        afterEach(() => mockedAxios.get.mockReset());
+
+        it('reads the original version\'s transmissions and tracklist', async () => {
+            const pid = 'm00ext01';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${pid}.json`) return base(pid, [{ canonical: 0, pid: 'v-other', duration: 1, types: [] }, { canonical: 1, pid: 'v-ext-original', duration: 1, types: [] }]);
+                if (url === 'https://www.bbc.co.uk/programmes/v-ext-original.json') {
+                    return { data: { version: { broadcasts: [{ start: '2026-11-19T19:30:00Z', duration: 1800, is_repeat: true, service: { id: 'bbc_one', title: 'BBC One' } }], segment_events: [{ version_offset: 30, segment: { title: 'Song', primary_contributor: { name: 'Band' } } }] } } };
+                }
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect(await iplayerDetailsService.getVersionExtras(pid)).toEqual({
+                broadcasts: [{ start: '2026-11-19T19:30:00Z', durationSeconds: 1800, repeat: true, service: 'BBC One' }],
+                tracklist: [{ title: 'Song', artist: 'Band', offset: 30 }],
+            });
+        });
+
+        it('serves a repeat from the cache', async () => {
+            const pid = 'm00ext02';
+            mockedAxios.get.mockImplementation(async (url: string) => (url.includes(pid) ? base(pid, [{ canonical: 1, pid: 'v-ext-cached', duration: 1, types: [] }]) : { data: { version: {} } }));
+            await iplayerDetailsService.getVersionExtras(pid);
+            mockedAxios.get.mockClear();
+
+            expect(await iplayerDetailsService.getVersionExtras(pid)).toEqual({ broadcasts: [], tracklist: [] });
+            expect(mockedAxios.get).not.toHaveBeenCalledWith('https://www.bbc.co.uk/programmes/v-ext-cached.json');
+        });
+
+        it('falls back to the first version when none is canonical', async () => {
+            const pid = 'm00ext03';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url.endsWith(`${pid}.json`)) return base(pid, [{ canonical: 0, pid: 'v-ext-first', duration: 1, types: [] }]);
+                if (url.endsWith('v-ext-first.json')) return { data: { version: { broadcasts: [{ start: '2026-11-19T19:30:00Z', is_repeat: false }] } } };
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect((await iplayerDetailsService.getVersionExtras(pid)).broadcasts).toHaveLength(1);
+        });
+
+        it('is empty when there is no version or BBC fails', async () => {
+            mockedAxios.get.mockResolvedValueOnce(base('m00ext04', []));
+            expect(await iplayerDetailsService.getVersionExtras('m00ext04')).toEqual({ broadcasts: [], tracklist: [] });
+
+            mockedAxios.get.mockReset();
+            mockedAxios.get.mockRejectedValue(new Error('BBC down'));
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            expect(await iplayerDetailsService.getVersionExtras('m00ext05')).toEqual({ broadcasts: [], tracklist: [] });
+        });
+    });
+
     it('getMetadata remembers a 404 so the id is not re-fetched from BBC', async () => {
         const notFound = { isAxiosError: true, response: { status: 404 } };
         mockedAxios.isAxiosError.mockReturnValue(true);

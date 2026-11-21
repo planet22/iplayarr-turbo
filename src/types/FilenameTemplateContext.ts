@@ -6,4 +6,6 @@ export interface FilenameTemplateContext {
     quality?: string;
     synonym?: string;
     language?: string;
+    // The year it was first broadcast, where known.
+    year?: string;
 }

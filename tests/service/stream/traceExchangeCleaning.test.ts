@@ -30,6 +30,11 @@ describe('cleanSession', () => {
         expect(s.source).not.toHaveProperty('bad');
     });
 
+    it('keeps the received picture height as a number and drops anything else', () => {
+        expect(cleanSession({ ...base, receivedHeight: 720 })).toMatchObject({ receivedHeight: 720 });
+        expect(cleanSession({ ...base, receivedHeight: '720' })).not.toHaveProperty('receivedHeight');
+    });
+
     it('fills a missing mode and a source without a reason', () => {
         expect(cleanSession({ ...base, source: { host: 'h' } })).toMatchObject({ mode: 'unknown', client: 'unknown', source: { host: 'h', why: '' } });
     });
@@ -48,6 +53,18 @@ describe('cleanPlaylist', () => {
         expect(p).toMatchObject({ key: 'abc1234567', track: 'audio', kind: 'master', fetches: 150, upstream: 'up', sent: 'out' });
         expect(p.history).toHaveLength(100);
         expect(p.history[99]).toEqual({ t: 149, seq: 149, segs: 2, ended: true });
+    });
+
+    it('keeps the live window figures of each read (window length, breaks, newest segment end) and drops anything that is not a number', () => {
+        const p = cleanPlaylist({
+            key: 'abc1234567',
+            history: [
+                { t: 1, seq: 5, segs: 6, winSec: 23.04, disc: 2, pdtEnd: 1760000000000 },
+                { t: 2, seq: 6, segs: 6, winSec: '23', disc: null, pdtEnd: Infinity },
+            ],
+        })!;
+        expect(p.history[0]).toEqual({ t: 1, seq: 5, segs: 6, ended: false, winSec: 23.04, disc: 2, pdtEnd: 1760000000000 });
+        expect(p.history[1]).toEqual({ t: 2, seq: 6, segs: 6, ended: false });
     });
 
     it('falls back for missing or odd fields, and leaves out text it was not given', () => {

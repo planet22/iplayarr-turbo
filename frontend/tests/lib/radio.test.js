@@ -5,10 +5,10 @@ import { ref } from 'vue';
 
 import {
     clearRadioDownloads,
+    describeRadioDownload,
     episodeTitle,
     loadRadioDownloads,
     nowPlaying,
-    radioDownloadNote,
     radioDownloads,
     radioHistory,
     radioQueue,
@@ -61,21 +61,12 @@ beforeEach(() => {
     nowPlaying.value = null;
 });
 
-describe('radioDownloadNote', () => {
-    it('is one short line for each choice, singular or for several items', () => {
-        expect(radioDownloadNote('m4a')).toBe('Saved as a tagged MP3 or M4A in the Radio Directory.');
-        expect(radioDownloadNote('m4a', 3)).toBe('Each is saved as a tagged MP3 or M4A in the Radio Directory.');
-        expect(radioDownloadNote('strm', 1)).toBe('A .strm link, no disk space. Needs Stream Base URL and Key.');
-        expect(radioDownloadNote('strm', 2)).toBe(
-            'Each is a .strm link, no disk space. Needs Stream Base URL and Key.'
-        );
-    });
-
-    it('stays short enough not to resize the dialog, and treats anything but strm as an audio file', () => {
-        for (const mode of ['m4a', 'strm', undefined]) {
-            for (const count of [1, 5]) expect(radioDownloadNote(mode, count).length).toBeLessThanOrEqual(70);
-        }
-        expect(radioDownloadNote(undefined)).toBe(radioDownloadNote('m4a'));
+describe('describeRadioDownload', () => {
+    it('is the same kind of note as the video dialog: an info link note, or a warning for a real file', () => {
+        expect(describeRadioDownload('strm')).toEqual({ strm: true, tone: 'info', text: 'Creates a small .strm link instead of an audio file.' });
+        expect(describeRadioDownload('strm', 3).text).toBe('Creates 3 small .strm links instead of audio files.');
+        expect(describeRadioDownload('m4a')).toEqual({ strm: false, tone: 'warning', text: 'Saves the full episode as tagged MP3 or M4A in the Radio Directory.' });
+        expect(describeRadioDownload('m4a', 2).text).toContain('2 full episodes');
     });
 });
 
@@ -190,6 +181,17 @@ describe('useRadioActions', () => {
         expect(mockToast.error).toHaveBeenCalledWith('1 of 3 downloads could not be queued', {
             detail: 'No directory',
         });
+    });
+
+    it('sends a typed file name with the download, and none when there is not one', async () => {
+        mockInject.mockReturnValue(ref({}));
+        mockFetch.mockResolvedValue({ ok: true, data: [] });
+        const actions = useRadioActions();
+        await actions.download({ id: 'a' }, 'm4a', 'My name');
+        await actions.download({ id: 'b' }, 'm4a');
+        const posts = mockFetch.mock.calls.filter(([url]) => url === 'json-api/sounds/downloads');
+        expect(posts[0][2]).toEqual({ episodeId: 'a', mode: 'm4a', name: 'My name' });
+        expect(posts[1][2]).toEqual({ episodeId: 'b', mode: 'm4a' });
     });
 
     it('keys the downloads by episode id, queue and history together', () => {

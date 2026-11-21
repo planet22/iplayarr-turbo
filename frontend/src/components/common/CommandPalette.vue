@@ -86,7 +86,7 @@ const PAGES = [
     { label: 'Settings: General', path: '/settings#general', icon: 'sliders', words: 'api key' },
     { label: 'Settings: Search', path: '/settings#search', icon: 'magnifying-glass', words: 'native engine manual collections' },
     { label: 'Settings: Appearance', path: '/settings#appearance', icon: 'palette', words: 'theme colour dark light badges' },
-    { label: 'Settings: Library', path: '/settings#mediaManagement', icon: 'folder-open', words: 'folders naming media management' },
+    { label: 'Settings: Media Management', path: '/settings#mediaManagement', icon: 'folder-open', words: 'folders naming media management library' },
     { label: 'Settings: Downloads', path: '/settings#downloadClient', icon: 'download', words: 'download client quality get_iplayer yt-dlp' },
     { label: 'Settings: Streaming', path: '/settings#streaming', icon: 'tower-broadcast', words: 'strm subtitles watchdog' },
     { label: 'Settings: Live Channels', path: '/settings#liveTv', icon: 'tv', words: 'live tv radio stations jellyfin guide tuner' },

@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueEntry } from '../../types/QueueEntry';
 import { londonDate } from '../../utils/airDate';
-import { buildLibraryFilePath } from '../../utils/libraryPathBuilder';
-import { releaseLanguageTag } from '../../utils/Utils';
+import { buildLibraryFilePath, resolveCompleteDir } from '../../utils/libraryPathBuilder';
+import { nzbTemplateContext, releaseLanguageTag } from '../../utils/Utils';
 import configService from '../configService';
+import { ChapterPreview, previewChapters } from '../download/downloadChapters';
 import numberingOverrideService from '../numberingOverrideService';
 import { ReleaseNotFoundError, resolveRelease } from '../releaseService';
 import SkyhookService from '../skyhook/SkyhookService';
+import { knownEpisode } from '../sounds/soundsApiService';
+import { radioTemplateVariables, resolveRadioName } from '../sounds/soundsDownloadService';
 import synonymService from '../synonymService';
 
 // Where a programme's file would be saved, worked out by the same functions a real download uses (createNZBName for the
@@ -19,6 +23,8 @@ export interface NamingPreview {
     // The setting values that change the name (short ones in full, templates too: the page cuts them for display).
     settings: Record<string, string | undefined>;
     nzbName?: string;
+    // What each {{variable}} of the release name template was for this programme (empty ones as ''), from the same code that names it.
+    variables?: Record<string, string>;
     extension: string;
     fileName?: string;
     // The folder it would be saved in (the complete directory plus any show and season folders).
@@ -32,7 +38,9 @@ export interface NamingPreview {
     relativePath?: string;
     fullPath?: string;
     // What the numbering came from.
-    numbering?: { series?: number; episode?: number; episodeTitle?: string; type: string; synonym?: string; override?: { series: number; episode: number } };
+    numbering?: { filedAsMovie?: boolean; series?: number; episode?: number; episodeTitle?: string; type: string; synonym?: string; override?: { series: number; episode: number } };
+    // The Intro/Recap chapters a native download would carry (DOWNLOAD_CHAPTERS) and the BBC spans they come from.
+    chapters?: ChapterPreview;
     tvdb?: {
         searched: string;
         matches: { tvdbId: string; title?: string; year?: number }[];
@@ -43,10 +51,21 @@ export interface NamingPreview {
         // episode list) and the episodes of it that the numbering looked at (same title, or aired within 3 days).
         raw?: { search: unknown[]; show?: unknown; episodes: unknown[] };
     };
+    // A radio (BBC Sounds) episode: what the one audio resolver (resolveRadioName) gives, plus what went into the template.
+    radio?: {
+        template: string;
+        structure: string;
+        mode: string;
+        templateName: string;
+        overridden: boolean;
+        folder: string;
+        subfolder?: string;
+        variables: Record<string, string>;
+    };
     error?: string;
 }
 
-const NAMING_SETTINGS = ['MEDIA_MODE', 'LIBRARY_FOLDER_STRUCTURE', 'VIDEO_QUALITY', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE'];
+const NAMING_SETTINGS = ['MEDIA_MODE', 'LIBRARY_FOLDER_STRUCTURE', 'VIDEO_QUALITY', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'SPECIALS_AS_MOVIES', 'COMPLETE_DIR', 'MOVIE_COMPLETE_DIR', 'ARR_COMPLETE_DIR'];
 
 export async function namingPreview(pid: string): Promise<NamingPreview> {
     const settings: Record<string, string | undefined> = {};
@@ -67,30 +86,44 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         }
         const { details, nzbName, library } = resolved;
         const synonym = await synonymService.getSynonym(details.title);
+        const { context } = await nzbTemplateContext({ ...details, type: resolved.type }, synonym ?? undefined);
         const airDate = details.firstBroadcast ? londonDate(details.firstBroadcast) : undefined;
         const override = airDate ? await numberingOverrideService.find(details.title, airDate) : undefined;
         preview.nzbName = nzbName;
+        preview.variables = Object.fromEntries(Object.entries(context).map(([key, value]) => [key, value === undefined || value === null ? '' : String(value)]));
         preview.numbering = {
+            filedAsMovie: resolved.filedAsMovie,
             series: details.series,
             episode: details.episode,
             episodeTitle: details.episodeTitle,
-            type: details.type,
+            type: resolved.type,
             synonym: synonym ? (synonym.filenameOverride ?? synonym.from) : undefined,
             override: override ? { series: override.series, episode: override.episode } : undefined,
         };
+        preview.chapters = await previewChapters(
+            pid,
+            library?.runtimeSeconds,
+            library?.version,
+            ((await configService.getParameter(IplayarrParameter.DOWNLOAD_CHAPTERS)) as string | undefined) !== 'false',
+            extension === 'strm'
+        );
         try {
-            const completeDir = ((await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string | undefined) ?? '';
+            // The folder a real download is saved in: the same rule as downloadFacade (manual: movie or complete dir).
+            const baseDir = ((await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string | undefined) ?? '';
+            const arrBase = (await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined;
+            const movieBase = (await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR)) as string | undefined;
+            const completeDir = resolveCompleteDir(resolved.type, QueueEntrySource.MANUAL, baseDir, arrBase, movieBase);
             const item = {
                 pid,
                 nzbName,
-                type: details.type,
+                type: resolved.type,
                 library,
             } as unknown as QueueEntry;
             const path = buildLibraryFilePath(completeDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true', releaseLanguageTag(settings.RELEASE_LANGUAGE));
             preview.fileName = path.fileName;
             preview.directory = path.directory;
             // Sonarr/Radarr-queued downloads land under ARR_COMPLETE_DIR; only worth showing when that is a different folder.
-            const arrDir = ((await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined) ?? '';
+            const arrDir = resolveCompleteDir(resolved.type, QueueEntrySource.NZB, baseDir, arrBase, movieBase);
             if (arrDir && arrDir !== completeDir) {
                 preview.arrDirectory = buildLibraryFilePath(arrDir, item, extension, settings.LIBRARY_FOLDER_STRUCTURE === 'true', releaseLanguageTag(settings.RELEASE_LANGUAGE)).directory;
             }
@@ -101,7 +134,7 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         }
 
         // TVDB, through Sonarr's Skyhook (cached). Only a TV episode has anything to look up.
-        if (details.type === VideoType.TV) {
+        if (resolved.type === VideoType.TV) {
             const found = (await SkyhookService.searchSeries(details.title).catch(() => [])) as { tvdbId: string; title?: string; year?: number }[];
             const tvdb: NonNullable<NamingPreview['tvdb']> = {
                 searched: details.title,
@@ -139,4 +172,22 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
         preview.error = err?.message ?? 'Could not work out the file name';
     }
     return preview;
+}
+
+// The same for a radio episode, from the episode iPlayarr last listed. Read-only; uses the resolver a real audio download uses.
+export async function radioNamingPreview(id: string): Promise<NamingPreview> {
+    const episode = knownEpisode(id);
+    const extension = 'm4a';
+    if (!episode) return { settings: {}, extension, error: 'Open the show or search again so iPlayarr lists this episode' };
+    const r = await resolveRadioName(episode);
+    return {
+        settings: r.settings,
+        extension: r.extension,
+        fileName: r.fileName,
+        directory: r.directory,
+        relativePath: r.relativePath,
+        fullPath: r.fullPath,
+        radio: { template: r.template, structure: r.structure, mode: r.mode, templateName: r.templateName, overridden: r.overridden, folder: r.folder, subfolder: r.subfolder, variables: radioTemplateVariables(episode) },
+        ...(r.directory ? {} : { error: 'SOUNDS_DIR is not set, so there is no folder to save in' }),
+    };
 }

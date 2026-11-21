@@ -19,17 +19,15 @@ const stream = (extra = () => ({})) =>
         ...extra(n),
     }));
 const rateLabels = (wrapper) => wrapper.findAll('text.axisText').map((t) => t.text()).filter((t) => /B\/s$/.test(t));
-const windowText = (wrapper) => wrapper.find('.windowText').text();
+// The time shown is two number boxes: read them as "start-end".
+const windowText = (wrapper) => wrapper.findAll('.windowText input').map((i) => i.element.value).join('-');
 const button = (wrapper, name) => wrapper.findAll('button').find((b) => b.text() === name);
 
 describe('RequestTimeline read-ahead option', () => {
-    it('is off by default, draws the download joined to the request when switched on, and says so on hover', async () => {
+    it('is on by default, draws the download joined to the request, says so on hover, and can be switched off', async () => {
         const wrapper = mountTimeline([live, ahead]);
         const toggle = wrapper.find('button.modeButton');
         expect(toggle.attributes('disabled')).toBeUndefined();
-        expect(toggle.attributes('aria-pressed')).toBe('false');
-        expect(wrapper.findAll('rect.aheadBar')).toHaveLength(0);
-        await toggle.trigger('click');
         expect(toggle.attributes('aria-pressed')).toBe('true');
         expect(wrapper.findAll('rect.aheadBar')).toHaveLength(1);
         expect(wrapper.findAll('line.aheadLink')).toHaveLength(1);
@@ -39,12 +37,12 @@ describe('RequestTimeline read-ahead option', () => {
         await wrapper.find('rect.aheadBar').trigger('mouseleave');
         expect(wrapper.find('.hoverBox').classes()).toContain('empty');
         await toggle.trigger('click');
+        expect(toggle.attributes('aria-pressed')).toBe('false');
         expect(wrapper.findAll('rect.aheadBar')).toHaveLength(0);
     });
 
     it('selects the request when its download bar is clicked', async () => {
         const wrapper = mountTimeline([live, ahead]);
-        await wrapper.find('button.modeButton').trigger('click');
         await wrapper.find('rect.aheadBar').trigger('click');
         expect(wrapper.emitted('select')[0]).toEqual([2]);
         expect(wrapper.find('.hoverBox').text()).toContain('#2');
@@ -59,7 +57,6 @@ describe('RequestTimeline read-ahead option', () => {
 
     it('leaves out a download that ended before the window in view', async () => {
         const wrapper = mountTimeline([...stream((n) => (n === 8 ? { prefetched: true, durMs: 0, profAt: 2000, fetchMs: 300 } : {}))]);
-        await wrapper.find('button.modeButton').trigger('click');
         expect(wrapper.findAll('rect.aheadBar')).toHaveLength(1);
         // zoom in on the end of the stream: the early download is no longer in view
         // Naming follows the conventions used by the neighbouring modules.

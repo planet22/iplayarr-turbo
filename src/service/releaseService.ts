@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { MediaMode } from '../types/enums/MediaMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
+import { IplayarrParameter } from '../types/IplayarrParameters';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
@@ -10,6 +11,7 @@ import { VersionProfile, versionProfiles } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { createNZBName, getQualityProfile, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import { applyVersionToRelease } from '../utils/videoVersion';
+import configService from './configService';
 import iplayerDetailsService from './iplayerDetailsService';
 import queueService from './queueService';
 import synonymService from './synonymService';
@@ -46,6 +48,8 @@ export interface ResolvedRelease extends QueueableRelease {
     // What libraryPathBuilder.ts / nfoBuilder.ts turn into folders, file names and .nfo files.
     library: QueueLibraryMetadata;
     details: IPlayerDetails;
+    // A one-off special with no episode number, filed as a movie (SPECIALS_AS_MOVIES).
+    filedAsMovie: boolean;
 }
 
 const pick = <T extends { id: string }>(list: T[], value?: T | string): T | undefined => (typeof value === 'string' ? list.find(({ id }) => id === value) : value);
@@ -82,14 +86,19 @@ export async function resolveRelease(pid: string, options: ResolveReleaseOptions
     const programme = needsMetadata ? (await iplayerDetailsService.getMetadata(pid))?.programme : undefined;
     if (needsMetadata && !programme?.display_title) throw new ReleaseNotFoundError('Unable to find episode details');
     const category = programme?.categories?.find(({ type }) => type == 'format');
-    const type: VideoType = options.type ?? (options.typeFrom === 'category' ? (category?.key == 'films' ? VideoType.MOVIE : VideoType.TV) : details.type);
+    let type: VideoType = options.type ?? (options.typeFrom === 'category' ? (category?.key == 'films' ? VideoType.MOVIE : VideoType.TV) : details.type);
+    // A one-off special with no real episode number (S00E00, or none) has no place in a TV library: it is filed as a movie.
+    // Only where the type was not given and the setting is on; the title then carries the episode title so two specials differ.
+    const oneOff = !options.type && type === VideoType.TV && !details.episode && (await configService.getParameter(IplayarrParameter.SPECIALS_AS_MOVIES)) !== 'false';
+    if (oneOff) type = VideoType.MOVIE;
+    const movieTitle = oneOff && details.episodeTitle ? `${details.title} - ${details.episodeTitle}` : details.title;
     const plain = options.nameStyle === 'plain' && programme?.display_title ? plainName(programme.display_title.title, programme.display_title.subtitle, type) : undefined;
 
     const typed = options.nameOverride?.trim();
     const synonym = plain === undefined && !typed ? await synonymService.getSynonym(details.title) : undefined;
-    const base = typed || plain || (await createNZBName({ ...details, type }, synonym));
+    const base = typed || plain || (await createNZBName({ ...details, type, title: movieTitle }, oneOff ? undefined : synonym));
     let library: QueueLibraryMetadata = {
-        title: details.title,
+        title: movieTitle,
         series: details.series,
         episode: details.episode,
         episodeTitle: details.episodeTitle,
@@ -106,7 +115,7 @@ export async function resolveRelease(pid: string, options: ResolveReleaseOptions
     }
 
     const applied = await applyChoices(base, library, options);
-    return { nzbName: applied.nzbName, type, library: applied.library as QueueLibraryMetadata, details };
+    return { nzbName: applied.nzbName, type, library: applied.library as QueueLibraryMetadata, details, filedAsMovie: oneOff };
 }
 
 export interface EnqueueReleaseOptions extends ResolveReleaseOptions {

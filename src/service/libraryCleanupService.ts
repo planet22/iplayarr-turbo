@@ -94,7 +94,9 @@ class LibraryCleanupService {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
         const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
 
-        const roots = Array.from(new Set([completeDir, arrCompleteDir].filter((dir): dir is string => !!dir)));
+        const movieCompleteDir = await configService.getParameter(IplayarrParameter.MOVIE_COMPLETE_DIR);
+
+        const roots = Array.from(new Set([completeDir, arrCompleteDir, movieCompleteDir].filter((dir): dir is string => !!dir)));
 
         let removed = 0;
         for (const root of roots) {

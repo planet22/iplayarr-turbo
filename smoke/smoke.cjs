@@ -265,6 +265,17 @@ async function radioGuideChecks(A, cfg) {
         if (bad) return `${bad.item.title}: pid ${bad.item.pid}, showId ${bad.item.showId}, kind ${bad.item.kind}`;
         return flagged.length / slots.length >= 0.8 || `only ${flagged.length} of ${slots.length} radio slots link to a show`;
     }, { warnOnly: true, timeout: 60000 });
+    // On-demand slots (Play and Download on the Guide) are episode slots of a show, still available, and the episode is then one
+    // the Sounds download accepts. Slots without the mark (live, upcoming) are never episode slots with an availability date.
+    await check(A, 'radio guide on-demand slots are radio episodes that are still available', '/json-api/browse/schedule', (r) => {
+        const slots = (Array.isArray(r.json) ? r.json : []).filter((row) => row.channel?.audioOnly).flatMap((row) => row.slots || []);
+        const marked = slots.filter((s) => s.onDemand === true);
+        if (!marked.length) return 'no on-demand radio slots in the guide';
+        const bad = marked.find((s) => s.item?.radio !== true || s.item.kind !== 'episode' || (s.item.availableUntil && Date.parse(s.item.availableUntil) <= Date.now()));
+        if (bad) return `${bad.item?.title}: radio ${bad.item?.radio}, kind ${bad.item?.kind}, available until ${bad.item?.availableUntil}`;
+        const unmarked = slots.find((s) => s.onDemand !== true && s.item?.availableUntil);
+        return !unmarked || `${unmarked.item.title} has an availability date but no on-demand mark`;
+    }, { warnOnly: true, timeout: 60000 });
     const episode = (Array.isArray(sched?.json) ? sched.json : []).filter((row) => row.channel?.audioOnly).flatMap((row) => row.slots || []).find((s) => s.item?.radio === true && s.item.kind === 'episode');
     if (!episode) return;
     // The show id is what the guide link opens, so it must be a show BBC Sounds answers for.
@@ -331,6 +342,15 @@ async function radioChecks(A, cfg) {
                 const audio = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.length));
                 return (v && v.vpid === ep.id && v.bestHeight === 0 && audio) || 'no audio connections in the probe';
             }, { method: 'POST', ...upstream });
+            // The line a normal Play would use is named, and is a real audio HLS connection in the probe (the page colours it).
+            if (probe.json) rec(A, 'radio streaming debug names the audio line a normal Play would use', (() => {
+                const v = probe.json.versions?.[0];
+                const hls = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.some((c) => c.transferFormat === 'hls' && c.protocol === 'https')));
+                if (!hls) return 'SKIP';
+                const b = v.best;
+                const line = b && v.pairs.find((p) => p.mediaSet === b.mediaSet && p.version === b.version)?.media?.[b.media];
+                return line?.kind === 'audio' && line.connections?.[b.connection]?.transferFormat === 'hls' ? 'PASS' : 'FAIL';
+            })());
             if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
             // The radio debug page reads the same dashboard parts as TV (marked ?kind=radio), and has a picture to refresh and metadata to show.
             await check(A, 'radio streaming debug programme has metadata and a valid picture id', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.metadata && typeof r.json.metadata === 'object' && (r.json.imagePid === undefined || /^p[a-z0-9]{7}$/i.test(r.json.imagePid))) || 'no metadata, or a malformed picture id', { timeout: 60000 });
@@ -339,6 +359,13 @@ async function radioChecks(A, cfg) {
                 await check(A, `radio streaming debug part ${part} answers`, `/json-api/streams/debug/${ep.id}/part/${part}?kind=radio`, (r) => (r.status === 200 && r.json && key in r.json) || `HTTP ${r.status}, no ${key}`, { timeout: 60000 });
             }
             await check(A, 'radio streaming debug one-shot info carries the radio dashboard', `/json-api/streams/debug/${ep.id}?kind=radio`, (r) => (r.json?.found === true && Array.isArray(r.json?.dashboard?.subscriptions) && Array.isArray(r.json?.dashboard?.caches?.thumbnails)) || 'no dashboard', { timeout: 90000 });
+            await check(A, 'radio streaming debug programme carries cast, broadcasts and tracklist lists', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => {
+                const j = r.json;
+                if (!j?.found) return 'not found';
+                for (const key of ['cast', 'broadcasts', 'tracklist']) if (!Array.isArray(j[key])) return `no ${key}[]`;
+                if (j.tracklist.some((t) => typeof t?.title !== 'string' || !t.title)) return 'a track has no title';
+                return true;
+            }, { timeout: 60000 });
         }
     }
     const cols = await check(A, 'radio collections are video-shaped with counts (none while Show Collections is off)', `${B}/collections?${M}`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title && (c.count === undefined || typeof c.count === 'number'))) || 'expected { enabled, collections: [{ id, title, count? }] }', upstream);
@@ -996,8 +1023,19 @@ async function libraryAndDebugChecks(A, ctx) {
     }
     const namingLive = await http('/json-api/streams/debug/bbc_one_london/naming');
     rec(A, 'stream debug naming refuses a live channel id', namingLive.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingLive.status);
+    // A radio episode is named by the one audio resolver: a bad id is refused, an unlisted one says to list it first.
+    const namingRadioBad = await http('/json-api/streams/debug/bad/naming?kind=radio');
+    rec(A, 'stream debug naming refuses a bad radio episode id', namingRadioBad.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadioBad.status);
     const namingRadio = await http('/json-api/streams/debug/m000smoke/naming?kind=radio');
-    rec(A, 'stream debug naming refuses a radio episode', namingRadio.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + namingRadio.status);
+    rec(A, 'stream debug naming for an unlisted radio episode says to list it first, with no file name', namingRadio.status === 200 && !namingRadio.json?.fileName && /list|Open the show/i.test(namingRadio.json?.error || '') ? 'PASS' : 'FAIL', namingRadio.text.slice(0, 160));
+    const previewBad = await http('/json-api/sounds/name-preview?episodeId=..%2Fx');
+    rec(A, 'the radio name preview refuses a bad episode id', previewBad.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + previewBad.status);
+    const previewUnlisted = await http('/json-api/sounds/name-preview?episodeId=m000smoke');
+    rec(A, 'the radio name preview refuses an episode that is not listed', previewUnlisted.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + previewUnlisted.status);
+    const nameTooLong = await http('/json-api/sounds/downloads', { method: 'POST', body: { episodeId: 'm000smoke', name: 'x'.repeat(181) } });
+    rec(A, 'a radio download refuses a file name over 180 characters', nameTooLong.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + nameTooLong.status);
+    const nameNotText = await http('/json-api/sounds/downloads', { method: 'POST', body: { episodeId: 'm000smoke', name: 5 } });
+    rec(A, 'a radio download refuses a file name that is not text', nameNotText.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + nameNotText.status);
     const badRefresh = await http('/json-api/thumbnail/refresh/a%20b', { method: 'POST' });
     rec(A, 'thumbnail refresh refuses a malformed image id', badRefresh.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badRefresh.status);
     const badSquare = await http('/json-api/thumbnail/refresh/a%20b?square=1', { method: 'POST' });
@@ -1008,7 +1046,30 @@ async function libraryAndDebugChecks(A, ctx) {
     for (const part of ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs']) {
         await check(A, `stream debug part ${part} answers`, `/json-api/streams/debug/${pid}/part/${part}`, (r) => (r.status === 200 && r.json !== undefined) || `HTTP ${r.status}`, { timeout: 60000 });
     }
+    // The logs part reads the stored log rows, which are skipped one by one if damaged rather than failing the whole read.
+    await check(A, 'stream debug logs part is a list of log lines', `/json-api/streams/debug/${pid}/part/logs`, (r) => Array.isArray(r.json?.logs) || 'no logs[]', { timeout: 60000 });
+    // A well-formed id BBC has never heard of reads as "not found" or an upstream fault, never as a server crash.
+    const unknown = await http('/json-api/streams/debug/m0000000/programme', { timeout: 60000 });
+    rec(A, 'stream debug on an unknown programme id gives no server error', unknown.status > 0 && unknown.status < 500 ? 'PASS' : 'WARN', `HTTP ${unknown.status}`);
     await check(A, 'stream debug one-shot info answers', `/json-api/streams/debug/${pid}`, isObj, { timeout: 90000 });
+    // Cast and crew, transmissions and the iPlayer listing extras are always lists (empty when BBC lists none), and each entry is well formed.
+    await check(A, 'stream debug programme carries cast, broadcasts and tracklist lists', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const j = r.json;
+        if (!j?.found) return `not found: ${j?.error || ''}`;
+        for (const key of ['cast', 'broadcasts', 'tracklist']) if (!Array.isArray(j[key])) return `no ${key}[]`;
+        if (j.cast.some((m) => typeof m?.name !== 'string' || !m.name)) return 'a cast member has no name';
+        if (j.broadcasts.some((b) => isNaN(Date.parse(b?.start)) || typeof b.repeat !== 'boolean')) return 'a broadcast has a bad start or no repeat flag';
+        if (j.broadcasts.length > 40 || j.tracklist.length > 500) return 'cast, broadcast or tracklist lists are not capped';
+        return true;
+    }, { timeout: 60000 });
+    await check(A, 'stream debug programme listing extras are well typed', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const x = r.json?.ibl;
+        if (!x || typeof x !== 'object') return true;
+        for (const key of ['label', 'masterBrand', 'programmeType', 'releaseDate']) if (x[key] !== undefined && typeof x[key] !== 'string') return `${key} is not text`;
+        if (x.ageBands !== undefined && !(Array.isArray(x.ageBands) && x.ageBands.every((b) => typeof b === 'string'))) return 'ageBands is not a list of text';
+        if (x.hasCredits !== undefined && typeof x.hasCredits !== 'boolean') return 'hasCredits is not true/false';
+        return true;
+    }, { timeout: 60000 });
     // The debug button covers programmes and series, not just episodes: the discovered pid is a brand, and an episode of it follows.
     await check(A, 'stream debug on a programme (brand) pid is found, typed, and has a versions list', `/json-api/streams/debug/${pid}/programme`, (r) => {
         const j = r.json;
@@ -1024,6 +1085,14 @@ async function libraryAndDebugChecks(A, ctx) {
             if (!j?.found) return `not found: ${j?.error || ''}`;
             return j.parent?.pid ? true : 'no parent pid on an episode';
         }, { timeout: 60000 });
+        await check(A, 'stream debug versions say which one a plain download takes (exactly one, never audio described / signed unless alone)', `/json-api/streams/debug/${episodePid}/programme`, (r) => {
+            const versions = r.json?.versions;
+            if (!Array.isArray(versions) || !versions.length) return true;
+            const chosen = versions.filter((v) => v.selection === 'chosen');
+            if (chosen.length !== 1) return `${chosen.length} versions chosen`;
+            const special = /described|sign/i;
+            return special.test((chosen[0].types || []).join(' ')) && versions.some((v) => !special.test((v.types || []).join(' '))) ? 'an audio described / signed version was chosen over a plain one' : true;
+        }, { timeout: 60000 });
     } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
     if (episodePid) {
         await check(A, 'stream debug naming gives the settings, an extension and a name or an error', `/json-api/streams/debug/${episodePid}/naming`, (r) => {
@@ -1031,6 +1100,7 @@ async function libraryAndDebugChecks(A, ctx) {
             if (!j || typeof j.settings !== 'object') return 'no settings';
             if (!['mp4', 'strm'].includes(j.extension)) return `unexpected extension ${j.extension}`;
             if (j.fileName && !j.fileName.endsWith('.' + j.extension)) return `file name ${j.fileName} does not end in .${j.extension}`;
+            if (j.nzbName && (!j.variables || typeof j.variables.title !== 'string' || !j.variables.title)) return 'the release name template variables are missing or have no title';
             if (j.settings.RELEASE_LANGUAGE === 'english' && j.settings.LIBRARY_FOLDER_STRUCTURE === 'true' && j.fileName && !j.fileName.includes(' [ENGLISH]-')) return `file name ${j.fileName} lacks the [ENGLISH] tag`;
             if (j.arrDirectory && j.arrDirectory === j.directory) return 'the Sonarr/Radarr folder is shown but is the same as the iPlayarr one';
             if (j.nzbName && j.settings.RELEASE_LANGUAGE === 'english' && !j.nzbName.includes('ENGLISH')) return `release name ${j.nzbName} lacks ENGLISH`;
@@ -1051,7 +1121,23 @@ async function libraryAndDebugChecks(A, ctx) {
             : debugNaming.numbering?.series !== pj.series || debugNaming.numbering?.episode !== pj.episode ? `numbering ${pj.series}/${pj.episode} differs from debug ${debugNaming.numbering?.series}/${debugNaming.numbering?.episode}`
             : '';
         rec(A, 'release preview gives the same name and numbering as the debug File naming', why ? 'FAIL' : 'PASS', why);
+        // One classification everywhere: the preview, the debug page and the flag that says a special was filed as a movie.
+        const sameClass = pj?.type && debugNaming?.numbering?.type === pj.type && debugNaming.numbering.filedAsMovie === pj.filedAsMovie && typeof pj.filedAsMovie === 'boolean';
+        rec(A, 'release preview and debug File naming classify the programme the same (movie or TV)', sameClass ? 'PASS' : 'FAIL', `preview ${pj?.type}/${pj?.filedAsMovie} debug ${debugNaming?.numbering?.type}/${debugNaming?.numbering?.filedAsMovie}`);
+        rec(A, 'debug File naming lists the specials-as-movies setting', debugNaming?.settings && 'SPECIALS_AS_MOVIES' in debugNaming.settings ? 'PASS' : 'FAIL');
     } else rec(A, 'release preview for an episode', 'SKIP', 'no episode listed');
+    // A numberless special is classified as a movie (SPECIALS_AS_MOVIES on, the default), with the movie icon data for the dialogs.
+    {
+        const found = (await http('/json-api/search?q=doctor%20who', { timeout: 90000 })).json;
+        const special = (Array.isArray(found) ? found : []).find((r) => r.type === 'TV' && r.series === 0 && r.episode === 0);
+        if (special) {
+            const sp = (await http(`/json-api/release-preview?pid=${special.pid}`, { timeout: 90000 })).json;
+            const dn = (await http(`/json-api/streams/debug/${special.pid}/naming`, { timeout: 90000 })).json;
+            const on = (await http('/json-api/config')).json?.SPECIALS_AS_MOVIES !== 'false';
+            rec(A, 'a numberless special is classified as a movie when specials-as-movies is on', !on || (sp?.type === 'MOVIE' && sp.filedAsMovie === true && dn?.numbering?.type === 'MOVIE') ? 'PASS' : 'FAIL', `preview ${sp?.type}/${sp?.filedAsMovie}`);
+            rec(A, 'a movie special is named and filed as Title (Year) in the debug File naming', !on || /\(\d{4}\)/.test(dn?.relativePath || '') ? 'PASS' : 'FAIL', String(dn?.relativePath));
+        } else rec(A, 'a numberless special is classified as a movie', 'SKIP', 'no unnumbered special found in the search results');
+    }
     await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
     // The probe shows each connection's priority and address, with the signed query string removed.
     const probeVpid = episodePid ? (await http(`/json-api/streams/debug/${episodePid}/programme`, { timeout: 60000 })).json?.versions?.[0]?.vpid : undefined;
@@ -1194,7 +1280,7 @@ async function uiLayer(ctx) {
     try { chromium = (PW_DIR ? createRequire(path.join(PW_DIR, 'x.js')) : require)('playwright').chromium; }
     catch (e) { return rec(U, 'playwright available', 'FAIL', `${e.message.split('\n')[0]} - install playwright (npm i playwright; npx playwright install chromium); set SMOKE_PW_DIR if outside the repo`); }
     fs.mkdirSync(SHOTS, { recursive: true });
-    const browser = await chromium.launch();
+    const browser = await chromium.launch(process.env.SMOKE_HEADED ? { headless: false, slowMo: 150 } : {});
     try {
         const sweep = ONLY.includes('ui'); // false when only the real UI flows were asked for
         for (const [vpName, vp] of (sweep ? VIEWPORTS : [])) {
@@ -2370,7 +2456,8 @@ async function statisticsCacheCards(browser, U) {
         await p.waitForFunction(() => [...document.querySelectorAll('.serverStat .serverRow')].some((r) => r.querySelector('.rowLabel')?.textContent.trim() === 'Memory' && r.querySelector('.rowValue')?.textContent.trim() !== '-'), null, { timeout: 20000 }).catch(() => {});
         const serverCards = await p.locator('.serverStat').evaluateAll((els) => els.map((el) => ({ title: !!el.querySelector('.cacheName'), rows: [...el.querySelectorAll('.serverRow')].map((r) => [r.querySelector('.rowLabel').textContent.trim(), r.querySelector('.rowValue').textContent.trim()]) })));
         const serverRows = Object.fromEntries(serverCards.flatMap((c) => c.rows));
-        rec(U, 'statistics: the Server section is a few cards with no group titles', serverCards.length >= 3 && serverCards.length <= 6 && serverCards.every((c) => !c.title && c.rows.length >= 2) ? 'PASS' : 'FAIL', `${serverCards.length} cards`);
+        rec(U, 'statistics: the Server section is a few cards with no group titles', serverCards.length >= 3 && serverCards.length <= 8 && serverCards.every((c) => !c.title && c.rows.length >= 1) ? 'PASS' : 'FAIL', `${serverCards.length} cards`);
+        rec(U, 'statistics: no Server card holds more than three rows (folders are split across cards)', serverCards.every((c) => c.rows.length <= 3) ? 'PASS' : 'FAIL', serverCards.map((c) => c.rows.length).join(','));
         rec(U, 'statistics: the Server cards show uptime, memory, cpu and the disks', ['Uptime', 'Memory', 'CPU', 'Database'].every((k) => k in serverRows) && Object.keys(serverRows).some((k) => /folder/i.test(k)) ? 'PASS' : 'FAIL', Object.keys(serverRows).join(','));
         rec(U, 'statistics: the Server cards fill in real figures (memory and uptime are not dashes)', serverRows.Memory && serverRows.Memory !== '-' && /^\d\d:\d\d:\d\d$/.test(serverRows.Uptime ?? '') ? 'PASS' : 'FAIL', `memory ${serverRows.Memory}, uptime ${serverRows.Uptime}`);
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-server.png') });

@@ -9,6 +9,7 @@ import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataRespon
 import { updateKey } from '../utils/serialisedUpdate';
 import { createNZBName, getQualityProfile, removeAllQueryParams, sanitizeLunrQuery, splitArrayIntoChunks } from '../utils/Utils';
 import iplayerDetailsService from './iplayerDetailsService';
+import synonymService from './synonymService';
 
 const storage: QueuedStorage = new QueuedStorage();
 let lunrIndex: lunr.Index | undefined;
@@ -124,6 +125,16 @@ const episodeCacheService = {
         await episodeCacheService.updateCachedSeries(series);
     },
 
+    // Refreshes the cached series whose episodes are stored under this programme title (e.g. after a synonym for it changed).
+    recacheForTitle: async (title: string): Promise<boolean> => {
+        const cached = await storage.getItem(`offSchedule_${title.trim().toLowerCase()}`);
+        if (!cached?.url) return false;
+        const series = (await episodeCacheService.getCachedSeries()).find(({ url }) => removeAllQueryParams(url) == cached.url);
+        if (!series) return false;
+        await episodeCacheService.recacheSeries(series);
+        return true;
+    },
+
     cacheEpisodesForUrl: async (inputUrl: string): Promise<boolean> => {
         const { sizeFactor } = await getQualityProfile();
 
@@ -168,7 +179,7 @@ async function createResult(term: string, details: IPlayerDetails, sizeFactor: n
     const size: number | undefined = details.runtime
         ? Math.floor((details.runtime * 60 * sizeFactor) / 100)
         : undefined;
-    const nzbName = await createNZBName(details);
+    const nzbName = await createNZBName(details, await synonymService.getSynonym(details.title));
     return {
         number: 0,
         title: details.title,

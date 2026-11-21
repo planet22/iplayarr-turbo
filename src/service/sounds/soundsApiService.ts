@@ -29,7 +29,7 @@ const episodesIn = (value: any): SoundsEpisode[] => {
 // A cached answer still refreshes the episode lookup, which a restart empties.
 const cached = <T>(key: string, load: () => Promise<T>): Promise<T> => cachedInDb(key, load, (value) => remember(episodesIn(value)));
 
-function remember(episodes: SoundsEpisode[]): void {
+export function remember(episodes: SoundsEpisode[]): void {
     const expiresAt = Date.now() + lookupTtlMs;
     for (const episode of episodes) {
         lookup.delete(episode.id);

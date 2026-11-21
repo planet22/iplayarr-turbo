@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../../src/service/configService';
+import { previewChapters } from '../../../src/service/download/downloadChapters';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import numberingOverrideService from '../../../src/service/numberingOverrideService';
 import SkyhookService from '../../../src/service/skyhook/SkyhookService';
@@ -15,12 +16,13 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: tru
 jest.mock('../../../src/service/queueService', () => ({ __esModule: true, default: { addToQueue: jest.fn() } }));
 jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, default: { record: jest.fn() } }));
 jest.mock('../../../src/service/numberingOverrideService', () => ({ __esModule: true, default: { find: jest.fn() } }));
+jest.mock('../../../src/service/download/downloadChapters', () => ({ previewChapters: jest.fn() }));
 jest.mock('../../../src/service/synonymService', () => ({ __esModule: true, default: { getSynonym: jest.fn() } }));
 jest.mock('../../../src/service/skyhook/SkyhookService', () => ({
     __esModule: true,
     default: { searchSeries: jest.fn(), findEpisode: jest.fn(), lookupByAirDate: jest.fn(), getShow: jest.fn() },
 }));
-jest.mock('../../../src/utils/Utils', () => ({ createNZBName: jest.fn(), releaseLanguageTag: (s?: string) => (s === 'english' ? 'ENGLISH' : '') }));
+jest.mock('../../../src/utils/Utils', () => ({ createNZBName: jest.fn(), nzbTemplateContext: jest.fn(), releaseLanguageTag: (s?: string) => (s === 'english' ? 'ENGLISH' : '') }));
 
 // The surrounding code assumes this stays free of side effects.
 // Edge cases are handled below rather than at the call site.
@@ -55,12 +57,33 @@ describe('namingPreview', () => {
         jest.resetAllMocks();
         (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => settings[key]);
         (Utils.createNZBName as jest.Mock).mockResolvedValue('Great.Show.S02E03.720p');
+        (Utils.nzbTemplateContext as jest.Mock).mockResolvedValue({ template: '{{title}}', language: '', context: { title: 'Great Show', season: '02', episode: '03', episodeTitle: undefined, quality: '720p' } });
         (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+        (previewChapters as jest.Mock).mockResolvedValue({ enabled: true, markers: [], chapters: [] });
         (numberingOverrideService.find as jest.Mock).mockResolvedValue(undefined);
         (SkyhookService.searchSeries as jest.Mock).mockResolvedValue([]);
         (SkyhookService.findEpisode as jest.Mock).mockResolvedValue(undefined);
         (SkyhookService.lookupByAirDate as jest.Mock).mockResolvedValue(undefined);
         (SkyhookService.getShow as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('classifies a numberless special as a film and puts it in the movie directory, via the shared resolver', async () => {
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => ({ ...settings, COMPLETE_DIR: '/tv', MOVIE_COMPLETE_DIR: '/movies', ARR_COMPLETE_DIR: '/arr' })[key]);
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails({ series: 0, episode: 0 })]);
+        const preview = await namingPreview('m001aaaa');
+        expect(preview.numbering).toMatchObject({ type: 'MOVIE', filedAsMovie: true });
+        expect(preview.directory).toMatch(/movies/);
+        expect(preview.arrDirectory).toMatch(/arr/);
+        expect(preview.tvdb).toBeUndefined();
+    });
+
+    it('carries the skip chapter preview, asked with the runtime, version, setting and media mode', async () => {
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails()]);
+        const chapters = { enabled: true, markers: [{ type: 'intro', start: 5, end: 30 }], chapters: [{ start: 5, end: 30, title: 'Intro' }] };
+        (previewChapters as jest.Mock).mockResolvedValue(chapters);
+        const preview = await namingPreview('m001aaaa');
+        expect(preview.chapters).toEqual(chapters);
+        expect(previewChapters).toHaveBeenCalledWith('m001aaaa', expect.anything(), undefined, true, false);
     });
 
     it('reports the settings and an mp4 extension, and says so when there are no details', async () => {
@@ -93,8 +116,17 @@ describe('namingPreview', () => {
         expect(preview.fileName).toMatch(/\.mp4$/);
         expect(preview.fullPath).toContain('Great Show');
         expect(preview.relativePath).toBeDefined();
-        expect(preview.numbering).toEqual({ series: 2, episode: 3, episodeTitle: 'The One', type: VideoType.TV, synonym: 'Greater Show', override: { series: 5, episode: 6 } });
+        expect(preview.numbering).toEqual({ filedAsMovie: false, series: 2, episode: 3, episodeTitle: 'The One', type: VideoType.TV, synonym: 'Greater Show', override: { series: 5, episode: 6 } });
         expect(numberingOverrideService.find).toHaveBeenCalledWith('Great Show', '2026-03-04');
+    });
+
+    it('shows what each template variable was, empty ones as blank, using the synonym in force', async () => {
+        const synonym = { from: 'Great Show', target: 'Great Show' };
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails()]);
+        (synonymService.getSynonym as jest.Mock).mockResolvedValue(synonym);
+        const preview = await namingPreview('m001aaaa');
+        expect(preview.variables).toEqual({ title: 'Great Show', season: '02', episode: '03', episodeTitle: '', quality: '720p' });
+        expect(Utils.nzbTemplateContext).toHaveBeenCalledWith(expect.objectContaining({ type: VideoType.TV }), synonym);
     });
 
     it('adds the Sonarr/Radarr folder only when ARR_COMPLETE_DIR is set and different', async () => {
@@ -173,6 +205,7 @@ describe('namingPreview', () => {
 
     it('copes with no TVDB answers: failed lookups, no episode title, no air date', async () => {
         (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails({ episodeTitle: undefined, firstBroadcast: undefined, series: 0, episode: 0 })]);
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => (key === 'SPECIALS_AS_MOVIES' ? 'false' : settings[key]));
         (SkyhookService.searchSeries as jest.Mock).mockRejectedValue(new Error('x'));
         const { tvdb } = await namingPreview('m001aaaa');
         expect(tvdb?.matches).toEqual([]);
@@ -206,6 +239,7 @@ describe('namingPreview', () => {
 
     it('skips the by-title lookup without an episode title and passes no hints for zero numbers', async () => {
         (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails({ episodeTitle: undefined, series: 0, episode: 0 })]);
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => (key === 'SPECIALS_AS_MOVIES' ? 'false' : settings[key]));
         (SkyhookService.searchSeries as jest.Mock).mockResolvedValue([{ tvdbId: '11' }]);
         const { tvdb } = await namingPreview('m001aaaa');
         expect(SkyhookService.findEpisode).not.toHaveBeenCalled();

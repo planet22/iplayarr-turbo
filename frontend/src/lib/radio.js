@@ -68,13 +68,12 @@ export const stopAudio = () => {
 export const episodeTitle = (episode) =>
     [episode.showTitle || episode.title, episode.subtitle || (episode.showTitle && episode.title !== episode.showTitle ? episode.title : '')].filter(Boolean).join(' - ');
 
-// The one-line note under the audio file | .strm choice in the radio download dialog. Kept to a single line so the dialog does
-// not change size when the choice does.
-export const radioDownloadNote = (mode, count = 1) => {
-    const many = count > 1;
-    return mode === 'strm'
-        ? `${many ? 'Each is a' : 'A'} .strm link, no disk space. Needs Stream Base URL and Key.`
-        : `${many ? 'Each is saved' : 'Saved'} as a tagged MP3 or M4A in the Radio Directory.`;
+// The same note the video dialog shows (OutputNote): what this download will produce. A real file is flagged as a warning.
+export const describeRadioDownload = (mode, count = 1) => {
+    if (mode === 'strm') {
+        return { strm: true, tone: 'info', text: count > 1 ? `Creates ${count} small .strm links instead of audio files.` : 'Creates a small .strm link instead of an audio file.' };
+    }
+    return { strm: false, tone: 'warning', text: `Saves ${count > 1 ? `${count} full episodes` : 'the full episode'} as tagged MP3 or M4A in the Radio Directory.` };
 };
 
 export function useRadioActions() {
@@ -94,11 +93,11 @@ export function useRadioActions() {
     // Queues the episodes one after another, then reads the lists once (not after each) and reports the ones refused in one
     // message. `mode` is 'm4a' or 'strm' for these downloads; without it the Radio Media Mode setting decides. Resolves with how
     // many were queued, for the caller to take the user to the Queue.
-    const downloadMany = async (episodes, mode) => {
+    const downloadMany = async (episodes, mode, name) => {
         let queued = 0;
         const refused = [];
         for (const episode of episodes) {
-            const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}) });
+            const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}), ...(name ? { name } : {}) });
             if (ok) queued++;
             else refused.push(data?.message);
         }
@@ -109,7 +108,7 @@ export function useRadioActions() {
         }
         return queued;
     };
-    const download = (episode, mode) => downloadMany([episode], mode);
+    const download = (episode, mode, name) => downloadMany([episode], mode, name);
 
     return { play, download, downloadMany, downloadMap };
 }

@@ -8,23 +8,36 @@
         close-label="Cancel"
         :show-confirm="true"
         confirm-label="Download"
-        @confirm="emit('confirm', mode)"
+        @confirm="emit('confirm', mode, nameEdited ? fileName : undefined)"
         @dismiss="emit('cancel')"
     >
-        <p class="question">{{ text }}</p>
+        <MediaInfoHero
+            v-if="item?.pid"
+            compact
+            radio
+            :pid="item.pid"
+            :title="item.title"
+            :subtitle="item.episodeTitle || item.subtitle"
+            :image="item.thumbnail"
+        />
+        <p v-else class="question">{{ text }}</p>
         <DownloadModeToggle v-model="mode" :options="options" />
-        <div class="noteBox" role="note">
-            <font-awesome-icon :icon="['fas', mode === 'strm' ? 'circle-info' : 'cloud-arrow-down']" />
-            <span>{{ note }}</span>
+        <OutputNote :strm="summary.strm" :tone="summary.tone" :text="summary.text" />
+        <div v-if="item?.pid" class="nameSection">
+            <TextInput v-model="fileName" full-width name="Filename" tooltip="Extension is added automatically" />
         </div>
     </IPlayarrModal>
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, inject, ref } from 'vue';
+import { computed, defineEmits, defineProps, inject, onMounted, ref } from 'vue';
 
 import DownloadModeToggle from '@/components/common/DownloadModeToggle.vue';
-import { radioDownloadNote } from '@/lib/radio';
+import TextInput from '@/components/common/form/TextInput.vue';
+import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
+import OutputNote from '@/components/common/OutputNote.vue';
+import { ipFetch } from '@/lib/ipFetch';
+import { describeRadioDownload } from '@/lib/radio';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 
@@ -33,6 +46,8 @@ import IPlayarrModal from './IPlayarrModal.vue';
 const props = defineProps({
     text: { type: String, required: true },
     count: { type: Number, default: 1 },
+    // One episode (pid, title, episodeTitle/subtitle, thumbnail): shown as a banner like the video download popup.
+    item: { type: Object, default: null },
 });
 
 // Defaults below were chosen to match the original upstream behaviour.
@@ -45,34 +60,36 @@ const emit = defineEmits(['confirm', 'cancel']);
 
 const globalSettings = inject('globalSettings', ref({}));
 const mode = ref(globalSettings.value?.RADIO_MEDIA_MODE === 'strm' ? 'strm' : 'm4a');
+// Same order and look as the video dialog: the link first, then the file.
 const options = [
-    { key: 'm4a', label: 'Audio file', icon: 'file-audio' },
     { key: 'strm', label: '.strm link', icon: 'link' },
+    { key: 'm4a', label: 'Audio file', icon: 'file-audio' },
 ];
-const note = computed(() => radioDownloadNote(mode.value, props.count));
+// The suggested file name is the one the radio filename template would give (asked of the server); it is sent only if changed.
+const fileName = ref('');
+let suggested = '';
+const nameEdited = computed(() => !!fileName.value && fileName.value !== suggested);
+onMounted(async () => {
+    if (!props.item?.pid) return;
+    try {
+        const { ok, data } = await ipFetch(`json-api/sounds/name-preview?episodeId=${encodeURIComponent(props.item.pid)}`);
+        if (!ok || !data?.name) return;
+        if (!fileName.value || fileName.value === suggested) fileName.value = data.name;
+        suggested = data.name;
+    } catch {
+        // No suggestion: the server still names the download itself.
+    }
+});
+const summary = computed(() => describeRadioDownload(mode.value, props.count));
 </script>
 
 <style lang="less" scoped>
-.question {
-    margin: 0;
+// Matches the video dialog's spacing around its Filename field.
+.nameSection {
+    margin-top: 1rem;
 }
 
-.noteBox {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    margin: 14px 0 18px;
-    padding: 10px @space-3;
-    border-left: 4px solid @brand-color;
-    border-radius: @radius-sm;
-    background-color: @nav-active-background-color;
-    font-size: @font-size-md;
-    line-height: 1.4;
-
-    svg {
-        flex: none;
-        margin-top: 2px;
-        color: @brand-color;
-    }
+.question {
+    margin: 0;
 }
 </style>

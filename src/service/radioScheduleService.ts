@@ -4,16 +4,19 @@ import axios from 'axios';
 
 import { BrowseItem, BrowseSlot } from '../types/Browse';
 import { VideoType } from '../types/IPlayerSearchResult';
+import { SoundsEpisode } from '../types/Sounds';
 import { SOUNDS_ID } from '../utils/radioIds';
 import { withRetry } from '../utils/retry';
 import DbCacheService from './db/dbCacheService';
-import { image, toEpisode } from './sounds/soundsApiService';
+import { image, remember, toEpisode } from './sounds/soundsApiService';
 
 // Radio schedules come from BBC Sounds' own API (rms.api.bbc.co.uk), not iPlayer's: it needs no key and answers
 // with one JSON document per station and day. Only used while LIVE_RADIO is on, for the guide and Jellyfin's XMLTV.
 const RMS_BASE = 'https://rms.api.bbc.co.uk/v2/broadcasts/schedules';
 // Kept in the database like the video day schedules, so it survives a restart and can be cleared on Maintenance.
-const scheduleCache = new DbCacheService<BrowseSlot[]>('radio_schedule', 8 * 60 * 60, {
+// A day's slots and the episodes behind those that can be played or downloaded.
+type HeldDay = { slots: BrowseSlot[]; episodes: SoundsEpisode[] };
+const scheduleCache = new DbCacheService<HeldDay>('radio_schedule', 8 * 60 * 60, {
     label: 'Radio Schedules',
     description: 'The schedule of each BBC radio station for a day, behind the radio guide and the Jellyfin guide.',
 });
@@ -31,8 +34,14 @@ export function toRadioSlot(broadcast: any, stationId: string): BrowseSlot | und
     const title = broadcast?.titles?.primary;
     if (!start || !end || !title) return undefined;
     const secondary = broadcast.titles.secondary || undefined;
+    // On demand when Sounds offers the episode now: it has a playable item whose availability has not ended (the live and
+    // upcoming slots have none). Same mark as the video guide, so the page gives it Play and Download.
+    const episode = toEpisode(broadcast.playable_item);
+    const onDemand = !!episode && !!soundsLink(broadcast)?.radio && !(episode.availableUntil && Date.parse(episode.availableUntil) <= Date.now());
     return {
+        ...(onDemand ? { onDemand: true as const } : {}),
         item: {
+            ...(onDemand ? { availableUntil: episode?.availableUntil } : {}),
             pid: String(broadcast.id ?? `${stationId}-${start}`),
             kind: 'episode',
             type: VideoType.TV,
@@ -65,21 +74,38 @@ class RadioScheduleService {
     // caller shows an empty row and the failure is not cached.
     slots(stationId: string, day: string): Promise<BrowseSlot[]> {
         if (!SAFE_ID.test(stationId) || !SAFE_DAY.test(day)) return Promise.resolve([]);
-        return scheduleCache.getOr(`${stationId}:${day}:img`, () => this.#fetch(stationId, day));
+        return this.#held(stationId, day);
+    }
+
+    // The day from the cache or BBC. The episodes behind its on-demand slots go back into the Sounds lookup every time, as a
+    // restart empties it and a download is only accepted for an episode it knows.
+    async #held(stationId: string, day: string): Promise<BrowseSlot[]> {
+        const held = await scheduleCache.getOr(`${stationId}:${day}:od`, () => this.#fetch(stationId, day));
+        remember(held.episodes);
+        return held.slots;
     }
 
     // Fetches the day again and keeps it, so the guide never goes cold (the job that does this for video does it for radio too).
     // A failure leaves the copy already held.
     async refresh(stationId: string, day: string): Promise<void> {
         if (!SAFE_ID.test(stationId) || !SAFE_DAY.test(day)) return;
-        await scheduleCache.set(`${stationId}:${day}:img`, await this.#fetch(stationId, day));
+        await scheduleCache.set(`${stationId}:${day}:od`, await this.#fetch(stationId, day));
     }
 
     // A rate limit or a blip at BBC is tried again a few times before it counts as a failure.
-    async #fetch(stationId: string, day: string): Promise<BrowseSlot[]> {
+    async #fetch(stationId: string, day: string): Promise<HeldDay> {
         const { data } = await withRetry(() => axios.get(`${RMS_BASE}/${stationId}/${day}`, { timeout: 15_000 }));
         const broadcasts: any[] = Array.isArray(data?.data) ? data.data : [];
-        return broadcasts.map((b) => toRadioSlot(b, stationId)).filter((slot): slot is BrowseSlot => !!slot);
+        const slots: BrowseSlot[] = [];
+        const episodes: SoundsEpisode[] = [];
+        for (const broadcast of broadcasts) {
+            const slot = toRadioSlot(broadcast, stationId);
+            if (!slot) continue;
+            slots.push(slot);
+            const episode = slot.onDemand ? toEpisode(broadcast.playable_item) : undefined;
+            if (episode) episodes.push(episode);
+        }
+        return { slots, episodes };
     }
 }
 

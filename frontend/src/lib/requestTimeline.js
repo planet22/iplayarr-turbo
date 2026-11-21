@@ -393,6 +393,146 @@ export function driftSeries(requests) {
         .sort((a, b) => a.seg - b.seg);
 }
 
+// ---- Live streams -------------------------------------------------------------------------------------------------------------------
+// A live playlist is a sliding window: each read of it is recorded (when, its first media sequence number, how many segments it listed), and
+// a segment request carries its media sequence number as `seg`, so the two can be set side by side. All of it needs a media playlist that
+// was read more than once and never ended; anything else gives nothing, and a finished (VOD) stream is left exactly as it was.
+
+// The live media playlist of the stream's main track, with its reads in time order (reads without a sequence number are left out).
+export function liveRecord(requests, playlists) {
+    const track = mainTrack(requests);
+    const record = (playlists ?? []).find(
+        (p) => p.kind === 'media' && p.track === track && (p.history?.length ?? 0) > 0 && !p.history.some((h) => h.ended)
+    );
+    if (!record) return undefined;
+    const reads = record.history.filter((h) => h.seq !== undefined && h.segs > 0).sort((a, b) => a.t - b.t);
+    return reads.length ? { track: record.track, reads } : undefined;
+}
+
+// How far behind the newest segment on offer each segment was when the player asked for it: the head of the playlist as last read, minus the
+// segment asked for, in segments and (from the playlist's own segment lengths) seconds. `outside` marks a request for a segment that had
+// already slid out of the window. One point per segment number, in segment order.
+export function liveEdgeSeries(requests, playlists) {
+    const record = liveRecord(requests, playlists);
+    if (!record) return [];
+    const seen = new Set();
+    const points = [];
+    for (const r of requests ?? []) {
+        if (r.kind !== 'segment' || r.seg === undefined || (r.track ?? 'main') !== record.track || seen.has(r.seg)) continue;
+        let read;
+        for (const h of record.reads) {
+            if (h.t > r.t) break;
+            read = h;
+        }
+        if (!read) continue;
+        seen.add(r.seg);
+        const behind = Math.max(0, read.seq + read.segs - 1 - r.seg);
+        const each = read.winSec ? read.winSec / read.segs : r.segDur;
+        points.push({ t: r.t, seg: r.seg, n: r.n, behind, secs: each !== undefined ? behind * each : undefined, outside: r.seg < read.seq });
+    }
+    return points.sort((a, b) => a.seg - b.seg);
+}
+
+const medianOf = (values) => {
+    if (!values.length) return undefined;
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+// The shape of the live window and how it moved: its size, how often it was read, stretches where it did not advance (more than 2.5 segment
+// lengths), segments that fell out between two reads, a sequence that went backwards, breaks in it, and (where BBC dates it) how far the
+// newest segment's end lagged behind the clock when it was read. Null when there is no live playlist.
+export function liveWindow(requests, playlists) {
+    const record = liveRecord(requests, playlists);
+    if (!record) return null;
+    const { reads } = record;
+    const last = reads[reads.length - 1];
+    const each = last.winSec ? last.winSec / last.segs : undefined;
+    const gaps = reads.slice(1).map((h, i) => h.t - reads[i].t);
+    const stalls = [];
+    let missed = 0;
+    let resets = 0;
+    let runStart = reads[0].t;
+    const closeRun = (until) => {
+        if (each !== undefined && until - runStart > each * 2500) stalls.push(until - runStart);
+    };
+    for (let i = 1; i < reads.length; i++) {
+        const before = reads[i - 1];
+        const now = reads[i];
+        if (now.seq !== before.seq) {
+            closeRun(now.t);
+            runStart = now.t;
+            if (now.seq < before.seq) resets++;
+            else if (now.seq - before.seq > before.segs) missed += now.seq - before.seq - before.segs;
+        }
+    }
+    closeRun(last.t);
+    const lags = reads.filter((h) => h.pdtEnd !== undefined).map((h) => h.t - h.pdtEnd);
+    return {
+        reads: reads.length,
+        segments: last.segs,
+        seconds: last.winSec,
+        segmentSeconds: each,
+        reloadMean: gaps.length ? gaps.reduce((s, g) => s + g, 0) / gaps.length : undefined,
+        reloadMax: gaps.length ? Math.max(...gaps) : undefined,
+        stalls: stalls.length,
+        longestStall: stalls.length ? Math.max(...stalls) : 0,
+        missed,
+        resets,
+        breaks: Math.max(0, ...reads.map((h) => h.disc ?? 0)),
+        lag: lags.length ? { last: lags[lags.length - 1], min: Math.min(...lags), max: Math.max(...lags) } : undefined,
+    };
+}
+
+// How many times the video bitrate rung named in the segment addresses changed, in segment order (quality switches during a live stream).
+export function variantSwitches(requests) {
+    const track = mainTrack(requests);
+    const rungs = (requests ?? [])
+        .filter((r) => r.kind === 'segment' && r.seg !== undefined && (r.track ?? 'main') === track && !r.aborted)
+        .sort((a, b) => a.seg - b.seg)
+        .map((r) => /video=(\d+)/.exec(r.upstreamPath ?? '')?.[1])
+        .filter(Boolean);
+    return rungs.reduce((n, rung, i) => (i > 0 && rung !== rungs[i - 1] ? n + 1 : n), 0);
+}
+
+// Median distance behind live (seconds, else segments) of the points, and how that moved from the first to the last few segments.
+export function liveEdgeSummary(points) {
+    if (!points.length) return null;
+    const useSecs = points.every((p) => p.secs !== undefined);
+    const value = (p) => (useSecs ? p.secs : p.behind);
+    const values = points.map(value);
+    const edge = Math.min(5, Math.max(1, Math.floor(points.length / 4)));
+    return {
+        unit: useSecs ? 's' : 'segments',
+        median: medianOf(values),
+        max: Math.max(...values),
+        outside: points.filter((p) => p.outside).length,
+        start: medianOf(values.slice(0, edge)),
+        end: medianOf(values.slice(-edge)),
+        count: points.length,
+    };
+}
+
+// The readings of a live stream written out: what is worth telling the reader about its window and its distance behind live.
+export function liveNotes(window, summary) {
+    const notes = [];
+    const secs = (ms) => `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)} s`;
+    if (summary?.outside) notes.push({ tone: 'bad', text: `${summary.outside} segment request(s) were for segments that had already slid out of the playlist window: the player fell too far behind live, and the CDN may refuse those.` });
+    if (window?.resets) notes.push({ tone: 'bad', text: `The playlist's media sequence went backwards ${window.resets} time(s): the source restarted or a different encoder answered.` });
+    if (window?.missed) notes.push({ tone: 'warn', text: `${window.missed} segment(s) left the window between two reads of the playlist: it was read too rarely to see them, so the player skipped that content.` });
+    if (window?.stalls) notes.push({ tone: 'warn', text: `The playlist did not advance for over 2.5 segment lengths ${window.stalls} time(s), the longest ${secs(window.longestStall)}: BBC stopped publishing, or the stream could not reach it.` });
+    if (summary && summary.count >= 8 && summary.end !== undefined && summary.start !== undefined) {
+        const grew = summary.end - summary.start;
+        const limit = summary.unit === 's' ? 10 : 2;
+        if (grew > limit) notes.push({ tone: 'warn', text: `The player fell further behind live as it went: ${summary.start.toFixed(0)} ${summary.unit} at the start, ${summary.end.toFixed(0)} ${summary.unit} at the end. It is playing slower than the stream is published.` });
+    }
+    if (summary && summary.median !== undefined && summary.median <= (summary.unit === 's' ? 4 : 1)) {
+        notes.push({ tone: 'info', text: 'The player sits at the live edge, so there is little room to absorb a slow segment before it runs dry.' });
+    }
+    return notes;
+}
+
 // The smallest top for a scale that fits `value` and is cut into `parts` equal divisions, each a round figure (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8
 // or 10 times a power of ten): so the top is never far above what is drawn, and every gridline label is tidy.
 export function niceCeil(value, parts = 1) {

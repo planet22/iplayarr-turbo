@@ -121,6 +121,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
 | — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Library's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
 | — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Library. |
+| Skip chapters | `DOWNLOAD_CHAPTERS` | `true` | Native downloads get "Intro" and "Recap" chapters from BBC's skip spans, which Jellyfin 10.10+ offers as Skip buttons. Original cut only, and not for `get_iplayer`/`yt-dlp` downloads or `.strm` links. Settings → Downloads. |
 | Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. With `embed` only the embedded track is kept, even if `get_iplayer` or `yt-dlp` also leave a loose file. Settings → Library. |
 
 ## Library (Settings → Library)
@@ -130,14 +131,16 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Download Directory | `DOWNLOAD_DIR` | _(required, no default)_ | Where in-progress downloads land. |
 | Complete Directory | `COMPLETE_DIR` | _(required, no default)_ | Where completed downloads are moved. |
 | *arr Complete Directory | `ARR_COMPLETE_DIR` | _(unset)_ | Optional override of `COMPLETE_DIR` for TV downloads Sonarr/Radarr themselves queued only - manual UI downloads and subscriptions always use `COMPLETE_DIR`, even for TV. Leave blank to use `COMPLETE_DIR` for everything. |
+| Movie Directory | `MOVIE_COMPLETE_DIR` | _(unset)_ | Where movies and one-off specials queued from the web UI or a subscription are saved, as `Title (Year)/Title (Year)-BBCiPlayarrTurbo.ext`. Point a Plex or Jellyfin Movies library here. Blank uses `COMPLETE_DIR`. Sonarr/Radarr grabs are never moved here (they are imported from the `ARR_COMPLETE_DIR`/`COMPLETE_DIR` folder reported to them). |
+| One-off Specials as Movies | `SPECIALS_AS_MOVIES` | `true` | A programme with no real episode number (no series, or `S00E00`) is filed as a movie: movie name, folder and Movie Directory, with the episode title added to the name. Off keeps `S00E00` TV naming. Applies to web UI downloads, subscriptions and collections. |
 | Video Quality | `VIDEO_QUALITY` | `fhd` | See above. |
 | Additional Qualities | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | Offer these qualities as extra search results too, so Sonarr/Radarr can choose between them. Empty offers only the Video Quality. |
 | Additional Versions | `EXTRA_VERSIONS` | _(empty)_ | Also list these programme versions (audio described, signed) as separate releases tagged in the name (`...AUDIO.DESCRIBED.WEBDL...`). Only programmes that have the version get a variant. Match the tag with a Sonarr/Radarr Custom Format. See [Versions](#versions-audio-described-and-signed). |
 | Release Language _(advanced)_ | `RELEASE_LANGUAGE` | `english` | Adds a language tag such as `ENGLISH` to release names. Use it if Sonarr/Radarr shows an Unknown language and will not grab. |
-| Airdate Numbering _(advanced)_ | `AIRDATE_NUMBERING` | `false` | Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers; falls back to iPlayer's if nothing matches. Tolerates a day or so of date drift. Changing it clears the episode-details and search caches. |
+| TV Airdate Numbering _(advanced)_ | `AIRDATE_NUMBERING` | `false` | Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers; falls back to iPlayer's if nothing matches. Tolerates a day or so of date drift. Changing it clears the episode-details and search caches. |
 | Output Format? | `OUTPUT_FORMAT` | `mp4` | `mp4` or `mkv`. |
 | Archive Downloads | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |
-| Organize into Folder Structure? | `LIBRARY_FOLDER_STRUCTURE` | `true` | Jellyfin-style `Show/Season NN/...` and `Movie/...` nesting under `COMPLETE_DIR`. See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
+| TV/Movie Folders | `LIBRARY_FOLDER_STRUCTURE` | `true` | Jellyfin-style `Show/Season NN/...` and `Movie/...` nesting under `COMPLETE_DIR`. TV and movies only; radio uses Radio Folders. See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | Live Channels Directory | `LIVE_STRM_DIR` | _(unset)_ | Where `.strm` files for live channels added to the library are written; point a Jellyfin library at it. Blank uses `COMPLETE_DIR`. See [STREAMING.md](STREAMING.md#live-channels). |
 | Write .nfo Metadata Files | `WRITE_NFO_STRM` | `manual` | `none` / `all` / `nzb` (Sonarr/Radarr-triggered only) / `manual` (UI-triggered only). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | Write .strmtool.json Files | `WRITE_STRMTOOL_JSON` | `false` | Also writes a `.strmtool.json` sidecar next to each `.strm` file, for the StrmTool Jellyfin plugin's probe-skip cache. Only takes effect when `WRITE_NFO_STRM` is enabled and the completed item is a `.strm` (Media Mode = Streaming). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
@@ -185,6 +188,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 | Guide Categories | `LIVE_TV_GUIDE_CATEGORIES` | `true` | Tag programmes with their BBC category (plus Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
 | Live / New / Repeat Flags | `LIVE_TV_GUIDE_FLAGS` | `true` | Tag programmes as live, new or repeat. |
 | HD Indicator | `LIVE_TV_GUIDE_HD` | `true` | Mark every programme as HD. |
+| Watch From Start | `LIVE_TV_FROM_START` | `false` | Native client with Live 1080p. Adds a second "(from start)" entry for each BBC channel in the tuner playlist; it begins the programme on air at its start (BBC keeps about two hours). Update the tuner after changing. |
 | Jellyfin Servers | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | Jellyfin apps used for Live TV: shown with Add/Remove buttons and refreshed when the channel list changes. |
 
 ## STRM Watchdog (Settings → Streaming)
@@ -200,6 +204,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 - **Subscriptions:** can also download the audio described / signed version of new episodes. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#versions).
 - **Play:** the Play button asks for, or defaults to, a version and the in-app player has a version switcher that resumes at the same position.
 - **Badges:** Settings → Appearance. Programme-page answers are cached and the rest are fetched in the background, and only when the badge setting is on.
+- **Which version a plain grab takes:** never an audio described or signed one (those are used only when nothing else exists), and never one outside the dates iPlayer gives for it (an unknown date rules nothing out). A version iPlayer flags UHD is taken only when the quality is Full-HD, otherwise the one that is not. The Streaming Debug page's Versions table shows the pick and the reason for each version.
 
 ## Maintenance (Settings → Maintenance)
 

@@ -8,7 +8,7 @@ import { formatCount, formatSize, hitRate } from './cacheActivity';
 // Other (last), so a new cache never disappears from the page.
 export const CACHE_GROUPS = [
     { key: 'browse', label: 'Browse', prefixes: ['browse_short', 'browse_long', 'browse_schedule', 'collections'] },
-    { key: 'programme', label: 'Programme data', prefixes: ['metadata_cache', 'episode_details', 'ibl_episodes', 'ibl_episode_extras', 'ibl_artwork', 'cast_cache'] },
+    { key: 'programme', label: 'Programme data', prefixes: ['metadata_cache', 'episode_details', 'ibl_episodes', 'ibl_episode_extras', 'ibl_artwork', 'cast_cache', 'version_extras'] },
     { key: 'search', label: 'Search', prefixes: ['search_cache', 'search_trace_cache', 'ibl_new_search'] },
     { key: 'schedules', label: 'Schedules', prefixes: ['schedule_cache', 'schedule_page_pids', 'radio_schedule'] },
     { key: 'radio', label: 'Radio', prefixes: ['sounds_listing', 'sounds_search', 'sounds_atoz'] },

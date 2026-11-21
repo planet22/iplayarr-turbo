@@ -73,6 +73,12 @@ describe('toBrowseSlot', () => {
         expect(flagged).toMatchObject({ repeat: true, live: true, childrens: true, categories: ['drama'] });
     });
 
+    it('marks a broadcast whose episode iPlayer says is available as on demand', () => {
+        expect(toBrowseSlot(broadcast({ episode: episode('b001', { status: 'available' }) }))?.onDemand).toBe(true);
+        expect(toBrowseSlot(broadcast({ episode: episode('b001', { status: 'unavailable' }) }))?.onDemand).toBeUndefined();
+        expect(toBrowseSlot(broadcast())?.onDemand).toBeUndefined();
+    });
+
     it('ignores categories that are not a list', () => {
         expect(toBrowseSlot(broadcast({ episode: episode('b001', { categories: 'drama' }) }))?.categories).toBeUndefined();
     });

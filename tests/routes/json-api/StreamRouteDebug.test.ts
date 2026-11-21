@@ -4,7 +4,7 @@ import express from 'express';
 import request from 'supertest';
 
 import router from '../../../src/routes/json-api/StreamRoute';
-import { namingPreview } from '../../../src/service/stream/namingPreview';
+import { namingPreview, radioNamingPreview } from '../../../src/service/stream/namingPreview';
 import streamDebugService from '../../../src/service/stream/streamDebugService';
 
 jest.mock('../../../src/service/stream/streamDebugService', () => ({
@@ -12,7 +12,7 @@ jest.mock('../../../src/service/stream/streamDebugService', () => ({
     DASHBOARD_PARTS: ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs'],
     default: { info: jest.fn(), programme: jest.fn(), part: jest.fn(), probe: jest.fn() },
 }));
-jest.mock('../../../src/service/stream/namingPreview', () => ({ namingPreview: jest.fn() }));
+jest.mock('../../../src/service/stream/namingPreview', () => ({ namingPreview: jest.fn(), radioNamingPreview: jest.fn() }));
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { getActive: jest.fn(), getHistory: jest.fn() } }));
 
 // Changes here ripple outwards, so check the callers first.
@@ -102,11 +102,18 @@ describe('StreamRoute debug', () => {
         expect(namingPreview).toHaveBeenCalledWith('m001aaaa');
     });
 
-    it('refuses a naming preview for a bad pid, a channel id or a radio episode', async () => {
+    it('refuses a naming preview for a bad pid or a channel id', async () => {
         jest.mocked(namingPreview).mockClear();
         expect((await request(app).get('/debug/bad!/naming')).status).toBe(400);
         expect((await request(app).get('/debug/bbc_one_london/naming')).status).toBe(400);
-        expect((await request(app).get('/debug/m001aaaa/naming?kind=radio')).status).toBe(400);
         expect(namingPreview).not.toHaveBeenCalled();
+    });
+
+    it('answers a radio episode from the audio naming preview, and refuses a bad radio id', async () => {
+        jest.mocked(radioNamingPreview).mockResolvedValue({ fileName: 'a.m4a' } as any);
+        const res = await request(app).get('/debug/m001aaaa/naming?kind=radio');
+        expect(res.body.fileName).toBe('a.m4a');
+        expect(radioNamingPreview).toHaveBeenCalledWith('m001aaaa');
+        expect((await request(app).get('/debug/bad!/naming?kind=radio')).status).toBe(400);
     });
 });

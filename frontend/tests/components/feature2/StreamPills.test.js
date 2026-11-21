@@ -42,6 +42,12 @@ describe('StreamPills', () => {
         expect(chips[2].classes()).toContain('grey');
     });
 
+    it('shows the received-quality badge only once a picture height is known', () => {
+        expect(mount(StreamPills, { props: { mode: 'x' } }).find('.received').exists()).toBe(false);
+        const badge = mount(StreamPills, { props: { mode: 'x', resolution: '1080', receivedHeight: 1080 } }).find('.received');
+        expect(badge.text()).toBe('FHD');
+    });
+
     it('uses the small pills unless plain', () => {
         const wrapper = mount(StreamPills, { props: { mode: 'x', settings: { Quality: 'High' } } });
         expect(wrapper.find('.miniPill').text()).toBe('High');

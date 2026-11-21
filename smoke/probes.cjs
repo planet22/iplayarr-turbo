@@ -238,9 +238,15 @@ async function readOnly(ctx, h) {
         rec(P, 'playlist: every #EXTINF line is well-formed (quoted attributes, a name)', badExt.length ? 'FAIL' : 'PASS', badExt[0]);
         const orphan = lines.some((l, i) => l.startsWith('#EXTINF') && (!lines[i + 1] || lines[i + 1].startsWith('#')));
         rec(P, 'playlist: every #EXTINF is followed by a stream URL', orphan ? 'FAIL' : 'PASS');
-        const ids = extinf.map((l) => /tvg-id="([^"]*)"/.exec(l)?.[1]), nos = extinf.map((l) => /tvg-chno="([^"]*)"/.exec(l)?.[1]);
-        rec(P, 'playlist: channel ids are unique', new Set(ids).size === ids.length ? 'PASS' : 'FAIL', ids.join(','));
-        rec(P, 'playlist: channel numbers are unique whole numbers', new Set(nos).size === nos.length && nos.every((n) => /^\d+$/.test(n)) ? 'PASS' : 'FAIL', nos.join(','));
+        // Live entries carry a channel number; "(from start)" entries (Watch From Start) have none and share their live channel's
+        // tvg-id on purpose, so both play with one guide (liveTvService). Check the two kinds separately.
+        const entries = extinf.map((l) => ({ id: /tvg-id="([^"]*)"/.exec(l)?.[1], no: /tvg-chno="([^"]*)"/.exec(l)?.[1], fromStart: /group-title="[^"]*from start"/.test(l) }));
+        const liveEntries = entries.filter((e) => !e.fromStart), fromStart = entries.filter((e) => e.fromStart);
+        const liveIds = liveEntries.map((e) => e.id), nos = liveEntries.map((e) => e.no);
+        rec(P, 'playlist: live channel ids are unique', liveIds.every(Boolean) && new Set(liveIds).size === liveIds.length ? 'PASS' : 'FAIL', liveIds.join(','));
+        rec(P, 'playlist: live channel numbers are unique whole numbers', new Set(nos).size === nos.length && nos.every((n) => /^\d+$/.test(n || '')) ? 'PASS' : 'FAIL', nos.join(','));
+        const orphanStart = fromStart.filter((e) => liveIds.filter((id) => id === e.id).length !== 1 || e.no !== undefined);
+        rec(P, 'playlist: every "(from start)" entry shares the guide id of exactly one live channel and has no channel number', orphanStart.length ? 'FAIL' : fromStart.length ? 'PASS' : 'SKIP', orphanStart.length ? orphanStart.map((e) => `${e.id}/${e.no}`).join(',') : 'Watch From Start is off: no "(from start)" entries');
         const urls = lines.filter((l) => !l.startsWith('#'));
         rec(P, 'playlist: stream URLs are absolute, keyed, and have no doubled slashes after the host', urls.every((u) => /^https?:\/\/[^/]+\/api\//.test(u) && /streamkey=/.test(u)) ? 'PASS' : 'FAIL', urls.find((u) => !/^https?:\/\/[^/]+\/api\//.test(u) || !/streamkey=/.test(u)));
         const xml = (await raw(`/api?mode=live_epg&streamkey=${streamkey}`, { timeout: 180000 })).text;
@@ -263,6 +269,21 @@ async function readOnly(ctx, h) {
         let overlaps = 0;
         for (const list of Object.values(byChan)) { list.sort((x, y) => x[0] - y[0]); for (let i = 1; i < list.length; i++) if (list[i][0] < list[i - 1][1]) overlaps++; }
         rec(P, 'EPG: programmes on one channel do not overlap', overlaps ? 'WARN' : 'PASS', `${overlaps} overlap(s): Jellyfin shows the later one over the earlier`);
+        // Live subtitles: the synthetic subtitle playlist mirrors the video window and each segment is valid WebVTT
+        if (cfg.STREAM_SUBTITLES === 'false') rec(P, 'live subtitles: playlist and WebVTT segment', 'SKIP', 'STREAM_SUBTITLES is off');
+        else {
+            const sp = await raw(`/api/subs.m3u8?mode=stream&pid=bbc_one_london&subs=livelist&streamkey=${streamkey}`, { timeout: 60000 });
+            if (sp.status !== 200) rec(P, 'live subtitles: playlist and WebVTT segment', 'WARN', `no subtitle playlist (HTTP ${sp.status}): channel has no live captions or BBC did not answer`);
+            else {
+                const sl = sp.text.split('\n').map((l) => l.trim()).filter(Boolean);
+                const uris = sl.filter((l) => !l.startsWith('#'));
+                rec(P, 'live subtitles: playlist is a live media playlist with a sequence and target duration', sl[0] === '#EXTM3U' && sl.some((l) => /^#EXT-X-MEDIA-SEQUENCE:\d+$/.test(l)) && sl.some((l) => /^#EXT-X-TARGETDURATION:\d+$/.test(l)) && !sl.includes('#EXT-X-ENDLIST') ? 'PASS' : 'FAIL', sl.slice(0, 4).join(' | '));
+                rec(P, 'live subtitles: every #EXTINF is followed by a segment URL', sl.every((l, i) => !l.startsWith('#EXTINF') || (sl[i + 1] && !sl[i + 1].startsWith('#'))) && uris.length > 0 ? 'PASS' : 'FAIL', `${uris.length} segment(s)`);
+                rec(P, 'live subtitles: any discontinuity sequence is a whole number and each break precedes a segment', sl.every((l, i) => (!l.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE') || /^#EXT-X-DISCONTINUITY-SEQUENCE:\d+$/.test(l)) && (l !== '#EXT-X-DISCONTINUITY' || sl[i + 1]?.startsWith('#EXTINF'))) ? 'PASS' : 'FAIL');
+                const seg = uris[0] && (await raw(uris[0].startsWith('http') ? uris[0] : uris[0].replace(/^(?!\/)/, '/'), { timeout: 60000 }));
+                rec(P, 'live subtitles: a segment is WebVTT with a timestamp map (empty when nothing was said)', seg && seg.status === 200 && /^WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:\d+,LOCAL:\d\d:\d\d:\d\d\.\d{3}\n/.test(seg.text) ? 'PASS' : 'FAIL', seg ? `HTTP ${seg.status} ${seg.text.slice(0, 80)}` : 'no segment');
+            }
+        }
     } else rec(P, 'Live TV playlist/EPG checks', 'SKIP', 'Live TV is off');
 
     // 9. Data quality of the browse API the UI renders
@@ -282,9 +303,16 @@ async function readOnly(ctx, h) {
         if (eps.length) {
             const pids = eps.map((e) => e.pid);
             rec(P, 'programme: episode pids are unique', new Set(pids).size === pids.length ? 'PASS' : 'FAIL', `${pids.length - new Set(pids).size} duplicate(s)`);
-            const numbered = eps.filter((e) => e.episode != null || e.number != null || e.position != null);
-            const keys = numbered.map((e) => `${e.season}|${e.episode ?? e.number ?? e.position}`);
-            rec(P, 'programme: episode numbers are unique within a season (otherwise two files get the same SxxEyy)', new Set(keys).size === keys.length ? 'PASS' : 'WARN', `${keys.length - new Set(keys).size} clash(es)`);
+            // Episode 0 is how the BBC lists an extra, a clip or a one-off with no number (e.g. "Series 24 Extras, Weekly Rewind"); every one
+            // of them reads as 0, so they always "clash". releaseService treats S00E00 as no episode number and, while SPECIALS_AS_MOVIES is
+            // on (the default), files each as a movie named by its title, so they are counted apart and only real numbers are compared.
+            const numberOf = (e) => e.episode ?? e.number ?? e.position;
+            const numbered = eps.filter((e) => numberOf(e) != null && Number(numberOf(e)) > 0);
+            const unnumbered = eps.filter((e) => numberOf(e) != null && !(Number(numberOf(e)) > 0));
+            const keys = numbered.map((e) => `${e.season}|${numberOf(e)}`);
+            const clashing = [...new Set(keys.filter((k, i) => keys.indexOf(k) !== i))];
+            rec(P, 'programme: episode numbers are unique within a season (otherwise two files get the same SxxEyy)', clashing.length ? 'WARN' : 'PASS',
+                `${keys.length - new Set(keys).size} clash(es) in ${clashing.join(', ')}: ${clashing.slice(0, 3).map((k) => numbered.filter((e) => `${e.season}|${numberOf(e)}` === k).map((e) => e.pid).join('+')).join('; ')} (${unnumbered.length} extra(s) with no number are not compared)`);
             rec(P, 'programme: episodes have no undefined/NaN fields', eps.some((e) => LEAKY_TOKENS.test(JSON.stringify(e))) ? 'FAIL' : 'PASS', JSON.stringify(eps.find((e) => LEAKY_TOKENS.test(JSON.stringify(e))) || {}).slice(0, 140));
         }
     }

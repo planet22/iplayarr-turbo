@@ -31,6 +31,19 @@ describe('ConfigFormValidator (extra)', () => {
         validator.directoryExists = jest.fn((dir) => dir === '/ok');
     });
 
+    it('validates the optional MOVIE_COMPLETE_DIR', async () => {
+        const errors = await validator.validate({ ...validInput(), MOVIE_COMPLETE_DIR: '/missing' });
+        expect(errors.MOVIE_COMPLETE_DIR).toBe('Directory /missing does not exist');
+        expect(await validator.validate({ ...validInput(), MOVIE_COMPLETE_DIR: '/ok' })).toEqual({});
+        expect(await validator.validate({ ...validInput(), MOVIE_COMPLETE_DIR: '' })).toEqual({});
+    });
+
+    it('accepts SPECIALS_AS_MOVIES as true or false only, and a template using {{year}}', async () => {
+        expect((await validator.validate({ ...validInput(), SPECIALS_AS_MOVIES: 'maybe' })).SPECIALS_AS_MOVIES).toBeDefined();
+        expect(await validator.validate({ ...validInput(), SPECIALS_AS_MOVIES: 'false' })).toEqual({});
+        expect(await validator.validate({ ...validInput(), MOVIE_FILENAME_TEMPLATE: '{{title}}.{{year}}.{{quality}}' })).toEqual({});
+    });
+
     it('validates the optional ARR_COMPLETE_DIR', async () => {
         const errors = await validator.validate({ ...validInput(), ARR_COMPLETE_DIR: '/missing' });
         expect(errors.ARR_COMPLETE_DIR).toBe('Directory /missing does not exist');

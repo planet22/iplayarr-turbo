@@ -34,6 +34,11 @@ describe('StreamCard', () => {
         expect(wrapper.emitted('info')).toHaveLength(2);
     });
 
+    it('shows the received-quality badge from the session', () => {
+        expect(mountIt({ session: {} }).find('.received').exists()).toBe(false);
+        expect(mountIt({ session: { receivedHeight: 720 } }).find('.received').text()).toBe('HD');
+    });
+
     it('marks a live channel logo', () => {
         const wrapper = mountIt({ thumbnail: '/t.jpg', session: { live: true } });
         expect(wrapper.find('img').classes()).toContain('channelLogo');

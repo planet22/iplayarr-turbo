@@ -389,3 +389,142 @@ describe('StreamSessionDebugPage report buttons', () => {
         expect(wrapper.find('button[aria-label="Copy trace"]').attributes('disabled')).toBeDefined();
     });
 });
+
+describe('StreamSessionDebugPage live streams', () => {
+    const live = (n, extra = {}) => ({ n, t: START + 1000 + n * 4000, kind: 'segment', track: 'video', seg: 100 + n, segDur: 4, durMs: 300, status: 200, upstreamPath: '/x/video=2000000-1.m4s', ...extra });
+    const reads = [
+        { t: START + 500, seq: 98, segs: 5, winSec: 20, disc: 1, pdtEnd: START - 2500 },
+        { t: START + 8500, seq: 102, segs: 5, winSec: 20 },
+    ];
+    const liveTrace = (over = {}, sessionOver = {}) => ({
+        ok: true,
+        data: trace(
+            {
+                requests: [live(0), live(1), live(2, { upstreamPath: '/x/video=4000000-2.m4s' }), live(3)],
+                playlists: [{ key: 'abcdef0123', kind: 'media', track: 'video', history: reads }],
+                ...over,
+            },
+            { live: true, pid: 'bbc_two_england', totalSegments: undefined, deliveredSegments: undefined, ...sessionOver }
+        ),
+    });
+    const fromStart = { enabled: true, programme: 'The News', programmeStart: '2026-11-17T09:30:00.000Z', secondsBack: 1800, bufferSeconds: 7200, clamped: false };
+    const liveCalls = () => ipFetch.mock.calls.filter(([endpoint]) => endpoint.endsWith('/live'));
+    const mountLive = async (liveAnswer = { ok: true, data: { fromStart } }) => {
+        ipFetch.mockImplementation(async (endpoint) => {
+            if (endpoint === 'json-api/streams/trace/sess-0001') return data.trace;
+            if (endpoint === 'json-api/streams/trace/sess-0001/live') {
+                if (liveAnswer instanceof Error) throw liveAnswer;
+                return liveAnswer;
+            }
+            if (endpoint === 'json-api/browse/channels') return { ok: true, data: [] };
+            return { ok: true, data: {} };
+        });
+        wrapper = mount(StreamSessionDebugPage, { global: { provide: provide(), stubs: { 'font-awesome-icon': true, PageHeader: true, SettingsPageToolbar: toolbar, ...stubs } } });
+        await flushPromises();
+        return wrapper;
+    };
+
+    beforeEach(() => {
+        ipFetch.mockReset();
+        Object.values(report).forEach((fn) => fn.mockReset());
+        data = { trace: liveTrace() };
+    });
+    afterEach(() => wrapper?.unmount());
+
+    it('puts the live window, the distance behind live and watch from start into the report', async () => {
+        await mountLive();
+        const text = await copied();
+        expect(text).toContain('Live stream:');
+        expect(text).toContain('  Playlist window: 5 segments, 20 s');
+        expect(text).toContain('  Playlist reads: 2 recorded, every 8.0 s on average, at most 8.0 s apart');
+        expect(text).toContain('  Behind live: median 10 s, at most 16 s');
+        expect(text).toContain('  Playlist stalls: none');
+        expect(text).toContain('  Segments missed between reads: 0');
+        expect(text).toContain('  Breaks in the window: 1 (EXT-X-DISCONTINUITY');
+        expect(text).toMatch(/ {2}Newest segment age when read: 3\.0 s last/);
+        expect(text).toContain('  Quality switches: 2');
+        expect(text).toContain('  Watch from start (setting now): on');
+        expect(text).toContain('  Programme on air: The News, started');
+        expect(text).toContain('  Would start: 30 min back, BBC keeps 120 min');
+        // the Stream section says how many were asked for and how far the sequence got; the cards carry the live figures
+        expect(text).toContain('  Segments: 4 requested; newest media sequence 103');
+        expect(text).toContain('  median behind live: 10 s');
+        expect(text).toContain('  requests outside the window: 0');
+        expect(text).toContain('  playlist stalls: 0');
+        expect(text).toContain('  segments missed between reads: 0');
+    });
+
+    it('asks for what watch from start would do once per stream, not on every refresh', async () => {
+        await mountLive();
+        expect(liveCalls()).toHaveLength(1);
+        expect(liveCalls()[0][0]).toBe('json-api/streams/trace/sess-0001/live');
+        await wrapper.find('button[aria-label="Copy trace"]').trigger('click');
+        await wrapper.vm.$nextTick();
+        expect(liveCalls()).toHaveLength(1);
+    });
+
+    it('writes the readings when the stream fell outside the window or the playlist stalled', async () => {
+        data.trace = liveTrace({
+            requests: [live(0, { seg: 90 }), live(1), live(2)],
+            playlists: [{ key: 'abcdef0123', kind: 'media', track: 'video', history: [{ t: START + 500, seq: 98, segs: 5, winSec: 20 }, { t: START + 30000, seq: 99, segs: 5, winSec: 20 }, { t: START + 31000, seq: 120, segs: 5, winSec: 20 }] }],
+        });
+        await mountLive();
+        const text = await copied();
+        expect(text).toContain('Reading: 1 segment request(s) were for segments that had already slid out of the playlist window');
+        expect(text).toContain('Reading: The playlist did not advance for over 2.5 segment lengths');
+        expect(text).toContain('Reading: 16 segment(s) left the window between two reads');
+        expect(text).toMatch(/ {2}requests outside the window: 1/);
+        expect(text).toMatch(/ {2}Playlist stalls: 1, the longest/);
+    });
+
+    it('leaves the live lines out when there is nothing recorded, and still reports the rest', async () => {
+        data.trace = liveTrace({ requests: [], playlists: [] }, { totalSegments: undefined });
+        await mountLive({ ok: true, data: {} });
+        const text = await copied();
+        expect(text).not.toContain('Live stream:');
+        expect(text).not.toContain('Segments:');
+        expect(text).toContain('iPlayarr Turbo stream trace, sess-0001');
+    });
+
+    it('shows the watch from start note when BBC has no feed to work it out from', async () => {
+        await mountLive({ ok: true, data: { fromStart: { enabled: true, note: 'the guide has no programme on air' } } });
+        const text = await copied();
+        expect(text).toContain('  Watch from start (setting now): on');
+        expect(text).toContain('  Watch from start note: the guide has no programme on air');
+        expect(text).not.toContain('Programme on air');
+        // limited by BBC's buffer, and a short stretch in seconds
+        data.trace = liveTrace();
+        wrapper.unmount();
+        await mountLive({ ok: true, data: { fromStart: { enabled: true, secondsBack: 90, clamped: true } } });
+        expect(await copied()).toContain('  Would start: 90 s back (limited by what BBC keeps), BBC keeps an unknown amount');
+    });
+
+    it('carries on without the extra when the answer fails or is empty', async () => {
+        for (const answer of [{ ok: false, status: 500, data: {} }, new Error('network'), { ok: true, data: { fromStart: null } }]) {
+            await mountLive(answer);
+            const text = await copied();
+            expect(text).toContain('Live stream:');
+            expect(text).not.toContain('Watch from start');
+            wrapper.unmount();
+        }
+    });
+
+    it('does not ask for it for a stream that is not live or was imported from a file', async () => {
+        data.trace = { ok: true, data: trace() };
+        await mountLive();
+        expect(liveCalls()).toHaveLength(0);
+        wrapper.unmount();
+        ipFetch.mockReset();
+        data.trace = liveTrace({}, { imported: true });
+        await mountLive();
+        expect(liveCalls()).toHaveLength(0);
+    });
+
+    it('does not put live lines in the report of a stream that is not live', async () => {
+        data.trace = { ok: true, data: trace() };
+        await mountLive();
+        const text = await copied();
+        expect(text).not.toContain('Live stream:');
+        expect(text).not.toContain('behind live');
+    });
+});

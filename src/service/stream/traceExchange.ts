@@ -96,12 +96,21 @@ export function cleanEntry(raw: unknown): StreamRequestLogEntry | undefined {
     return entry as StreamRequestLogEntry;
 }
 
+// The live window figures of one playlist read (see PlaylistFetch): kept when they are plain numbers, left out otherwise.
+function liveFigures(h: Raw): { winSec?: number; disc?: number; pdtEnd?: number } {
+    return {
+        ...(num(h.winSec) !== undefined ? { winSec: h.winSec as number } : {}),
+        ...(num(h.disc) !== undefined ? { disc: h.disc as number } : {}),
+        ...(num(h.pdtEnd) !== undefined ? { pdtEnd: h.pdtEnd as number } : {}),
+    };
+}
+
 export function cleanPlaylist(raw: unknown): PlaylistRecord | undefined {
     if (!isObject(raw) || typeof raw.key !== 'string' || !/^[0-9a-f]{10}$/.test(raw.key)) return undefined;
     const history = (Array.isArray(raw.history) ? raw.history : [])
         .filter((h: unknown) => isObject(h) && num(h.t) !== undefined)
         .slice(-MAX_HISTORY)
-        .map((h: Raw) => ({ t: h.t as number, ...(num(h.seq) !== undefined ? { seq: h.seq as number } : {}), segs: num(h.segs) ?? 0, ended: h.ended === true }));
+        .map((h: Raw) => ({ t: h.t as number, ...(num(h.seq) !== undefined ? { seq: h.seq as number } : {}), segs: num(h.segs) ?? 0, ended: h.ended === true, ...liveFigures(h) }));
     return {
         key: raw.key,
         track: ['video', 'audio', 'main'].includes(raw.track) ? raw.track : 'main',
@@ -128,7 +137,7 @@ export function cleanSession(raw: unknown): StreamSession {
         const value = typeof raw[key] === 'string' ? new Date(raw[key]) : undefined;
         if (value && !isNaN(value.getTime())) session[key] = value.toISOString();
     }
-    copyFields(raw, session, ['totalSegments', 'currentSegmentIndex', 'bytesTransferred'], ['userAgent', 'version', 'endReason', 'resolution', 'title', 'image', 'continuesSessionId'], ['live', 'radio']);
+    copyFields(raw, session, ['totalSegments', 'currentSegmentIndex', 'bytesTransferred', 'receivedHeight'], ['userAgent', 'version', 'endReason', 'resolution', 'title', 'image', 'continuesSessionId'], ['live', 'radio']);
     if (Array.isArray(raw.deliveredSegments)) session.deliveredSegments = raw.deliveredSegments.filter((n: unknown) => Number.isInteger(n)).slice(0, 20000);
     if (isObject(raw.settings)) {
         session.settings = Object.fromEntries(Object.entries(raw.settings).filter(([, v]) => typeof v === 'string').slice(0, 60).map(([k, v]) => [k.slice(0, 100), (v as string).slice(0, 500)]));

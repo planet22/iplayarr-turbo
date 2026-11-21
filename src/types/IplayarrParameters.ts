@@ -6,6 +6,10 @@ export enum IplayarrParameter {
     DOWNLOAD_DIR = 'DOWNLOAD_DIR',
     COMPLETE_DIR = 'COMPLETE_DIR',
     ARR_COMPLETE_DIR = 'ARR_COMPLETE_DIR',
+    // Where films and one-off specials queued from the web UI or a subscription are saved (blank: the Complete Directory).
+    MOVIE_COMPLETE_DIR = 'MOVIE_COMPLETE_DIR',
+    // A programme with no real episode number is treated as a film: the movie name, folder and Movie Directory.
+    SPECIALS_AS_MOVIES = 'SPECIALS_AS_MOVIES',
     DOWNLOAD_CLIENT = 'DOWNLOAD_CLIENT',
     GET_IPLAYER_EXEC = 'GET_IPLAYER_EXEC',
     YTDLP_EXEC = 'YTDLP_EXEC',
@@ -84,6 +88,7 @@ export enum IplayarrParameter {
     STREAM_TRACE = 'STREAM_TRACE',
     STREAM_PREFETCH_OPEN_RANGE = 'STREAM_PREFETCH_OPEN_RANGE',
     DOWNLOAD_SUBTITLES = 'DOWNLOAD_SUBTITLES',
+    DOWNLOAD_CHAPTERS = 'DOWNLOAD_CHAPTERS',
     STREAM_LIVE_DASH_1080 = 'STREAM_LIVE_DASH_1080',
     LIVE_UHD_EVENT_FEEDS = 'LIVE_UHD_EVENT_FEEDS',
     LIVE_RADIO = 'LIVE_RADIO',
@@ -128,6 +133,7 @@ export enum IplayarrParameter {
     LIVE_TV_GUIDE_CATEGORIES = 'LIVE_TV_GUIDE_CATEGORIES',
     LIVE_TV_GUIDE_FLAGS = 'LIVE_TV_GUIDE_FLAGS',
     LIVE_TV_GUIDE_HD = 'LIVE_TV_GUIDE_HD',
+    LIVE_TV_FROM_START = 'LIVE_TV_FROM_START',
     LIVE_TV_JELLYFIN_APPS = 'LIVE_TV_JELLYFIN_APPS',
 
     STRM_WATCHDOG_ENABLED = 'STRM_WATCHDOG_ENABLED',

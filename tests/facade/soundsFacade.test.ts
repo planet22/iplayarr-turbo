@@ -5,6 +5,7 @@ import configService from '../../src/service/configService';
 import libraryIndexService from '../../src/service/libraryIndexService';
 import soundsApiService, { knownEpisode } from '../../src/service/sounds/soundsApiService';
 import soundsBrowseAdapter from '../../src/service/sounds/soundsBrowseAdapter';
+import { resolveRadioName } from '../../src/service/sounds/soundsDownloadService';
 import soundsDownloadService, { SoundsDownloadError } from '../../src/service/sounds/soundsDownloadService';
 import soundsFollowService from '../../src/service/sounds/soundsFollowService';
 import soundsLibraryService from '../../src/service/sounds/soundsLibraryService';
@@ -13,6 +14,7 @@ jest.mock('../../src/service/configService', () => ({ __esModule: true, default:
 jest.mock('../../src/service/sounds/soundsDownloadService', () => ({
     __esModule: true,
     SoundsDownloadError: class extends Error {},
+    resolveRadioName: jest.fn(),
     default: { list: jest.fn(), enqueue: jest.fn(), remove: jest.fn(), retry: jest.fn(), writeShowCover: jest.fn() },
 }));
 jest.mock('../../src/service/sounds/soundsFollowService', () => ({
@@ -262,6 +264,23 @@ describe('soundsFacade core', () => {
         dl.retry.mockResolvedValueOnce({ id: 'a' }).mockResolvedValueOnce(undefined);
         expect(await soundsFacade.retryDownload('a')).toBe(true);
         expect(await soundsFacade.retryDownload('b')).toBe(false);
+    });
+
+    it('passes a typed name on to the download, only when there is one', async () => {
+        (knownEpisode as jest.Mock).mockReturnValue({ id: 'p1' });
+        dl.enqueue.mockResolvedValue({ id: 'p1' });
+        await soundsFacade.download('p1', 'm4a', 'My name');
+        expect(dl.enqueue).toHaveBeenLastCalledWith({ id: 'p1' }, 'm4a', false, 'My name');
+        await soundsFacade.download('p1', 'strm');
+        expect(dl.enqueue).toHaveBeenLastCalledWith({ id: 'p1' }, 'strm');
+    });
+
+    it('suggests the template name for a listed episode, and nothing for an unknown one', async () => {
+        (knownEpisode as jest.Mock).mockReturnValueOnce(undefined).mockReturnValueOnce({ id: 'p1' });
+        expect(await soundsFacade.namePreview('p1')).toBeUndefined();
+        (resolveRadioName as jest.Mock).mockResolvedValue({ templateName: 'Show - Ep' });
+        expect(await soundsFacade.namePreview('p1')).toBe('Show - Ep');
+        expect(resolveRadioName).toHaveBeenCalledWith({ id: 'p1' });
     });
 
     it('downloads only an episode it has listed, and cancels by id', async () => {

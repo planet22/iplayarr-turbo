@@ -291,6 +291,23 @@ describe('Utils', () => {
             await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBCiPlayarrTurbo');
         });
 
+        it('gives the template and what each variable is, the values the name is made from', async () => {
+            withConfig({ RELEASE_LANGUAGE: 'none', TV_FILENAME_TEMPLATE: '{{title}}.S{{season}}E{{episode}}' });
+            const { template, language, context } = await Utils.nzbTemplateContext(tv);
+            expect(template).toContain('{{title}}.S{{season}}E{{episode}}');
+            expect(language).toBe('');
+            expect(context).toMatchObject({ title: 'Show', season: '01', episode: '02', quality: '1080p' });
+        });
+
+        it('gives the first-broadcast year, from details or a search result, and none when unknown', async () => {
+            withConfig({ RELEASE_LANGUAGE: 'none' });
+            expect((await Utils.nzbTemplateContext({ ...movie, firstBroadcast: '2024-12-25T20:00:00Z' })).context.year).toBe('2024');
+            expect((await Utils.nzbTemplateContext({ ...movie, pubDate: new Date('2019-06-01T12:00:00Z') })).context.year).toBe('2019');
+            expect((await Utils.nzbTemplateContext(movie)).context.year).toBeUndefined();
+            withConfig({ RELEASE_LANGUAGE: 'none', MOVIE_FILENAME_TEMPLATE: '{{title}}.{{year}}' });
+            await expect(Utils.createNZBName({ ...movie, firstBroadcast: '2024-12-25T20:00:00Z' })).resolves.toBe('Film.2024-BBCiPlayarrTurbo');
+        });
+
         it('can be switched off', async () => {
             withConfig({ RELEASE_LANGUAGE: 'none' });
             await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');

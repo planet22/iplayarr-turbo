@@ -93,6 +93,31 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 const del = await http('/json-api/offSchedule', { method: 'DELETE', body: { id: mine.id } });
                 ok('off-schedule delete', del.status === 200 && !(del.json || []).some((s) => s.id === mine.id));
             }
+            // Cache the series first, then add a synonym for its title: the save refreshes the cached episodes in the background,
+            // so their names pick the synonym up (shows only with get_iplayer search).
+            const title = ((await http('/json-api/browse/programme/m002csng')).json || {}).title;
+            if (title) {
+                const again = await http('/json-api/offSchedule', { method: 'POST', body: { name: 'SMOKE-TEMP series syn', url: 'https://www.bbc.co.uk/programmes/m002csng' } });
+                const series = (again.json || []).find((s) => s.name === 'SMOKE-TEMP series syn');
+                if (series) {
+                    later('delete off-schedule (synonym)', () => http('/json-api/offSchedule', { method: 'DELETE', body: { id: series.id } }));
+                    await http('/json-api/offSchedule/refresh', { method: 'POST', body: { id: series.id }, timeout: 120000 });
+                    const syn = await http('/json-api/synonym', { method: 'POST', body: { from: 'SMOKE-TEMP-os-from', target: title, exemptions: '' } });
+                    const synMine = (syn.json || []).find((s) => s.from === 'SMOKE-TEMP-os-from');
+                    if (synMine) {
+                        later('delete off-schedule synonym', () => http('/json-api/synonym', { method: 'DELETE', body: { id: synMine.id } }));
+                        let named = false;
+                        let count = 'no';
+                        for (let i = 0; i < 12 && !named; i++) {
+                            await new Promise((r) => setTimeout(r, 5000));
+                            const found = (await http(`/json-api/search?q=${encodeURIComponent(title)}`, { timeout: 90000 })).json;
+                            count = Array.isArray(found) ? found.length : 'no';
+                            named = Array.isArray(found) && found.some((r) => String(r.nzbName || '').includes('SMOKE-TEMP-os-from'));
+                        }
+                        warn('adding a synonym renames the cached off-schedule episodes', named, `${count} results, none named with the synonym after a minute`);
+                    }
+                }
+            }
         });
 
         // 5. Show subscription: subscribe -> list -> check -> versions -> unsubscribe
@@ -273,7 +298,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                     { n: 3, t: 9500, kind: 'segment', track: 'video', seg: 2, status: 200, bytes: 5, prof: [5, -1, 'x'], profMs: 100 },
                     { n: 4, t: 9800, kind: 'segment', track: 'video', seg: 3, status: 200, bytes: 5, prof: [5] },
                 ],
-                playlists: [{ key: 'abc1234567', track: 'video', url: 'h/p.m3u8', kind: 'media', fetches: 1, firstT: 1, lastT: 1, history: [], upstream: '#EXTM3U\n' }],
+                playlists: [{ key: 'abc1234567', track: 'video', url: 'h/p.m3u8', kind: 'media', fetches: 2, firstT: 1000, lastT: 5000, history: [{ t: 1000, seq: 98, segs: 6, ended: false, winSec: 23.04, disc: 1, pdtEnd: 1760000000000 }, { t: 5000, seq: 99, segs: 6, ended: false, winSec: 23.04 }, { t: 6000, seq: 'x', segs: 6, winSec: 'bad' }], upstream: '#EXTM3U\n' }],
                 naming: { extension: 'mp4', fileName: 'Smoke.mp4' },
             });
             const upload = async (query = '', content = file) => {
@@ -303,8 +328,18 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('an imported byte profile with bad bins is cleaned, and one with no bin width is dropped', JSON.stringify(profiled[2]?.prof) === '[5,0,0]' && profiled[3]?.prof === undefined, `${JSON.stringify(profiled[2]?.prof)} / ${JSON.stringify(profiled[3]?.prof)}`);
             const pl = await http(`/json-api/streams/trace/${id}/playlist/abc1234567`);
             ok('an imported playlist is served', pl.status === 200 && /EXTM3U/.test(pl.json?.upstream || ''), `HTTP ${pl.status}`);
+            // The live window figures of each playlist read survive the import (bad ones are dropped), and the export carries them again.
+            const reads = trace.json?.playlists?.[0]?.history || [];
+            ok('an imported live playlist keeps the window figures of each read', reads[0]?.winSec === 23.04 && reads[0]?.disc === 1 && reads[0]?.pdtEnd === 1760000000000 && reads[1]?.winSec === 23.04, JSON.stringify(reads).slice(0, 200));
+            ok('an imported playlist read with figures that are not numbers loses them', reads[2] && reads[2].winSec === undefined && reads[2].seq === undefined, JSON.stringify(reads[2]));
+            // What watch from start would do: nothing for a stream that is not a live channel's (this one is a made-up programme id), and the usual refusals.
+            const liveInfo = await http(`/json-api/streams/trace/${id}/live`);
+            ok('live info for a trace that is not live channel TV is empty', liveInfo.status === 200 && JSON.stringify(liveInfo.json) === '{}', `HTTP ${liveInfo.status} ${liveInfo.text.slice(0, 80)}`);
+            ok('live info for an unknown stream is 404', (await http('/json-api/streams/trace/ffffffff-0000-4000-8000-00000000dead/live')).status === 404);
+            ok('live info with a bad stream id is refused', (await http('/json-api/streams/trace/not-an-id!/live')).status === 400);
             const plain = await http(`/json-api/streams/trace/${id}/export`);
             ok('an imported trace exports as JSON again', plain.status === 200 && plain.json?.format === 'iplayarr-trace' && plain.json.session?.id === id, `HTTP ${plain.status}`);
+            ok('an export carries the live window figures of the playlist reads', plain.json?.playlists?.[0]?.history?.[0]?.winSec === 23.04 && plain.json.playlists[0].history[0].pdtEnd === 1760000000000, JSON.stringify(plain.json?.playlists?.[0]?.history?.[0]));
             ok('an export carries the byte profiles', JSON.stringify(plain.json?.requests?.[0]?.prof) === '[4,0,6]' && plain.json?.requests?.[1]?.fetchMs === 150, JSON.stringify(plain.json?.requests?.[0]).slice(0, 120));
             const gz = await fetch(`${BASE}/json-api/streams/trace/${id}/export?gzip=1`);
             const gzBytes = new Uint8Array(await gz.arrayBuffer());
@@ -349,6 +384,13 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 if (cfg.STREAM_TRACE === 'true') {
                     ok('a streamed segment has a byte profile that adds up to its bytes', profiled.length > 0 && profiled.every((r) => r.prof.reduce((a, b) => a + b, 0) === r.bytes && r.profMs >= 100), `${profiled.length} profiled of ${traced.length} requests`);
                 } else ok('with Stream Trace off a stream records no requests and no byte profile', traced.length === 0 && profiled.length === 0, `${traced.length} requests`);
+                // The Streaming row's received-quality badge: with Stream Trace on, the session's picture height is the tallest the trace read from a segment; off, none is read.
+                const now = ((await http('/json-api/streams')).json || {}).active?.find((s) => s.id === mine.id);
+                const heights = traced.filter((r) => r.kind === 'segment' && r.vh).map((r) => r.vh);
+                if (cfg.STREAM_TRACE === 'true') {
+                    if (heights.length) ok('the stream\'s received picture height is the tallest read from its segments', now?.receivedHeight === Math.max(...heights), `${now?.receivedHeight} vs ${heights.join(',')}`);
+                    else rec(W, 'the stream\'s received picture height', 'SKIP', 'no picture size read from the segment (not H.264 MPEG-TS, or the 4 KB range was too short)');
+                } else ok('with Stream Trace off no received picture height is noted', now?.receivedHeight === undefined, `${now?.receivedHeight}`);
             }
             if (mine) {
                 const stop = await http(`/json-api/streams/${mine.id}/stop`, { method: 'POST' });
@@ -357,6 +399,24 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             // live
             const live = await http(`/api?mode=stream&pid=bbc_four&streamkey=${streamkey}`, { timeout: 60000 });
             warn('live channel master playlist', /#EXTM3U/.test(live.text), `HTTP ${live.status}`);
+            // Live trace (HLS, or the 1080p DASH feed made into HLS): a media playlist read is recorded with its window figures, and the stream's
+            // live info answers. Soft checks: a live channel can be off air, or BBC can refuse it from the dev instance.
+            if (/#EXTM3U/.test(live.text) && cfg.STREAM_TRACE === 'true') {
+                const liveUri = (live.text.split('\n').find((l) => l && !l.startsWith('#')) || '').trim();
+                if (liveUri) {
+                    const liveMedia = await http(liveUri.startsWith('http') ? liveUri.replace(BASE, '') : '/api/' + liveUri.replace(/^\/?(api\/)?/, ''), { timeout: 60000 });
+                    const liveSession = (((await http('/json-api/streams')).json || {}).active || []).find((s) => s.pid === 'bbc_four');
+                    if (liveSession && /#EXTINF/.test(liveMedia.text)) {
+                        const liveTrace = (await http(`/json-api/streams/trace/${liveSession.id}`)).json;
+                        const read = (liveTrace?.playlists || []).find((p) => p.kind === 'media');
+                        const last = read?.history?.[read.history.length - 1];
+                        warn('a live media playlist read is traced with its window figures', !!last && last.segs > 0 && last.seq !== undefined && last.winSec > 0, JSON.stringify(last));
+                        const liveInfo = await http(`/json-api/streams/trace/${liveSession.id}/live`);
+                        warn('live info answers for a live channel stream', liveInfo.status === 200 && typeof liveInfo.json?.fromStart?.enabled === 'boolean', `HTTP ${liveInfo.status} ${liveInfo.text.slice(0, 100)}`);
+                        await http(`/json-api/streams/${liveSession.id}/stop`, { method: 'POST' });
+                    } else rec(W, 'live trace of a media playlist read', 'SKIP', 'no live session or media playlist to trace');
+                }
+            }
         });
 
         // 9. Downloads: .strm download, real file download, queue/history lifecycle, cancel
@@ -567,8 +627,12 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             if (!ctx.wd?.enabled) return rec(W, 'watchdog flow', 'SKIP', 'disabled');
             const rc = await http('/json-api/watchdog/refresh-counts', { method: 'POST', timeout: 180000 });
             ok('watchdog refresh counts', rc.status === 200 || rc.status === 409, `HTTP ${rc.status} ${rc.text.slice(0, 100)}`);
-            const totals = async () => Object.fromEntries((((await http('/json-api/library/debug', { timeout: 60000 })).json || {}).sources || []).map((x) => [x.id, x.counted + '/' + x.rejected]));
+            // counted/rejected per source. The scan time is kept apart, only to say in the detail whether a source that differs was rescanned
+            // (an app source is read from Sonarr/Radarr/Jellyfin, which can change on its own) or left as it was.
+            let scanTimes = {};
+            const totals = async () => { const sources = ((await http('/json-api/library/debug', { timeout: 60000 })).json || {}).sources || []; scanTimes = Object.fromEntries(sources.map((x) => [x.id, x.scannedAt])); return Object.fromEntries(sources.map((x) => [x.id, x.counted + '/' + x.rejected])); };
             const beforeRun = await totals();
+            const scannedBefore = scanTimes;
             const run = await http('/json-api/watchdog/run', { method: 'POST' });
             ok('watchdog run starts', run.status === 202 || run.status === 409, `HTTP ${run.status}`);
             await sleep(5000);
@@ -581,7 +645,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             for (let i = 0; i < 120 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(500);
             const afterStop = await totals();
             const changed = Object.keys({ ...beforeRun, ...afterStop }).filter((k) => beforeRun[k] !== afterStop[k]);
-            if (runningAtStop) warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.join(', ')}`);
+            if (runningAtStop) warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.map((k) => `${k} ${beforeRun[k]} -> ${afterStop[k]} (${scannedBefore[k] === scanTimes[k] ? 'scan time unchanged' : `rescanned ${scannedBefore[k]} -> ${scanTimes[k]}`})`).join(', ')}`);
             else rec(W, 'a stopped watchdog scan leaves the library index as it was', 'SKIP', 'SKIPPED because: the run had already finished before the stop, and a finished run legitimately replaces the index');
             ok('watchdog is no longer running after stop', !(await http('/json-api/watchdog')).json?.live?.running, 'still running after 60s');
         });

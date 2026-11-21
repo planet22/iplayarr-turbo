@@ -216,6 +216,15 @@ describe('LibraryCleanupService', () => {
         expect(fs.readdirSync(arrCompleteDir)).toHaveLength(0);
     });
 
+    it('also cleans MOVIE_COMPLETE_DIR', async () => {
+        const movieDir = path.join(tmpDir, 'movies');
+        mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: completeDir, MOVIE_COMPLETE_DIR: movieDir });
+        fs.mkdirSync(path.join(movieDir, 'Old Movie (2020)'), { recursive: true });
+
+        expect(await libraryCleanupService.cleanup()).toBe(1);
+        expect(fs.readdirSync(movieDir)).toHaveLength(0);
+    });
+
     it('is a no-op when the configured directories do not exist on disk', async () => {
         mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', COMPLETE_DIR: path.join(tmpDir, 'does-not-exist') });
 

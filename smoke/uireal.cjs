@@ -9,13 +9,16 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
     const U = 'ui-real';
     const shot = async (page, name, full = false) => page.screenshot({ path: path.join(SHOTS, `real-${name}.png`), fullPage: full }).catch(() => {});
     const cleanups = [];
-    const flow = async (name, fn) => {
+    // `expected` lists the errors a flow causes on purpose (a request it aborts): `url` matches the failing resource, `text` the message.
+    // Everything else still fails the flow.
+    const flow = async (name, fn, { expected = [] } = {}) => {
         if (ctx.want && !ctx.want(name)) return; // --filter on the command line
         const errs = [];
+        const isExpected = (text, url) => expected.some((e) => (e.url && e.url.test(url || '')) || (e.text && e.text.test(text)));
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
         const page = await context.newPage();
-        page.on('pageerror', (e) => errs.push('pageerror: ' + e.message.slice(0, 100)));
-        page.on('console', (m) => { if (m.type() === 'error' && !/\/socket\.io\//.test(m.location()?.url || '') && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '')) errs.push('console: ' + m.text().slice(0, 100)); });
+        page.on('pageerror', (e) => { if (!isExpected(e.message, '')) errs.push('pageerror: ' + e.message.slice(0, 100)); });
+        page.on('console', (m) => { if (m.type() === 'error' && !/\/socket\.io\//.test(m.location()?.url || '') && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '') && !isExpected(m.text(), m.location()?.url)) errs.push('console: ' + m.text().slice(0, 100)); });
         try { await fn(page, context); }
         catch (e) { rec(U, name, 'FAIL', 'threw: ' + e.message.split('\n')[0]); await shot(page, 'FAILED-' + name.replace(/\W+/g, '-')); }
         if (errs.length) rec(U, `${name}: no page/console errors`, 'FAIL', errs.slice(0, 2).join(' | '));
@@ -33,6 +36,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
     const ok = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'FAIL', c ? '' : d);
     const warn = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'WARN', c ? '' : d);
     const dialog = (page) => page.locator('[role=dialog], .modal, .modalContent, .dialog').first();
+    // The Filename box in a Download dialog (video and audio) spans the popup and stays level with its label.
+    const filenameFillsDialog = async (d) => {
+        const input = d.locator('input[type=text], input:not([type])').last();
+        const label = d.getByText('Filename', { exact: true }).first();
+        const [box, panel, text] = await Promise.all([input.boundingBox().catch(() => null), d.boundingBox().catch(() => null), label.boundingBox().catch(() => null)]);
+        // Wide, and still on the label's row: their vertical centres are within half a line of each other.
+        return !!box && !!panel && !!text && box.width >= panel.width * 0.6 && Math.abs(box.y + box.height / 2 - (text.y + text.height / 2)) < 12;
+    };
     // The Subscriptions list is paged (16 a page, oldest first): a new subscription can be on page 2, so show the biggest page.
     const showAllSubscriptions = async (page) => {
         const sizeSelect = page.locator('select[aria-label="items per page"]').first();
@@ -78,12 +89,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // The row's Download button is the one-click download (it queues straight away); the row itself opens the dialog.
             const dl = page.locator('button[title*="ownload"], button[aria-label*="ownload"]').first();
             rec(U, 'search result download button is accessible', (await dl.count()) > 0 ? 'PASS' : 'WARN', 'no button with a Download name');
-            const row = page.locator('tbody tr td.text').first();
+            // The first row can be a collection (it opens the Collections page, not a dialog): take the first programme row that has an episode.
+            const row = page.locator('tbody tr', { hasNotText: 'COLLECTION' }).filter({ hasText: /Episode \d+/ }).locator('td.text').first();
             if (await row.count()) {
                 await row.click();
                 await page.waitForTimeout(1500);
                 const d = dialog(page);
                 warn('download dialog opens from search', (await d.count()) > 0 && (await d.isVisible().catch(() => false)));
+                warn('the Filename box in the video Download dialog fills the popup width and lines up with its label', await filenameFillsDialog(d));
                 await shot(page, 'search-3-download-dialog');
                 // The size shown for a file download follows the Quality picker (full-HD is bigger than mobile).
                 const sizeOf = async () => {
@@ -350,7 +363,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 }
             } else rec(U, 'streaming tab select', 'WARN', 'none found');
             // visit every tab for a visual record
-            for (const t of ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance']) {
+            for (const t of ['General', 'Search', 'Downloads', 'Media Management', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance']) {
                 await page.locator(`.settingsTab:has-text("${t}")`).first().click().catch(() => {});
                 await page.waitForTimeout(500);
                 await shot(page, `settings-tab-${t.toLowerCase().replace(/\W+/g, '-')}`, true);
@@ -420,10 +433,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await tab('general');
             const names = await page.locator('.settingsTab').allTextContents();
             ok('the tab bar lists General, Search and Appearance', ['General', 'Search', 'Appearance'].every((t) => names.some((n) => n.includes(t))), names.join());
-            const order = ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance'];
-            ok('the tabs are in the planned order: General, Search, Downloads, Library, Streaming, Live Channels, Appearance, Authentication, Maintenance',
+            const order = ['General', 'Search', 'Downloads', 'Media Management', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance'];
+            ok('the tabs are in the planned order: General, Search, Downloads, Media Management, Streaming, Live Channels, Appearance, Authentication, Maintenance',
                 order.every((t, i) => (names[i] || '').includes(t)), names.join());
-            ok('no tab still carries the old names (Media Management, Download Client, Live TV)', !names.some((n) => /Media Management|Download Client|Live TV/.test(n)), names.join());
+            ok('no tab still carries the old names (Download Client, Live TV)', !names.some((n) => /Download Client|Live TV/.test(n)), names.join());
             const general = await labels();
             ok('General holds the API key (and the advanced RSS/schedule settings)', general.some((l) => /Api Key/i.test(l)) && !general.some((l) => /Native Search|Colour Scheme/i.test(l)), general.join(' | '));
 
@@ -435,8 +448,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForTimeout(400);
             const engine = (await http('/json-api/config')).json?.NATIVE_SEARCH_ENGINE;
             if (engine === 'V2' || (await page.locator('.settingsBody').innerText()).includes('Collections')) {
-                const adv = (await labels()).join(' | ');
-                ok('Search (advanced, engine 2.0) offers both collection options, NZB and manual', (adv.match(/Expand BBC Collections/g) || []).length === 2 && (adv.match(/Find BBC Collections by Name/g) || []).length === 2, adv);
+                // Counted per block (NZB, manual, radio), not across the page, so a block added later does not break the count.
+                const advList = await labels();
+                const adv = advList.join(' | ');
+                const starts = advList.map((l, i) => (/^Native Search\s*$/i.test(l) ? i : -1)).filter((i) => i >= 0);
+                const radioAt = advList.findIndex((l) => /^Search Video and Radio Together/i.test(l));
+                const blockEnd = radioAt >= 0 ? radioAt : advList.length;
+                const inBlock = (from, to) => advList.slice(from, to);
+                const one = (list) => list.filter((l) => /^Expand BBC Collections/i.test(l)).length === 1 && list.filter((l) => /^Find BBC Collections by Name/i.test(l)).length === 1;
+                ok('Search (advanced, engine 2.0) offers both collection options, NZB and manual',
+                    starts.length >= 2 && one(inBlock(starts[0], starts[1])) && one(inBlock(starts[1], blockEnd)), adv);
+                if (radioAt >= 0) ok('Search (advanced) offers both collection options for radio too', one(inBlock(radioAt, advList.length)), adv);
             }
             // Same setting, same name: no engine suffix on any label, and radio offers the collection options under the same names.
             const advLabels = await labels();
@@ -446,8 +468,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 const radioStart = at(/^Search Video and Radio Together/i);
                 const radio = advLabels.slice(radioStart);
                 const [expand, names, words] = [/^Expand BBC Collections/i, /^Find BBC Collections by Name/i, /^Match All Search Words/i].map((re) => radio.findIndex((l) => re.test(l)));
-                ok('Radio Search offers Expand BBC Collections, then Find BBC Collections by Name (while Show Collections is on), then Match All Search Words',
-                    expand >= 0 && expand < words && (names < 0 || (expand < names && names < words)), radio.join(' | '));
+                // The radio block is laid out on purpose (Settings regroup, SettingsTabLayouts.test.js): wording and ranking first, then scope and
+                // limits, then the collection options (Find by Name, then Expand), then networks. It does not copy the TV blocks' order.
+                ok('Radio Search offers Match All Search Words first, then Find BBC Collections by Name (while Show Collections is on), then Expand BBC Collections',
+                    words >= 0 && expand > words && (names < 0 || (words < names && names < expand)), radio.join(' | '));
             }
             await shot(page, 'settings-tab-search-advanced', true);
 
@@ -481,7 +505,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Maintenance lists the scheduled tasks', /Scheduled tasks/i.test(maint));
             // Every task that has run shows how long it took; none is running here, so no progress bar is on screen.
             const ranTasks = ((await http('/json-api/maintenance/tasks')).json || []).filter((x) => Number.isFinite(x.lastDurationMs));
-            const tookPills = await page.locator('.pill', { hasText: /^Took / }).count();
+            const tookPills = await page.locator('.pill', { hasText: /Took / }).count();
             ok('Maintenance shows "Took ..." for every task that has run', tookPills === ranTasks.length, `${tookPills} pills, ${ranTasks.length} tasks with a duration`);
             ok('Maintenance draws no progress bar while nothing runs', (await page.locator('.settingsBody .taskBar').count()) === 0);
             ok('Hours in RSS Feed and Full Schedule Refresh are no longer on Maintenance', !/Hours in RSS Feed|Full Schedule Refresh/.test(maint));
@@ -720,16 +744,38 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             if (ctx.cfg?.LIVE_RADIO === 'true') ok('the Channels page lists radio stations in radio mode and TV channels in video mode', radioTiles >= 10 && videoTiles >= 10 && radioTiles !== videoTiles, `radio ${radioTiles}, video ${videoTiles}`);
             else ok('the TV Channels page is not an empty state', videoTiles >= 1 && (await page.locator('.emptyStateBlock').count()) === 0, `video ${videoTiles}`);
             // The radio Guide's blocks open the show's radio page (not a search for the title); the video Guide's still open a programme.
+            // A block is a div.programmeBlock holding an a.blockLink (its buttons never sit inside the link). When the instance has no guide
+            // blocks to draw, the schedule request is answered with one radio and one TV block of the flow's own, so the link targets are still
+            // checked; the click is then skipped, as that show does not exist.
             if (ctx.cfg?.LIVE_RADIO === 'true') {
-                await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
-                const blocks = page.locator('a.programmeBlock');
-                await blocks.first().waitFor({ timeout: 25000 }).catch(() => {});
-                const radioHrefs = await blocks.evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                const blockLinks = page.locator('.programmeBlock a.blockLink');
+                const loadGuide = async () => {
+                    await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
+                    await blockLinks.first().waitFor({ timeout: 25000 }).catch(() => {});
+                    return blockLinks.evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                };
+                let radioHrefs = await loadGuide();
+                let canned = false;
+                if (!radioHrefs.length) {
+                    const now = Date.now();
+                    const slot = (item) => ({ item, start: new Date(now - 1800000).toISOString(), end: new Date(now + 1800000).toISOString() });
+                    const rows = [
+                        { channel: { id: 'smoke_radio', title: 'SMOKE Radio', audioOnly: true }, slots: [{ ...slot({ pid: 'b0smokee1', kind: 'episode', radio: true, showId: 'b0smokes1', title: 'SMOKE radio show' }), onDemand: true }] },
+                        { channel: { id: 'smoke_tv', title: 'SMOKE TV' }, slots: [slot({ pid: 'b0smoketv', kind: 'episode', type: 'TV', title: 'SMOKE TV show' })] },
+                    ];
+                    await page.route(/\/json-api\/browse\/schedule\?date=/, (route) => route.fulfill({ json: rows }));
+                    canned = true;
+                    radioHrefs = await loadGuide();
+                }
                 if (!radioHrefs.length) rec(U, 'radio Guide blocks open the radio page', 'SKIP', 'no guide blocks drawn');
                 else {
                     ok('radio Guide blocks open the show\'s radio page, not a search', radioHrefs.some((h) => /^\/browse\/radio\/[a-z0-9]+(\?episode=[a-z0-9]+)?$/i.test(h)) && !radioHrefs.some((h) => /^\/browse\/programme\//.test(h)), radioHrefs.slice(0, 3).join(' | '));
-                    const target = page.locator('a.programmeBlock[href^="/browse/radio/"]').first();
-                    if (await target.count()) {
+                    // An on-demand radio block (canned here when the instance has none drawn) offers Play and Download, as TV blocks do.
+                    const onDemandBlock = page.locator('.programmeBlock.onDemand').first();
+                    if (await onDemandBlock.count()) ok('an on-demand radio Guide block offers Play and Download', (await onDemandBlock.locator('button[aria-label="Play on demand"], button[aria-label="Download on demand"]').count()) >= 1, 'no Play or Download button on the on-demand block');
+                    else rec(U, 'an on-demand radio Guide block offers Play and Download', 'SKIP', 'no on-demand radio block drawn');
+                    const target = page.locator('.programmeBlock a.blockLink[href^="/browse/radio/"]').first();
+                    if (!canned && await target.count()) {
                         await target.scrollIntoViewIfNeeded();
                         await target.click();
                         await page.waitForURL(/\/browse\/radio\//, { timeout: 15000 }).catch(() => {});
@@ -740,8 +786,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
                 await page.locator('.NavBar .modeSingle').click();
                 await page.waitForTimeout(2500);
-                const videoHrefs = await page.locator('a.programmeBlock').evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
-                if (videoHrefs.length) ok('video Guide blocks still open a programme page', videoHrefs.every((h) => /^\/browse\/programme\/[a-z0-9]+$/i.test(h)), videoHrefs.find((h) => !/^\/browse\/programme\//.test(h)) || '');
+                const videoHrefs = await page.locator('.programmeBlock a.blockLink').evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                if (videoHrefs.length) ok('video Guide blocks still open a programme page', videoHrefs.every((h) => /^\/browse\/programme\/[a-z0-9]+(\?episode=[a-z0-9]+)?$/i.test(h)), videoHrefs.find((h) => !/^\/browse\/programme\//.test(h)) || '');
                 else rec(U, 'video Guide blocks still open a programme page', 'SKIP', 'no guide blocks drawn');
             }
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
@@ -788,6 +834,21 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await cards.first().waitFor({ timeout: 25000 });
             ok('an opened radio collection lists radio cards, and has a Download collection button like video', (await cards.count()) > 0 && (await page.locator('button[title^="Download collection"]').count()) === 1);
             await shot(page, 'radio-collection');
+            // The audio Download dialog is the video one: banner, link-first choice, one-line note, then the file name. Cancel queues nothing.
+            await cards.first().click();
+            await page.waitForTimeout(2500);
+            const radioDownload = page.locator('button[title="Download MP3"], button[title="Record to M4A"], button[title="Download"]').first();
+            if (await radioDownload.count()) {
+                await radioDownload.click();
+                await page.waitForSelector('.modal-inner, [role=dialog]', { timeout: 15000 }).catch(() => {});
+                const rd = page.locator('.modal-inner, [role=dialog]').first();
+                const choices = (await rd.locator('[role=radio]').allInnerTexts().catch(() => [])).map((t) => t.trim());
+                warn('the audio Download dialog offers the .strm link first, then the audio file, like video', choices.length === 2 && /strm/i.test(choices[0]) && /audio/i.test(choices[1]), JSON.stringify(choices));
+                warn('the audio Download dialog has the same note and a Filename field after it as the video dialog', (await rd.locator('.outputNote').count()) === 1 && (await rd.getByText('Filename', { exact: true }).count()) === 1);
+                warn('the Filename box in the audio Download dialog fills the popup width and lines up with its label', await filenameFillsDialog(rd));
+                await shot(page, 'radio-download-dialog');
+                await page.keyboard.press('Escape');
+            } else rec(U, 'the audio Download dialog matches the video one', 'SKIP', 'no episode download button');
 
             // Radio A to Z off: BBC Sounds has no A to Z, so an address for it opens Categories and the command palette does not offer it.
             // On: the address stays and the palette offers it.
@@ -858,6 +919,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.locator('.probeTable tbody tr').first().waitFor({ timeout: 40000 });
                 const body = await page.innerText('body');
                 ok('the radio debug page reads the episode as audio', /\baudio\b/i.test(body) && (await page.locator('.probeTable tbody tr').count()) > 2, 'no audio probe rows');
+                ok('the radio debug page colours exactly one Probe line as the one a normal Play would use', (await page.locator('.streamDebug .probeTable tr.bestRow').count()) === 1, `${await page.locator('.streamDebug .probeTable tr.bestRow').count()} coloured line(s)`);
                 ok('the radio debug page has no broken picture', await page.evaluate(() => [...document.querySelectorAll('.streamDebug img')].every((i) => i.complete && i.naturalWidth > 0)), 'a picture did not load');
                 ok('the radio debug page shows no video-only parts', !/Video info|FHD upgrade/.test(body) && (await page.locator('.streamDebug .pidLinks li', { hasText: /^Programme page$/ }).count()) === 0, 'video-only text on the page');
                 // Radio gets Library debug and Watchdog beside its Sounds page link (the iPlayer-only Programme page and Video info stay off).
@@ -1205,6 +1267,105 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
             ok('the server value replaces the cached one', (await nav().count()) === 0);
             ok('and the cache follows it', JSON.parse((await page.evaluate(() => localStorage.getItem('iplayarr.navSettings'))) || '{}').BROWSE_SHOW_COLLECTIONS === 'false');
+        }, {
+            // The three requests this flow aborts, and the app's own report that its start-up fetch failed.
+            expected: [{ url: /\/json-api\/(config|config\/hiddenSettings|versions)(\?|$)/ }, { text: /Could not finish setting up the app/ }],
+        });
+
+        // ---- Stream trace charts and the imported-traces button, from a trace imported for the purpose. The read-only ui layer only checks
+        // these when the history already holds a stream with three segment requests or an imported trace, and skips otherwise; this flow
+        // brings its own (SMOKE-TEMP, deleted afterwards), so they are checked on any instance. The Delete button is looked at, never pressed:
+        // it would remove the instance's own imported traces too.
+        await flow('trace charts and imported traces (imported trace)', async (page) => {
+            const id = 'ffffffff-0000-4000-8000-5a0e7e57ab1f';
+            const file = JSON.stringify({
+                format: 'iplayarr-trace', version: 1, exportedAt: new Date().toISOString(),
+                session: { id, pid: 'b0smoke2', mode: 'direct', client: 'NATIVE', startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T10:01:00.000Z', title: 'SMOKE-TEMP chart trace' },
+                requests: [
+                    { n: 1, t: 1000, kind: 'segment', track: 'video', seg: 0, status: 200, bytes: 400000, durMs: 300, prof: [4, 0, 6], profMs: 100 },
+                    { n: 2, t: 4000, kind: 'segment', track: 'video', seg: 1, status: 200, bytes: 800000, durMs: 0, prefetched: true, prof: [8], profMs: 100, profAt: 2000, fetchMs: 150 },
+                    { n: 3, t: 7000, kind: 'segment', track: 'video', seg: 2, status: 200, bytes: 500000, durMs: 250, prof: [5, 5], profMs: 100 },
+                    { n: 4, t: 9800, kind: 'segment', track: 'video', seg: 3, status: 200, bytes: 500000, durMs: 250, prof: [5], profMs: 100 },
+                ],
+                playlists: [],
+                naming: { extension: 'mp4', fileName: 'Smoke chart.mp4' },
+            });
+            const upload = async (query) => {
+                const form = new FormData();
+                form.append('file', new Blob([file]), 'trace.json');
+                const r = await fetch(`${BASE}/json-api/streams/trace/import${query}`, { method: 'POST', body: form });
+                return { status: r.status, text: await r.text().catch(() => '') };
+            };
+            cleanups.push(async () => { await http('/json-api/streams/trace/' + id, { method: 'DELETE' }); });
+            let imported = await upload('');
+            if (imported.status === 409) imported = await upload('?replace=1');
+            if (imported.status !== 200) return rec(U, 'trace charts fixture: import a trace', 'FAIL', `HTTP ${imported.status} ${imported.text.slice(0, 100)}`);
+
+            // The Streaming page: the button that deletes imported traces has an icon of its own, not the trash can of "Clear stream history".
+            await page.goto(BASE + '/streaming', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(1200);
+            const del = page.locator('button[aria-label="Delete all imported traces"]');
+            const icon = await del.locator('svg').first().getAttribute('data-icon').catch(() => null);
+            const clear = await page.locator('button[aria-label="Clear stream history"] svg').first().getAttribute('data-icon').catch(() => null);
+            ok('streaming page: Delete all imported traces has its own icon (imported trace)', !!icon && icon !== 'trash' && icon !== clear, `imported ${icon}, clear history ${clear}`);
+
+            // The trace page: throughput views, the fit and read-ahead buttons.
+            await page.setViewportSize({ width: 1800, height: 1000 });
+            await page.goto(`${BASE}/streaming/session/${id}`, { waitUntil: 'networkidle' });
+            await page.locator('.timelineSvg').waitFor({ timeout: 30000 });
+            const texts = async (selector) => (await page.locator(selector).allTextContents()).map((t) => t.trim());
+            const rateLabel = async () => (await texts('.timelineSvg text.laneLabel')).find((t) => /throughput/i.test(t)) || '';
+            const rateAxis = async () => (await texts('.timelineSvg text.axisText')).filter((t) => /B\/s$/.test(t));
+            const mode = (name) => page.locator(`.timelineControls button:text-is("${name}")`);
+            ok('trace charts: the throughput graph offers Smoothed, Per transfer and Measured (imported trace)', (await mode('Smoothed').count()) === 1 && (await mode('Per transfer').count()) === 1 && (await mode('Measured').count()) === 1);
+            ok('trace charts: Measured is on offer because the trace has a byte profile (imported trace)', !(await mode('Measured').isDisabled()));
+            // A trace with a byte profile opens on Measured, so each view is chosen in turn rather than assuming where it starts.
+            const seen = [];
+            for (const name of ['Smoothed', 'Per transfer', 'Measured']) {
+                await mode(name).click();
+                seen.push(await rateLabel());
+            }
+            ok('trace charts: the throughput views change the graph label (imported trace)', new Set(seen).size === 3, seen.join(' | '));
+            await mode('Smoothed').click();
+            const axis = await rateAxis();
+            ok('trace charts: the throughput scale labels the middle and the top, not just 0 (imported trace)', axis.length >= 2, `${axis.length} labels: ${axis.join(', ')}`);
+            const fit = page.locator('.timelineControls button[aria-label*="Throughput scale"]');
+            const before = await fit.getAttribute('aria-pressed');
+            await fit.click();
+            const during = await fit.getAttribute('aria-pressed');
+            await fit.click();
+            ok('trace charts: the fit button switches the throughput scale to the part in view and back (imported trace)', before === 'false' && during === 'true' && (await fit.getAttribute('aria-pressed')) === 'false', `${before} -> ${during}`);
+            const ahead = page.locator('button.modeButton').first();
+            ok('trace charts: the read-ahead button is on offer when a read-ahead download was recorded (imported trace)', !(await ahead.isDisabled()));
+            // The read-ahead downloads are drawn from the start (the button is lit); pressing it hides them and pressing again shows them.
+            const shown = await page.locator('rect.aheadBar').count();
+            await ahead.click();
+            const hidden = await page.locator('rect.aheadBar').count();
+            await ahead.click();
+            const again = await page.locator('rect.aheadBar').count();
+            ok('trace charts: the read-ahead button draws one bar for the one read-ahead segment, hides it and shows it again (imported trace)', shown === 1 && hidden === 0 && again === 1, `${shown} / ${hidden} / ${again} bar(s)`);
+            await shot(page, 'trace-charts-imported', true);
+        });
+
+        // ---- Watchdog card icons for a sent notification and a failed last check. The read-only ui layer skips these unless a link has
+        // already had a webhook sent; here the watchdog's answer is changed in the browser (first link: invalid, last check failed, "Webhook
+        // sent"), so the card's icons are drawn from it. Nothing is changed on the server.
+        await flow('watchdog notification icon (fixture)', async (page) => {
+            const real = (await http('/json-api/watchdog')).json || {};
+            const items = Array.isArray(real.items) ? real.items : [];
+            if (!items.length) return rec(U, 'watchdog cards show a notification-sent icon (fixture)', 'SKIP', 'the watchdog tracks no links, so there is no card to mark');
+            const at = new Date().toISOString();
+            const marked = items.map((item, i) => (i === 0
+                ? { ...item, status: 'invalid', failCount: Math.max(1, item.failCount || 0), lastChecked: at, history: [...(item.history || []), { t: Date.now(), at, result: 'failed', message: 'SMOKE fixture' }], actions: [...new Set([...(item.actions || []), 'Webhook sent'])] }
+                : item));
+            await page.addInitScript(() => { try { localStorage.setItem('iplayarr.watchdogViewMode', 'cards'); } catch { /* the default view is used */ } });
+            await page.route('**/socket.io/**', (route) => route.abort()); // a pushed state would replace the changed one
+            await page.route(/\/json-api\/watchdog$/, (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { ...real, items: marked } }) : route.continue()));
+            await page.goto(BASE + '/watchdog', { waitUntil: 'networkidle' });
+            await page.locator('.cardGrid').first().waitFor({ timeout: 15000 }).catch(() => {});
+            ok('watchdog cards show a notification-sent icon (fixture)', (await page.locator('.cardGrid .lastCheck[title^="Notification sent"]').count()) > 0, 'no paper-plane icon on any card');
+            ok('watchdog cards show a failed icon for a link whose last check failed (fixture)', (await page.locator('.cardGrid .lastCheck.failed').count()) > 0, 'no failed icon on any card');
+            await shot(page, 'watchdog-notification-fixture');
         });
 
         // ---- Collections: the menu item and page follow Show Collections, and Discover never has a row (restored afterwards)
@@ -1618,6 +1779,25 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.locator('.streamDebug h2').first().waitFor({ timeout: 30000 }).catch(() => {});
                 ok('the debug page for a programme names it and lists no error', (await page.locator('.streamDebug .overview .facts h2').count()) === 1 && (await page.locator('.streamDebug .infoPanel.danger, .streamDebug .infoPanel.error').count()) === 0);
                 ok('the debug page lists the pid links as a list under the pid', (await page.locator('.streamDebug .facts .pidLinks li').count()) >= 3);
+                // Cast and crew from BBC: shown when BBC lists any; the Cards view groups by role and the choice is kept.
+                if (await page.locator('.streamDebug .sectionTitle', { hasText: 'Cast and crew from BBC' }).count()) {
+                    await page.locator('.streamDebug .castToggle button', { hasText: 'Cards' }).click();
+                    ok('the debug page cast and crew switches to cards grouped by role', (await page.locator('.streamDebug .castGroup h3').count()) > 0 && (await page.locator('.streamDebug .castCard .castName').count()) > 0);
+                    ok('the debug page remembers the cards choice in this browser', (await page.evaluate(() => localStorage.getItem('streamDebugCastView'))) === 'cards');
+                    await page.locator('.streamDebug .castToggle button', { hasText: 'Table' }).click();
+                    ok('the debug page cast and crew switches back to the table', (await page.locator('.streamDebug #trace-section-dbg-cast table tbody tr').count()) > 0);
+                } else rec(U, 'debug page cast and crew cards', 'SKIP', 'BBC lists no cast for this programme');
+                // A brand or series has nothing to play: an icon opens its programme page, and Play says why it cannot.
+                const factType = (await page.locator('.streamDebug .facts dt', { hasText: /^Type$/ }).locator('xpath=following-sibling::dd[1]').first().textContent().catch(() => '')) || '';
+                if (/^(brand|series)$/i.test(factType.trim())) {
+                    ok('the debug page of a brand or series has the programme page icon beside the title', (await page.locator('.streamDebug .facts h2 .containerLink').count()) === 1);
+                    const playButton = page.locator('.streamDebug .playerControls button').first();
+                    if (await playButton.isEnabled().catch(() => false)) {
+                        await playButton.click();
+                        const toast = await page.getByText('Could not play this').first().waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
+                        ok('Play on a brand or series says why it did not play (a toast)', toast, 'no "Could not play this" toast within 20 s');
+                    } else rec(U, 'Play on a brand or series says why it did not play', 'SKIP', 'Play is disabled (no stream key)');
+                } else rec(U, 'debug page programme page icon for a brand or series', 'SKIP', `the discovered programme is a ${factType.trim() || 'programme of unknown type'}`);
                 ok('the debug page gives "Leaves iPlayer" and "Days left" together', (await page.locator('.streamDebug .facts dt', { hasText: 'Leaves iPlayer' }).count()) === (await page.locator('.streamDebug .facts dt', { hasText: 'Days left' }).count()));
                 const libFont = await page.locator('.streamDebug .libraryTable td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);
                 const downloadsFont = await page.locator('.streamDebug table.dataTable:not(.libraryTable):not(.probeTable):not(.segmentTable) td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);

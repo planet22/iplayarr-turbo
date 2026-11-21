@@ -8,8 +8,12 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import { setMediaMode, setRadioEnabled } from '@/lib/mediaMode';
 import SchedulePage from '@/views/SchedulePage.vue';
 
-const { browseFetch } = vi.hoisted(() => ({ browseFetch: vi.fn(async () => []) }));
+const { browseFetch, actions } = vi.hoisted(() => ({
+    browseFetch: vi.fn(async () => []),
+    actions: { canPlay: true, play: vi.fn(), download: vi.fn() },
+}));
 vi.mock('@/lib/browse', () => ({ browseFetch }));
+vi.mock('@/lib/useBrowseActions', () => ({ useBrowseActions: () => actions }));
 
 // Failures are reported to the caller rather than thrown past it.
 // Read this before changing anything beneath it.
@@ -158,6 +162,21 @@ describe('SchedulePage', () => {
             expect(wrapper.find('.emptyStateBlock').exists()).toBe(false);
             expect(wrapper.findAll('.channelCell').map((c) => c.text())).toEqual(['Radio 4']);
         });
+
+        it('offers play and download on an on-demand radio slot', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const onDemand = { ...slot('p1', 'Today', -HOUR, HOUR), onDemand: true };
+            onDemand.item = { ...onDemand.item, radio: true, showId: 'b006qj9z' };
+            browseFetch.mockResolvedValue([row('radio-4', 'Radio 4', [onDemand], { audioOnly: true })]);
+            const wrapper = await mountWith(settings('true'));
+            const block = wrapper.find('.programmeBlock');
+            expect(block.classes()).toContain('onDemand');
+            await block.find('button[aria-label="Play on demand"]').trigger('click');
+            expect(actions.play).toHaveBeenCalledWith(onDemand.item);
+            await block.find('button[aria-label="Download on demand"]').trigger('click');
+            expect(actions.download).toHaveBeenCalledWith(onDemand.item);
+        });
     });
 
     it('draws a row per channel with a block per programme, marking the one on air', async () => {
@@ -177,6 +196,20 @@ describe('SchedulePage', () => {
         expect(blocks[0].classes()).toContain('live');
         expect(blocks[1].classes()).not.toContain('live');
         expect(wrapper.find('.noSchedule').text()).toBe('No schedule available');
+    });
+
+    it('marks programmes to watch on demand and offers play and download on them only', async () => {
+        const onDemand = { ...slot('p1', 'Breakfast', -HOUR, HOUR), onDemand: true };
+        browseFetch.mockResolvedValue([row('bbc-one', 'BBC One', [onDemand, slot('p2', 'Later Show', HOUR, HOUR)])]);
+        const wrapper = await mountIt();
+        const blocks = wrapper.findAll('.programmeBlock');
+        expect(blocks[0].classes()).toContain('onDemand');
+        expect(blocks[1].classes()).not.toContain('onDemand');
+        expect(blocks[1].find('.blockActions').exists()).toBe(false);
+        await blocks[0].find('button[aria-label="Download on demand"]').trigger('click');
+        expect(actions.download).toHaveBeenCalledWith(onDemand.item);
+        await blocks[0].find('button[aria-label="Play on demand"]').trigger('click');
+        expect(actions.play).toHaveBeenCalledWith(onDemand.item);
     });
 
     it('lists a programme once even though neighbouring days report it too', async () => {

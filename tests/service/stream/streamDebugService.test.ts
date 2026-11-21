@@ -30,7 +30,7 @@ jest.mock('../../../src/service/appService', () => ({ __esModule: true, default:
 jest.mock('../../../src/service/arr/ArrLibraryService', () => ({ __esModule: true, default: { getFilesFor: jest.fn() } }));
 jest.mock('../../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
 jest.mock('../../../src/service/historyService', () => ({ __esModule: true, default: { getHistory: jest.fn() } }));
-jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn(), getIblExtras: jest.fn(), getIblArtwork: jest.fn() } }));
+jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn(), getIblExtras: jest.fn(), getIblArtwork: jest.fn(), getContributors: jest.fn().mockResolvedValue([]), getVersionExtras: jest.fn().mockResolvedValue({ broadcasts: [], tracklist: [] }) } }));
 jest.mock('../../../src/service/libraryIndexService', () => ({ __esModule: true, default: { episodes: jest.fn() } }));
 jest.mock('../../../src/service/liveChannelService', () => ({ __esModule: true, default: { isEnabled: jest.fn() } }));
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn(), linesMentioning: jest.fn() } }));
@@ -128,8 +128,8 @@ describe('streamDebugService', () => {
                 ibl: { tagline: 'x' },
             });
             expect(info.versions).toEqual([
-                { vpid: 'p0vers01', types: ['Original'], duration: 1800, canonical: true },
-                { vpid: 'p0vers02', types: ['Audio Described'], duration: 1800, canonical: false },
+                { vpid: 'p0vers01', types: ['Original'], duration: 1800, canonical: true, selection: 'chosen' },
+                { vpid: 'p0vers02', types: ['Audio Described'], duration: 1800, canonical: false, selection: 'audio described / signed' },
             ]);
             expect(info.settings.STREAM_MODE).toBe('direct');
             // The parents are cut to their titles.
@@ -172,6 +172,17 @@ describe('streamDebugService', () => {
             const info = await streamDebugService.info(PID);
 
             expect(info.versions.map((version) => version.flags)).toEqual([{ hd: true, uhd: true }, {}]);
+        });
+
+        it('gives the cast, broadcasts and tracklist BBC lists', async () => {
+            jest.mocked(iplayerDetailsService.getContributors).mockResolvedValue([{ name: 'Ann Actor', role: 'Actor', character_name: 'Bea' }]);
+            jest.mocked(iplayerDetailsService.getVersionExtras).mockResolvedValue({ broadcasts: [{ start: '2026-11-19T19:30:00Z', repeat: false, service: 'BBC One' }], tracklist: [{ title: 'Song', artist: 'Band' }] });
+
+            const info = await streamDebugService.info(PID);
+
+            expect(info.cast).toEqual([{ name: 'Ann Actor', role: 'Actor', character_name: 'Bea' }]);
+            expect(info.broadcasts).toHaveLength(1);
+            expect(info.tracklist).toEqual([{ title: 'Song', artist: 'Band' }]);
         });
 
         it('says so when BBC does not have the programme, and still gives the rest', async () => {
@@ -247,6 +258,14 @@ describe('streamDebugService', () => {
 
             expect(info.versions.map((version) => [version.availableFrom, version.downloadable])).toEqual([['2026-11-01T06:00:00Z', true], [undefined, false]]);
             expect(info.access).toEqual({ signIn: true });
+        });
+
+        it('says which version a plain download takes, and why not the others', async () => {
+            jest.mocked(iplayerDetailsService.getIblExtras).mockResolvedValue({} as any);
+
+            const info = await streamDebugService.info(PID);
+
+            expect(info.versions.map((version) => version.selection)).toEqual(['chosen', 'audio described / signed']);
         });
 
         it('adds what Sonarr or Radarr holds for the files they list, and skips an app that is gone or does not answer', async () => {
@@ -371,7 +390,7 @@ describe('streamDebugService', () => {
             const info = await streamDebugService.info('bbc_one_london');
 
             expect(info).toMatchObject({ found: true, type: 'live channel', title: 'BBC One', channel: 'BBC channel' });
-            expect(info.live).toEqual({ kind: 'channel', vpid: 'bbc_one_hd', enabled: true });
+            expect(info.live).toEqual({ kind: 'channel', vpid: 'bbc_one_hd', enabled: true, fromStart: { enabled: false } });
             expect(info.versions).toEqual([{ vpid: 'bbc_one_hd', types: ['Live'], canonical: true }]);
             expect(info.settings.STREAM_LIVE_DASH_1080).toBe('true');
             expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
@@ -569,6 +588,44 @@ v.m3u8
             expect(probed).toMatchObject({ vpid: 'm0033frv', types: ['Audio'], bestHeight: 0, fhd: { outcome: 'no-variant' }, liveSet: { media: [] } });
             expect(probed.pairs[0].media[0].connections[0].master?.variants).toEqual([{ bandwidth: 128000, codecs: 'mp4a.40.2' }]);
             expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
+        });
+
+        describe('radio best line', () => {
+            const conn = (host: string, supplier: string, protocol = 'https', transferFormat = 'hls') =>
+                `<connection href="${protocol}://${host}/master.m3u8" supplier="${supplier}" transferFormat="${transferFormat}" protocol="${protocol}" priority="10"/>`;
+            const audio = (...conns: string[]) => `<mediaSelection><media kind="audio" encoding="aac" bitrate="128">${conns.join('')}</media></mediaSelection>`;
+            const serve = (answers: Record<string, string>) => {
+                jest.mocked(fetchTextWithStatus).mockImplementation(async (url: string) => {
+                    const key = Object.keys(answers).find((k) => url.includes(`/mediaset/${k.split('/')[0]}/`) && url.includes(`/mediaselector/${k.split('/')[1]}/`));
+                    return { statusCode: 200, body: key ? answers[key] : '<mediaSelection></mediaSelection>' };
+                });
+                jest.mocked(resolveRedirect).mockImplementation(async (href: string) => href);
+                jest.mocked(fetchText).mockResolvedValue('#EXTM3U\n');
+            };
+            const bestOf = async () => (await streamDebugService.probe('m0033frv', undefined, true)).versions[0].best;
+
+            it('is the Akamai https connection of the first route that offers audio, as the Sounds stream takes it', async () => {
+                serve({ 'iptv-all/6': audio(conn('a.example', 'other'), conn('b.example', 'mf_akamai_nonbidi')), 'pc/6': audio(conn('c.example', 'other')) });
+                expect(await bestOf()).toEqual({ mediaSet: 'iptv-all', version: 6, media: 0, connection: 1 });
+            });
+
+            it('falls back to the first usable connection when none is Akamai', async () => {
+                serve({ 'iptv-all/6': audio(conn('a.example', 'vbidi_x'), conn('b.example', 'other')) });
+                expect(await bestOf()).toEqual({ mediaSet: 'iptv-all', version: 6, media: 0, connection: 1 });
+            });
+
+            it('skips http, non-HLS and bidirectional connections, and moves to the next route', async () => {
+                serve({
+                    'iptv-all/6': audio(conn('a.example', 'other', 'http'), conn('b.example', 'other', 'https', 'dash'), conn('c.example', 'mf_bidi')),
+                    'pc/6': audio(conn('d.example', 'other')),
+                });
+                expect(await bestOf()).toEqual({ mediaSet: 'pc', version: 6, media: 0, connection: 0 });
+            });
+
+            it('ignores a video group and is nothing when no route offers a usable audio connection', async () => {
+                serve({ 'iptv-all/6': '<mediaSelection><media kind="video" encoding="h264"><connection href="https://v.example/m.m3u8" supplier="s" transferFormat="hls" protocol="https" priority="1"/></media></mediaSelection>' });
+                expect(await bestOf()).toBeUndefined();
+            });
         });
 
         it('leaves audio masters unread when the programme is video', async () => {

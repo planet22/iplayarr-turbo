@@ -14,6 +14,11 @@ const londonFormat = new Intl.DateTimeFormat('en-CA', {
 
 // The calendar date (YYYY-MM-DD) a UTC timestamp falls on in the UK, which is the date TVDB/Sonarr
 // record as a programme's air date - not the UTC date (late-evening broadcasts differ in summer).
+// The year (YYYY) of that UK date: the one place a release's year is worked out (template {{year}} and the film folder).
+export function broadcastYear(iso: string | undefined | null): string | undefined {
+    return londonDate(iso)?.slice(0, 4);
+}
+
 export function londonDate(iso: string | undefined | null): string | undefined {
     if (!iso) return undefined;
     const time = Date.parse(iso);

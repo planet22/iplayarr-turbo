@@ -34,6 +34,7 @@ describe('LiveTvSettingsTab (Live Channels)', () => {
             'STREAM_LIVE_DASH_1080',
             'LIVE_UHD_EVENT_FEEDS',
             'LIVE_TV_ENABLED',
+            'LIVE_TV_FROM_START',
             'STREAM_BASE_URL',
             'STREAM_KEY',
             'LIVE_TV_EPG_OFFSET',
@@ -59,7 +60,7 @@ describe('LiveTvSettingsTab (Live Channels)', () => {
     it('keeps the guide settings Advanced-only', () => {
         const basic = fields(mountIt({}, false));
         ['LIVE_TV_EPG_OFFSET', 'LIVE_TV_LOGO_SHAPE', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD'].forEach((f) => expect(basic).not.toContain(f));
-        expect(basic).toEqual(['LIVE_RADIO', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_ENABLED', 'STREAM_BASE_URL', 'STREAM_KEY']);
+        expect(basic).toEqual(['LIVE_RADIO', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_ENABLED', 'LIVE_TV_FROM_START', 'STREAM_BASE_URL', 'STREAM_KEY']);
     });
 
     it('does not call Live 1080p experimental', () => {
@@ -75,6 +76,12 @@ describe('LiveTvSettingsTab (Live Channels)', () => {
         });
         expect(wrapper.find('[data-field="STREAM_LIVE_DASH_1080"]').attributes('data-name')).toBe('Live 1080p');
         ['LIVE_RADIO', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS'].forEach((f) => expect(wrapper.find(`[data-field="${f}"]`).attributes('data-adv')).toBe('0'));
+    });
+
+    it('offers Watch From Start only with the tuner on and the native client', () => {
+        expect(fields(mountIt({}, false))).toContain('LIVE_TV_FROM_START');
+        expect(fields(mountIt({ LIVE_TV_ENABLED: 'false' }))).not.toContain('LIVE_TV_FROM_START');
+        expect(fields(mountIt({ STREAM_CLIENT: 'YTDLP' }))).not.toContain('LIVE_TV_FROM_START');
     });
 
     it('hides the connection and guide settings while the tuner is off', () => {

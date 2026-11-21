@@ -15,6 +15,7 @@ import { linkSegments,register, resolve as resolveToken } from '../../../src/ser
 import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv, VOD_PLAYLIST_CACHE } from '../../../src/service/stream/streamProxyUtils';
 import streamRequestLog, { setTraceEnabled } from '../../../src/service/stream/streamRequestLog';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
+import * as tsTimestamps from '../../../src/service/stream/tsTimestamps';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
@@ -26,7 +27,7 @@ jest.mock('../../../src/service/dnsRelayService', () => ({ ensureDnsRelayRunning
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { debug: jest.fn(), log: jest.fn() } }));
 jest.mock('../../../src/service/stream/streamSessionService', () => ({
     __esModule: true,
-    default: { setSegmentCount: jest.fn(), recordSegmentDelivered: jest.fn(), addBytesTransferred: jest.fn() },
+    default: { setSegmentCount: jest.fn(), recordSegmentDelivered: jest.fn(), addBytesTransferred: jest.fn(), setReceivedHeight: jest.fn() },
 }));
 
 const mockGet = (client: any, responses: Array<{ status: number; headers?: any; body?: string }>) => {
@@ -112,6 +113,36 @@ describe('proxyUrl', () => {
         mockGet(https, [seg]);
         await proxyUrl('https://cdn/p/profiled.ts', makeReq({ seg: '0' }), makeRes(), 5, 'prof-off');
         expect(await streamRequestLog.get('prof-off')).toEqual([]);
+    });
+
+    it('tells the session the picture height read from a segment, only while tracing and only when one is found', async () => {
+        const seg = { status: 200, headers: { 'content-type': 'video/mp2t' }, body: 'abcdefgh' };
+        const size = jest.spyOn(tsTimestamps, 'videoSize');
+        try {
+            size.mockReturnValue({ width: 1280, height: 720 });
+            setTraceEnabled(true);
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size.ts', makeReq({ seg: '0' }), makeRes(), 5, 'size-on');
+            expect(streamSessionService.setReceivedHeight).toHaveBeenCalledWith('size-on', 720);
+
+            (streamSessionService.setReceivedHeight as jest.Mock).mockClear();
+            size.mockReturnValue(undefined);
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size2.ts', makeReq({ seg: '0' }), makeRes(), 5, 'size-none');
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size3.ts', makeReq({ seg: '0' }), makeRes(), 5);
+            expect(streamSessionService.setReceivedHeight).not.toHaveBeenCalled();
+
+            setTraceEnabled(false);
+            size.mockReturnValue({ width: 1280, height: 720 });
+            mockGet(https, [seg]);
+            await proxyUrl('https://cdn/p/size4.ts', makeReq({ seg: '0' }), makeRes(), 5, 'size-off');
+            expect(streamSessionService.setReceivedHeight).not.toHaveBeenCalled();
+        } finally {
+            size.mockRestore();
+            setTraceEnabled(false);
+            ['size-on', 'size-none'].forEach((id) => streamRequestLog.discard(id));
+        }
     });
 
     it('tags live segments with their media sequence number only while tracing', async () => {
@@ -406,6 +437,25 @@ describe('proxyUrl', () => {
             await tick();
             await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), makeRes(), 5, 'sess');
             expect(await streamRequestLog.get('sess')).toEqual([]);
+        });
+
+        it('numbers a generated live DASH segment from the number and track in its address, without counting it as a delivered segment', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-type': 'video/mp4', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp4', 'content-length': '4' }, body: 'seg1' },
+            ]);
+            setTraceEnabled(true);
+            try {
+                await proxyUrl('https://cdn/p/57.m4s', makeReq({ token: tokens[0], tseq: '57', ttrack: 'audio' }), makeRes(), 5, 'sess-dash');
+                const [entry] = await streamRequestLog.get('sess-dash');
+                expect(entry).toMatchObject({ kind: 'segment', seg: 57, track: 'audio' });
+                // an unknown track name is ignored
+                await proxyUrl('https://cdn/p/58.m4s', makeReq({ token: tokens[1], tseq: '58', ttrack: 'evil' }), makeRes(), 5, 'sess-dash');
+                expect((await streamRequestLog.get('sess-dash')).find((e) => e.seg === 58)?.track).toBe('main');
+            } finally {
+                setTraceEnabled(false);
+                streamRequestLog.discard('sess-dash');
+            }
         });
 
         it('does not read ahead for Range requests (a seek) or for the last segment', async () => {

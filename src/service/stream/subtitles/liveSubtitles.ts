@@ -77,17 +77,29 @@ export function buildLiveSubtitlePlaylist(
     if (isNaN(sequence) || !target) {
         return undefined;
     }
+    // A break in the video (ad splice, encoder restart) is mirrored, with its sequence, so a player
+    // keeps the subtitle and video playlists in step across it.
+    const discontinuitySequence = /#EXT-X-DISCONTINUITY-SEQUENCE:(\d+)/.exec(videoPlaylist)?.[1];
     const entries: string[] = [];
+    let segments = 0;
     let duration: string | undefined;
+    let discontinuity = false;
     for (const line of lines) {
         const info = /^#EXTINF:([\d.]+)/.exec(line);
-        if (info) {
+        if (line.trim() === '#EXT-X-DISCONTINUITY') {
+            discontinuity = true;
+        } else if (info) {
             duration = info[1];
         } else if (line.trim() && !line.startsWith('#') && duration) {
             const named = /(\d{1,12})\.[a-z0-9]+(?:\?.*)?$/i.exec(line.trim());
-            const number = named ? parseInt(named[1], 10) : sequence + entries.length / 2;
+            const number = named ? parseInt(named[1], 10) : sequence + segments;
+            if (discontinuity) {
+                entries.push('#EXT-X-DISCONTINUITY');
+            }
             entries.push(`#EXTINF:${duration},`, vttUri(number));
+            segments++;
             duration = undefined;
+            discontinuity = false;
         }
     }
     if (entries.length === 0) {
@@ -98,6 +110,7 @@ export function buildLiveSubtitlePlaylist(
         '#EXT-X-VERSION:3',
         `#EXT-X-TARGETDURATION:${target}`,
         `#EXT-X-MEDIA-SEQUENCE:${sequence}`,
+        ...(discontinuitySequence ? [`#EXT-X-DISCONTINUITY-SEQUENCE:${discontinuitySequence}`] : []),
         ...entries,
         '',
     ].join('\n');

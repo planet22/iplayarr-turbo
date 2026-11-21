@@ -97,6 +97,51 @@ describe('liveTvService', () => {
         }
     });
 
+    describe('watch from start (LIVE_TV_FROM_START)', () => {
+        afterEach(() => {
+            delete params.LIVE_TV_FROM_START;
+            delete params.STREAM_LIVE_DASH_1080;
+        });
+
+        it('adds nothing while the setting is off', async () => {
+            expect(await liveTvService.playlist()).not.toContain('from start');
+        });
+
+        it('adds a second entry per channel, sharing the guide id and with no channel number of its own', async () => {
+            params.LIVE_TV_FROM_START = 'true';
+            const lines = (await liveTvService.playlist()).split('\n');
+            const extra = lines.filter((line) => line.includes('(from start)'));
+            expect(extra).toHaveLength(2);
+            expect(extra[0]).toContain('tvg-id="bbc_two_england"');
+            expect(extra[0]).not.toContain('tvg-chno');
+            expect(extra[0]).toContain('group-title="BBC from start"');
+            expect(extra[0].endsWith(',BBC Two (from start)')).toBe(true);
+            expect(lines[lines.indexOf(extra[0]) + 1]).toBe('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk&from=start');
+            // The normal entries are unchanged.
+            expect(lines).toContain('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk');
+        });
+
+        it('skips radio, custom and UHD event channels, and everything when Live 1080p is off', async () => {
+            params.LIVE_TV_FROM_START = 'true';
+            const spy = jest.spyOn(liveTvService, 'channels').mockResolvedValue([
+                { id: 'bbc_two_england', title: 'BBC Two', masterBrand: 'bbc_two' },
+                { id: 'bbc_radio_two', title: 'Radio 2', masterBrand: 'bbc_radio_two', audioOnly: true },
+                { id: 'my_custom', title: 'Mine' },
+                { id: 'uk_bbc_stream_041', title: 'UHD 41' },
+            ] as any);
+            setCustomRegistry([{ id: 'my_custom', title: 'Mine', streamUrl: 'http://x/y.m3u8', streamType: 'auto' } as any], {});
+            try {
+                const urls = (await liveTvService.playlist()).split('\n').filter((line) => line.includes('&from=start'));
+                expect(urls).toEqual([expect.stringContaining('pid=bbc_two_england')]);
+                params.STREAM_LIVE_DASH_1080 = 'false';
+                expect(await liveTvService.playlist()).not.toContain('from start');
+            } finally {
+                setCustomRegistry([], {});
+                spy.mockRestore();
+            }
+        });
+    });
+
     it('is an empty tuner when nothing is selected', async () => {
         (liveTvChannelService.list as jest.Mock).mockResolvedValue([]);
         expect(await liveTvService.playlist()).toBe('#EXTM3U\n');

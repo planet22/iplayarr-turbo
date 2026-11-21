@@ -24,6 +24,20 @@ export interface IblEpisodeExtras {
     // When the episode leaves iPlayer (ISO), and whether iPlayer flags it with content guidance.
     availableUntil?: string;
     guidance?: true;
+    // iPlayer's own word for whether it can be watched on demand now ("available", "unavailable"...), as the guide uses it.
+    status?: string;
+    // More of what iPlayer's listing says, shown on the debug page: category label, channel (master brand), whether a signed or
+    // audio described version exists, children's content, programme type (e.g. "sequential"), release date text, whether
+    // credits exist, and the age bands iPlayer asks about.
+    label?: string;
+    masterBrand?: string;
+    signed?: true;
+    audioDescribed?: true;
+    childrens?: true;
+    programmeType?: string;
+    releaseDate?: string;
+    hasCredits?: boolean;
+    ageBands?: string[];
 }
 
 const ISO_DURATION = /^PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?$/;
@@ -67,7 +81,61 @@ export function parseIblEpisodeExtras(episode: any): IblEpisodeExtras {
         ...(downloadable.length ? { downloadable } : {}),
         ...(availableUntil ? { availableUntil } : {}),
         ...(episode?.guidance === true ? { guidance: true as const } : {}),
+        ...(typeof episode?.status === 'string' && episode.status ? { status: episode.status } : {}),
+        ...(typeof episode?.labels?.category === 'string' && episode.labels.category ? { label: episode.labels.category } : {}),
+        ...(typeof episode?.master_brand?.titles?.medium === 'string' && episode.master_brand.titles.medium ? { masterBrand: episode.master_brand.titles.medium } : {}),
+        ...(episode?.signed === true ? { signed: true as const } : {}),
+        ...(episode?.audio_described === true ? { audioDescribed: true as const } : {}),
+        ...(episode?.childrens === true ? { childrens: true as const } : {}),
+        ...(typeof episode?.programme_type === 'string' && episode.programme_type ? { programmeType: episode.programme_type } : {}),
+        ...(typeof episode?.release_date === 'string' && episode.release_date ? { releaseDate: episode.release_date } : {}),
+        ...(typeof episode?.has_credits === 'boolean' ? { hasCredits: episode.has_credits } : {}),
+        ...(Array.isArray(episode?.requires_ab) && episode.requires_ab.length ? { ageBands: episode.requires_ab.filter((band: unknown): band is string => typeof band === 'string') } : {}),
     };
+}
+
+// One transmission of an episode (from a version's programme page) and one tracklist entry (a segment event).
+export interface VersionBroadcast {
+    start: string;
+    end?: string;
+    durationSeconds?: number;
+    repeat: boolean;
+    service?: string;
+}
+export interface VersionTrack {
+    // Seconds into the programme, when BBC gives it.
+    offset?: number;
+    title: string;
+    artist?: string;
+}
+export interface VersionExtras {
+    broadcasts: VersionBroadcast[];
+    tracklist: VersionTrack[];
+}
+
+const MAX_BROADCASTS = 40;
+const MAX_TRACKS = 500;
+const asText = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
+
+// A version record's transmissions and tracklist. The "_hd" twin of each service is left out (same transmission twice), and
+// segment events are read defensively: BBC nests the track under `segment`, and the artist under a primary contributor.
+export function parseVersionExtras(version: any): VersionExtras {
+    const broadcasts: VersionBroadcast[] = (Array.isArray(version?.broadcasts) ? version.broadcasts : [])
+        .filter((b: any) => typeof b?.start === 'string' && !isNaN(Date.parse(b.start)) && !/_hd$/i.test(String(b?.service?.id ?? '')))
+        .slice(0, MAX_BROADCASTS)
+        .map((b: any): VersionBroadcast => ({ start: b.start, ...(asText(b.end) ? { end: b.end } : {}), ...(typeof b.duration === 'number' ? { durationSeconds: b.duration } : {}), repeat: b.is_repeat === true, ...(asText(b.service?.title) ? { service: b.service.title } : {}) }));
+    const tracklist: VersionTrack[] = (Array.isArray(version?.segment_events) ? version.segment_events : [])
+        .slice(0, MAX_TRACKS)
+        .map((event: any): VersionTrack | undefined => {
+            const segment = event?.segment ?? {};
+            const title = asText(segment.track_title) ?? asText(segment.title) ?? asText(event?.title);
+            if (!title) return undefined;
+            const artist = asText(segment.artist) ?? asText(segment.primary_contributor?.name) ?? asText(segment.contributions?.[0]?.contributor?.name) ?? asText(segment.contributions?.[0]?.name);
+            const offset = typeof event?.version_offset === 'number' ? event.version_offset : typeof event?.offset === 'number' ? event.offset : undefined;
+            return { title, ...(artist ? { artist } : {}), ...(offset !== undefined ? { offset } : {}) };
+        })
+        .filter((track: VersionTrack | undefined): track is VersionTrack => !!track);
+    return { broadcasts, tracklist };
 }
 
 // Addresses (each with "{recipe}" where a size goes) of the pictures iPlayer lists for an episode, and the show's

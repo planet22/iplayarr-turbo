@@ -5,7 +5,7 @@ import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerContributor, IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { expiryOf } from '../utils/availability';
 import { setBounded } from '../utils/boundedMap';
-import { IblArtwork, IblEpisodeExtras, parseIblArtwork, parseIblEpisodeExtras } from '../utils/iblEpisode';
+import { IblArtwork, IblEpisodeExtras, parseIblArtwork, parseIblEpisodeExtras, parseVersionExtras, VersionExtras } from '../utils/iblEpisode';
 import { withRetry } from '../utils/retry';
 import { markSearchIncomplete } from '../utils/searchCompleteness';
 import { ProgrammeNotFoundError } from '../utils/upstreamError';
@@ -17,13 +17,14 @@ import episodeDetailsCache from './episodeDetailsCache';
 const MAX_NOT_FOUND = 5000;
 
 class IPlayerDetailsService {
-    metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 86400, { label: 'Programme metadata', description: 'BBC programme details per PID (title, synopsis, parents).' });
+    metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 3 * 86400, { label: 'Programme metadata', description: 'BBC programme details per PID (title, synopsis, parents).' });
     // IBL episode-list pages per programme/series pid. Short TTL: new episodes must show up, and the
     // hourly subscription check relies on seeing them.
     episodesCache: DbCacheService<IPlayerEpisodeMetadata[]> = new DbCacheService('ibl_episodes', 1800, { label: 'Episode lists', description: 'Pages of episodes per brand/series. Keep short so new episodes appear and subscriptions see them.' });
     castCache: DbCacheService<IPlayerContributor[]> = new DbCacheService('cast_cache', 7 * 86400, { label: 'Cast and crew', description: 'Cast and crew per episode version, for the .nfo files.' });
-    iblExtrasCache: DbCacheService<IblEpisodeExtras> = new DbCacheService('ibl_episode_extras', 86400, { label: 'Episode extras', description: 'Editorial tagline and running time per episode from iPlayer\'s listing API, for the .nfo files.' });
-    iblArtworkCache: DbCacheService<IblArtwork> = new DbCacheService('ibl_artwork', 86400, { label: 'Episode artwork', description: 'Addresses of an episode\'s pictures and its show\'s logo from iPlayer\'s listing API, for the Jellyfin images.' });
+    versionExtrasCache: DbCacheService<VersionExtras> = new DbCacheService('version_extras', 24 * 3600, { label: 'Broadcasts and tracklists', description: 'Transmissions and tracklist per episode version, for the debug page.' });
+    iblExtrasCache: DbCacheService<IblEpisodeExtras> = new DbCacheService('ibl_episode_extras', 7 * 86400, { label: 'Episode extras', description: 'Editorial tagline and running time per episode from iPlayer\'s listing API, for the .nfo files.' });
+    iblArtworkCache: DbCacheService<IblArtwork> = new DbCacheService('ibl_artwork', 7 * 86400, { label: 'Episode artwork', description: 'Addresses of an episode\'s pictures and its show\'s logo from iPlayer\'s listing API, for the Jellyfin images.' });
     // ids BBC answered 404 for (e.g. live channel ids like bbc_two_england, which several pages
     // ask details for) mapped to when to try again - otherwise every request repeats the BBC round trip.
     notFound: Map<string, number> = new Map();
@@ -160,6 +161,22 @@ class IPlayerDetailsService {
             });
         } catch {
             return [];
+        }
+    }
+
+    // Transmissions (regional HD duplicates left out) and the tracklist of an episode's original version, from its programme page.
+    // For the debug page; best-effort, an empty answer on any failure.
+    async getVersionExtras(pid: string): Promise<VersionExtras> {
+        try {
+            const { programme } = await this.getMetadata(pid);
+            const version = programme.versions?.find((v) => v.canonical === 1) ?? programme.versions?.[0];
+            if (!version) return { broadcasts: [], tracklist: [] };
+            return await this.versionExtrasCache.getOr(version.pid, async () => {
+                const response: { data: { version?: { broadcasts?: any[]; segment_events?: any[] } } } = await axios.get(`https://www.bbc.co.uk/programmes/${version.pid}.json`);
+                return parseVersionExtras(response.data?.version);
+            });
+        } catch {
+            return { broadcasts: [], tracklist: [] };
         }
     }
 

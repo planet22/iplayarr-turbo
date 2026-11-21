@@ -5,6 +5,7 @@ import path from 'path';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
+import { broadcastYear } from './airDate';
 import { nameableEpisodeTitle } from './episodeMarkers';
 import { resolveInside, sanitizeFileName } from './pathSafety';
 import { applyGroupToName, RELEASE_GROUP } from './releaseGroup';
@@ -19,13 +20,23 @@ export function arrBaseDir(completeDir: string, arrCompleteDir?: string): string
 // Picks which configured complete directory a completed item should land under: the arr
 // directory for anything an *arr app queued (source NZB), COMPLETE_DIR for manually-triggered
 // and subscription-queued downloads (source MANUAL).
+// A film or one-off queued by hand or by a subscription goes to MOVIE_COMPLETE_DIR when set; an *arr grab never does,
+// as the app imports it from the folder get_config reports.
 export function resolveCompleteDir(
-    _type: VideoType,
+    type: VideoType,
     source: QueueEntrySource | undefined,
     completeDir: string,
-    arrCompleteDir?: string
+    arrCompleteDir?: string,
+    movieCompleteDir?: string
 ): string {
-    return source === QueueEntrySource.NZB ? arrBaseDir(completeDir, arrCompleteDir) : completeDir;
+    if (source === QueueEntrySource.NZB) return arrBaseDir(completeDir, arrCompleteDir);
+    return type === VideoType.MOVIE && movieCompleteDir ? movieCompleteDir : completeDir;
+}
+
+// "Title (2024)": the form Plex and Jellyfin read a film's year from. Left alone when the title already carries one.
+function withYear(title: string, pubDate?: string): string {
+    const year = broadcastYear(pubDate);
+    return year && !/\(\d{4}\)\s*$/.test(title) ? `${title} (${year})` : title;
 }
 
 // Windows/POSIX-illegal filename characters.
@@ -99,11 +110,12 @@ function buildUncheckedLibraryFilePath(
     const showTitle = sanitizeSegment(title);
 
     if (item.type === VideoType.MOVIE) {
-        const fileName = `${showTitle}${tag}${releaseGroupSuffix}.${extension}`;
+        const movieTitle = sanitizeSegment(withYear(title, item.library.pubDate));
+        const fileName = `${movieTitle}${tag}${releaseGroupSuffix}.${extension}`;
         // A film from an iPlayer collection sits in a "<collection> [boxset]" folder, which is how Jellyfin is told to
         // gather the films inside into one collection. (TV keeps its show folders: a boxset folder would break them.)
         const collectionFolder = item.library.collection ? `${sanitizeSegment(item.library.collection)}${boxsetSuffix}` : undefined;
-        const directory = collectionFolder ? path.join(completeDir, collectionFolder, showTitle) : path.join(completeDir, showTitle);
+        const directory = collectionFolder ? path.join(completeDir, collectionFolder, movieTitle) : path.join(completeDir, movieTitle);
         return {
             directory,
             fileName,
@@ -111,7 +123,7 @@ function buildUncheckedLibraryFilePath(
             // Built with explicit '/' (not path.join) to match the '/'-joined
             // style the rest of this codebase reports paths to Sonarr/Radarr
             // in, regardless of the host OS's path separator.
-            relativePath: `${collectionFolder ? `${collectionFolder}/` : ''}${showTitle}/${fileName}`,
+            relativePath: `${collectionFolder ? `${collectionFolder}/` : ''}${movieTitle}/${fileName}`,
             showDirectory: directory,
         };
     }

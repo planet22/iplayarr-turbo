@@ -235,7 +235,7 @@ describe('SettingsPage', () => {
                 ['general', 'General'],
                 ['search', 'Search'],
                 ['downloadClient', 'Downloads'],
-                ['mediaManagement', 'Library'],
+                ['mediaManagement', 'Media Management'],
                 ['streaming', 'Streaming'],
                 ['liveTv', 'Live Channels'],
                 ['appearance', 'Appearance'],

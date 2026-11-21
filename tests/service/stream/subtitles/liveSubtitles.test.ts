@@ -102,6 +102,49 @@ describe('buildLiveSubtitlePlaylist', () => {
         expect(out).toContain('/vtt/101\n');
     });
 
+    it('mirrors discontinuities and the discontinuity sequence', () => {
+        const withBreak = [
+            '#EXTM3U',
+            '#EXT-X-TARGETDURATION:4',
+            '#EXT-X-MEDIA-SEQUENCE:100',
+            '#EXT-X-DISCONTINUITY-SEQUENCE:7',
+            '#EXTINF:3.84,',
+            '100.ts',
+            '#EXT-X-DISCONTINUITY',
+            '#EXTINF:3.84,',
+            '101.ts',
+            '',
+        ].join('\n');
+        const out = buildLiveSubtitlePlaylist(withBreak, (n) => `/vtt/${n}`)!;
+        expect(out).toContain('#EXT-X-DISCONTINUITY-SEQUENCE:7');
+        expect(out).toContain('/vtt/100\n#EXT-X-DISCONTINUITY\n#EXTINF:3.84,\n/vtt/101');
+        expect(buildLiveSubtitlePlaylist(video, (n) => `${n}`)).not.toContain('DISCONTINUITY');
+    });
+
+    it('keeps counting through unnumbered names across a discontinuity, and ignores one with no segment after it', () => {
+        const odd = [
+            '#EXTM3U',
+            '#EXT-X-TARGETDURATION:4',
+            '#EXT-X-MEDIA-SEQUENCE:50',
+            '#EXTINF:3.84,',
+            'a.ts',
+            '#EXT-X-DISCONTINUITY',
+            '#EXTINF:3.84,',
+            'b.ts',
+            '#EXT-X-DISCONTINUITY',
+            '',
+        ].join('\n');
+        const out = buildLiveSubtitlePlaylist(odd, (n) => `/vtt/${n}`)!;
+        expect(out).toContain('/vtt/50\n#EXT-X-DISCONTINUITY\n#EXTINF:3.84,\n/vtt/51');
+        expect(out.match(/#EXT-X-DISCONTINUITY\n/g)).toHaveLength(1);
+        expect(out).not.toContain('DISCONTINUITY-SEQUENCE');
+    });
+
+    it('returns undefined for a media playlist with no segments yet', () => {
+        const empty = '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:5\n';
+        expect(buildLiveSubtitlePlaylist(empty, (n) => `${n}`)).toBeUndefined();
+    });
+
     it('returns undefined for something that is not a media playlist', () => {
         expect(buildLiveSubtitlePlaylist('<html>', (n) => `${n}`)).toBeUndefined();
     });

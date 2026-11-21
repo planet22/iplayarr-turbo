@@ -17,6 +17,11 @@
             :title="`${searchResult.title}${searchResult.series && searchResult.episode ? ` - Series ${searchResult.series}, Episode ${searchResult.episode}` : ''}`"
             :subtitle="searchResult.episodeTitle"
         />
+        <div v-if="classified" class="classified" :class="classified.movie ? 'isMovie' : 'isTv'" data-testid="classified">
+            <font-awesome-icon :icon="['fas', classified.movie ? 'film' : 'tv']" />
+            <strong>{{ classified.movie ? 'Filed as a movie' : 'Filed as a TV episode' }}</strong>
+            <span class="subtle">{{ classified.note }}</span>
+        </div>
         <DownloadModeToggle v-model="mode" />
         <div class="infoSection">
             <SelectInput
@@ -28,13 +33,11 @@
             />
             <SelectInput v-model="quality" name="Quality" :tooltip="qualityTip" :options="qualityOptions" />
         </div>
-        <div :class="['outputNote', summary.tone]">
-            <font-awesome-icon :icon="['fas', summary.strm ? 'link' : 'triangle-exclamation']" />
-            <span>{{ summary.text }}</span>
-        </div>
+        <OutputNote :strm="summary.strm" :tone="summary.tone" :text="summary.text" />
         <div class="infoSection">
             <TextInput
                 v-model="searchResult.nzbName"
+                full-width
                 name="Filename"
                 tooltip="Extension is added automatically"
             />
@@ -49,6 +52,7 @@ import DownloadModeToggle from '@/components/common/DownloadModeToggle.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
+import OutputNote from '@/components/common/OutputNote.vue';
 import { defaultMediaMode, describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, preferredVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
@@ -109,6 +113,8 @@ onMounted(async () => {
 // the version or quality changes, since those are part of the name. A card only has a rough guess of its own (a browse
 // card knows no season or episode), so the guess is replaced as soon as the server answers - unless the user has already
 // typed their own, which is kept and then sent as theirs.
+// How the server files this programme (movie or TV), shown so it is clear before downloading. Unset until it answers.
+const classified = ref(undefined);
 let suggested = searchResult.value.nzbName;
 let latestRequest = 0;
 const refreshSuggestion = async () => {
@@ -119,10 +125,12 @@ const refreshSuggestion = async () => {
     try {
         const response = await ipFetch(`json-api/release-preview?${query}`);
         if (request !== latestRequest || !response.ok || !response.data?.nzbName) return;
-        const { nzbName, series, episode, episodeTitle } = response.data;
+        const { nzbName, type, filedAsMovie, series, episode, episodeTitle } = response.data;
+        classified.value = type ? { movie: type === 'MOVIE', note: filedAsMovie ? 'one-off special with no episode number' : type === 'MOVIE' ? 'a movie, or no series and episode' : 'has a series and episode number' } : undefined;
         if (searchResult.value.nzbName === suggested) searchResult.value.nzbName = nzbName;
         suggested = nzbName;
-        Object.assign(searchResult.value, { series, episode, episodeTitle: episodeTitle ?? searchResult.value.episodeTitle });
+        // The server's type decides (a one-off special is filed as a movie), so the card shows the movie icon.
+        Object.assign(searchResult.value, { type: type ?? searchResult.value.type, series, episode, episodeTitle: episodeTitle ?? searchResult.value.episodeTitle });
     } catch {
         // Keep the guess; the server still names the download itself.
     }
@@ -155,31 +163,14 @@ const download = async () => {
 .infoSection {
     margin-top: 1rem;
 }
-
-.outputNote {
+.classified {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 10px;
-    padding: @space-2 @space-3;
-    border-radius: @radius-sm;
-    background-color: @nav-active-background-color;
-    font-size: @font-size-md;
-    color: @table-text-color;
-
-    svg {
-        flex: none;
-        color: @brand-color;
-    }
-
-    // A real file download: same warning look as the batch confirmation.
-    &.warning {
-        border-left: 4px solid @caution-color;
-        background-color: color-mix(in srgb, @caution-color 14%, transparent);
-
-        svg {
-            color: @caution-color;
-        }
-    }
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+.classified .subtle {
+    opacity: 0.7;
 }
 </style>

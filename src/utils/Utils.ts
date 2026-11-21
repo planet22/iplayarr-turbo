@@ -21,13 +21,18 @@ import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
-import { londonDate } from './airDate';
+import { broadcastYear, londonDate } from './airDate';
 import { nameableEpisodeTitle } from './episodeMarkers';
 import { applyGroupToTemplate } from './releaseGroup';
 
 const removeUnsafeCharsRegex = /[^a-zA-Z0-9\s\\/._-]/g;
 
-export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails, synonym?: Synonym) {
+// The template in force and what each {{variable}} is for this programme: the one place the release name's inputs are worked
+// out (createNZBName renders them; the debug page shows them).
+export async function nzbTemplateContext(
+    result: IPlayerSearchResult | IPlayerDetails,
+    synonym?: Synonym
+): Promise<{ template: string; language: string; context: FilenameTemplateContext }> {
     const templateKey: IplayarrParameter =
         result.type == VideoType.MOVIE
             ? IplayarrParameter.MOVIE_FILENAME_TEMPLATE
@@ -48,7 +53,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         }
     }
 
-    const name = Handlebars.compile(template)({
+    const context = {
         title: title.replaceAll(removeUnsafeCharsRegex, ''),
         season,
         episode:
@@ -64,7 +69,14 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
                 : undefined,
         quality: qualityProfile.quality,
         language,
-    } as FilenameTemplateContext)
+        year: broadcastYear('firstBroadcast' in result ? result.firstBroadcast : (result as IPlayerSearchResult).pubDate?.toISOString?.()),
+    } as FilenameTemplateContext;
+    return { template, language, context };
+}
+
+export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails, synonym?: Synonym) {
+    const { template, language, context } = await nzbTemplateContext(result, synonym);
+    const name = Handlebars.compile(template)(context)
         .replaceAll(/[\s/\\]|[\s\\-_]{2,}/g, '.')
         .replaceAll(/\.{2,}/g, '.');
 

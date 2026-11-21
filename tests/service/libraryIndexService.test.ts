@@ -86,6 +86,18 @@ describe('libraryIndexService', () => {
         expect(episodes.get('m001aaaa')?.listings[0]).toMatchObject({ sourceId: 'history', name: 'iPlayarr', type: 'HISTORY' });
     });
 
+    it('finds a history movie link under MOVIE_COMPLETE_DIR, not the complete folder', async () => {
+        setHistorySource(true);
+        const movies = path.join(dir, 'movies');
+        jest.mocked(configService.getParameter).mockImplementation(async (key: any) => ({ COMPLETE_DIR: complete, ARR_COMPLETE_DIR: arrComplete, MOVIE_COMPLETE_DIR: movies })[key as string]);
+        jest.mocked(historyService.getHistory).mockResolvedValue([
+            { pid: 'm001mmmm', extension: 'strm', type: 'MOVIE', source: 'MANUAL', libraryPath: 'Film (2024)/Film (2024).strm' },
+        ] as any);
+        expect(await libraryIndexService.scan({ history: true })).toEqual(['history']);
+        const files = (await libraryIndexService.episodes()).get('m001mmmm')?.files ?? [];
+        expect(files[0]).toBe(path.join(movies, 'Film (2024)/Film (2024).strm'));
+    });
+
     it('reads a Sonarr/Radarr app\'s .strm links, with the episode ids, and ignores other files and other tools\' links', async () => {
         const mine = strm('a.strm', 'm001aaaa');
         const other = path.join(dir, 'other.strm');
@@ -371,6 +383,14 @@ describe('libraryIndexService folders and shows', () => {
 
         expect(found.count).toBe(2);
         expect([...found.pids].sort()).toEqual(['m001aaaa', 'm001bbbb']);
+    });
+
+    it('counts links in a movie folder under MOVIE_COMPLETE_DIR', async () => {
+        const movies = path.join(dir, 'movies');
+        jest.mocked(configService.getParameter).mockImplementation(async (key: any) => ({ COMPLETE_DIR: complete, ARR_COMPLETE_DIR: arrComplete, MOVIE_COMPLETE_DIR: movies })[key as string]);
+        put(movies, 'The Film (2024)/The Film (2024).strm', link('m001ffff'));
+        const found = await libraryIndexService.onDisk('The Film (2024)');
+        expect([...found.pids]).toEqual(['m001ffff']);
     });
 
     it('knows a real file by the .nfo beside it, or by our release group in its name, and ignores any other', async () => {

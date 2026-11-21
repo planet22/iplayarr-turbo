@@ -4,6 +4,7 @@ import { formatBytes } from '@/lib/utils';
 
 const DASH = '-';
 const num = (value) => (Number.isFinite(value) ? String(value) : DASH);
+const rate = (perSec) => (Number.isFinite(perSec) ? `${formatBytes(perSec)}/s` : DASH);
 
 // "in 12m" / "5m ago" / "in 3h"; a dash when there is no time.
 export function relativeTime(iso, now = Date.now()) {
@@ -49,6 +50,20 @@ export function buildServerGroups(fast, checks, now = Date.now(), uptime = DASH)
         state: a.reachable ? 'ok' : 'fail',
     }));
 
+    // Folders (and the database) go on cards of at most three rows each.
+    const storageRows = [
+        ...disks,
+        {
+            key: 'database',
+            label: 'Database',
+            value: f.database ? formatBytes(f.database.sizeBytes) : DASH,
+        },
+    ];
+    const storageCards = [];
+    for (let i = 0; i < storageRows.length; i += 3) {
+        storageCards.push({ key: i === 0 ? 'storage' : `storage${i / 3 + 1}`, rows: storageRows.slice(i, i + 3) });
+    }
+
     return [
         {
             key: 'system',
@@ -68,17 +83,7 @@ export function buildServerGroups(fast, checks, now = Date.now(), uptime = DASH)
                 },
             ],
         },
-        {
-            key: 'storage',
-            rows: [
-                ...disks,
-                {
-                    key: 'database',
-                    label: 'Database',
-                    value: f.database ? formatBytes(f.database.sizeBytes) : DASH,
-                },
-            ],
-        },
+        ...storageCards,
         {
             key: 'traffic',
             rows: [
@@ -99,6 +104,23 @@ export function buildServerGroups(fast, checks, now = Date.now(), uptime = DASH)
                     label: 'Streams',
                     value: f.active ? num(f.active.streams) : DASH,
                     detail: Number.isFinite(f.streamsToday) ? `${f.streamsToday} today` : undefined,
+                },
+            ],
+        },
+        {
+            key: 'network',
+            rows: [
+                {
+                    key: 'netIn',
+                    label: 'Received',
+                    value: f.network ? rate(f.network.rxPerSec) : DASH,
+                    detail: f.network ? `${formatBytes(f.network.rxBytes)} since start` : undefined,
+                },
+                {
+                    key: 'netOut',
+                    label: 'Sent',
+                    value: f.network ? rate(f.network.txPerSec) : DASH,
+                    detail: f.network ? `${formatBytes(f.network.txBytes)} since start` : undefined,
                 },
             ],
         },

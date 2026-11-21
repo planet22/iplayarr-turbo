@@ -68,6 +68,12 @@ export const deliveredQualityLines = (requests, ladderTop) => {
     ];
 };
 
+// A live stream's window and distance behind live, with the readings. Nothing for a stream that has none.
+export const liveLines = (facts, notes) =>
+    (facts?.length || notes?.length)
+        ? ['Live stream:', ...(facts ?? []).map((fact) => `  ${fact.label}: ${fact.value}`), ...(notes ?? []).map((note) => `  Reading: ${note.text}`), '']
+        : [];
+
 export const playerLines = (players) => [
     'Clients:',
     ...(players ?? []).map(

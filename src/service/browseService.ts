@@ -139,6 +139,7 @@ export function toBrowseSlot(broadcast: any): BrowseSlot | undefined {
         live: broadcast.episode.live || undefined,
         childrens: broadcast.episode.childrens || undefined,
         categories: Array.isArray(broadcast.episode.categories) ? broadcast.episode.categories : undefined,
+        onDemand: broadcast.episode.status === 'available' ? true : undefined,
     };
 }
 
@@ -338,8 +339,8 @@ export function dedupeRails(rails: BrowseRail[]): BrowseRail[] {
 }
 
 class BrowseService {
-    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900, { label: 'Browse (listings)', description: 'Fast-changing iPlayer listings: highlights, recently added.' });
-    longCache: DbCacheService<any> = new DbCacheService('browse_long', 86400, { label: 'Browse (static)', description: 'Slow-changing iPlayer data: categories, channel logos, skip markers.' });
+    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 1800, { label: 'Browse (listings)', description: 'Fast-changing iPlayer listings: highlights, recently added.' });
+    longCache: DbCacheService<any> = new DbCacheService('browse_long', 7 * 86400, { label: 'Browse (static)', description: 'Slow-changing iPlayer data: categories, channel logos, skip markers.' });
 
     // Day schedules barely change once published, and "now" is worked out per request, so they live much longer than other listings.
     scheduleCache: DbCacheService<any> = new DbCacheService('browse_schedule', 60 * 60 * 8, { label: 'Browse (day schedules)', description: 'The schedule of each channel for a day, behind the guide grid, now/next and the Jellyfin guide.' });
