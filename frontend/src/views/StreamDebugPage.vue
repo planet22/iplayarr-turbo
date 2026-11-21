@@ -54,6 +54,9 @@
                         <template v-if="info.live">
                             <dt>Stream service id</dt><dd><code>{{ info.live.vpid || 'none (not served by BBC\'s stream service)' }}</code></dd>
                             <dt>Switched on</dt><dd>{{ info.live.enabled === undefined ? 'unknown' : info.live.enabled ? 'yes' : 'no' }}</dd>
+                            <template v-if="info.live.fromStart">
+                                <dt>Watch from start</dt><dd>{{ fromStartText(info.live.fromStart) }}</dd>
+                            </template>
                             <template v-if="info.live.custom">
                                 <dt>Stream type</dt><dd>{{ info.live.custom.type }}<template v-if="info.live.custom.host"> · {{ info.live.custom.host }}</template><template v-if="info.live.custom.headers"> · sends custom headers</template></dd>
                                 <template v-if="info.live.custom.lastTest"><dt>Last test</dt><dd>{{ info.live.custom.lastTest.ok ? 'worked' : 'failed' }} · {{ formatWhen(info.live.custom.lastTest.at) }}<template v-if="info.live.custom.lastTest.message"> · {{ info.live.custom.lastTest.message }}</template></dd></template>
@@ -63,6 +66,7 @@
                         <template v-if="info.parent"><dt>Part of</dt><dd>{{ info.parent.title }} (<code>{{ info.parent.pid }}</code>)</dd></template>
                         <template v-if="info.firstBroadcast"><dt>First broadcast</dt><dd>{{ info.firstBroadcast }}</dd></template>
                         <template v-if="expiry"><dt>{{ isRadio ? 'Leaves BBC Sounds' : 'Leaves iPlayer' }}</dt><dd>{{ expiry.when }}</dd><dt>Days left</dt><dd>{{ expiry.calc }}</dd></template>
+                        <template v-if="info.ibl?.status"><dt>iPlayer status</dt><dd>{{ info.ibl.status }}<template v-if="info.ibl.status === 'available'"> (on demand; the guide marks it)</template></dd></template>
                         <template v-if="info.imagePid"><dt>Image</dt><dd><code>{{ info.imagePid }}</code></dd></template>
                         <template v-if="info.cache.vpid"><dt>Remembered vpid</dt><dd><code>{{ info.cache.vpid }}</code></dd></template>
                         <template v-if="info.cache.hqProbe"><dt>Quality probe winner</dt><dd>{{ info.cache.hqProbe.mediaSet }}/{{ info.cache.hqProbe.version }}, connection {{ info.cache.hqProbe.index }}, {{ info.cache.hqProbe.height }}p</dd></template>
@@ -120,6 +124,7 @@
                     </dd>
                 </template>
                 <template v-if="naming.nzbName"><dt>Release name (NZB)<InfoTip text="The title Sonarr and Radarr see in search results. It is not the saved file name." /></dt><dd><code>{{ naming.nzbName }}</code></dd></template>
+                <template v-if="naming.chapters"><dt>Skip chapters<InfoTip text="The Intro and Recap chapters a native download of this programme would carry, from the skip spans BBC lists (DOWNLOAD_CHAPTERS). Jellyfin shows them as Skip buttons." /></dt><dd><template v-if="naming.chapters.chapters.length"><div v-for="line in chapterLines(naming.chapters.chapters)" :key="line"><code>{{ line }}</code></div></template><span v-else class="subtle">{{ naming.chapters.note ?? 'none' }}</span></dd></template>
                 <template v-if="naming.numbering">
                     <dt>Numbering used</dt>
                     <dd>{{ naming.numbering.type }} · S{{ naming.numbering.series ?? '–' }}E{{ naming.numbering.episode ?? '–' }}<template v-if="naming.numbering.episodeTitle"> · {{ naming.numbering.episodeTitle }}</template><template v-if="naming.numbering.synonym"> · synonym: {{ naming.numbering.synonym }}</template><template v-if="naming.numbering.override"> · manual override S{{ naming.numbering.override.series }}E{{ naming.numbering.override.episode }}</template></dd>
@@ -292,7 +297,7 @@
 
             <TraceSection id="dbg-versions" title="Versions" :info="help.versions">
             <table class="dataTable">
-                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th></tr></thead>
+                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th><th v-if="!isRadio">Plain pick</th></tr></thead>
                 <tbody>
                     <tr v-for="version in info.versions" :key="version.vpid">
                         <td class="text"><code>{{ version.vpid }}</code></td>
@@ -303,8 +308,9 @@
                         <td class="text">{{ version.availableUntil ? formatWhen(version.availableUntil) : '' }}</td>
                         <td v-if="!isRadio" class="text">{{ version.downloadable === undefined ? '' : version.downloadable ? 'allowed' : 'not allowed' }}</td>
                         <td class="text">{{ version.canonical ? 'yes' : '' }}</td>
+                        <td v-if="!isRadio" class="text">{{ version.selection ?? '' }}</td>
                     </tr>
-                    <tr v-if="!info.versions.length"><td :colspan="isRadio ? 4 : 8" class="empty">BBC lists no versions for this pid</td></tr>
+                    <tr v-if="!info.versions.length"><td :colspan="isRadio ? 4 : 9" class="empty">BBC lists no versions for this pid</td></tr>
                 </tbody>
             </table>
 
@@ -477,6 +483,7 @@ import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import TraceSection from '@/components/streaming/TraceSection.vue';
+import { chapterLines, chaptersSummary } from '@/lib/chapterText';
 import { copyReport, downloadReport } from '@/lib/copyReport';
 import { ipFetch } from '@/lib/ipFetch';
 import { useMediaProviders } from '@/lib/mediaProvider';
@@ -646,6 +653,14 @@ const expiry = computed(() => {
 
 const json = (value) => JSON.stringify(value, null, 2);
 
+// One line for what "watch from start" would do for a live channel now (also used in the copied report).
+const fromStartText = (f) => {
+    if (!f.enabled) return 'off (Settings > Live Channels)';
+    if (!f.programme) return f.note || 'not available';
+    const mins = Math.round((f.secondsBack ?? 0) / 60);
+    return `${f.programme}, on air since ${formatWhen(f.programmeStart)}: runs ${mins} min behind live, starting at segment ${f.firstSegment}; BBC keeps ${Math.round((f.bufferSeconds ?? 0) / 60)} min${f.clamped ? ', so it cannot reach the start' : ''}${f.note ? `; ${f.note}` : ''}`;
+};
+
 // A plain-text report of this page for a bug report; copyReport removes keys, tokens, addresses and URL queries.
 const hiddenSettings = inject('hiddenSettings', null);
 const toolVersions = inject('toolVersions', null);
@@ -662,6 +677,8 @@ const copyPage = (download = false) => {
         ...(i.channel ? [`Channel: ${i.channel}`] : []),
         ...(i.firstBroadcast ? [`First broadcast: ${i.firstBroadcast}`] : []),
         ...(expiry.value ? [`Leaves iPlayer: ${expiry.value.when} (${expiry.value.calc})`] : []),
+        ...(i.ibl?.status ? [`iPlayer status: ${i.ibl.status}`] : []),
+        ...(i.live?.fromStart ? [`Watch from start: ${fromStartText(i.live.fromStart)}`] : []),
         ...(i.error ? [`Error: ${i.error}`] : []),
         '',
         'Settings:',
@@ -678,6 +695,7 @@ const copyPage = (download = false) => {
                   ...(naming.value.directory ? [`  Folder: ${naming.value.directory}`] : []),
                   ...(naming.value.arrDirectory ? [`  Sonarr/Radarr folder: ${naming.value.arrDirectory}`] : []),
                   ...(naming.value.nzbName ? [`  Release name (NZB): ${naming.value.nzbName}`] : []),
+                  ...(naming.value.chapters ? [`  Skip chapters: ${chaptersSummary(naming.value.chapters)}`, ...(naming.value.chapters.markers ?? []).map((m) => `  BBC skip span: ${m.type} ${m.start}s - ${m.end}s`)] : []),
               ]
             : []),
         '',
@@ -685,7 +703,7 @@ const copyPage = (download = false) => {
         ...metadataRows.value.filter((row) => !Array.isArray(row[1])).map((row) => `  ${row[0]}: ${String(row[1]).slice(0, 300)}`),
         '',
         'Versions:',
-        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}`),
+        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}${v.selection ? ` (plain pick: ${v.selection})` : ''}`),
         '',
         'Probe (BBC mediaselector, every version and route):',
         ...(result.value ? probeReportLines(result.value, connectionRows, answer) : ['  not run']),

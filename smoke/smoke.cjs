@@ -331,6 +331,15 @@ async function radioChecks(A, cfg) {
                 const audio = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.length));
                 return (v && v.vpid === ep.id && v.bestHeight === 0 && audio) || 'no audio connections in the probe';
             }, { method: 'POST', ...upstream });
+            // The line a normal Play would use is named, and is a real audio HLS connection in the probe (the page colours it).
+            if (probe.json) rec(A, 'radio streaming debug names the audio line a normal Play would use', (() => {
+                const v = probe.json.versions?.[0];
+                const hls = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.some((c) => c.transferFormat === 'hls' && c.protocol === 'https')));
+                if (!hls) return 'SKIP';
+                const b = v.best;
+                const line = b && v.pairs.find((p) => p.mediaSet === b.mediaSet && p.version === b.version)?.media?.[b.media];
+                return line?.kind === 'audio' && line.connections?.[b.connection]?.transferFormat === 'hls' ? 'PASS' : 'FAIL';
+            })());
             if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
             // The radio debug page reads the same dashboard parts as TV (marked ?kind=radio), and has a picture to refresh and metadata to show.
             await check(A, 'radio streaming debug programme has metadata and a valid picture id', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.metadata && typeof r.json.metadata === 'object' && (r.json.imagePid === undefined || /^p[a-z0-9]{7}$/i.test(r.json.imagePid))) || 'no metadata, or a malformed picture id', { timeout: 60000 });
@@ -1019,6 +1028,11 @@ async function libraryAndDebugChecks(A, ctx) {
     for (const part of ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs']) {
         await check(A, `stream debug part ${part} answers`, `/json-api/streams/debug/${pid}/part/${part}`, (r) => (r.status === 200 && r.json !== undefined) || `HTTP ${r.status}`, { timeout: 60000 });
     }
+    // The logs part reads the stored log rows, which are skipped one by one if damaged rather than failing the whole read.
+    await check(A, 'stream debug logs part is a list of log lines', `/json-api/streams/debug/${pid}/part/logs`, (r) => Array.isArray(r.json?.logs) || 'no logs[]', { timeout: 60000 });
+    // A well-formed id BBC has never heard of reads as "not found" or an upstream fault, never as a server crash.
+    const unknown = await http('/json-api/streams/debug/m0000000/programme', { timeout: 60000 });
+    rec(A, 'stream debug on an unknown programme id gives no server error', unknown.status > 0 && unknown.status < 500 ? 'PASS' : 'WARN', `HTTP ${unknown.status}`);
     await check(A, 'stream debug one-shot info answers', `/json-api/streams/debug/${pid}`, isObj, { timeout: 90000 });
     // The debug button covers programmes and series, not just episodes: the discovered pid is a brand, and an episode of it follows.
     await check(A, 'stream debug on a programme (brand) pid is found, typed, and has a versions list', `/json-api/streams/debug/${pid}/programme`, (r) => {
@@ -1034,6 +1048,14 @@ async function libraryAndDebugChecks(A, ctx) {
             const j = r.json;
             if (!j?.found) return `not found: ${j?.error || ''}`;
             return j.parent?.pid ? true : 'no parent pid on an episode';
+        }, { timeout: 60000 });
+        await check(A, 'stream debug versions say which one a plain download takes (exactly one, never audio described / signed unless alone)', `/json-api/streams/debug/${episodePid}/programme`, (r) => {
+            const versions = r.json?.versions;
+            if (!Array.isArray(versions) || !versions.length) return true;
+            const chosen = versions.filter((v) => v.selection === 'chosen');
+            if (chosen.length !== 1) return `${chosen.length} versions chosen`;
+            const special = /described|sign/i;
+            return special.test((chosen[0].types || []).join(' ')) && versions.some((v) => !special.test((v.types || []).join(' '))) ? 'an audio described / signed version was chosen over a plain one' : true;
         }, { timeout: 60000 });
     } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
     if (episodePid) {

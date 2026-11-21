@@ -53,6 +53,11 @@ describe('iblEpisode', () => {
             ).toEqual({ versionFlags: { p0a: { hd: true, uhd: true }, p0b: { hdr: true } }, versionEnds: { p0a: '2026-12-01T00:00:00Z' }, availableUntil: '2026-12-01T00:00:00Z', guidance: true });
         });
 
+        it('keeps the status iPlayer gives the episode', () => {
+            expect(parseIblEpisodeExtras({ status: 'available', versions: [] })).toEqual({ status: 'available' });
+            expect(parseIblEpisodeExtras({ status: '', versions: [] })).toEqual({});
+        });
+
         it('reads when each version starts, what it asks for and which versions can be downloaded', () => {
             expect(
                 parseIblEpisodeExtras({

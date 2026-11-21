@@ -120,7 +120,7 @@ const tabs = [
     { key: 'general', label: 'General', icon: 'sliders' },
     { key: 'search', label: 'Search', icon: 'magnifying-glass' },
     { key: 'downloadClient', label: 'Downloads', icon: 'download' },
-    { key: 'mediaManagement', label: 'Library', icon: 'folder-open' },
+    { key: 'mediaManagement', label: 'Media Management', icon: 'folder-open' },
     { key: 'streaming', label: 'Streaming', icon: 'tower-broadcast' },
     { key: 'liveTv', label: 'Live Channels', icon: 'tv' },
     { key: 'appearance', label: 'Appearance', icon: 'palette' },
@@ -154,7 +154,7 @@ const TAB_KEYS = {
     ],
     downloadClient: [
         'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES', 'EXTRA_VERSIONS', 'RELEASE_LANGUAGE', 'DOWNLOAD_ASK_VERSION', 'DOWNLOAD_DEFAULT_VERSION',
-        'DOWNLOAD_CLIENT', 'ACTIVE_LIMIT', 'RADIO_ACTIVE_LIMIT', 'OUTPUT_FORMAT', 'DOWNLOAD_SUBTITLES', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'ARCHIVE_ENABLED',
+        'DOWNLOAD_CLIENT', 'ACTIVE_LIMIT', 'RADIO_ACTIVE_LIMIT', 'OUTPUT_FORMAT', 'DOWNLOAD_SUBTITLES', 'DOWNLOAD_CHAPTERS', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'ARCHIVE_ENABLED',
     ],
     streaming: [
         'STREAM_BASE_URL', 'STREAM_KEY', 'STREAM_CLIENT', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE',
@@ -165,7 +165,7 @@ const TAB_KEYS = {
     ],
     liveTv: [
         'LIVE_TV_ENABLED', 'STREAM_BASE_URL', 'STREAM_KEY', 'LIVE_TV_EPG_OFFSET', 'LIVE_TV_LOGO_SHAPE',
-        'LIVE_RADIO', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD',
+        'LIVE_RADIO', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_FROM_START',
     ],
     authentication: [
         'AUTH_TYPE', 'AUTH_USERNAME', 'AUTH_PASSWORD', 'OIDC_CONFIG_URL', 'OIDC_CALLBACK_HOST', 'OIDC_CLIENT_ID',

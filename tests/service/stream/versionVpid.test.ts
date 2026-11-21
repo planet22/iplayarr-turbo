@@ -35,6 +35,21 @@ describe('versionVpid', () => {
         await expect(fetchVersionVpid('p1', 'bogus')).rejects.toThrow('Unknown version "bogus"');
     });
 
+    it('skips a version that has expired, and keeps the only one when all have', async () => {
+        const versions = [{ pid: 'old', types: ['Dubbed Audio Described'] }, { pid: 'new', types: ['Dubbed Audio Described', 'x'] }];
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockResolvedValue({ versionEnds: { old: '2020-01-01T00:00:00Z' } });
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata(versions));
+        await expect(fetchVersionVpid('p1', 'audio-described')).resolves.toBe('new');
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockResolvedValue({ versionEnds: { old: '2020-01-01T00:00:00Z', new: '2020-01-01T00:00:00Z' } });
+        await expect(fetchVersionVpid('p1', 'audio-described')).resolves.toBe('old');
+    });
+
+    it('still finds the version when the dates cannot be read from iPlayer', async () => {
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockRejectedValue(new Error('down'));
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata([{ pid: 'ad', types: ['Audio Described'] }]));
+        await expect(fetchVersionVpid('p1', 'audio-described')).resolves.toBe('ad');
+    });
+
     it('copes with a programme that lists no versions', async () => {
         (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata(undefined));
         await expect(versionTypesFor('p1')).resolves.toEqual([]);

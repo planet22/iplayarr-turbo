@@ -198,6 +198,11 @@ describe('StreamingPage', () => {
         expect(wrapper.text()).not.toContain('No streams currently playing');
     });
 
+    it('badges what a stream delivered in both tables, only where a picture height is known', async () => {
+        const wrapper = await mountIt({ active: [{ ...active, receivedHeight: 1080 }], history: [{ ...old, receivedHeight: 720 }, { ...old, id: 's00' }] });
+        expect(wrapper.findAll('.received').map((b) => b.text())).toEqual(['FHD', 'HD']);
+    });
+
     it('lists the history, and loads details for the programmes it shows', async () => {
         const wrapper = await mountIt({ active: [], history: [old] });
         expect(wrapper.text()).toContain('Finished Show');

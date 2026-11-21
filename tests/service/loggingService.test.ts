@@ -250,6 +250,33 @@ describe('loggingService persistence and file format', () => {
         expect(lines.map((line) => line.message)).toEqual(['step', 'm0aaaaaa three']);
     });
 
+    it('skips a damaged stored line when replaying to a client', async () => {
+        await dbReady();
+        await prisma.queueItem.createMany({
+            data: [
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'a', message: 'before' }) },
+                { queue: 'iplayarr_logs', value: '{cut off' },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'b', message: 'after' }) },
+            ],
+        });
+        await expect(loggingService.pushInitialLogs('sock-2')).resolves.toBeUndefined();
+        const sent = (socketService.publish as jest.Mock).mock.calls.filter(([id]) => id === 'sock-2').map(([, , line]) => line.message);
+        expect(sent).toEqual(['before', 'after']);
+    });
+
+    it('skips a damaged stored line when searching for text', async () => {
+        await dbReady();
+        await prisma.queueItem.createMany({
+            data: [
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0bbbbbb first' }) },
+                { queue: 'iplayarr_logs', value: 'garbage m0bbbbbb' },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0bbbbbb second' }) },
+            ],
+        });
+        const lines = await loggingService.linesMentioning('m0bbbbbb', 10);
+        expect(lines.map((line) => line.message)).toEqual(['m0bbbbbb first', 'm0bbbbbb second']);
+    });
+
     it('writes log files as "[time] [LEVEL] message" outside tests', () => {
         const savedEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = 'production';

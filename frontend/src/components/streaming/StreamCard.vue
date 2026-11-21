@@ -20,7 +20,7 @@ v-if="thumbnail"
         </template>
         <template v-if="subtitle" #subtitle>{{ subtitle }}</template>
         <template #chips>
-            <StreamPills plain :mode="mode" :resolution="session.resolution" :settings="session.settings" />
+            <StreamPills plain :mode="mode" :resolution="session.resolution" :received-height="session.receivedHeight" :settings="session.settings" />
         </template>
         <div v-if="hasRate || hasLiveBadge || hasSegments" class="streamFacts">
             <ThroughputSpark

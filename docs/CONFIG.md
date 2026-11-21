@@ -121,6 +121,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
 | — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Library's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
 | — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Library. |
+| Skip chapters | `DOWNLOAD_CHAPTERS` | `true` | Native downloads get "Intro" and "Recap" chapters from BBC's skip spans, which Jellyfin 10.10+ offers as Skip buttons. Original cut only, and not for `get_iplayer`/`yt-dlp` downloads or `.strm` links. Settings → Downloads. |
 | Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. With `embed` only the embedded track is kept, even if `get_iplayer` or `yt-dlp` also leave a loose file. Settings → Library. |
 
 ## Library (Settings → Library)
@@ -185,6 +186,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 | Guide Categories | `LIVE_TV_GUIDE_CATEGORIES` | `true` | Tag programmes with their BBC category (plus Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
 | Live / New / Repeat Flags | `LIVE_TV_GUIDE_FLAGS` | `true` | Tag programmes as live, new or repeat. |
 | HD Indicator | `LIVE_TV_GUIDE_HD` | `true` | Mark every programme as HD. |
+| Watch From Start | `LIVE_TV_FROM_START` | `false` | Native client with Live 1080p. Adds a second "(from start)" entry for each BBC channel in the tuner playlist; it begins the programme on air at its start (BBC keeps about two hours). Update the tuner after changing. |
 | Jellyfin Servers | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | Jellyfin apps used for Live TV: shown with Add/Remove buttons and refreshed when the channel list changes. |
 
 ## STRM Watchdog (Settings → Streaming)
@@ -200,6 +202,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 - **Subscriptions:** can also download the audio described / signed version of new episodes. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#versions).
 - **Play:** the Play button asks for, or defaults to, a version and the in-app player has a version switcher that resumes at the same position.
 - **Badges:** Settings → Appearance. Programme-page answers are cached and the rest are fetched in the background, and only when the badge setting is on.
+- **Which version a plain grab takes:** never an audio described or signed one (those are used only when nothing else exists), and never one outside the dates iPlayer gives for it (an unknown date rules nothing out). A version iPlayer flags UHD is taken only when the quality is Full-HD, otherwise the one that is not. The Streaming Debug page's Versions table shows the pick and the reason for each version.
 
 ## Maintenance (Settings → Maintenance)
 

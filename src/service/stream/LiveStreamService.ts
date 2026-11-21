@@ -6,11 +6,12 @@ import { customChannel } from '../../constants/CustomChannels';
 import { isUhdEventFeed, LiveChannelVpids, uhdEventDashUrl } from '../../constants/LiveChannels';
 import { isRadioStation } from '../../constants/RadioChannels';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
+import browseService from '../browseService';
 import configService from '../configService';
 import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
-import { buildMasterPlaylist, buildMediaPlaylist, DashKind, LiveDash, parseLiveMpd } from './liveDashHls';
+import { buildMasterPlaylist, buildMediaPlaylist, DashKind, defaultTimeShiftSeconds, LiveDash, parseLiveMpd, planFromStart } from './liveDashHls';
 import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from './mediaSelectorPairs';
 import radioStreamService, { topVariant } from './radioStreamService';
 import { cached, liveResolveTtlMs } from './resolveCache';
@@ -279,7 +280,10 @@ class LiveStreamService implements AbstractStreamService {
                 return false;
             }
             const streamKey = (req.query?.streamkey as string) ?? '';
-            const playlist = buildMasterPlaylist(live, (kind) => this.#dashPlaylistHref(channelId, kind, streamKey, sessionId));
+            // "Watch from start" (opt-in): how far behind live the window runs is settled here, once, so the video and audio
+            // playlists agree and it stays put.
+            const delayMs = req.query?.from === 'start' ? (await this.#fromStart(channelId, live))?.delayMs : undefined;
+            const playlist = buildMasterPlaylist(live, (kind) => this.#dashPlaylistHref(channelId, kind, streamKey, sessionId, delayMs));
             if (sessionId) {
                 streamSessionService.setResolution(sessionId, isUhdEventFeed(channelId) ? 'Live UHD' : 'Live 1080p');
             }
@@ -294,22 +298,68 @@ class LiveStreamService implements AbstractStreamService {
         }
     }
 
-    #dashPlaylistHref(channelId: string, kind: DashKind, streamKey: string, sessionId?: string): string {
+    #dashPlaylistHref(channelId: string, kind: DashKind, streamKey: string, sessionId?: string, delayMs?: number): string {
         return (
             `/api/live-${kind}.m3u8?mode=stream&pid=${encodeURIComponent(channelId)}&dash=${kind}&streamkey=${encodeURIComponent(streamKey)}` +
-            (sessionId ? `&session=${encodeURIComponent(sessionId)}` : '')
+            (sessionId ? `&session=${encodeURIComponent(sessionId)}` : '') +
+            (delayMs !== undefined ? `&delay=${delayMs}` : '')
         );
     }
 
+    async #fromStartEnabled(): Promise<boolean> {
+        return (await configService.getParameter(IplayarrParameter.LIVE_TV_FROM_START)) === 'true';
+    }
+
+    // Where "watch from start" begins for a channel right now: the segment holding the start of the programme on air, no
+    // further back than BBC's buffer reaches. Undefined when the setting is off or the guide has no programme on air.
+    async #fromStart(channelId: string, live: LiveDash): Promise<(ReturnType<typeof planFromStart> & { title: string; programmeStart: string }) | undefined> {
+        if (!(await this.#fromStartEnabled())) {
+            return undefined;
+        }
+        const now = (await browseService.nowNext(channelId).catch(() => undefined))?.now;
+        const startMs = now ? Date.parse(now.start) : NaN;
+        if (!now || Number.isNaN(startMs)) {
+            return undefined;
+        }
+        return { ...planFromStart(live, live.video, startMs, Date.now()), title: now.item.title, programmeStart: now.start };
+    }
+
+    // What "watch from start" would do for a channel at this moment, for the Streaming debug page. Never throws.
+    async fromStartInfo(channelId: string): Promise<{ enabled: boolean; programme?: string; programmeStart?: string; secondsBack?: number; bufferSeconds?: number; clamped?: boolean; firstSegment?: number; note?: string }> {
+        const enabled = await this.#fromStartEnabled();
+        if (!enabled) {
+            return { enabled };
+        }
+        try {
+            // Playback only uses it where the DASH feed is used (Live 1080p on, or a feed that only exists as DASH).
+            const live = (await this.#dashWanted(channelId)) ? await this.#liveDash(channelId) : undefined;
+            if (!live) {
+                return { enabled, note: 'no DASH feed in use for this channel (Live 1080p is off, or BBC has none), so it plays from the live edge' };
+            }
+            const plan = await this.#fromStart(channelId, live);
+            if (!plan) {
+                return { enabled, note: 'the guide has no programme on air' };
+            }
+            return { enabled, programme: plan.title, programmeStart: plan.programmeStart, secondsBack: plan.secondsBack, bufferSeconds: live.timeShiftSeconds ?? defaultTimeShiftSeconds, clamped: plan.clamped, firstSegment: plan.first, ...(live.timeShiftSeconds ? {} : { note: 'the manifest gives no buffer depth; 2 hours assumed' }) };
+        } catch (err: any) {
+            return { enabled, note: `could not be worked out: ${err?.message ?? err}` };
+        }
+    }
+
     // A video or audio media playlist as polled by the player (the endpoint's `dash=` request): a fresh
-    // sliding window each time, with every segment URL a segment-proxy token.
-    async getDashPlaylist(channelId: string, kind: DashKind, streamKey: string, sessionId?: string): Promise<string | undefined> {
+    // sliding window each time, with every segment URL a segment-proxy token. `delay` (ms, set by the master playlist for
+    // "watch from start") holds the window that far behind live.
+    async getDashPlaylist(channelId: string, kind: DashKind, streamKey: string, sessionId?: string, delay?: string): Promise<string | undefined> {
         const live = await this.#liveDash(channelId);
         if (!live) {
             return undefined;
         }
         const suffix = `&streamkey=${encodeURIComponent(streamKey)}` + (sessionId ? `&session=${encodeURIComponent(sessionId)}` : '');
-        return buildMediaPlaylist(live, kind, Date.now(), (url, isInit) => `/api/${isInit ? 'init.mp4' : 'seg.m4s'}?mode=stream&token=${registerSegmentUrl(url)}${suffix}`);
+        const now = Date.now();
+        // Only a delay of up to three hours counts, and only while the setting is on.
+        const delayMs = delay && /^\d{1,9}$/.test(delay) ? Number(delay) : undefined;
+        const useDelay = delayMs !== undefined && delayMs <= 3 * 3600_000 && (await this.#fromStartEnabled());
+        return buildMediaPlaylist(live, kind, now, (url, isInit) => `/api/${isInit ? 'init.mp4' : 'seg.m4s'}?mode=stream&token=${registerSegmentUrl(url)}${suffix}`, useDelay ? delayMs : undefined);
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {

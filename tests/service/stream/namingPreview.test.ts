@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../../src/service/configService';
+import { previewChapters } from '../../../src/service/download/downloadChapters';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import numberingOverrideService from '../../../src/service/numberingOverrideService';
 import SkyhookService from '../../../src/service/skyhook/SkyhookService';
@@ -15,6 +16,7 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: tru
 jest.mock('../../../src/service/queueService', () => ({ __esModule: true, default: { addToQueue: jest.fn() } }));
 jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, default: { record: jest.fn() } }));
 jest.mock('../../../src/service/numberingOverrideService', () => ({ __esModule: true, default: { find: jest.fn() } }));
+jest.mock('../../../src/service/download/downloadChapters', () => ({ previewChapters: jest.fn() }));
 jest.mock('../../../src/service/synonymService', () => ({ __esModule: true, default: { getSynonym: jest.fn() } }));
 jest.mock('../../../src/service/skyhook/SkyhookService', () => ({
     __esModule: true,
@@ -57,11 +59,21 @@ describe('namingPreview', () => {
         (Utils.createNZBName as jest.Mock).mockResolvedValue('Great.Show.S02E03.720p');
         (Utils.nzbTemplateContext as jest.Mock).mockResolvedValue({ template: '{{title}}', language: '', context: { title: 'Great Show', season: '02', episode: '03', episodeTitle: undefined, quality: '720p' } });
         (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+        (previewChapters as jest.Mock).mockResolvedValue({ enabled: true, markers: [], chapters: [] });
         (numberingOverrideService.find as jest.Mock).mockResolvedValue(undefined);
         (SkyhookService.searchSeries as jest.Mock).mockResolvedValue([]);
         (SkyhookService.findEpisode as jest.Mock).mockResolvedValue(undefined);
         (SkyhookService.lookupByAirDate as jest.Mock).mockResolvedValue(undefined);
         (SkyhookService.getShow as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('carries the skip chapter preview, asked with the runtime, version, setting and media mode', async () => {
+        (iplayerDetailsService.details as jest.Mock).mockResolvedValue([tvDetails()]);
+        const chapters = { enabled: true, markers: [{ type: 'intro', start: 5, end: 30 }], chapters: [{ start: 5, end: 30, title: 'Intro' }] };
+        (previewChapters as jest.Mock).mockResolvedValue(chapters);
+        const preview = await namingPreview('m001aaaa');
+        expect(preview.chapters).toEqual(chapters);
+        expect(previewChapters).toHaveBeenCalledWith('m001aaaa', expect.anything(), undefined, true, false);
     });
 
     it('reports the settings and an mp4 extension, and says so when there are no details', async () => {

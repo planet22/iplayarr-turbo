@@ -139,6 +139,7 @@ export function toBrowseSlot(broadcast: any): BrowseSlot | undefined {
         live: broadcast.episode.live || undefined,
         childrens: broadcast.episode.childrens || undefined,
         categories: Array.isArray(broadcast.episode.categories) ? broadcast.episode.categories : undefined,
+        onDemand: broadcast.episode.status === 'available' ? true : undefined,
     };
 }
 

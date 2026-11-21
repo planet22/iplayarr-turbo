@@ -263,6 +263,21 @@ async function readOnly(ctx, h) {
         let overlaps = 0;
         for (const list of Object.values(byChan)) { list.sort((x, y) => x[0] - y[0]); for (let i = 1; i < list.length; i++) if (list[i][0] < list[i - 1][1]) overlaps++; }
         rec(P, 'EPG: programmes on one channel do not overlap', overlaps ? 'WARN' : 'PASS', `${overlaps} overlap(s): Jellyfin shows the later one over the earlier`);
+        // Live subtitles: the synthetic subtitle playlist mirrors the video window and each segment is valid WebVTT
+        if (cfg.STREAM_SUBTITLES === 'false') rec(P, 'live subtitles: playlist and WebVTT segment', 'SKIP', 'STREAM_SUBTITLES is off');
+        else {
+            const sp = await raw(`/api/subs.m3u8?mode=stream&pid=bbc_one_london&subs=livelist&streamkey=${streamkey}`, { timeout: 60000 });
+            if (sp.status !== 200) rec(P, 'live subtitles: playlist and WebVTT segment', 'WARN', `no subtitle playlist (HTTP ${sp.status}): channel has no live captions or BBC did not answer`);
+            else {
+                const sl = sp.text.split('\n').map((l) => l.trim()).filter(Boolean);
+                const uris = sl.filter((l) => !l.startsWith('#'));
+                rec(P, 'live subtitles: playlist is a live media playlist with a sequence and target duration', sl[0] === '#EXTM3U' && sl.some((l) => /^#EXT-X-MEDIA-SEQUENCE:\d+$/.test(l)) && sl.some((l) => /^#EXT-X-TARGETDURATION:\d+$/.test(l)) && !sl.includes('#EXT-X-ENDLIST') ? 'PASS' : 'FAIL', sl.slice(0, 4).join(' | '));
+                rec(P, 'live subtitles: every #EXTINF is followed by a segment URL', sl.every((l, i) => !l.startsWith('#EXTINF') || (sl[i + 1] && !sl[i + 1].startsWith('#'))) && uris.length > 0 ? 'PASS' : 'FAIL', `${uris.length} segment(s)`);
+                rec(P, 'live subtitles: any discontinuity sequence is a whole number and each break precedes a segment', sl.every((l, i) => (!l.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE') || /^#EXT-X-DISCONTINUITY-SEQUENCE:\d+$/.test(l)) && (l !== '#EXT-X-DISCONTINUITY' || sl[i + 1]?.startsWith('#EXTINF'))) ? 'PASS' : 'FAIL');
+                const seg = uris[0] && (await raw(uris[0].startsWith('http') ? uris[0] : uris[0].replace(/^(?!\/)/, '/'), { timeout: 60000 }));
+                rec(P, 'live subtitles: a segment is WebVTT with a timestamp map (empty when nothing was said)', seg && seg.status === 200 && /^WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:\d+,LOCAL:\d\d:\d\d:\d\d\.\d{3}\n/.test(seg.text) ? 'PASS' : 'FAIL', seg ? `HTTP ${seg.status} ${seg.text.slice(0, 80)}` : 'no segment');
+            }
+        }
     } else rec(P, 'Live TV playlist/EPG checks', 'SKIP', 'Live TV is off');
 
     // 9. Data quality of the browse API the UI renders

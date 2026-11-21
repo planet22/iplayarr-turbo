@@ -61,6 +61,20 @@ describe('resolveDownloadUrl', () => {
         await expect(resolveDownloadUrl('p404')).rejects.toThrow('No programme found for pid p404 (status 404)');
     });
 
+    it.each([408, 429, 500, 503])('reports a %i from BBC as an upstream fault, not as the programme missing', async (status) => {
+        (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: status, body: '' });
+        const error = await resolveDownloadUrl(`pdown${status}`).catch((e) => e);
+        expect(error.code).toBe('EUPSTREAM');
+        expect(error.message).not.toContain('No programme found');
+    });
+
+    it('does not remember a failed lookup, so the next attempt asks BBC again', async () => {
+        (fetchTextWithStatus as jest.Mock).mockResolvedValueOnce({ statusCode: 503, body: '' });
+        await expect(resolveDownloadVpid('pretry')).rejects.toMatchObject({ code: 'EUPSTREAM' });
+        (fetchTextWithStatus as jest.Mock).mockResolvedValueOnce({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [{ pid: 'recovered', types: [] }] }) });
+        await expect(resolveDownloadVpid('pretry')).resolves.toBe('recovered');
+    });
+
     it('fails clearly when the programme has no versions', async () => {
         (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [] }) });
         await expect(resolveDownloadUrl('pnone')).rejects.toThrow('No available versions found for pnone');
@@ -160,6 +174,13 @@ describe('resolveDownloadVpid', () => {
         (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [{ pid: 'plainvpid', types: ['Original'] }] }) });
         await expect(resolveDownloadVpid('pvpid-plain', 'job-1')).resolves.toBe('plainvpid');
         expect(queueService.getFromQueue).toHaveBeenCalledWith('pvpid-plain', 'job-1');
+    });
+
+    it('asks for a uhd version when the queue entry is Full-HD', async () => {
+        (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { quality: 'fhd' } });
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockResolvedValue({ versionFlags: { uhdpid: { uhd: true } } });
+        (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [{ pid: 'hdpid', types: ['Original'] }, { pid: 'uhdpid', types: ['Original'] }] }) });
+        await expect(resolveDownloadVpid('pvpid-uhd')).resolves.toBe('uhdpid');
     });
 
     it('returns the vpid of the version the queue entry chose', async () => {

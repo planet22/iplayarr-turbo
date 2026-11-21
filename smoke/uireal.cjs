@@ -359,7 +359,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 }
             } else rec(U, 'streaming tab select', 'WARN', 'none found');
             // visit every tab for a visual record
-            for (const t of ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance']) {
+            for (const t of ['General', 'Search', 'Downloads', 'Media Management', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance']) {
                 await page.locator(`.settingsTab:has-text("${t}")`).first().click().catch(() => {});
                 await page.waitForTimeout(500);
                 await shot(page, `settings-tab-${t.toLowerCase().replace(/\W+/g, '-')}`, true);
@@ -429,10 +429,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await tab('general');
             const names = await page.locator('.settingsTab').allTextContents();
             ok('the tab bar lists General, Search and Appearance', ['General', 'Search', 'Appearance'].every((t) => names.some((n) => n.includes(t))), names.join());
-            const order = ['General', 'Search', 'Downloads', 'Library', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance'];
-            ok('the tabs are in the planned order: General, Search, Downloads, Library, Streaming, Live Channels, Appearance, Authentication, Maintenance',
+            const order = ['General', 'Search', 'Downloads', 'Media Management', 'Streaming', 'Live Channels', 'Appearance', 'Authentication', 'Maintenance'];
+            ok('the tabs are in the planned order: General, Search, Downloads, Media Management, Streaming, Live Channels, Appearance, Authentication, Maintenance',
                 order.every((t, i) => (names[i] || '').includes(t)), names.join());
-            ok('no tab still carries the old names (Media Management, Download Client, Live TV)', !names.some((n) => /Media Management|Download Client|Live TV/.test(n)), names.join());
+            ok('no tab still carries the old names (Download Client, Live TV)', !names.some((n) => /Download Client|Live TV/.test(n)), names.join());
             const general = await labels();
             ok('General holds the API key (and the advanced RSS/schedule settings)', general.some((l) => /Api Key/i.test(l)) && !general.some((l) => /Native Search|Colour Scheme/i.test(l)), general.join(' | '));
 
@@ -882,6 +882,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.locator('.probeTable tbody tr').first().waitFor({ timeout: 40000 });
                 const body = await page.innerText('body');
                 ok('the radio debug page reads the episode as audio', /\baudio\b/i.test(body) && (await page.locator('.probeTable tbody tr').count()) > 2, 'no audio probe rows');
+                ok('the radio debug page colours exactly one Probe line as the one a normal Play would use', (await page.locator('.streamDebug .probeTable tr.bestRow').count()) === 1, `${await page.locator('.streamDebug .probeTable tr.bestRow').count()} coloured line(s)`);
                 ok('the radio debug page has no broken picture', await page.evaluate(() => [...document.querySelectorAll('.streamDebug img')].every((i) => i.complete && i.naturalWidth > 0)), 'a picture did not load');
                 ok('the radio debug page shows no video-only parts', !/Video info|FHD upgrade/.test(body) && (await page.locator('.streamDebug .pidLinks li', { hasText: /^Programme page$/ }).count()) === 0, 'video-only text on the page');
                 // Radio gets Library debug and Watchdog beside its Sounds page link (the iPlayer-only Programme page and Video info stay off).

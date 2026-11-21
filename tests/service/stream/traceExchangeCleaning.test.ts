@@ -30,6 +30,11 @@ describe('cleanSession', () => {
         expect(s.source).not.toHaveProperty('bad');
     });
 
+    it('keeps the received picture height as a number and drops anything else', () => {
+        expect(cleanSession({ ...base, receivedHeight: 720 })).toMatchObject({ receivedHeight: 720 });
+        expect(cleanSession({ ...base, receivedHeight: '720' })).not.toHaveProperty('receivedHeight');
+    });
+
     it('fills a missing mode and a source without a reason', () => {
         expect(cleanSession({ ...base, source: { host: 'h' } })).toMatchObject({ mode: 'unknown', client: 'unknown', source: { host: 'h', why: '' } });
     });

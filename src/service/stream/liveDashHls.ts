@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { parseIsoDuration } from '../../utils/iblEpisode';
 import { parseAttributes } from './bbcHttp';
 
 // EXPERIMENTAL: presents BBC's live 1080p HEVC DASH feed as HLS without touching the media. The segments are CMAF fMP4,
@@ -26,9 +27,14 @@ export interface DashRendition {
 
 export interface LiveDash {
     availabilityStartMs: number;
+    // How far back BBC keeps segments (the manifest's timeShiftBufferDepth), when it says.
+    timeShiftSeconds?: number;
     video: DashRendition;
     audio?: DashRendition;
 }
+
+// BBC keeps about two hours of a live channel; used when the manifest does not say.
+export const defaultTimeShiftSeconds = 7200;
 
 // How many segments the generated playlists list, and how far behind the newest published segment they
 // stop: the newest one or two may be advertised before the CDN can actually serve them.
@@ -107,7 +113,8 @@ export function parseLiveMpd(xml: string, mpdUrl: string): LiveDash {
     // The programme's own audio, not the audio-described alternate that shares the group.
     const mainAudio = audio.filter((a) => !a.role || a.role === 'main');
     const best = [...(mainAudio.length ? mainAudio : audio)].sort((a, b) => b.bandwidth - a.bandwidth)[0];
-    return { availabilityStartMs, video: top, audio: best };
+    const timeShiftSeconds = parseIsoDuration(mpd.timeShiftBufferDepth);
+    return { availabilityStartMs, ...(timeShiftSeconds ? { timeShiftSeconds } : {}), video: top, audio: best };
 }
 
 export function buildMasterPlaylist(dash: LiveDash, playlistHref: (kind: DashKind) => string): string {
@@ -144,13 +151,62 @@ function newestSegment(dash: LiveDash, rendition: DashRendition, nowMs: number):
     return rendition.startNumber + elapsedSegments - 1 - liveEdgeDelaySegments;
 }
 
+// "Watch from start": the same live window, held a fixed delay behind the live edge so that what the player starts on is the
+// beginning of the programme on air, and it then plays on at normal speed. (A growing EVENT or finished playlist does not do
+// this: ffmpeg, so Jellyfin, starts those at the live edge or plays them to an end.) The delay is settled once, when the master
+// playlist is served, and handed to the media playlists, so it never drifts. It is kept inside what BBC still buffers.
+export interface FromStartPlan {
+    // How far behind live the window runs (ms).
+    delayMs: number;
+    // The segment a player starting on this window begins with (ffmpeg starts three segments from the end of a live list).
+    first: number;
+    // Seconds behind live, for display.
+    secondsBack: number;
+    // The programme began before BBC's buffer reaches, so the delay is as long as the buffer allows.
+    clamped: boolean;
+}
+
+// The segment holding a moment in time.
+function segmentAt(dash: LiveDash, rendition: DashRendition, ms: number): number {
+    return rendition.startNumber + Math.floor((ms - dash.availabilityStartMs) / (rendition.segmentSeconds * 1000));
+}
+
+// Segments of the buffer left unused at its old edge, where BBC prunes as it goes.
+const bufferMarginSegments = 8;
+
+export function planFromStart(dash: LiveDash, rendition: DashRendition, startMs: number, nowMs: number): FromStartPlan {
+    const segmentMs = rendition.segmentSeconds * 1000;
+    const wanted = segmentAt(dash, rendition, startMs);
+    // The listed window ends liveEdgeDelaySegments + 1 behind the moment it is shifted to, and a player starts two segments
+    // from its end: shift to five segments past the programme's first one.
+    const shiftedTo = dash.availabilityStartMs + (wanted - rendition.startNumber + liveEdgeDelaySegments + 3) * segmentMs;
+    const depthSegments = Math.floor((dash.timeShiftSeconds ?? defaultTimeShiftSeconds) / rendition.segmentSeconds);
+    const maxDelayMs = Math.max(0, (depthSegments - bufferMarginSegments) * segmentMs);
+    const ideal = nowMs - shiftedTo;
+    // Whole milliseconds: it travels in a URL. Never ahead of live.
+    const delayMs = Math.round(Math.min(Math.max(ideal, 0), maxDelayMs));
+    return {
+        delayMs,
+        first: newestSegment(dash, rendition, nowMs - delayMs) - 2,
+        secondsBack: Math.round(delayMs / 1000),
+        clamped: ideal > maxDelayMs,
+    };
+}
+
 // `segmentHref` turns an upstream URL (init or media segment) into the URL the player should fetch.
-export function buildMediaPlaylist(dash: LiveDash, kind: DashKind, nowMs: number, segmentHref: (upstreamUrl: string, isInit: boolean) => string): string | undefined {
+// With `delayMs` the window sits that far behind live (see planFromStart).
+export function buildMediaPlaylist(
+    dash: LiveDash,
+    kind: DashKind,
+    nowMs: number,
+    segmentHref: (upstreamUrl: string, isInit: boolean) => string,
+    delayMs = 0
+): string | undefined {
     const rendition = kind === 'video' ? dash.video : dash.audio;
     if (!rendition) {
         return undefined;
     }
-    const newest = newestSegment(dash, rendition, nowMs);
+    const newest = newestSegment(dash, rendition, nowMs - delayMs);
     const first = Math.max(rendition.startNumber, newest - windowSegments + 1);
     const lines = [
         '#EXTM3U',

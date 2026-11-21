@@ -93,6 +93,21 @@ describe('streamSessionService lifecycle', () => {
         expect(socketService.emit).toHaveBeenCalledTimes(1);
     });
 
+    it('setReceivedHeight keeps the tallest picture and only emits on change', async () => {
+        const id = await streamSessionService.start('p1', mode, client);
+        (socketService.emit as jest.Mock).mockClear();
+        streamSessionService.setReceivedHeight(id, 720);
+        streamSessionService.setReceivedHeight(id, 720);
+        streamSessionService.setReceivedHeight(id, 396);
+        streamSessionService.setReceivedHeight(id, NaN);
+        streamSessionService.setReceivedHeight('missing', 1080);
+        expect(find(id).receivedHeight).toBe(720);
+        await flush();
+        expect(socketService.emit).toHaveBeenCalledTimes(1);
+        streamSessionService.setReceivedHeight(id, 1080);
+        expect(find(id).receivedHeight).toBe(1080);
+    });
+
     it('end archives the session into history', async () => {
         const id = await streamSessionService.start('p1', mode, client);
         await streamSessionService.end(id);

@@ -74,15 +74,26 @@ v-if="row.channel.logo && !failedLogos[row.channel.id]"
                     </div>
                     <div v-for="row in channels" :key="row.channel.id" class="channelRow">
                         <span v-if="row.slots.length === 0" class="noSchedule">No schedule available</span>
-                        <RouterLink
-                            v-for="slot in row.slots" :key="`${slot.item.pid}|${slot.start}`" :to="slotLink(row, slot)"
-                            :class="['programmeBlock', isLive(slot) ? 'live' : '']"
-                            :style="blockStyle(slot)" :title="slot.item.title"
+                        <!-- A block is a plain box holding the link and, for a programme to watch on demand, its action buttons: a button never sits inside a link. -->
+                        <div
+                            v-for="slot in row.slots" :key="`${slot.item.pid}|${slot.start}`"
+                            :class="['programmeBlock', isLive(slot) ? 'live' : '', slot.onDemand ? 'onDemand' : '']"
+                            :style="blockStyle(slot)"
                         >
-                            <span class="blockTitle">{{ slot.item.title }}</span>
-                            <span v-if="slot.item.subtitle" class="blockSubtitle">{{ slot.item.subtitle }}</span>
-                            <span class="blockTime">{{ formatTime(slot.start) }} - {{ formatTime(slot.end) }}</span>
-                        </RouterLink>
+                            <RouterLink class="blockLink" :to="slotLink(row, slot)" :title="slot.item.title">
+                                <span class="blockTitle">{{ slot.item.title }}</span>
+                                <span v-if="slot.item.subtitle" class="blockSubtitle">{{ slot.item.subtitle }}</span>
+                                <span class="blockTime">{{ formatTime(slot.start) }} - {{ formatTime(slot.end) }}</span>
+                            </RouterLink>
+                            <span v-if="slot.onDemand" class="blockActions">
+                                <button v-if="canPlay" type="button" class="clickable" title="Play on demand" aria-label="Play on demand" @click.prevent.stop="play(slot.item)">
+                                    <font-awesome-icon :icon="['fas', 'play']" />
+                                </button>
+                                <button type="button" class="clickable" title="Download (or .strm) on demand" aria-label="Download on demand" @click.prevent.stop="download(slot.item)">
+                                    <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
+                                </button>
+                            </span>
+                        </div>
                     </div>
                     <div
                         v-for="shade in adjacentShades" :key="shade.left" class="adjacentDay"
@@ -106,7 +117,11 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { browseFetch } from '@/lib/browse';
 import { programmeTarget } from '@/lib/mediaDisplay';
 import { radioActive } from '@/lib/mediaMode';
+import { useBrowseActions } from '@/lib/useBrowseActions';
 import { formatTime as formatClock, getThumbnailUrl } from '@/lib/utils';
+
+// Play or download a programme the guide marks as on demand, the same way a card does.
+const { canPlay, play, download } = useBrowseActions();
 
 const ZOOM_STEP = 0.5;
 const ZOOM_MIN = 1;
@@ -587,25 +602,76 @@ onBeforeUnmount(() => {
     position: absolute;
     top: 4px;
     bottom: 4px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 1px;
-    padding: @space-1 @space-2;
     box-sizing: border-box;
     overflow: hidden;
     border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
-    text-decoration: none;
+
+    .blockLink {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1px;
+        height: 100%;
+        padding: @space-1 @space-2;
+        box-sizing: border-box;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    // Programmes to watch on demand: a slight brand-colour shade, and Play / Download buttons on hover (always, on touch screens).
+    &.onDemand {
+        background-color: color-mix(in srgb, @brand-color 12%, @settings-button-background-color);
+    }
+
+    .blockActions {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        display: none;
+        gap: @space-1;
+
+        button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid @settings-button-border-color;
+            background-color: @settings-button-background-color;
+            color: @primary-text-color;
+            font-size: @font-size-xs;
+
+            &:hover {
+                background-color: @brand-color;
+                border-color: @brand-color;
+                color: @on-brand-color;
+            }
+        }
+    }
+
+    &:hover .blockActions,
+    &:has(:focus-visible) .blockActions {
+        display: flex;
+    }
+
+    @media (hover: none) {
+        .blockActions {
+            display: flex;
+        }
+    }
 
     &:hover {
         border-color: @brand-color;
         z-index: 1;
     }
 
-    &.live {
+    &.live,
+    &.live.onDemand {
         border-color: @brand-color;
         background-color: @nav-active-background-color;
     }

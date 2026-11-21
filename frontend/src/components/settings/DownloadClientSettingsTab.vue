@@ -104,6 +104,14 @@
         :error="validationErrors.config?.DOWNLOAD_SUBTITLES"
         :options="subtitleModes"
     />
+    <SelectInput
+        v-model="config.DOWNLOAD_CHAPTERS"
+        field="DOWNLOAD_CHAPTERS"
+        name="Skip chapters"
+        tooltip="Mark the intro and recap as chapters, so Jellyfin offers a Skip button. Native downloads only."
+        :error="validationErrors.config?.DOWNLOAD_CHAPTERS"
+        :options="trueOrFalse"
+    />
     <template v-if="showAdvanced">
         <TextInput
             v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"

@@ -24,6 +24,8 @@ export interface IblEpisodeExtras {
     // When the episode leaves iPlayer (ISO), and whether iPlayer flags it with content guidance.
     availableUntil?: string;
     guidance?: true;
+    // iPlayer's own word for whether it can be watched on demand now ("available", "unavailable"...), as the guide uses it.
+    status?: string;
 }
 
 const ISO_DURATION = /^PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?$/;
@@ -67,6 +69,7 @@ export function parseIblEpisodeExtras(episode: any): IblEpisodeExtras {
         ...(downloadable.length ? { downloadable } : {}),
         ...(availableUntil ? { availableUntil } : {}),
         ...(episode?.guidance === true ? { guidance: true as const } : {}),
+        ...(typeof episode?.status === 'string' && episode.status ? { status: episode.status } : {}),
     };
 }
 

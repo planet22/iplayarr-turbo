@@ -117,6 +117,7 @@ const configService = {
         STREAM_TRACE: 'false',
         STREAM_PREFETCH_OPEN_RANGE: 'true',
         DOWNLOAD_SUBTITLES: 'sidecar',
+        DOWNLOAD_CHAPTERS: 'true',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
         LIVE_RADIO: 'true',
@@ -152,6 +153,7 @@ const configService = {
         LIVE_TV_GUIDE_CATEGORIES: 'true',
         LIVE_TV_GUIDE_FLAGS: 'true',
         LIVE_TV_GUIDE_HD: 'true',
+        LIVE_TV_FROM_START: 'false',
         STRM_WATCHDOG_ENABLED: 'true',
         // Radio links are checked too (they only exist while BBC Sounds is on), as video's are.
         STRM_WATCHDOG_SOURCES: 'history,radio',

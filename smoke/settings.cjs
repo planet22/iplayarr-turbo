@@ -76,6 +76,7 @@ const CHANGE = {
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
     LIVE_TV_GUIDE_FLAGS: ['false', 'true'],
     LIVE_TV_GUIDE_HD: ['false', 'true'],
+    LIVE_TV_FROM_START: ['true', 'false'],
     LIVE_TV_JELLYFIN_APPS: ['smoke-temp-none'],
     STRM_WATCHDOG_ENABLED: ['true', 'false'],
     STRM_WATCHDOG_SOURCES: ['subscribed', 'history'],
@@ -147,6 +148,7 @@ const NO_EFFECT = {
     RADIO_ATOZ_HIDE_EMPTY: 'turning it on starts a request per show (thousands) once Radio A to Z is on; the radio A to Z checks use their own run, so no flip here',
     RADIO_ATOZ: 'turning it on starts a crawl of the whole BBC Sounds show list (about 120 requests); the radio A to Z checks use their own run, so no flip here',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
+    DOWNLOAD_CHAPTERS: 'decides whether a finished native download carries Intro/Recap chapters; this suite cancels its downloads, so the download tests cover it',
     DOWNLOAD_SUBTITLES: 'decides what a finished download keeps (a loose .srt, an embedded track, both or none); this suite cancels its downloads, so the real-download matrix and the download tests cover it, and section 7b checks the four values and the refusal',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
@@ -224,7 +226,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
     // --filter: a section runs only when the filter matches one of its labels (its setting keys or a short name for it), so a
     // filtered run does just that work instead of the whole sweep with the other results hidden. No filter: everything runs.
     const wants = (...labels) => !ctx.want || labels.flat().some((label) => ctx.want(label));
-    const LIVE_TV_KEYS = ['LIVE_TV_ENABLED', 'LIVE_TV_LOGO_SHAPE', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_EPG_OFFSET', 'STREAM_BASE_URL', 'STREAM_LIVE_DASH_1080'];
+    const LIVE_TV_KEYS = ['LIVE_TV_ENABLED', 'LIVE_TV_LOGO_SHAPE', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'LIVE_TV_FROM_START', 'LIVE_TV_EPG_OFFSET', 'STREAM_BASE_URL', 'STREAM_LIVE_DASH_1080'];
     const profilesQ = Object.fromEntries(((await http('/json-api/config/qualityProfiles')).json || []).map((p) => [p.id, p.quality]));
     let termIx = 0;
     const freshTerm = () => TERMS[termIx++ % TERMS.length];
@@ -491,6 +493,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         LIVE_TV_GUIDE_CATEGORIES: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} category tags`, (xml) => ({ pass: /<category/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_FLAGS: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} new/live/repeat flags`, (xml) => ({ pass: /<new\/>|<previously-shown\/>|<live\/>/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
         LIVE_TV_GUIDE_HD: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'marks' : 'does not mark'} programmes HD`, (xml) => ({ pass: /<quality>HDTV/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
+        // On adds a second "(from start)" entry per channel to the playlist; off leaves only the normal ones.
+        LIVE_TV_FROM_START: async ({ next }) => {
+            if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
+            const extra = (await playlist()).text.split(String.fromCharCode(10)).filter((l) => l.includes('&from=start'));
+            return { what: `playlist ${next === 'true' ? 'has' : 'has no'} from-start entries`, pass: (extra.length > 0) === (next === 'true'), detail: `${extra.length} from-start entries` };
+        },
         // Off adds &lq=720 to the plain TV channel URLs, so Jellyfin (which caches its probe per URL) probes them again; on leaves them as they were.
         STREAM_LIVE_DASH_1080: async ({ next }) => {
             if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
