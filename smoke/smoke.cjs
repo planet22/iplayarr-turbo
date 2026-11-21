@@ -1049,6 +1049,14 @@ async function libraryAndDebugChecks(A, ctx) {
             if (!j?.found) return `not found: ${j?.error || ''}`;
             return j.parent?.pid ? true : 'no parent pid on an episode';
         }, { timeout: 60000 });
+        await check(A, 'stream debug versions say which one a plain download takes (exactly one, never audio described / signed unless alone)', `/json-api/streams/debug/${episodePid}/programme`, (r) => {
+            const versions = r.json?.versions;
+            if (!Array.isArray(versions) || !versions.length) return true;
+            const chosen = versions.filter((v) => v.selection === 'chosen');
+            if (chosen.length !== 1) return `${chosen.length} versions chosen`;
+            const special = /described|sign/i;
+            return special.test((chosen[0].types || []).join(' ')) && versions.some((v) => !special.test((v.types || []).join(' '))) ? 'an audio described / signed version was chosen over a plain one' : true;
+        }, { timeout: 60000 });
     } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
     if (episodePid) {
         await check(A, 'stream debug naming gives the settings, an extension and a name or an error', `/json-api/streams/debug/${episodePid}/naming`, (r) => {

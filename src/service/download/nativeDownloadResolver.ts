@@ -86,14 +86,16 @@ async function qualityChain(pid: string, jobId?: string): Promise<string[]> {
 
 // The vpid the download will fetch (cached, so cheap after resolveDownloadUrl), for its captions.
 export async function resolveDownloadVpid(pid: string, jobId?: string): Promise<string> {
-    return resolveVpid(pid, queueService.getFromQueue(pid, jobId)?.library?.version);
+    const library = queueService.getFromQueue(pid, jobId)?.library;
+    return resolveVpid(pid, library?.version, library?.quality);
 }
 
 // `onStep` is told what is happening, for the download's log.
 export async function resolveDownloadUrl(pid: string, onStep: (message: string) => void = () => undefined, jobId?: string): Promise<string> {
     onStep('Looking up the programme on BBC iPlayer');
-    const version = queueService.getFromQueue(pid, jobId)?.library?.version;
-    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid, version), version);
+    const library = queueService.getFromQueue(pid, jobId)?.library;
+    const version = library?.version;
+    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid, version, library?.quality), version);
     const variants = parseVariants(await fetchText(masterUrl), masterUrl);
     if (variants.length === 0) {
         onStep('Stream offers a single quality, using it');

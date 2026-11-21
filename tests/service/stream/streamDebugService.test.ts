@@ -128,8 +128,8 @@ describe('streamDebugService', () => {
                 ibl: { tagline: 'x' },
             });
             expect(info.versions).toEqual([
-                { vpid: 'p0vers01', types: ['Original'], duration: 1800, canonical: true },
-                { vpid: 'p0vers02', types: ['Audio Described'], duration: 1800, canonical: false },
+                { vpid: 'p0vers01', types: ['Original'], duration: 1800, canonical: true, selection: 'chosen' },
+                { vpid: 'p0vers02', types: ['Audio Described'], duration: 1800, canonical: false, selection: 'audio described / signed' },
             ]);
             expect(info.settings.STREAM_MODE).toBe('direct');
             // The parents are cut to their titles.
@@ -247,6 +247,14 @@ describe('streamDebugService', () => {
 
             expect(info.versions.map((version) => [version.availableFrom, version.downloadable])).toEqual([['2026-11-01T06:00:00Z', true], [undefined, false]]);
             expect(info.access).toEqual({ signIn: true });
+        });
+
+        it('says which version a plain download takes, and why not the others', async () => {
+            jest.mocked(iplayerDetailsService.getIblExtras).mockResolvedValue({} as any);
+
+            const info = await streamDebugService.info(PID);
+
+            expect(info.versions.map((version) => version.selection)).toEqual(['chosen', 'audio described / signed']);
         });
 
         it('adds what Sonarr or Radarr holds for the files they list, and skips an app that is gone or does not answer', async () => {

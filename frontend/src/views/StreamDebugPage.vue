@@ -297,7 +297,7 @@
 
             <TraceSection id="dbg-versions" title="Versions" :info="help.versions">
             <table class="dataTable">
-                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th></tr></thead>
+                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th><th v-if="!isRadio">Plain pick</th></tr></thead>
                 <tbody>
                     <tr v-for="version in info.versions" :key="version.vpid">
                         <td class="text"><code>{{ version.vpid }}</code></td>
@@ -308,8 +308,9 @@
                         <td class="text">{{ version.availableUntil ? formatWhen(version.availableUntil) : '' }}</td>
                         <td v-if="!isRadio" class="text">{{ version.downloadable === undefined ? '' : version.downloadable ? 'allowed' : 'not allowed' }}</td>
                         <td class="text">{{ version.canonical ? 'yes' : '' }}</td>
+                        <td v-if="!isRadio" class="text">{{ version.selection ?? '' }}</td>
                     </tr>
-                    <tr v-if="!info.versions.length"><td :colspan="isRadio ? 4 : 8" class="empty">BBC lists no versions for this pid</td></tr>
+                    <tr v-if="!info.versions.length"><td :colspan="isRadio ? 4 : 9" class="empty">BBC lists no versions for this pid</td></tr>
                 </tbody>
             </table>
 
@@ -702,7 +703,7 @@ const copyPage = (download = false) => {
         ...metadataRows.value.filter((row) => !Array.isArray(row[1])).map((row) => `  ${row[0]}: ${String(row[1]).slice(0, 300)}`),
         '',
         'Versions:',
-        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}`),
+        ...(i.versions ?? []).map((v) => `  ${v.vpid} [${(v.types ?? []).join(', ') || 'standard'}] until ${v.availableUntil ?? '-'}${v.canonical ? ' canonical' : ''}${v.selection ? ` (plain pick: ${v.selection})` : ''}`),
         '',
         'Probe (BBC mediaselector, every version and route):',
         ...(result.value ? probeReportLines(result.value, connectionRows, answer) : ['  not run']),

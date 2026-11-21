@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import configService from '../../../src/service/configService';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import { fetchTextWithStatus } from '../../../src/service/stream/bbcHttp';
 import { fetchPlainVpid, resolveVpid } from '../../../src/service/stream/versionVpid';
+import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { ProgrammeNotFoundError } from '../../../src/utils/upstreamError';
 
 jest.mock('../../../src/service/stream/bbcHttp', () => ({ ...jest.requireActual('../../../src/service/stream/bbcHttp'), fetchTextWithStatus: jest.fn() }));
@@ -35,6 +37,19 @@ describe('fetchPlainVpid', () => {
             ],
         });
         await expect(fetchPlainVpid('p')).resolves.toBe('plain');
+    });
+
+    it('skips a plain version outside its dates and takes a uhd one only for the top quality', async () => {
+        reply(200, { allAvailableVersions: [{ pid: 'old', types: [] }, { pid: 'uhd', types: ['Original version'] }, { pid: 'hd', types: ['Original version'] }] });
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockResolvedValue({ versionEnds: { old: '2020-01-01T00:00:00Z' }, versionFlags: { uhd: { uhd: true } } });
+        await expect(fetchPlainVpid('p')).resolves.toBe('hd');
+        await expect(fetchPlainVpid('p', true)).resolves.toBe('uhd');
+    });
+
+    it('ignores a failed lookup of dates from iPlayer', async () => {
+        reply(200, { allAvailableVersions: [{ pid: 'a', types: ['x'] }, { pid: 'b', types: [] }] });
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockRejectedValue(new Error('down'));
+        await expect(fetchPlainVpid('p')).resolves.toBe('b');
     });
 
     it('takes the version with the fewest types, and tolerates versions without types', async () => {
@@ -92,6 +107,24 @@ describe('resolveVpid', () => {
         await expect(resolveVpid('pcache2')).rejects.toMatchObject({ code: 'EUPSTREAM' });
         (fetchTextWithStatus as jest.Mock).mockResolvedValueOnce({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [{ pid: 'ok', types: [] }] }) });
         await expect(resolveVpid('pcache2')).resolves.toBe('ok');
+    });
+
+    it('takes a uhd version only when the quality is Full-HD, with its own cache entry', async () => {
+        reply(200, { allAvailableVersions: [{ pid: 'hdone', types: ['Original'] }, { pid: 'uhdone', types: ['Original'] }] });
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockResolvedValue({ versionFlags: { uhdone: { uhd: true } } });
+        await expect(resolveVpid('pcache4', undefined, 'hd')).resolves.toBe('hdone');
+        await expect(resolveVpid('pcache4', undefined, 'fhd')).resolves.toBe('uhdone');
+        await expect(resolveVpid('pcache4', undefined, 'fhd')).resolves.toBe('uhdone');
+        await expect(resolveVpid('pcache4', undefined, 'hd')).resolves.toBe('hdone');
+    });
+
+    it('reads the quality from the VIDEO_QUALITY setting when none is given', async () => {
+        reply(200, { allAvailableVersions: [{ pid: 'hdone', types: ['Original'] }, { pid: 'uhdone', types: ['Original'] }] });
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockResolvedValue({ versionFlags: { uhdone: { uhd: true } } });
+        await configService.setParameter(IplayarrParameter.VIDEO_QUALITY, 'fhd');
+        await expect(resolveVpid('pcache5')).resolves.toBe('uhdone');
+        await configService.setParameter(IplayarrParameter.VIDEO_QUALITY, 'hd');
+        await expect(resolveVpid('pcache5')).resolves.toBe('hdone');
     });
 
     it('gives a non-plain version its own vpid from the programme versions, apart from the plain one', async () => {

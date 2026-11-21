@@ -176,6 +176,13 @@ describe('resolveDownloadVpid', () => {
         expect(queueService.getFromQueue).toHaveBeenCalledWith('pvpid-plain', 'job-1');
     });
 
+    it('asks for a uhd version when the queue entry is Full-HD', async () => {
+        (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { quality: 'fhd' } });
+        (iplayerDetailsService as any).getIblExtras = jest.fn().mockResolvedValue({ versionFlags: { uhdpid: { uhd: true } } });
+        (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [{ pid: 'hdpid', types: ['Original'] }, { pid: 'uhdpid', types: ['Original'] }] }) });
+        await expect(resolveDownloadVpid('pvpid-uhd')).resolves.toBe('uhdpid');
+    });
+
     it('returns the vpid of the version the queue entry chose', async () => {
         (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { version: 'audio-described' } });
         (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({

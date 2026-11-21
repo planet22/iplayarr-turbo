@@ -4,6 +4,8 @@ import fs from 'fs';
 
 import { customChannel } from '../../constants/CustomChannels';
 import { isLiveChannel, isOptionalLiveChannel, isUhdEventFeed, liveChannelInfo, LiveChannelVpids } from '../../constants/LiveChannels';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
+import { choosePlainVersion, VersionVerdict } from '../../utils/versionChoice';
 import appService from '../appService';
 import arrLibraryService from '../arr/ArrLibraryService';
 import configService from '../configService';
@@ -39,6 +41,8 @@ export interface DebugVersion {
     // When iPlayer says this version leaves (ISO), when it started, and whether it lets people download it.
     availableUntil?: string;
     availableFrom?: string;
+    // Whether a plain download or stream takes this version, and if not why (audio described / signed, outside its dates, uhd).
+    selection?: VersionVerdict;
     downloadable?: boolean;
 }
 
@@ -473,7 +477,10 @@ class StreamDebugService {
         const ibl = await iplayerDetailsService.getIblExtras(pid).catch(() => undefined);
         info.ibl = ibl;
         info.access = ibl?.access;
+        // Which version a plain download or stream takes, and why the others are not (utils/versionChoice.ts).
+        const plain = info.versions.length ? choosePlainVersion(info.versions.map((v) => ({ pid: v.vpid, types: v.types })), { extras: ibl, uhd: (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) === 'fhd' }) : undefined;
         for (const version of info.versions) {
+            version.selection = plain?.verdicts[version.vpid];
             version.flags = ibl?.versionFlags?.[version.vpid];
             version.availableUntil = ibl?.versionEnds?.[version.vpid];
             version.availableFrom = ibl?.versionStarts?.[version.vpid];

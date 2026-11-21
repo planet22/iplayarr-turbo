@@ -202,6 +202,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 - **Subscriptions:** can also download the audio described / signed version of new episodes. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#versions).
 - **Play:** the Play button asks for, or defaults to, a version and the in-app player has a version switcher that resumes at the same position.
 - **Badges:** Settings → Appearance. Programme-page answers are cached and the rest are fetched in the background, and only when the badge setting is on.
+- **Which version a plain grab takes:** never an audio described or signed one (those are used only when nothing else exists), and never one outside the dates iPlayer gives for it (an unknown date rules nothing out). A version iPlayer flags UHD is taken only when the quality is Full-HD, otherwise the one that is not. The Streaming Debug page's Versions table shows the pick and the reason for each version.
 
 ## Maintenance (Settings → Maintenance)
 
