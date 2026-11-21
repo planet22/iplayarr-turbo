@@ -48,7 +48,8 @@ describe('RadioDownloadConfirm', () => {
         const wrapper = mountIt({ text: 'Download this?' });
         expect(wrapper.find('.question').text()).toBe('Download this?');
         expect(wrapper.find('.toggle').text()).toBe('m4a');
-        expect(wrapper.find('.noteBox').text()).toContain('Saved as a tagged MP3 or M4A');
+        expect(wrapper.find('.outputNote').text()).toContain('as tagged MP3 or M4A');
+        expect(wrapper.find('.outputNote').classes()).toContain('warning');
         wrapper.findComponent(IPlayarrModal).vm.$emit('confirm');
         expect(wrapper.emitted('confirm')[0]).toEqual(['m4a', undefined]);
     });
@@ -56,7 +57,8 @@ describe('RadioDownloadConfirm', () => {
     it('starts on strm when the setting says so', () => {
         const wrapper = mountIt({ text: 'x', count: 3 }, { RADIO_MEDIA_MODE: 'strm' });
         expect(wrapper.find('.toggle').text()).toBe('strm');
-        expect(wrapper.find('.noteBox').text()).toContain('Each is a .strm link');
+        expect(wrapper.find('.outputNote').text()).toContain('Creates 3 small .strm links');
+        expect(wrapper.find('.outputNote').classes()).toContain('info');
     });
 
     it('follows the toggle and emits cancel on dismiss', async () => {
@@ -120,5 +122,23 @@ describe('RadioDownloadConfirm', () => {
             expect(wrapper.find('.hero').exists()).toBe(false);
             expect(wrapper.find('.nameInput').exists()).toBe(false);
         });
+    });
+
+    it('offers the same choices in the same order as the video dialog: the link first, then the file', () => {
+        const wrapper = mountIt({ text: 'x' });
+        const options = wrapper.findComponent(DownloadModeToggle).props('options');
+        expect(options.map(({ key, label, icon }) => [key, label, icon])).toEqual([
+            ['strm', '.strm link', 'link'],
+            ['m4a', 'Audio file', 'file-audio'],
+        ]);
+    });
+
+    it('puts the note before the file name, as the video dialog does', async () => {
+        ipFetch.mockResolvedValue({ ok: false });
+        const wrapper = mountIt({ text: 'x', item: { pid: 'p1', title: 'Show' } });
+        await flushPromises();
+        const html = wrapper.html();
+        expect(html.indexOf('outputNote')).toBeGreaterThan(-1);
+        expect(html.indexOf('outputNote')).toBeLessThan(html.indexOf('nameInput'));
     });
 });

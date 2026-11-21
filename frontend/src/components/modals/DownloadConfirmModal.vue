@@ -28,10 +28,7 @@
             />
             <SelectInput v-model="quality" name="Quality" :tooltip="qualityTip" :options="qualityOptions" />
         </div>
-        <div :class="['outputNote', summary.tone]">
-            <font-awesome-icon :icon="['fas', summary.strm ? 'link' : 'triangle-exclamation']" />
-            <span>{{ summary.text }}</span>
-        </div>
+        <OutputNote :strm="summary.strm" :tone="summary.tone" :text="summary.text" />
         <div class="infoSection">
             <TextInput
                 v-model="searchResult.nzbName"
@@ -49,6 +46,7 @@ import DownloadModeToggle from '@/components/common/DownloadModeToggle.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
+import OutputNote from '@/components/common/OutputNote.vue';
 import { defaultMediaMode, describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, preferredVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
@@ -154,32 +152,5 @@ const download = async () => {
 <style lang="less" scoped>
 .infoSection {
     margin-top: 1rem;
-}
-
-.outputNote {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 10px;
-    padding: @space-2 @space-3;
-    border-radius: @radius-sm;
-    background-color: @nav-active-background-color;
-    font-size: @font-size-md;
-    color: @table-text-color;
-
-    svg {
-        flex: none;
-        color: @brand-color;
-    }
-
-    // A real file download: same warning look as the batch confirmation.
-    &.warning {
-        border-left: 4px solid @caution-color;
-        background-color: color-mix(in srgb, @caution-color 14%, transparent);
-
-        svg {
-            color: @caution-color;
-        }
-    }
 }
 </style>

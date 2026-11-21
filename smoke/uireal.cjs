@@ -788,6 +788,20 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await cards.first().waitFor({ timeout: 25000 });
             ok('an opened radio collection lists radio cards, and has a Download collection button like video', (await cards.count()) > 0 && (await page.locator('button[title^="Download collection"]').count()) === 1);
             await shot(page, 'radio-collection');
+            // The audio Download dialog is the video one: banner, link-first choice, one-line note, then the file name. Cancel queues nothing.
+            await cards.first().click();
+            await page.waitForTimeout(2500);
+            const radioDownload = page.locator('button[title="Download MP3"], button[title="Record to M4A"], button[title="Download"]').first();
+            if (await radioDownload.count()) {
+                await radioDownload.click();
+                await page.waitForSelector('.modal-inner, [role=dialog]', { timeout: 15000 }).catch(() => {});
+                const rd = page.locator('.modal-inner, [role=dialog]').first();
+                const choices = (await rd.locator('[role=radio]').allInnerTexts().catch(() => [])).map((t) => t.trim());
+                warn('the audio Download dialog offers the .strm link first, then the audio file, like video', choices.length === 2 && /strm/i.test(choices[0]) && /audio/i.test(choices[1]), JSON.stringify(choices));
+                warn('the audio Download dialog has the same note and a Filename field after it as the video dialog', (await rd.locator('.outputNote').count()) === 1 && (await rd.getByText('Filename', { exact: true }).count()) === 1);
+                await shot(page, 'radio-download-dialog');
+                await page.keyboard.press('Escape');
+            } else rec(U, 'the audio Download dialog matches the video one', 'SKIP', 'no episode download button');
 
             // Radio A to Z off: BBC Sounds has no A to Z, so an address for it opens Categories and the command palette does not offer it.
             // On: the address stays and the palette offers it.

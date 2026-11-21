@@ -68,13 +68,12 @@ export const stopAudio = () => {
 export const episodeTitle = (episode) =>
     [episode.showTitle || episode.title, episode.subtitle || (episode.showTitle && episode.title !== episode.showTitle ? episode.title : '')].filter(Boolean).join(' - ');
 
-// The one-line note under the audio file | .strm choice in the radio download dialog. Kept to a single line so the dialog does
-// not change size when the choice does.
-export const radioDownloadNote = (mode, count = 1) => {
-    const many = count > 1;
-    return mode === 'strm'
-        ? `${many ? 'Each is a' : 'A'} .strm link, no disk space. Needs Stream Base URL and Key.`
-        : `${many ? 'Each is saved' : 'Saved'} as a tagged MP3 or M4A in the Radio Directory.`;
+// The same note the video dialog shows (OutputNote): what this download will produce. A real file is flagged as a warning.
+export const describeRadioDownload = (mode, count = 1) => {
+    if (mode === 'strm') {
+        return { strm: true, tone: 'info', text: count > 1 ? `Creates ${count} small .strm links instead of audio files.` : 'Creates a small .strm link instead of an audio file.' };
+    }
+    return { strm: false, tone: 'warning', text: `Saves ${count > 1 ? `${count} full episodes` : 'the full episode'} as tagged MP3 or M4A in the Radio Directory.` };
 };
 
 export function useRadioActions() {

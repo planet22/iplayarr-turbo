@@ -22,12 +22,9 @@
         />
         <p v-else class="question">{{ text }}</p>
         <DownloadModeToggle v-model="mode" :options="options" />
+        <OutputNote :strm="summary.strm" :tone="summary.tone" :text="summary.text" />
         <div v-if="item?.pid" class="nameSection">
             <TextInput v-model="fileName" name="Filename" tooltip="Extension is added automatically" />
-        </div>
-        <div class="noteBox" role="note">
-            <font-awesome-icon :icon="['fas', mode === 'strm' ? 'circle-info' : 'cloud-arrow-down']" />
-            <span>{{ note }}</span>
         </div>
     </IPlayarrModal>
 </template>
@@ -38,8 +35,9 @@ import { computed, defineEmits, defineProps, inject, onMounted, ref } from 'vue'
 import DownloadModeToggle from '@/components/common/DownloadModeToggle.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
+import OutputNote from '@/components/common/OutputNote.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { radioDownloadNote } from '@/lib/radio';
+import { describeRadioDownload } from '@/lib/radio';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 
@@ -62,9 +60,10 @@ const emit = defineEmits(['confirm', 'cancel']);
 
 const globalSettings = inject('globalSettings', ref({}));
 const mode = ref(globalSettings.value?.RADIO_MEDIA_MODE === 'strm' ? 'strm' : 'm4a');
+// Same order and look as the video dialog: the link first, then the file.
 const options = [
-    { key: 'm4a', label: 'Audio file', icon: 'file-audio' },
     { key: 'strm', label: '.strm link', icon: 'link' },
+    { key: 'm4a', label: 'Audio file', icon: 'file-audio' },
 ];
 // The suggested file name is the one the radio filename template would give (asked of the server); it is sent only if changed.
 const fileName = ref('');
@@ -81,7 +80,7 @@ onMounted(async () => {
         // No suggestion: the server still names the download itself.
     }
 });
-const note = computed(() => radioDownloadNote(mode.value, props.count));
+const summary = computed(() => describeRadioDownload(mode.value, props.count));
 </script>
 
 <style lang="less" scoped>
@@ -92,24 +91,5 @@ const note = computed(() => radioDownloadNote(mode.value, props.count));
 
 .question {
     margin: 0;
-}
-
-.noteBox {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    margin: 14px 0 18px;
-    padding: 10px @space-3;
-    border-left: 4px solid @brand-color;
-    border-radius: @radius-sm;
-    background-color: @nav-active-background-color;
-    font-size: @font-size-md;
-    line-height: 1.4;
-
-    svg {
-        flex: none;
-        margin-top: 2px;
-        color: @brand-color;
-    }
 }
 </style>

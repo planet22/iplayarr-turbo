@@ -8,7 +8,7 @@ import {
     episodeTitle,
     loadRadioDownloads,
     nowPlaying,
-    radioDownloadNote,
+    describeRadioDownload,
     radioDownloads,
     radioHistory,
     radioQueue,
@@ -61,21 +61,12 @@ beforeEach(() => {
     nowPlaying.value = null;
 });
 
-describe('radioDownloadNote', () => {
-    it('is one short line for each choice, singular or for several items', () => {
-        expect(radioDownloadNote('m4a')).toBe('Saved as a tagged MP3 or M4A in the Radio Directory.');
-        expect(radioDownloadNote('m4a', 3)).toBe('Each is saved as a tagged MP3 or M4A in the Radio Directory.');
-        expect(radioDownloadNote('strm', 1)).toBe('A .strm link, no disk space. Needs Stream Base URL and Key.');
-        expect(radioDownloadNote('strm', 2)).toBe(
-            'Each is a .strm link, no disk space. Needs Stream Base URL and Key.'
-        );
-    });
-
-    it('stays short enough not to resize the dialog, and treats anything but strm as an audio file', () => {
-        for (const mode of ['m4a', 'strm', undefined]) {
-            for (const count of [1, 5]) expect(radioDownloadNote(mode, count).length).toBeLessThanOrEqual(70);
-        }
-        expect(radioDownloadNote(undefined)).toBe(radioDownloadNote('m4a'));
+describe('describeRadioDownload', () => {
+    it('is the same kind of note as the video dialog: an info link note, or a warning for a real file', () => {
+        expect(describeRadioDownload('strm')).toEqual({ strm: true, tone: 'info', text: 'Creates a small .strm link instead of an audio file.' });
+        expect(describeRadioDownload('strm', 3).text).toBe('Creates 3 small .strm links instead of audio files.');
+        expect(describeRadioDownload('m4a')).toEqual({ strm: false, tone: 'warning', text: 'Saves the full episode as tagged MP3 or M4A in the Radio Directory.' });
+        expect(describeRadioDownload('m4a', 2).text).toContain('2 full episodes');
     });
 });
 
