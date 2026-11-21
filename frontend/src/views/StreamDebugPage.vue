@@ -653,7 +653,6 @@ const expiry = computed(() => {
 
 const json = (value) => JSON.stringify(value, null, 2);
 
-// A plain-text report of this page for a bug report; copyReport removes keys, tokens, addresses and URL queries.
 // One line for what "watch from start" would do for a live channel now (also used in the copied report).
 const fromStartText = (f) => {
     if (!f.enabled) return 'off (Settings > Live Channels)';
@@ -662,6 +661,7 @@ const fromStartText = (f) => {
     return `${f.programme}, on air since ${formatWhen(f.programmeStart)}: runs ${mins} min behind live, starting at segment ${f.firstSegment}; BBC keeps ${Math.round((f.bufferSeconds ?? 0) / 60)} min${f.clamped ? ', so it cannot reach the start' : ''}${f.note ? `; ${f.note}` : ''}`;
 };
 
+// A plain-text report of this page for a bug report; copyReport removes keys, tokens, addresses and URL queries.
 const hiddenSettings = inject('hiddenSettings', null);
 const toolVersions = inject('toolVersions', null);
 const copyPage = (download = false) => {
@@ -678,8 +678,8 @@ const copyPage = (download = false) => {
         ...(i.firstBroadcast ? [`First broadcast: ${i.firstBroadcast}`] : []),
         ...(expiry.value ? [`Leaves iPlayer: ${expiry.value.when} (${expiry.value.calc})`] : []),
         ...(i.ibl?.status ? [`iPlayer status: ${i.ibl.status}`] : []),
-        ...(i.error ? [`Error: ${i.error}`] : []),
         ...(i.live?.fromStart ? [`Watch from start: ${fromStartText(i.live.fromStart)}`] : []),
+        ...(i.error ? [`Error: ${i.error}`] : []),
         '',
         'Settings:',
         ...Object.entries(shownSettings.value ?? {}).map(([key, value]) => `  ${key}: ${value ?? '-'}`),

@@ -24,9 +24,9 @@ import thumbnailCacheService from '../thumbnailCacheService';
 import videoEventService from '../videoEventService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
+import LiveStreamService from './LiveStreamService';
 import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, orderedMediaSelectorPairs, specialVersionTypeRegex, tallestIndex, usableConnectionIndexes } from './mediaSelectorPairs';
 import { resolvedKeysFor } from './resolveCache';
-import LiveStreamService from './LiveStreamService';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import streamSessionService from './streamSessionService';
 
@@ -55,12 +55,12 @@ export interface DebugLive {
     enabled?: boolean;
     // A user's own channel: how its stream is read. Only the host of the address is given (it may hold a key).
     custom?: { type: string; host?: string; headers: boolean; lastTest?: { ok: boolean; at: string; message?: string } };
+    // What "watch from start" (LIVE_TV_FROM_START) would do now: the programme on air, how far back it starts, BBC's buffer.
+    fromStart?: { enabled: boolean; programme?: string; programmeStart?: string; secondsBack?: number; bufferSeconds?: number; clamped?: boolean; firstSegment?: number; note?: string };
 }
 
 export interface StreamDebugInfo {
     pid: string;
-    // What "watch from start" (LIVE_TV_FROM_START) would do now: the programme on air, how far back it starts, BBC's buffer.
-    fromStart?: { enabled: boolean; programme?: string; programmeStart?: string; secondsBack?: number; bufferSeconds?: number; clamped?: boolean; firstSegment?: number; note?: string };
     found: boolean;
     error?: string;
     type?: string;
@@ -387,14 +387,14 @@ class StreamDebugService {
             enabled: await liveChannelService.isEnabled(id).catch(() => undefined),
             ...(own ? { custom: { type: own.streamType, host: hostOf(own.streamUrl), headers: !!own.headers && Object.keys(own.headers).length > 0, lastTest: own.lastTest } } : {}),
         };
-        // Only a channel served through BBC's stream service has something to probe.
-        if (vpid && kind !== 'uhd-event' && kind !== 'custom') info.versions = [{ vpid, types: ['Live'], canonical: true }];
-        return info;
-    }
         if (kind === 'channel' || kind === 'regional') {
             info.settings.LIVE_TV_FROM_START = ((await configService.getParameter('LIVE_TV_FROM_START' as any)) as string | undefined) ?? undefined;
             info.live.fromStart = await LiveStreamService.fromStartInfo(id);
         }
+        // Only a channel served through BBC's stream service has something to probe.
+        if (vpid && kind !== 'uhd-event' && kind !== 'custom') info.versions = [{ vpid, types: ['Live'], canonical: true }];
+        return info;
+    }
 
     // The episode's BBC programme page (the same record TV shows), for what the in-memory Sounds list does not hold, e.g. after a restart.
     async #radioProgramme(id: string): Promise<any | undefined> {
