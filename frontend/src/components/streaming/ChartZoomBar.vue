@@ -16,11 +16,9 @@
             to
             <input v-model="hi" class="zoomInput" :class="{ invalid: reversed }" type="number" inputmode="numeric" aria-label="Last segment shown" @change="commit" @keydown.enter="commit" />
         </label>
-        <span v-if="highlight !== null" class="zoomOf">
-            highlighted: segment {{ highlight }}
-            <button type="button" class="clearLink clickable" title="Stop highlighting" aria-label="Stop highlighting" @click="emit('clear-highlight')">clear</button>
-        </span>
-        <span class="zoomOf" title="The whole stream; Show everything returns to it">of {{ full.lo }} to {{ full.hi }}</span>
+        <button type="button" class="zoomButton clickable" :class="{ on: sync }" :aria-pressed="sync" :title="syncTitle" :aria-label="syncTitle" @click="emit('toggle-sync')"><font-awesome-icon :icon="['fas', 'crosshairs']" /></button>
+        <button type="button" class="zoomButton clickable" :disabled="highlight === null && !canJump" title="Clear the selected point everywhere" aria-label="Clear the selected point everywhere" @click="emit('clear-highlight')"><font-awesome-icon :icon="['fas', 'xmark']" /></button>
+        <button type="button" class="zoomButton clickable" :disabled="!canJump" title="Scroll to the selected request in the request log" aria-label="Jump to table" @click="emit('jump')"><font-awesome-icon :icon="['fas', 'table-list']" /></button>
     </div>
 </template>
 
@@ -41,18 +39,23 @@ const props = defineProps({
     fitY: { type: Boolean, default: false },
     // The segment picked out in all four charts, if one is.
     highlight: { type: Number, default: null },
+    // Whether picking a point is shared across the page, and whether a request is selected to jump to in the table.
+    sync: { type: Boolean, default: false },
+    canJump: { type: Boolean, default: false },
 });
-const emit = defineEmits(['zoom', 'pan', 'fit', 'range', 'fit-y', 'clear-highlight']);
+const emit = defineEmits(['zoom', 'pan', 'fit', 'range', 'fit-y', 'clear-highlight', 'toggle-sync', 'jump']);
 const fitYTitle = computed(() => (props.fitY ? 'Vertical scales run from the smallest to the largest value shown; use the whole stream' : 'Vertical scales cover the whole stream; fit each to the smallest and largest value shown (linear)'));
+
+const syncTitle = computed(() => (props.sync ? 'Point selection is shared across the page; stop sharing it' : 'Share point selection across all the charts and the request log'));
 
 const lo = ref(props.view.lo);
 const hi = ref(props.view.hi);
-const sync = () => {
+const syncBoxes = () => {
     lo.value = props.view.lo;
     hi.value = props.view.hi;
     reversed.value = false;
 };
-watch(() => [props.view.lo, props.view.hi], sync);
+watch(() => [props.view.lo, props.view.hi], syncBoxes);
 // A first segment after the last one is not a range: it is flagged and the view stays as it was until the pair is right (typing one box at a time passes through this).
 const reversed = ref(false);
 const commit = async () => {
@@ -63,7 +66,7 @@ const commit = async () => {
     if (!Number.isNaN(a) && !Number.isNaN(b)) emit('range', { lo: a, hi: b });
     // Shows what the view really is: a range outside the stream is pulled back, and nonsense is put right.
     await nextTick();
-    sync();
+    syncBoxes();
 };
 </script>
 
@@ -98,22 +101,15 @@ const commit = async () => {
     color: @subtle-text-color;
 }
 
-.zoomButton[aria-pressed='true'] {
+.zoomButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.zoomButton[aria-pressed='true'],
+.zoomButton.on {
     color: @primary-color;
     border-color: @primary-color;
-}
-
-.clearLink {
-    padding: 0;
-    color: @primary-color;
-    background: none;
-    border: 0;
-    text-decoration: underline;
-}
-
-.zoomOf {
-    font-size: @font-size-sm;
-    color: @subtle-text-color;
 }
 
 .zoomInput {

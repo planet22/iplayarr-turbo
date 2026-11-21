@@ -126,8 +126,8 @@ describe('StreamHealthCharts zoom', () => {
         await plots[0].trigger('click', { clientX });
         await plots[0].trigger('mouseleave');
         expect(crosses()).toBe(4);
-        expect(wrapper.find('.chartZoomBar').text()).toContain('highlighted: segment 5');
-        await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
+        expect(wrapper.find('.chartZoomBar button[aria-label="Clear the selected point everywhere"]').attributes('disabled')).toBeUndefined();
+        await wrapper.find('button[aria-label="Clear the selected point everywhere"]').trigger('click');
         expect(crosses()).toBe(0);
     });
 
@@ -151,12 +151,12 @@ describe('StreamHealthCharts zoom', () => {
         // clicked, then moved off: the kept segment stays written; hovering another shows that one meanwhile
         await plots[0].trigger('click', { clientX: at(5) });
         await plots[0].trigger('mouseleave');
-        expect(lines().every((text) => /^Kept - segment 5: /.test(text))).toBe(true);
+        expect(lines().every((text) => /^Selected - segment 5: /.test(text))).toBe(true);
         await plots[1].trigger('mousemove', { clientX: at(9) });
         expect(lines().every((text) => /^segment 9: /.test(text))).toBe(true);
         await plots[1].trigger('mouseleave');
-        expect(lines()[3]).toMatch(/^Kept - segment 5: /);
-        await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
+        expect(lines()[3]).toMatch(/^Selected - segment 5: /);
+        await wrapper.find('button[aria-label="Clear the selected point everywhere"]').trigger('click');
         expect(lines().every((text) => /Hover or tap/.test(text))).toBe(true);
     });
 
@@ -231,7 +231,7 @@ describe('StreamHealthCharts zoom', () => {
         await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
         expect(shown()).toBe('5 to 15');
         // with nothing kept it is the middle of the view again
-        await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
+        await wrapper.find('button[aria-label="Clear the selected point everywhere"]').trigger('click');
         await wrapper.find('button[aria-label="Show everything"]').trigger('click');
         await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
         expect(shown()).toBe('5 to 14');

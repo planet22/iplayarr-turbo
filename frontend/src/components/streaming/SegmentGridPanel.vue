@@ -42,6 +42,9 @@
 
         <div class="gridLegend">
             <span v-for="item in LEGEND" :key="item.state" class="legendItem"><span :class="['cell', item.state]" /> {{ item.label }}</span>
+            <button type="button" class="expandButton jumpButton clickable" :disabled="selected === null" title="Scroll to the selected request in the request log" @click="emit('jump', selected)">
+                <font-awesome-icon :icon="['fas', 'table-list']" /> Jump to table
+            </button>
             <button type="button" class="expandButton clickable" @click="expanded = !expanded">
                 <font-awesome-icon :icon="['fas', expanded ? 'angles-up' : 'angles-down']" />
                 {{ expanded ? 'Collapse' : 'Expand' }}
@@ -68,7 +71,7 @@ const props = defineProps({
     origin: { type: Number, default: 0 },
     selected: { type: Number, default: null },
 });
-const emit = defineEmits(['select']);
+const emit = defineEmits(['select', 'jump']);
 
 const LEGEND = [
     { state: 'ok', label: 'Delivered' },
@@ -252,6 +255,19 @@ const neverAsked = computed(() => (grids.value[0]?.cells ?? []).filter((cell) =>
     .legendItem .cell {
         width: 10px;
         height: 10px;
+    }
+}
+
+.jumpButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.jumpButton {
+    margin-left: auto;
+
+    + .expandButton {
+        margin-left: 0;
     }
 }
 

@@ -82,16 +82,16 @@
             </TraceSection>
 
             <TraceSection v-if="!session.live" id="grid" title="Segment delivery map" info="One cell per segment index, as in the Streaming page's segment popup. Hover a cell for every request made for it; click to select the first one in the request log." :summary="gridSummary">
-                <SegmentGridPanel :session="session" :requests="trace.requests" :origin="originMs" :selected="selected" @select="selectRequest" />
+                <SegmentGridPanel :session="session" :requests="trace.requests" :origin="originMs" :selected="selected" @select="selectRequest" @jump="jumpToRow" />
             </TraceSection>
 
             <TraceSection v-if="!session.live || lanesPresent" id="timeline" title="Segment request timeline" info="Each bar is one segment request: x is arrival time, bar length is transfer duration, height is segment index. Colour is the outcome: request order (index versus highest requested) and PTS continuity of the segment content. A muxed stream has one lane; A/V PTS plots each elementary stream's first PTS on its own lane." :summary="`${trace.requests.length} requests`">
                 <EmptyState v-if="!lanesPresent" icon="timeline" title="No segment requests recorded yet" />
-                <RequestTimeline v-else :requests="trace.requests" :origin="originMs" :selected="selected" @select="selectRequest" />
+                <RequestTimeline v-else :requests="trace.requests" :origin="originMs" :selected="selected" @select="selectRequest" @jump="jumpToRow" @clear="selected = null" :sync="syncSelect" @toggle-sync="syncSelect = !syncSelect" />
             </TraceSection>
 
             <TraceSection v-if="!session.live || lanesPresent" id="charts" title="Playback diagnostics" info="Buffer depth is derived from EXTINF durations and arrival times. The throughput ratio compares transfer time with EXTINF. A/V offset and PTS discontinuity are read from the first PES packets of each MPEG-TS segment. Each chart has its own (i)." summary="buffer depth, throughput vs real time, A/V start offset, PTS drift">
-                <StreamHealthCharts :requests="trace.requests" />
+                <StreamHealthCharts :requests="trace.requests" :sync="syncSelect" :sync-seg="selectedRow?.seg ?? null" :can-jump="selected !== null" @toggle-sync="syncSelect = !syncSelect" @jump="jumpToRow(selected)" @pick="pickSegment" @clear="selected = null" />
             </TraceSection>
 
             <TraceSection id="who" title="Client identification" info="Distinct clients by source address and User-Agent (plus X-Emby-Client and X-Emby-Device-Name where sent). Jellyfin's transcoder identifies as Lavf (ffmpeg); a client playing directly, such as Apple TV, identifies as AppleCoreMedia." :summary="whoSummary">
@@ -542,10 +542,20 @@ const isProblem = (row) => outcomeOf(row) !== 'ok' && outcomeOf(row) !== 'prefet
 const shownRequests = computed(() => (problemsOnly.value ? rows.value.filter(isProblem) : rows.value));
 const { page, pageSize, pagedItems: pagedRequests } = usePagination(shownRequests);
 
-// A mark clicked in the graph finds its row: the filter is cleared and the page turned to it.
+// A mark clicked in a graph only selects the request; the Jump to table button then finds its row: the filter is cleared and the page turned to it.
 const rowEls = new Map();
 const rowRef = (n, el) => (el ? rowEls.set(n, el) : rowEls.delete(n));
+// Sync (on by default): a point picked in one chart is picked in all of them, and in the request log.
+const syncSelect = ref(true);
+const pickSegment = (seg) => {
+    const hit = rows.value.find((row) => row.kind === 'segment' && row.seg === seg);
+    if (hit) selected.value = hit.n;
+};
 const selectRequest = (n) => {
+    selected.value = n;
+};
+const jumpToRow = (n) => {
+    if (n === null || n === undefined) return;
     selected.value = n;
     setSectionOpen('requests', true);
     setSectionOpen('selected', true);
@@ -583,6 +593,7 @@ const copy = async (download = false) => {
         ...(verdict.value ? [`  Reading: ${verdict.value.text}`] : []),
         '',
         ...(s.radio ? [] : [...deliveredQualityLines(trace.value.requests, ladderTop), '']),
+        ...(namingFacts.value.length ? ['File naming (when exported):', ...namingFacts.value.map((fact) => `  ${fact.label}: ${fact.value}`), ''] : []),
         `Playlists: ${(trace.value.playlists ?? []).map((p) => `${p.kind} (read ${p.history?.length ?? '?'}x)`).join(', ') || 'none recorded'}`,
         '',
         'Log lines around this stream (the browser holds only the latest few hundred):',

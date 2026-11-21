@@ -21,6 +21,9 @@
                 to
                 <input v-model="winHi" class="timeInput" :class="{ invalid: winReversed }" type="number" step="any" inputmode="decimal" aria-label="End of the time shown, in seconds" @change="commitWindow" @keydown.enter="commitWindow" />
             </label>
+            <button type="button" class="tlButton clickable" :class="{ on: sync }" :aria-pressed="sync" :title="syncTitle" :aria-label="syncTitle" @click="emit('toggle-sync')"><font-awesome-icon :icon="['fas', 'crosshairs']" /></button>
+            <button type="button" class="tlButton clickable" :disabled="selected === null || selected === undefined" title="Clear the selected point everywhere" aria-label="Clear the selected point everywhere" @click="emit('clear')"><font-awesome-icon :icon="['fas', 'xmark']" /></button>
+            <button type="button" class="tlButton clickable" :disabled="selected === null || selected === undefined" title="Scroll to the selected request in the request log" aria-label="Jump to table" @click="emit('jump', selected)"><font-awesome-icon :icon="['fas', 'table-list']" /></button>
             <span class="viewSwitch rateSwitch" role="group" aria-label="How the throughput graph is drawn">
                 <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'smooth' }" :aria-pressed="rateMode === 'smooth'" title="Throughput averaged over slices of time, finer as you zoom" @click="rateMode = 'smooth'; rateChosen = true">Smoothed</button>
                 <button type="button" class="viewButton clickable" :class="{ on: rateMode === 'transfer' }" :aria-pressed="rateMode === 'transfer'" title="Throughput at full detail: a step wherever the transfers in flight change, each at its own bytes over duration" @click="rateMode = 'transfer'; rateChosen = true">Per transfer</button>
@@ -83,7 +86,7 @@
         </div>
         <div class="hoverBox" :class="{ empty: !shown }">
             <template v-if="shown">
-                #{{ shown.n }} {{ TRACK_LABELS[shown.track] ?? shown.track }} segment {{ shown.seg }}
+                <template v-if="!hovered">Selected - </template>#{{ shown.n }} {{ TRACK_LABELS[shown.track] ?? shown.track }} segment {{ shown.seg }}
                 <template v-if="shown.ptsV !== undefined || shown.ptsA !== undefined"> (first PTS: video {{ shown.ptsV?.toFixed(3) ?? '-' }} s, audio {{ shown.ptsA?.toFixed(3) ?? '-' }} s)</template>
                 at {{ formatOffset(shown.t - origin) }}, {{ formatMs(shown.durMs) }}
                 <template v-if="shown.ptsDriftMs !== undefined"> , PTS offset {{ shown.ptsDriftMs }} ms from previous segment end</template>
@@ -113,8 +116,10 @@ const props = defineProps({
     // Time zero of the axis labels: when the session started.
     origin: { type: Number, default: 0 },
     selected: { type: Number, default: null },
+    // Whether picking a point is shared with the other charts on the page.
+    sync: { type: Boolean, default: false },
 });
-const emit = defineEmits(['select']);
+const emit = defineEmits(['select', 'jump', 'clear', 'toggle-sync']);
 
 // Drawn at the width it is shown at (so text and marks keep their real size on a phone), with shorter lanes when narrow.
 const root = ref(null);
@@ -195,9 +200,18 @@ const commitWindow = async () => {
     syncWindowBoxes();
 };
 
+const syncTitle = computed(() => (props.sync ? 'Point selection is shared across the page; stop sharing it' : 'Share point selection across all the charts and the request log'));
+// Zoom around the selected request when there is one (as the playback charts do around their kept segment), else the middle of the view.
 const zoom = (factor) => {
     custom.value = true;
-    win.value = zoomWindow(win.value, full.value, factor);
+    const pick = props.requests.find((r) => r.n === props.selected);
+    if (!pick) {
+        win.value = zoomWindow(win.value, full.value, factor);
+        return;
+    }
+    const mid = pick.t + (pick.durMs ?? 0) / 2;
+    const half = Math.max(10, ((win.value.t1 - win.value.t0) * factor) / 2);
+    win.value = clampWindow({ t0: mid - half, t1: mid + half }, full.value);
 };
 const pan = (fraction) => {
     custom.value = true;
@@ -451,6 +465,11 @@ const ticks = computed(() => {
     }
 }
 
+.tlButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .tlButton {
     width: 32px;
     height: 32px;
@@ -567,6 +586,11 @@ const ticks = computed(() => {
         background-color: @table-row-hover-color;
         border-color: @primary-color;
     }
+}
+
+.tlButton.on {
+    color: @primary-color;
+    border-color: @primary-color;
 }
 
 .timeInput {
