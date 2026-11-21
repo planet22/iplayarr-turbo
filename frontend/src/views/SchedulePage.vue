@@ -621,9 +621,9 @@ onBeforeUnmount(() => {
         text-decoration: none;
     }
 
-    // Programmes to watch on demand: a brand-coloured edge, and Play / Download buttons on hover (always, on touch screens).
+    // Programmes to watch on demand: a slight brand-colour shade, and Play / Download buttons on hover (always, on touch screens).
     &.onDemand {
-        border-left: 3px solid @brand-color;
+        background-color: color-mix(in srgb, @brand-color 12%, @settings-button-background-color);
     }
 
     .blockActions {
@@ -670,7 +670,8 @@ onBeforeUnmount(() => {
         z-index: 1;
     }
 
-    &.live {
+    &.live,
+    &.live.onDemand {
         border-color: @brand-color;
         background-color: @nav-active-background-color;
     }
