@@ -46,7 +46,7 @@
     />
     <InfoBar small>
         Cached BBC data is kept in the database so repeat searches and page loads are fast. A new lifetime applies to entries stored from
-        now on; existing entries keep their old expiry until cleared.
+        now on; existing entries keep their old expiry until cleared. Stored data is kept by the clear button above; clear it only on purpose.
     </InfoBar>
     <LoadingIndicator v-if="!cachesLoaded" />
     <template v-else>
@@ -173,7 +173,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { formatSize } from '@/lib/cacheActivity';
-import { buildSections, cacheStorage, MAINTENANCE_SORTS, readCollapsedGroups, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
+import { buildSections, cacheStorage, isStored, MAINTENANCE_SORTS, readCollapsedGroups, STORED_GROUP_KEY, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
@@ -250,8 +250,10 @@ const describeTtl = (seconds) => {
 const resetTtl = (cache) => {
     Object.assign(ttlDraft.value[cache.prefix], splitTtl(cache.defaultTtl), { resetPending: true });
 };
+const STORED_WARNING = 'This is stored data, not a cache: it is slow or costly to build again.';
 const clearCache = async (cache) => {
-    if (await dialogService.confirm(`Clear ${cache.label}`, `Are you sure you want to clear ${cache.count.toLocaleString()} cached items?`, undefined, { danger: true, confirmLabel: 'Clear' })) {
+    const stored = isStored(cache);
+    if (await dialogService.confirm(`Clear ${cache.label}`, `Are you sure you want to clear ${cache.count.toLocaleString()} ${stored ? 'stored' : 'cached'} items?`, stored ? STORED_WARNING : undefined, { danger: true, confirmLabel: 'Clear' })) {
         clear(cache);
     }
 };
@@ -259,8 +261,9 @@ const clearCache = async (cache) => {
 // Clears every cache in the group, after the same kind of confirmation as a single cache.
 const clearGroup = async (section) => {
     const { records } = section.totals;
+    const stored = section.key === STORED_GROUP_KEY;
     if (
-        await dialogService.confirm(`Clear ${section.label}`, `Clear ${records.toLocaleString()} cached ${records === 1 ? 'item' : 'items'} in ${section.label}?`, undefined, {
+        await dialogService.confirm(`Clear ${section.label}`, `Clear ${records.toLocaleString()} ${stored ? 'stored' : 'cached'} ${records === 1 ? 'item' : 'items'} in ${section.label}?`, stored ? STORED_WARNING : undefined, {
             danger: true,
             confirmLabel: 'Clear',
         })
@@ -281,12 +284,12 @@ const refreshCaches = async () => {
 };
 
 const clearEverything = async () => {
-    const total = caches.value.reduce((sum, cache) => sum + cache.count, 0);
+    const total = caches.value.filter((cache) => !isStored(cache)).reduce((sum, cache) => sum + cache.count, 0);
     if (
         await dialogService.confirm(
             'Clear all caches',
             `Are you sure you want to clear all ${total.toLocaleString()} cached items?`,
-            'Searches and pages will be slower until the caches fill up again.',
+            'Searches and pages will be slower until the caches fill up again. Stored data is kept.',
             { danger: true, confirmLabel: 'Clear all' }
         )
     ) {

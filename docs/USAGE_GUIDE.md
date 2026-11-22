@@ -82,7 +82,7 @@ Server info plus search/grab counters — a quick health-and-activity snapshot, 
 
 ## Settings (`/settings`)
 
-Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance (caches and editable scheduled tasks). Maintenance lists the caches in the same groups, which fold away and have a **Clear group** button (it asks first); the same sort and Grouped / Flat choice apply. Changes are staged and applied with the Save bar; a filter box finds a setting and `Ctrl+K` jumps to a tab. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
+Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance (caches and editable scheduled tasks). Maintenance lists the caches in the same groups, which fold away and have a **Clear group** button (it asks first). The **Stored data** group (library index, thumbnail ids, Radio A to Z) is costly to rebuild, so the toolbar's clear-all button leaves it alone; the same sort and Grouped / Flat choice apply. Changes are staged and applied with the Save bar; a filter box finds a setting and `Ctrl+K` jumps to a tab. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
 
 ## About (`/about`)
 

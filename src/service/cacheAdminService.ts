@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { groupOf, OTHER_GROUP } from '../constants/CacheGroups';
+import { groupOf, OTHER_GROUP, storedPrefixes } from '../constants/CacheGroups';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import configService from './configService';
 import DbCacheService, { CacheTypeInfo, CacheTypeStats, MAX_CACHE_TTL, MIN_CACHE_TTL } from './db/dbCacheService';
@@ -102,7 +102,7 @@ const cacheAdminService = {
     },
 
     clearAll: async (): Promise<number> => {
-        const [cleared] = await Promise.all([DbCacheService.clearAllTypes(), thumbnailCacheService.clearAll()]);
+        const [cleared] = await Promise.all([DbCacheService.clearAllTypes(storedPrefixes()), thumbnailCacheService.clearAll()]);
         const inMemory = memoryCaches();
         inMemory.forEach((cache) => cache.clear());
         return cleared + 1 + inMemory.length;

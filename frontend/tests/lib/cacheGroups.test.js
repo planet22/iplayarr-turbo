@@ -11,6 +11,7 @@ import {
     defaultRank,
     groupKeyOf,
     groupTotals,
+    isStored,
     MAINTENANCE_SORTS,
     readCachePrefs,
     readCollapsedGroups,
@@ -75,6 +76,15 @@ describe('cacheGroups', () => {
         it('matches the server\'s group list exactly (keys, labels, caches and order), so the two never drift', async () => {
             const { CACHE_GROUPS: serverGroups } = await import('../../../src/constants/CacheGroups');
             expect(CACHE_GROUPS).toEqual(serverGroups);
+        });
+
+        it('puts the stored data in its own last group, apart from the real caches', () => {
+            expect(CACHE_GROUPS.at(-1)).toMatchObject({ key: 'stored', label: 'Stored data' });
+            expect(CACHE_GROUPS.at(-1).prefixes).toEqual(['library_index', 'thumbnail_image_pid', 'sounds_atoz']);
+            expect(groupKeyOf('thumbnails')).toBe('library');
+            expect(isStored({ prefix: 'library_index' })).toBe(true);
+            expect(isStored({ prefix: 'browse_short' })).toBe(false);
+            expect(buildSections([cache('library_index'), cache('browse_short')]).map((s) => s.key)).toEqual(['browse', 'stored']);
         });
 
         it('ranks an unlisted cache after every listed one', () => {

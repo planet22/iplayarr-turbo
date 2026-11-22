@@ -210,6 +210,16 @@ describe('DbCacheService', () => {
             expect(await prisma.cache.count({ where: { key: 'unlabelled_1' } })).toBe(1);
         });
 
+        it('leaves the caches named in `except` alone when clearing every type', async () => {
+            await typed.set('1', 'x');
+            await other.set('1', 'z');
+
+            await DbCacheService.clearAllTypes(['typed_b']);
+
+            expect((await statsFor('typed_a')).count).toBe(0);
+            expect((await statsFor('typed_b')).count).toBe(1);
+        });
+
         it('applies a TTL override to new entries, persists it, and resets it', async () => {
             const now = Date.now();
             jest.spyOn(Date, 'now').mockReturnValue(now);

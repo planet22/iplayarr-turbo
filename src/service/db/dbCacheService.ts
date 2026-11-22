@@ -275,10 +275,11 @@ export default class DbCacheService<T> {
         return true;
     }
 
-    /** Empties every labelled cache. Returns how many cache types were cleared. */
-    static async clearAllTypes(): Promise<number> {
+    /** Empties every labelled cache except those in `except`. Returns how many cache types were cleared. */
+    static async clearAllTypes(except: string[] = []): Promise<number> {
         await dbReady();
-        const prefixes = [...DbCacheService.registry.keys()];
+        const prefixes = [...DbCacheService.registry.keys()].filter((prefix) => !except.includes(prefix));
+        if (!prefixes.length) return 0;
         await prisma.cache.deleteMany({ where: { OR: prefixes.map((prefix) => ({ key: { startsWith: `${prefix}_` } })) } });
         return prefixes.length;
     }

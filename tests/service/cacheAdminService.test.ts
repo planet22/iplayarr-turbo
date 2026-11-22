@@ -122,6 +122,12 @@ describe('cacheAdminService', () => {
         expect(thumbs.clearAll).toHaveBeenCalled();
     });
 
+    it('clear all keeps the stored data (library index, thumbnail ids, Radio A to Z)', async () => {
+        const clearAllTypes = jest.spyOn(DbCacheService, 'clearAllTypes').mockResolvedValue(5);
+        await cacheAdminService.clearAll();
+        expect(clearAllTypes).toHaveBeenCalledWith(expect.arrayContaining(['library_index', 'thumbnail_image_pid', 'sounds_atoz']));
+    });
+
     it('falls back to 30 days when the retention setting is unusable', async () => {
         config.getParameter.mockResolvedValue('');
         expect(await thumbnailRow()).toMatchObject({ ttl: 30 * 86400, overridden: false });
