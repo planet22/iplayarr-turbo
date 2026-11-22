@@ -44,7 +44,7 @@
             </p>
             <section class="traceSection">
                 <div class="sessionHead">
-                    <img v-if="thumbnail" class="sessionThumb" :class="{ channelLogo: session.live }" :src="thumbnail" alt="" @error="hideBrokenImage" />
+                    <img v-if="thumbnail" class="sessionThumb" :class="{ channelLogo: session.live, squareThumb: session.radio && !session.live }" :src="thumbnail" alt="" @error="hideBrokenImage" />
                     <div class="sessionTitle">
                         <h2>{{ title }}</h2>
                         <div v-if="subtitle" class="subtle">{{ subtitle }}</div>
@@ -101,7 +101,7 @@
                 <p v-for="(note, i) in liveNoteList" :key="i" class="verdict" :class="note.tone">{{ note.text }}</p>
             </TraceSection>
 
-            <TraceSection id="who" title="Client identification" info="Distinct clients by source address and User-Agent (plus X-Emby-Client and X-Emby-Device-Name where sent). Jellyfin's transcoder identifies as Lavf (ffmpeg); a client playing directly, such as Apple TV, identifies as AppleCoreMedia." :summary="whoSummary">
+            <TraceSection id="who" title="Client identification" info="Distinct clients by source address and User-Agent (plus X-Emby-Client and X-Emby-Device-Name where sent). Jellyfin's transcoder identifies as Lavf (ffmpeg); a client playing directly, such as Apple TV, identifies as AppleCoreMedia." :summary="isMobile ? '' : whoSummary">
                 <div class="tableScroll"><table class="dataTable traceTable">
                     <thead><tr><th>Address</th><th>User-Agent</th><th>Jellyfin / Emby client</th><th class="numCol">Requests</th></tr></thead>
                     <tbody>
@@ -159,7 +159,7 @@
                         <div class="reqTop">
                             <span class="resultDot" :class="`o-${outcomeOf(row)}`" />
                             <strong>#{{ row.n }}</strong>
-                            <span>{{ TRACK_LABELS[row.track] ?? row.track ?? '' }} {{ kindLabel(row).toLowerCase() }}<template v-if="row.seg !== undefined"> {{ row.seg }}</template></span>
+                            <span>{{ TRACK_LABELS[row.track] ?? row.track ?? '' }} {{ kindLabel(row).toLowerCase() }}{{ row.kind === 'segment' && row.seg !== undefined ? ` ${row.seg}` : '' }}</span>
                             <span class="reqWhen mono">{{ formatOffset(row.t - originMs) }}</span>
                         </div>
                         <div class="reqResult" :class="{ bad: isProblem(row) }">{{ OUTCOME_LABELS[outcomeOf(row)] }}</div>
@@ -729,6 +729,12 @@ const copy = async (download = false) => {
     &.channelLogo {
         object-fit: contain;
     }
+
+    // A radio programme's picture is square: shown whole, not cropped to a wide frame.
+    &.squareThumb {
+        width: 72px;
+        height: 72px;
+    }
 }
 
 .sessionTitle {
@@ -806,14 +812,38 @@ const copy = async (download = false) => {
     .sessionThumb {
         width: 96px;
         height: 54px;
+
+        &.squareThumb {
+            width: 64px;
+            height: 64px;
+        }
     }
 
+    // The speed figure and the segment map share one row, the map taking what is left.
     .sessionGraphs {
         flex: 1 1 100%;
         flex-direction: row;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         align-items: center;
+        justify-content: space-between;
         column-gap: @space-3;
+    }
+
+    // The bar's eight buttons fit one row: slimmer, closer together.
+    .streamTracePage :deep(.SettingsPageToolbar) {
+        padding: 0 @space-2;
+
+        .SettingsPageToolbar-button {
+            padding: 0 @space-2;
+            margin: 6px 2px;
+        }
+    }
+
+    // Client table: the User-Agent wraps instead of running off the edge.
+    .traceTable td.text {
+        white-space: normal;
+        min-width: 200px;
+        overflow-wrap: anywhere;
     }
 
     .verdict {
