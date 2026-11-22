@@ -250,7 +250,7 @@ loading="lazy"
                 </template>
             </DataCard>
         </div>
-        <table v-else class="dataTable watchdogTable">
+        <div v-else class="watchdogScroll"><table class="dataTable watchdogTable">
             <thead>
                 <tr>
                     <th></th>
@@ -296,7 +296,7 @@ v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid)"
                     <td :class="['detail', item.status == 'ok' ? 'hide-mobile' : '']">{{ item.message || (item.files || []).join(', ') }}</td>
                 </tr>
             </tbody>
-        </table>
+        </table></div>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
         </template>
     </div>
@@ -539,11 +539,30 @@ onMounted(async () => {
 <style lang="less">
 // The links table has many narrow columns: tight horizontal padding, and the thumbnail, pid, episode,
 // status, source, checked and action columns shrink to their content so the detail column gets the room.
+// A wide table scrolls inside its own box instead of making the whole page scroll sideways.
+.watchdogScroll {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
 .watchdogTable {
     th,
     td {
         padding-left: @space-1;
         padding-right: @space-1;
+    }
+
+    // A long episode name, file path or message wraps in its column rather than stretching the table.
+    td.detail {
+        min-width: 12rem;
+        overflow-wrap: anywhere;
+    }
+
+    // (Written with :not(:last-child) too, so it outranks the shrink-to-content rule above.)
+    td.libraryLabel:not(:last-child) {
+        min-width: 14rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
 
     th:not(:last-child),
@@ -687,9 +706,11 @@ onMounted(async () => {
     overflow-wrap: anywhere;
 }
 
-// The big number with its per-source icon counts in a 2 x 2 grid to its right.
+// The big number with its per-source icon counts in a 2 x 2 grid to its right; the counts drop under the number
+// when the card is too narrow to hold both, instead of running off the card.
 .valueRow {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: @space-4;
