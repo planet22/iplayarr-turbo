@@ -76,7 +76,7 @@ describe('StreamDebugPage extras', () => {
     describe('cast and crew', () => {
         it('lists cast and crew in a table by default, under a BBC title', async () => {
             const wrapper = await open({ cast: CAST });
-            expect(wrapper.findAll('.sectionTitle').map((title) => title.text())).toContain('Cast and crew from BBC');
+            expect(wrapper.findAll('.sectionTitle').map((title) => title.text())).toContain('Cast and Crew');
             const rows = cells(wrapper.find('#trace-section-dbg-cast'));
             expect(rows[0]).toEqual(['Ann Actor', 'Actor', 'Bea']);
             expect(rows[1]).toEqual(['Dan Director', 'Director', '']);

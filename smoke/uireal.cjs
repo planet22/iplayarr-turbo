@@ -1780,11 +1780,11 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 ok('the debug page for a programme names it and lists no error', (await page.locator('.streamDebug .overview .facts h2').count()) === 1 && (await page.locator('.streamDebug .infoPanel.danger, .streamDebug .infoPanel.error').count()) === 0);
                 ok('the debug page lists the pid links as a list under the pid', (await page.locator('.streamDebug .facts .pidLinks li').count()) >= 3);
                 // Cast and crew from BBC: shown when BBC lists any; the Cards view groups by role and the choice is kept.
-                if (await page.locator('.streamDebug .sectionTitle', { hasText: 'Cast and crew from BBC' }).count()) {
-                    await page.locator('.streamDebug .castToggle button', { hasText: 'Cards' }).click();
+                if (await page.locator('.streamDebug .sectionTitle', { hasText: 'Cast and Crew' }).count()) {
+                    await page.locator('.streamDebug .castToggle button[aria-label^="Show as cards"]').click();
                     ok('the debug page cast and crew switches to cards grouped by role', (await page.locator('.streamDebug .castGroup h3').count()) > 0 && (await page.locator('.streamDebug .castCard .castName').count()) > 0);
                     ok('the debug page remembers the cards choice in this browser', (await page.evaluate(() => localStorage.getItem('streamDebugCastView'))) === 'cards');
-                    await page.locator('.streamDebug .castToggle button', { hasText: 'Table' }).click();
+                    await page.locator('.streamDebug .castToggle button[aria-label="Show as a table"]').click();
                     ok('the debug page cast and crew switches back to the table', (await page.locator('.streamDebug #trace-section-dbg-cast table tbody tr').count()) > 0);
                 } else rec(U, 'debug page cast and crew cards', 'SKIP', 'BBC lists no cast for this programme');
                 // A brand or series has nothing to play: an icon opens its programme page, and Play says why it cannot.
