@@ -330,10 +330,13 @@ describe('StreamHealthCharts zoom', () => {
             expect(live.findAll('svg.plot')).toHaveLength(3);
             expect(live.text()).not.toContain('Requires video and audio first-PTS');
             expect(live.text()).not.toContain('Requires segment first-PTS');
-            // a finished stream still says what each chart needs
+            // a finished stream still says what each chart needs, except the A/V offset one, which is left out when there is no
+            // video and audio timestamp pair to compare (an audio-only stream)
             const finished = mountWith({ requests: noClock });
             expect(finished.findAll('svg.plot')).toHaveLength(2);
-            expect(finished.text()).toContain('Requires video and audio first-PTS');
+            expect(finished.text()).not.toContain('Requires video and audio first-PTS');
+            expect(finished.text()).not.toContain('A/V start offset');
+            expect(finished.text()).toContain('Requires segment first-PTS');
             // with timestamps (MPEG-TS) all five show, and with nothing at all, none
             expect(mountWith({ requests, playlists: reads(), hideEmpty: true }).findAll('svg.plot')).toHaveLength(5);
             expect(mountWith({ requests: [], hideEmpty: true }).findAll('svg.plot')).toHaveLength(0);
