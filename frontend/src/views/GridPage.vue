@@ -302,27 +302,23 @@ watch(
     margin-bottom: 1rem;
 }
 
-// A to Z: the 27 buttons widen to use the whole row. Each aims for one row on desktop, two on a tablet and four on a phone
-// (--cols buttons per row), but never narrower than the minimum, so a narrow screen just wraps onto more rows.
-// A last, part-filled row grows its buttons to fill the line.
+// A to Z: the 27 buttons are all the same size and share the full width. One row on a wide desktop, two on a tablet or
+// smaller desktop, four on a phone (the column count keeps each button at least about 34px wide).
 .atozBar {
-    --cols: 27;
-    --gap: 6px;
-    gap: var(--gap);
+    display: grid;
+    grid-template-columns: repeat(27, minmax(0, 1fr));
 
     :deep(.filterChip) {
-        flex: 1 1 calc(((100% -(var(--cols) - 1) * var(--gap)) / var(--cols)) - 0.5px);
-        min-width: 34px;
         padding-left: 0;
         padding-right: 0;
     }
 
-    @media (max-width: @laptop-breakpoint) {
-        --cols: 14;
+    @media (max-width: 1499px) {
+        grid-template-columns: repeat(14, minmax(0, 1fr));
     }
 
     @media (max-width: @compact-breakpoint) {
-        --cols: 7;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 }
 </style>
