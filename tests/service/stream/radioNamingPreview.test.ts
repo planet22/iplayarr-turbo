@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { findEpisode, knownEpisode } from '../../../src/service/sounds/soundsApiService';
+import soundsApiService, { knownEpisode } from '../../../src/service/sounds/soundsApiService';
 import { resolveRadioName } from '../../../src/service/sounds/soundsDownloadService';
 import { radioNamingPreview } from '../../../src/service/stream/namingPreview';
 
@@ -11,7 +11,7 @@ jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, d
 jest.mock('../../../src/service/numberingOverrideService', () => ({ __esModule: true, default: {} }));
 jest.mock('../../../src/service/synonymService', () => ({ __esModule: true, default: {} }));
 jest.mock('../../../src/service/skyhook/SkyhookService', () => ({ __esModule: true, default: {} }));
-jest.mock('../../../src/service/sounds/soundsApiService', () => ({ knownEpisode: jest.fn(), findEpisode: jest.fn() }));
+jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, knownEpisode: jest.fn(), findEpisode: jest.fn(), default: { show: jest.fn() } }));
 jest.mock('../../../src/service/sounds/soundsDownloadService', () => ({
     resolveRadioName: jest.fn(),
     radioTemplateVariables: jest.fn(() => ({ show: 'The Show', title: 'Ep' })),
@@ -44,6 +44,15 @@ describe('radioNamingPreview', () => {
         const preview = await radioNamingPreview('p1');
         expect(preview.error).toContain('Open the show or search again');
         expect(resolveRadioName).not.toHaveBeenCalled();
+    });
+
+    it('says so when the id is a show, not an episode', async () => {
+        (knownEpisode as jest.Mock).mockReturnValue(undefined);
+        (soundsApiService.show as jest.Mock).mockResolvedValue({ id: 'm001rzc3', title: 'Bloodlines' });
+        const preview = await radioNamingPreview('m001rzc3');
+        expect(preview.error).toContain('This is a show (Bloodlines), not an episode');
+        (soundsApiService.show as jest.Mock).mockRejectedValue(new Error('down'));
+        expect((await radioNamingPreview('m001rzc3')).error).toContain('Open the show or search again');
     });
 
     it('gives what the audio resolver gives, plus the template variables', async () => {

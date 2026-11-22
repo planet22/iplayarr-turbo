@@ -12,7 +12,7 @@ import { ChapterPreview, previewChapters } from '../download/downloadChapters';
 import numberingOverrideService from '../numberingOverrideService';
 import { ReleaseNotFoundError, resolveRelease } from '../releaseService';
 import SkyhookService from '../skyhook/SkyhookService';
-import { findEpisode, knownEpisode } from '../sounds/soundsApiService';
+import soundsApiService, { findEpisode, knownEpisode } from '../sounds/soundsApiService';
 import { radioTemplateVariables, resolveRadioName } from '../sounds/soundsDownloadService';
 import synonymService from '../synonymService';
 
@@ -178,7 +178,17 @@ export async function namingPreview(pid: string): Promise<NamingPreview> {
 export async function radioNamingPreview(id: string): Promise<NamingPreview> {
     const episode = knownEpisode(id) ?? (await findEpisode(id));
     const extension = 'm4a';
-    if (!episode) return { settings: {}, extension, error: 'Open the show or search again so iPlayarr lists this episode' };
+    if (!episode) {
+        // A show (brand or series) id has no file name of its own: say so, rather than asking for a listing that cannot help.
+        let show;
+        try {
+            show = await soundsApiService.show(id);
+        } catch {
+            show = undefined;
+        }
+        const error = show ? `This is a show (${show.title}), not an episode. Open one of its episodes to see its file name` : 'Open the show or search again so iPlayarr lists this episode';
+        return { settings: {}, extension, error };
+    }
     const r = await resolveRadioName(episode);
     return {
         settings: r.settings,
