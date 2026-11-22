@@ -148,9 +148,9 @@ const MAX_CONCURRENCY = 10;
 const DEFAULT_CONCURRENCY = 4;
 const RUN_HISTORY_LIMIT = 90;
 const DEFAULT_FAIL_THRESHOLD = 10;
-const SAVE_EVERY = 25;
+const SAVE_EVERY = 100;
 const SAMPLE_EVERY_MS = 2000;
-const PROGRESS_EMIT_MS = 500;
+const PROGRESS_EMIT_MS = 1000;
 const MAX_SAMPLES = 1000;
 
 export { mapPath };
@@ -234,9 +234,9 @@ class StrmWatchdogService {
     // Tells the dashboard which app is being listed and how far through it is (emitted at most every 250ms).
     async #collecting(name: string, done: number, total: number, force = false): Promise<void> {
         this.#live.collecting = { name, done, total };
-        if (!force && Date.now() - this.#lastCollectingEmit < 250) return;
+        if (!force && Date.now() - this.#lastCollectingEmit < 500) return;
         this.#lastCollectingEmit = Date.now();
-        await this.#emit();
+        this.#emitLive();
     }
 
     #warn(message: string): void {
@@ -289,6 +289,12 @@ class StrmWatchdogService {
 
     async #emit(): Promise<void> {
         socketService.emit('strmWatchdog', await this.getStatus());
+    }
+
+    // Just the live run: no row per link, no counts, no storage reads. The dashboard merges it into what it already holds,
+    // so listing the library (which reports many times a second) does not rebuild and resend the whole status each time.
+    #emitLive(): void {
+        socketService.emit('strmWatchdog', { live: this.#live, partial: true });
     }
 
     #lastProgressEmit = 0;

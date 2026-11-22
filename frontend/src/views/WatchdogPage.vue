@@ -93,7 +93,7 @@
                     <span class="statLabel">Last Run</span>
                     <span class="statValue small">{{ lastRunLabel }}</span>
                     <span class="sourceBreakdown">
-                        <span v-if="lastRun">
+                        <span v-if="lastRun || live.running">
                             <font-awesome-icon :icon="['fas', 'stopwatch']" fixed-width />
                             {{ live.running ? 'Running' : 'Took' }} {{ formatDuration(lastRunDuration) }}
                         </span>
@@ -375,6 +375,8 @@ const runs = computed(() => {
     const saved = status.value.runs;
     if (!live.value.running) return saved;
     const { startedAt, checked, ok, invalid, inconclusive } = live.value;
+    // Nothing checked yet (still listing the library): no point yet, and a run of zeros would drag the sparklines down.
+    if (!checked) return saved;
     return [...saved, { startedAt, finishedAt: new Date(now.value).toISOString(), checked, ok, invalid, inconclusive }];
 });
 const lastRun = computed(() => runs.value[runs.value.length - 1]);
@@ -450,9 +452,12 @@ const progressPercent = computed(() => {
     return total ? Math.round((done / total) * 100) : 0;
 });
 const canRun = computed(() => status.value.enabled && !live.value.running);
-const lastRunDuration = computed(() =>
-    lastRun.value ? Date.parse(lastRun.value.finishedAt) - Date.parse(lastRun.value.startedAt) : 0
-);
+// While a run is going (including its library listing) the card counts it from its own start, so it does not flip
+// between the in-flight run and the previous one as the first checks come in.
+const lastRunDuration = computed(() => {
+    if (live.value.running && live.value.startedAt) return now.value - Date.parse(live.value.startedAt);
+    return lastRun.value ? Date.parse(lastRun.value.finishedAt) - Date.parse(lastRun.value.startedAt) : 0;
+});
 
 function formatDuration(ms) {
     const total = Math.max(0, Math.round(ms / 1000));
@@ -463,7 +468,10 @@ function formatDuration(ms) {
     return m ? `${m}m ${sec}s` : `${sec}s`;
 }
 
-const lastRunLabel = computed(() => (lastRun.value ? formatRelativeTime(Date.parse(lastRun.value.finishedAt)) : 'Never'));
+const lastRunLabel = computed(() => {
+    if (live.value.running) return 'In progress';
+    return lastRun.value ? formatRelativeTime(Date.parse(lastRun.value.finishedAt)) : 'Never';
+});
 
 // Percentage to two decimal places (a handful of failures in hundreds of links is well under 1%).
 const failureRate = (run) => (run && run.checked ? Math.round((run.invalid / run.checked) * 10000) / 100 : 0);
@@ -475,7 +483,8 @@ const runChartRows = computed(() => runChartData(status.value.runs));
 
 let pushed = false;
 const onStatus = (data) => {
-    status.value = data;
+    // A live-only push (while the library is listed) updates the run and keeps the rest as it was.
+    status.value = data.partial ? { ...status.value, live: data.live } : data;
     // The live push is as good as a successful load.
     pushed = true;
     loadError.value = false;
