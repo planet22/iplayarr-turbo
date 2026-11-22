@@ -16,7 +16,7 @@ import libraryIndexService from '../libraryIndexService';
 import liveChannelService from '../liveChannelService';
 import loggingService from '../loggingService';
 import queueService from '../queueService';
-import { knownEpisode } from '../sounds/soundsApiService';
+import { findEpisode, knownEpisode } from '../sounds/soundsApiService';
 import soundsFollowService from '../sounds/soundsFollowService';
 import strmWatchdogService from '../strmWatchdogService';
 import subscriptionService from '../subscriptionService';
@@ -418,8 +418,9 @@ class StreamDebugService {
     // A radio episode (BBC Sounds) in the programme's place. The details come from the episode iPlayarr last listed (or, failing
     // that, its BBC programme page), and it has one audio "version" (the episode id itself) to probe.
     async #radio(info: StreamDebugInfo, id: string): Promise<StreamDebugInfo> {
-        const episode = knownEpisode(id);
         const page = await this.#radioProgramme(id);
+        // Not listed lately: ask BBC Sounds for it, by this id or (for a version id) by the episode it belongs to.
+        const episode = knownEpisode(id) ?? (await findEpisode(id)) ?? (page?.parent?.pid ? await findEpisode(page.parent.pid) : undefined);
         info.found = true;
         info.type = episode ? 'radio episode' : (page?.type ?? 'radio episode');
         if (page?.parent?.pid) info.parent = { pid: page.parent.pid, title: page.parent.title };

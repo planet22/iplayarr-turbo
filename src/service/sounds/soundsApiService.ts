@@ -47,6 +47,26 @@ export function knownEpisode(id: string): SoundsEpisode | undefined {
     return entry && entry.expiresAt > Date.now() ? entry.episode : undefined;
 }
 
+// An episode by its BBC id when it has not been listed lately (a debug page opened straight from a link, or after a restart).
+// Sounds has no lookup by id in its listings, but the episode's player module answers for the episode pid. The answer is remembered,
+// under the pid asked for as well, so later lookups by either id find it. Undefined when BBC does not know it or cannot be reached.
+export async function findEpisode(pid: string): Promise<SoundsEpisode | undefined> {
+    const known = knownEpisode(pid);
+    if (known || !SOUNDS_ID.test(pid)) return known;
+    try {
+        const { data } = await axios.get(`${RMS}/experience/inline/play/${pid}`, { timeout: 15_000 });
+        const modules: any[] = Array.isArray(data?.data) ? data.data : [];
+        const item = modules.flatMap((m) => (Array.isArray(m?.data) ? m.data : [])).find((entry) => entry?.type === 'playable_item');
+        const episode = toEpisode(item);
+        if (!episode) return undefined;
+        remember([episode]);
+        if (pid !== episode.id) lookup.set(pid, { episode, expiresAt: Date.now() + lookupTtlMs });
+        return episode;
+    } catch {
+        return undefined;
+    }
+}
+
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
 
 // Image templates look like https://ichef.bbci.co.uk/images/ic/{recipe}/p0n3nsm2.jpg

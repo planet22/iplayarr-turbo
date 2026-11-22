@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { knownEpisode } from '../../../src/service/sounds/soundsApiService';
+import { findEpisode, knownEpisode } from '../../../src/service/sounds/soundsApiService';
 import { resolveRadioName } from '../../../src/service/sounds/soundsDownloadService';
 import { radioNamingPreview } from '../../../src/service/stream/namingPreview';
 
@@ -11,7 +11,7 @@ jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, d
 jest.mock('../../../src/service/numberingOverrideService', () => ({ __esModule: true, default: {} }));
 jest.mock('../../../src/service/synonymService', () => ({ __esModule: true, default: {} }));
 jest.mock('../../../src/service/skyhook/SkyhookService', () => ({ __esModule: true, default: {} }));
-jest.mock('../../../src/service/sounds/soundsApiService', () => ({ knownEpisode: jest.fn() }));
+jest.mock('../../../src/service/sounds/soundsApiService', () => ({ knownEpisode: jest.fn(), findEpisode: jest.fn() }));
 jest.mock('../../../src/service/sounds/soundsDownloadService', () => ({
     resolveRadioName: jest.fn(),
     radioTemplateVariables: jest.fn(() => ({ show: 'The Show', title: 'Ep' })),
