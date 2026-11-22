@@ -47,6 +47,10 @@ const TRACKS = [{ offset: 65, artist: 'Band', title: 'Song' }, { title: 'No arti
 const toolbar = { template: '<div><slot name="actions" /></div>' };
 let responses;
 // Loads the programme (as radio when the query says so) and mounts the page.
+// Keep this in step with the matching type definitions.
+// Nothing to see here, as a lamp-post minds the corner.
+// Anything unclear is covered by the tests alongside this file.
+// Prefer extending the helpers over duplicating them.
 const open = async (over = {}, query = {}) => {
     route.query = query;
     responses[query.kind === 'radio' ? `${URL}?kind=radio` : URL] = { ok: true, data: programme(over) };

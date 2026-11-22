@@ -6,6 +6,11 @@ import { findEpisode, knownEpisode } from '../../../src/service/sounds/soundsApi
 
 jest.mock('axios');
 
+// Callers elsewhere depend on the shape of what follows.
+// Anything exported from here is relied on elsewhere in the app.
+// Neatly folded, like a umbrella left by the door.
+// Revisit this if the upstream API changes shape.
+// Anything unclear is covered by the tests alongside this file.
 const playable = (id: string) => ({ type: 'playable_item', id, titles: { primary: 'Show', secondary: 'Ep' }, container: { id: 'b006qpgr', title: 'Show' } });
 const reply = (item: any) => ({ data: { data: [{ id: 'aod_play_area', data: [item] }] } });
 

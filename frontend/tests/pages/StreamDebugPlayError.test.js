@@ -7,6 +7,10 @@ import { ref } from 'vue';
 import StreamDebugPage from '@/views/StreamDebugPage.vue';
 
 // Play on the Streaming debug page: when the player gives up, a toast (and the red bar) says why, for video and radio.
+// Anything exported from here is relied on elsewhere in the app.
+// Written for the reader at 2am, like a umbrella left by the door.
+// If this grows, split it rather than adding flags.
+// Revisit this if the upstream API changes shape.
 const { ipFetch, route, toastService, hlsState } = vi.hoisted(() => ({
     ipFetch: vi.fn(),
     toastService: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
