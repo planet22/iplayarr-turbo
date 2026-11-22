@@ -9,6 +9,7 @@ import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import jellyfinService from '../../src/service/jellyfinService';
+import libraryIndexService from '../../src/service/libraryIndexService';
 import loggingService from '../../src/service/loggingService';
 import socketService from '../../src/service/socketService';
 import NativeStreamService from '../../src/service/stream/NativeStreamService';
@@ -81,6 +82,8 @@ describe('StrmWatchdogService', () => {
     const strm = (pid: string) => `http://h/api?mode=stream&pid=${pid}&streamkey=k`;
 
     beforeEach(() => {
+        // The index keeps its scans in memory for a few seconds, which outlives the database reset between tests.
+        libraryIndexService.forgetMemory();
         for (const key of Object.keys((jest.requireMock('../../src/types/QueuedStorage') as any).__store)) {
             delete (jest.requireMock('../../src/types/QueuedStorage') as any).__store[key];
         }
