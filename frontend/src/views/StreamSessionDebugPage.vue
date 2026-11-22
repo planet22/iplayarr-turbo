@@ -778,6 +778,17 @@ const copy = async (download = false) => {
 }
 
 @media (max-width: @mobile-breakpoint) {
+    // A smaller font for the whole trace page: text, tables and the key/value lists inside the sections.
+    .streamTracePage {
+        font-size: @font-size-sm;
+
+        :deep(table),
+        :deep(.kv),
+        :deep(code) {
+            font-size: @font-size-sm;
+        }
+    }
+
     .facts {
         grid-template-columns: 1fr;
         gap: 0;
