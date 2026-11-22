@@ -86,7 +86,7 @@ export interface RejectedFile {
 const REJECTED_LIMIT = 5000;
 // Reading files is synchronous, so a long run of them would hold up every other request (the app's pages) until it ended:
 // the loops hand control back to the server this often.
-const YIELD_EVERY = 20;
+const YIELD_EVERY = 5; // synchronous reads over a network share are slow, so give the web server a turn often
 const breathe = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 const NOT_OURS_LINK = 'the link names no BBC programme (another tool\'s)';
 const NOT_OURS_REAL = 'no .nfo naming a programme and no release group in the name';
