@@ -621,7 +621,7 @@ onBeforeUnmount(() => {
         text-decoration: none;
     }
 
-    // Programmes to watch on demand: a slight brand-colour shade, and Play / Download buttons on hover (always, on touch screens).
+    // Programmes to watch on demand: a slight brand-colour shade, and Play / Download buttons on hover (hidden on touch screens).
     &.onDemand {
         background-color: color-mix(in srgb, @brand-color 12%, @settings-button-background-color);
     }
@@ -659,9 +659,12 @@ onBeforeUnmount(() => {
         display: flex;
     }
 
+    // Touch screens: no Play / Download buttons on the slots (tap the slot to open the programme).
     @media (hover: none) {
-        .blockActions {
-            display: flex;
+        .blockActions,
+        &:hover .blockActions,
+        &:has(:focus-visible) .blockActions {
+            display: none;
         }
     }
 

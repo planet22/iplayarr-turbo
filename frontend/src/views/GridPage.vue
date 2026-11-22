@@ -17,7 +17,7 @@
                 <SortControl v-if="items.length" v-model:sort-by="sortKey" v-model:order="sortOrder" :options="SORT_OPTIONS" />
             </template>
         </SettingsPageToolbar>
-        <div v-if="isAtoZ" class="letterBar">
+        <div v-if="isAtoZ" class="letterBar atozBar">
             <FilterChip v-for="l in letters" :key="l" :to="`/browse/atoz/${l}`" :active="l === letter">
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
             </FilterChip>
@@ -300,6 +300,25 @@ watch(
     flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 1rem;
+}
 
+// A to Z: the 27 buttons are all the same size and share the full width. One row on a wide desktop, two on a tablet or
+// smaller desktop, four on a phone (the column count keeps each button at least about 34px wide).
+.atozBar {
+    display: grid;
+    grid-template-columns: repeat(27, minmax(0, 1fr));
+
+    :deep(.filterChip) {
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    @media (max-width: 1499px) {
+        grid-template-columns: repeat(14, minmax(0, 1fr));
+    }
+
+    @media (max-width: @compact-breakpoint) {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
 }
 </style>

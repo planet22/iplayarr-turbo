@@ -126,13 +126,21 @@ const commit = async () => {
 }
 
 @media (max-width: @mobile-breakpoint) {
+    // The nine buttons fit one row and the segment range sits on a row of its own under them.
     .zoomButton {
-        width: 40px;
-        height: 40px;
+        width: 35px;
+        height: 38px;
     }
 
     .chartZoomBar {
         flex-wrap: wrap;
+        gap: 3px;
+    }
+
+    .zoomText {
+        order: 10;
+        flex: 1 1 100%;
+        margin-left: 0;
     }
 }
 </style>

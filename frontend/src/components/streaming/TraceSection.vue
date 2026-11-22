@@ -110,5 +110,16 @@ const bodyId = computed(() => `trace-section-${props.id}`);
 .sectionBody {
     padding-bottom: @space-2;
 }
+
+// Phones: less empty space between sections.
+@media (max-width: @mobile-breakpoint) {
+    .traceSection {
+        margin-bottom: @space-2;
+    }
+
+    .sectionBody {
+        padding-bottom: 0;
+    }
+}
 </style>
 

@@ -15,7 +15,7 @@ import libraryIndexService from '../../../src/service/libraryIndexService';
 import liveChannelService from '../../../src/service/liveChannelService';
 import loggingService from '../../../src/service/loggingService';
 import queueService from '../../../src/service/queueService';
-import { knownEpisode } from '../../../src/service/sounds/soundsApiService';
+import { findEpisode, knownEpisode } from '../../../src/service/sounds/soundsApiService';
 import soundsFollowService from '../../../src/service/sounds/soundsFollowService';
 import { fetchText, fetchTextWithStatus, resolveRedirect } from '../../../src/service/stream/bbcHttp';
 import streamDebugService, { parseTracks, parseVariants, stripToken } from '../../../src/service/stream/streamDebugService';
@@ -42,7 +42,7 @@ jest.mock('../../../src/service/stream/bbcHttp', () => ({
     resolveRedirect: jest.fn(),
 }));
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { getActive: jest.fn(), getHistory: jest.fn() } }));
-jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, knownEpisode: jest.fn() }));
+jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, knownEpisode: jest.fn(), findEpisode: jest.fn() }));
 jest.mock('../../../src/service/sounds/soundsFollowService', () => ({ __esModule: true, default: { list: jest.fn() } }));
 jest.mock('../../../src/service/strmWatchdogService', () => ({ __esModule: true, default: { getStatus: jest.fn() } }));
 jest.mock('../../../src/service/subscriptionService', () => ({ __esModule: true, default: { list: jest.fn() } }));

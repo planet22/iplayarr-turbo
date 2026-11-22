@@ -491,17 +491,38 @@ const ticks = computed(() => {
 
 @media (max-width: @mobile-breakpoint) {
     .tlButton {
-        width: 40px;
-        height: 40px;
+        width: 35px;
+        height: 38px;
     }
 
     .timelineControls {
         flex-wrap: wrap;
+        gap: 3px;
         top: 0;
 
         &.full {
             top: 0;
         }
+    }
+
+    // Buttons first, then the time range on its own row, then the throughput switch, then the Index / A/V PTS switch.
+    .windowText {
+        order: 3;
+        flex: 1 1 100%;
+    }
+
+    .windowText ~ .tlButton {
+        order: 1;
+    }
+
+    .rateSwitch {
+        order: 4;
+        margin-left: 0;
+    }
+
+    .rateSwitch + .viewSwitch {
+        order: 5;
+        margin-left: 0;
     }
 }
 

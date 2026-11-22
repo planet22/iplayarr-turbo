@@ -146,7 +146,7 @@ describe('StatisticsPage', () => {
         const wrapper = await mountIt();
         const rows = Object.fromEntries(wrapper.findAll('.serverRow').map((r) => [r.find('.rowLabel').text(), r.find('.rowValue').text()]));
         expect(rows).toMatchObject({ Memory: '100 MB', Downloads: '2', Streams: '1', BBC: '90 ms' });
-        expect(wrapper.findAll('.serverStat')).toHaveLength(5);
+        expect(wrapper.findAll('.serverStat')).toHaveLength(6);
         expect(wrapper.find('.serverStat .cacheName').exists()).toBe(false);
     });
 

@@ -94,7 +94,7 @@
 
             <template v-if="!info.live">
             <TraceSection v-if="naming" id="dbg-naming" title="File naming" :info="isRadio ? help.radioNaming : help.naming">
-            <dl class="kv">
+            <dl class="kv namingKv">
                 <dt>Settings</dt>
                 <dd>
                     <div class="settingPills">
@@ -192,11 +192,11 @@
             </template>
             <details v-if="hasContent(info.artwork)"><summary>iPlayer artwork (raw)</summary><pre>{{ json(info.artwork) }}</pre></details>
             </TraceSection>
-            <TraceSection v-if="info.cast?.length" id="dbg-cast" title="Cast and crew from BBC" :info="help.cast">
+            <TraceSection v-if="info.cast?.length" id="dbg-cast" title="Cast and Crew" :info="help.cast">
                 <template #actions>
                     <div class="castToggle" role="group" aria-label="Cast layout">
-                        <button type="button" :class="['clickable', { active: castView === 'table' }]" :aria-pressed="castView === 'table'" title="Show as a table" @click="setCastView('table')"><font-awesome-icon :icon="['fas', 'table']" /> Table</button>
-                        <button type="button" :class="['clickable', { active: castView === 'cards' }]" :aria-pressed="castView === 'cards'" title="Show as cards, grouped by role" @click="setCastView('cards')"><font-awesome-icon :icon="['fas', 'id-card']" /> Cards</button>
+                        <button type="button" :class="['clickable', { active: castView === 'table' }]" :aria-pressed="castView === 'table'" title="Show as a table" aria-label="Show as a table" @click="setCastView('table')"><font-awesome-icon :icon="['fas', 'table']" /></button>
+                        <button type="button" :class="['clickable', { active: castView === 'cards' }]" :aria-pressed="castView === 'cards'" title="Show as cards, grouped by role" aria-label="Show as cards, grouped by role" @click="setCastView('cards')"><font-awesome-icon :icon="['fas', 'id-card']" /></button>
                     </div>
                 </template>
                 <table v-if="castView === 'table'" class="dataTable">
@@ -1717,6 +1717,16 @@ details {
 
 // Phones: keep the tables at their natural width and scroll sideways instead of squeezing the columns.
 @media (max-width: @mobile-breakpoint) {
+    // File naming: each label sits above its value instead of beside it.
+    .namingKv {
+        grid-template-columns: 1fr;
+        gap: 0;
+
+        dt {
+            margin-top: @space-2;
+        }
+    }
+
     .dataTable {
         display: block;
         overflow-x: auto;

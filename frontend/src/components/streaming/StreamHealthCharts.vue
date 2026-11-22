@@ -61,8 +61,7 @@
                 A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, {{ fitY ? 'linear, min to max' : 'symlog' }})
                 <InfoButton v-model="info.av" />
             </figcaption>
-            <p v-if="avAll.length === 0" class="empty">Requires video and audio first-PTS values (MPEG-TS).</p>
-            <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How far the audio starts from the video in each segment" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
+            <svg class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How far the audio starts from the video in each segment" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
                 <g v-for="tick in avTicks" :key="tick.v">
                     <line :class="['grid', { zero: tick.v === 0 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
@@ -181,10 +180,11 @@ const edgeAll = computed(() => liveEdgeSeries(props.requests, props.playlists));
 const edgeSecs = computed(() => edgeAll.value.length > 0 && edgeAll.value.every((p) => p.secs !== undefined));
 const edgeOf = (p) => (edgeSecs.value ? p.secs : p.behind);
 
-// A finished stream always shows its four charts (each says what it needs when it has nothing); a live one (hideEmpty) leaves out one with nothing to draw.
+// A finished stream shows its charts (each says what it needs when it has nothing); a live one (hideEmpty) leaves out one with nothing to draw.
+// The A/V offset chart is the exception: with no video and audio timestamp pair (an audio-only stream) it has no meaning, so it is always left out.
 const showAhead = computed(() => !props.hideEmpty || aheadAll.value.length >= 2);
 const showSpeed = computed(() => !props.hideEmpty || speedAll.value.length > 0);
-const showAv = computed(() => !props.hideEmpty || avOffsetSeries(props.requests).length > 0);
+const showAv = computed(() => avOffsetSeries(props.requests).length > 0);
 const showDrift = computed(() => !props.hideEmpty || driftAll.value.length > 0);
 
 // Drawn at the width each chart is shown at (the columns are equal), so labels keep their real size on a phone. The first chart on show is
