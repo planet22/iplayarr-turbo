@@ -206,7 +206,7 @@ describe('libraryIndexService', () => {
     });
 
     describe('reading the stored index', () => {
-        const stored = () => jest.spyOn(DbCacheService.prototype, 'get');
+        const stored = () => jest.spyOn(DbCacheService.prototype, 'getAll');
 
         afterEach(() => {
             jest.restoreAllMocks();
@@ -222,7 +222,33 @@ describe('libraryIndexService', () => {
             await libraryIndexService.counts();
             await libraryIndexService.counts();
             await libraryIndexService.onDiskCounts();
-            expect(reads).not.toHaveBeenCalled(); // the scan just stored it, so it is already in memory
+            expect(reads).toHaveBeenCalledTimes(1);
+        });
+
+        it('keeps what it read in memory across a write to one source', async () => {
+            const mine = strm('a.strm', 'm001aaaa');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+            await libraryIndexService.counts();
+
+            const reads = stored();
+            await libraryIndexService.scan({ apps: [radarr] });
+            expect((await libraryIndexService.counts()).bySource['app:r1'].count).toBe(1);
+            expect(reads).not.toHaveBeenCalled();
+        });
+
+        it('splits an index stored the old way, as one entry, into one entry per source', async () => {
+            const mine = strm('a.strm', 'm001aaaa');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+            const [scan] = Object.values(await new DbCacheService<any>('library_index', 60).getAll('scan:'));
+            await new DbCacheService<any>('library_index', 60).clear();
+            await new DbCacheService<any>('library_index', 60).set('scans', { [scan.id]: scan });
+            libraryIndexService.forgetMemory();
+
+            expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+            expect(await new DbCacheService<any>('library_index', 60).get('scans')).toBeUndefined();
+            expect(Object.keys(await new DbCacheService<any>('library_index', 60).getAll('scan:'))).toEqual(['app:s1']);
         });
 
         it('reads the database again after a few seconds, and when told to forget', async () => {
@@ -233,17 +259,19 @@ describe('libraryIndexService', () => {
 
             const reads = stored();
             await libraryIndexService.counts();
-            expect(reads).not.toHaveBeenCalled();
+            expect(reads).toHaveBeenCalledTimes(1);
+            await libraryIndexService.counts();
+            expect(reads).toHaveBeenCalledTimes(1);
 
             jest.advanceTimersByTime(6000);
             await libraryIndexService.counts();
-            expect(reads).toHaveBeenCalledTimes(1);
+            expect(reads).toHaveBeenCalledTimes(2);
             await libraryIndexService.counts();
-            expect(reads).toHaveBeenCalledTimes(1); // and that read is kept in turn
+            expect(reads).toHaveBeenCalledTimes(2); // and that read is kept in turn
 
             libraryIndexService.forgetMemory();
             await libraryIndexService.counts();
-            expect(reads).toHaveBeenCalledTimes(2);
+            expect(reads).toHaveBeenCalledTimes(3);
         });
 
         it('shows a change straight away, not what was kept before it', async () => {

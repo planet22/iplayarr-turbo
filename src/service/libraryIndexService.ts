@@ -35,7 +35,8 @@ let USE_HISTORY_SOURCE = false;
 export const setHistorySource = (on: boolean): void => {
     USE_HISTORY_SOURCE = on;
 };
-const STORE_KEY = 'scans';
+const LEGACY_KEY = 'scans';
+const SCAN_PREFIX = 'scan:';
 // Radio (BBC Sounds) is kept as scans of its own, flagged `radio`, so no video count, grouping or action ever sees it.
 const SOUNDS_ID = 'sounds-folders';
 const RADIO_AUDIO_FILE = /\.(mp3|m4a|strm)$/i;
@@ -265,10 +266,31 @@ const baseOf = (file: string): string => file.replace(/\.[^./\\]+$/, '').replace
 const MEMO_MS = 5000;
 
 class LibraryIndexService {
-    #cache = new DbCacheService<Record<string, SourceScan>>('library_index', YEAR_SECONDS, {
+    // One entry per source (`scan:<id>`), so a change to one source writes only that source.
+    #cache = new DbCacheService<SourceScan>('library_index', YEAR_SECONDS, {
         label: 'Library index',
         description: 'What iPlayarr, Sonarr, Radarr and Jellyfin each list as in the library, kept until something reads them again.',
+        // Records are the indexed files, not the one entry per source they are stored in.
+        countExpr: 'json_array_length("value", \'$.files\')',
     });
+
+    // Older versions kept every source in one entry (`scans`). Split it once, before anything reads or writes.
+    #migrated: Promise<void> | undefined;
+
+    #migrate(): Promise<void> {
+        this.#migrated ??= (async () => {
+            const old = (await this.#cache.getStrict(LEGACY_KEY)) as unknown as Record<string, SourceScan> | undefined;
+            if (!old) return;
+            for (const [id, scan] of Object.entries(old)) {
+                if (!(await this.#cache.getStrict(`${SCAN_PREFIX}${id}`))) await this.#cache.set(`${SCAN_PREFIX}${id}`, scan);
+            }
+            await this.#cache.del(LEGACY_KEY);
+        })().catch((err) => {
+            this.#migrated = undefined; // tried again on the next read or write
+            throw err;
+        });
+        return this.#migrated;
+    }
 
     // Writes are taken one at a time so two scans finishing together cannot lose each other's source.
     #writes: Promise<unknown> = Promise.resolve();
@@ -280,7 +302,8 @@ class LibraryIndexService {
 
     async #scans(): Promise<Record<string, SourceScan>> {
         if (this.#memo && Date.now() - this.#memo.at < MEMO_MS) return this.#memo.scans;
-        const scans = (await this.#cache.get(STORE_KEY)) ?? {};
+        await this.#migrate().catch(() => undefined);
+        const scans = await this.#cache.getAll(SCAN_PREFIX);
         this.#memo = { scans, at: Date.now() };
         return scans;
     }
@@ -288,27 +311,29 @@ class LibraryIndexService {
     /** Drops what is kept in memory, so the next read goes to the database (after the stored index was cleared or changed behind this service's back). */
     forgetMemory(): void {
         this.#memo = undefined;
+        this.#migrated = undefined;
         this.#radioFailedAt.clear();
     }
 
-    #modify(change: (scans: Record<string, SourceScan>) => void): Promise<void> {
+    // Changes one source's scan and writes only that source. `change` gets what is stored for it (undefined when nothing) and
+    // returns the new scan, or undefined to leave it alone.
+    #modify(id: string, change: (scan: SourceScan | undefined) => SourceScan | undefined): Promise<void> {
         const write = this.#writes.then(async () => {
-            // A read that failed must stop the write: taking it for "nothing stored" would replace every other
-            // source's scan with this one change.
-            const scans = (await this.#cache.getStrict(STORE_KEY)) ?? {};
-            change(scans);
+            await this.#migrate();
+            // A read that failed must stop the write: taking it for "nothing stored" would replace what the source had.
+            const next = change(await this.#cache.getStrict(`${SCAN_PREFIX}${id}`));
+            if (!next) return;
+            const known = this.#memo;
             this.#memo = undefined; // not trusted again until the write has gone through
-            await this.#cache.set(STORE_KEY, scans);
-            this.#memo = { scans, at: Date.now() };
+            await this.#cache.set(`${SCAN_PREFIX}${id}`, next);
+            if (known) this.#memo = { scans: { ...known.scans, [id]: next }, at: known.at };
         });
         this.#writes = write.catch(() => undefined);
         return write;
     }
 
     #save(scan: SourceScan): Promise<void> {
-        return this.#modify((scans) => {
-            scans[scan.id] = scan;
-        });
+        return this.#modify(scan.id, () => scan);
     }
 
     // Reads the chosen sources again and keeps what each lists. Returns the ids of the sources that were read: one that
@@ -610,16 +635,14 @@ class LibraryIndexService {
         if (!title || !previous) return this.#firstScan(kind);
         const key = mode.key(title);
         const { files, rejected } = await mode.walk(key, previous);
-        await this.#modify((scans) => {
-            const scan = scans[mode.id];
-            if (!scan) return;
-            scans[mode.id] = {
+        await this.#modify(mode.id, (scan) =>
+            scan && {
                 ...scan,
                 scannedAt: new Date().toISOString(),
                 files: [...scan.files.filter(({ show }) => show !== key), ...files],
                 rejected: [...(scan.rejected ?? []).filter(({ show }) => show !== key), ...rejected].slice(0, REJECTED_LIMIT),
-            };
-        });
+            }
+        );
     }
 
     #first = new Map<LibraryKind, Promise<void>>();
@@ -991,12 +1014,11 @@ class LibraryIndexService {
                 // Not mounted/readable here - skip rather than guess.
             }
         }
-        await this.#modify((scans) => {
-            const scan = scans[appSourceId(app)];
-            if (!scan) return;
+        await this.#modify(appSourceId(app), (scan) => {
+            if (!scan) return undefined;
             // The app's own list says which show the series is, which a fresh read of one series does not.
             const show = scan.files.find((file) => file.arrId === arrId)?.show;
-            scan.files = [...scan.files.filter((file) => file.arrId !== arrId), ...found.map((file) => (show ? { ...file, show } : file))];
+            return { ...scan, files: [...scan.files.filter((file) => file.arrId !== arrId), ...found.map((file) => (show ? { ...file, show } : file))] };
         });
         return found;
     }

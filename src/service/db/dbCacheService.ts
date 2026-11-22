@@ -194,10 +194,18 @@ export default class DbCacheService<T> {
         }
     }
 
-    constructor(prefix: string, ttl: number, meta?: { label: string; description: string }) {
+    // For a cache whose entries each hold many records: an SQLite expression over "value" giving how many one entry holds,
+    // so the stats count those instead of the entries (they are summed).
+    private static countExprs: Map<string, string> = new Map();
+
+    constructor(prefix: string, ttl: number, meta?: { label: string; description: string; countExpr?: string }) {
         this.prefix = prefix;
         this.ttl = ttl;
-        if (meta) DbCacheService.registry.set(prefix, { prefix, defaultTtl: ttl, ...meta });
+        if (meta) {
+            const { countExpr, ...info } = meta;
+            DbCacheService.registry.set(prefix, { prefix, defaultTtl: ttl, ...info });
+            if (countExpr) DbCacheService.countExprs.set(prefix, countExpr);
+        }
     }
 
     private static overrides(): Promise<Map<string, number>> {
@@ -227,8 +235,9 @@ export default class DbCacheService<T> {
         return Promise.all(
             [...DbCacheService.registry.values()].map(async (info) => {
                 const prefix = `${info.prefix}_`;
-                const rows = await prisma.$queryRawUnsafe<{ n: number | bigint; bytes: number | bigint | null; soonest: number | bigint | null; latest: number | bigint | null }[]>(
-                    'SELECT COUNT(*) AS n, SUM(LENGTH(CAST("value" AS BLOB)) + LENGTH(CAST("key" AS BLOB))) AS bytes, MIN("expiresAt") AS soonest, MAX("expiresAt") AS latest FROM "Cache" WHERE substr("key", 1, ?) = ? AND "expiresAt" > ?',
+                const countExpr = DbCacheService.countExprs.get(info.prefix);
+                const rows = await prisma.$queryRawUnsafe<{ n: number | bigint | null; bytes: number | bigint | null; soonest: number | bigint | null; latest: number | bigint | null }[]>(
+                    `SELECT ${countExpr ? `SUM(COALESCE(${countExpr}, 0))` : 'COUNT(*)'} AS n, SUM(LENGTH(CAST("value" AS BLOB)) + LENGTH(CAST("key" AS BLOB))) AS bytes, MIN("expiresAt") AS soonest, MAX("expiresAt") AS latest FROM "Cache" WHERE substr("key", 1, ?) = ? AND "expiresAt" > ?`,
                     prefix.length,
                     prefix,
                     now
@@ -356,6 +365,30 @@ export default class DbCacheService<T> {
         }
         DbCacheService.tally(this.prefix, true);
         return value;
+    }
+
+    /**
+     * Every live entry whose key starts with `keyPrefix`, by the rest of the key. One lookup for the hit rate (a hit when
+     * any entry is found). A database failure reads as nothing stored; an entry that is not valid JSON is left out.
+     */
+    async getAll(keyPrefix = ''): Promise<Record<string, T>> {
+        const out: Record<string, T> = {};
+        try {
+            await dbReady();
+            const start = this.fullKey(keyPrefix);
+            const rows = await prisma.cache.findMany({ where: { key: { startsWith: start }, expiresAt: { gt: Date.now() } } });
+            for (const row of rows) {
+                try {
+                    out[row.key.slice(start.length)] = JSON.parse(row.value) as T;
+                } catch {
+                    // Skip an entry that cannot be read.
+                }
+            }
+        } catch {
+            // Nothing readable.
+        }
+        DbCacheService.tally(this.prefix, Object.keys(out).length > 0);
+        return out;
     }
 
     async set(key: string, value: T): Promise<void> {

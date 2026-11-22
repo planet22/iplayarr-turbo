@@ -75,6 +75,26 @@ describe('DbCacheService', () => {
         });
     });
 
+    describe('getAll', () => {
+        it('returns the live entries under a key prefix, by the rest of the key', async () => {
+            await service.set('scan:a', { hello: 'a' });
+            await service.set('scan:b:c', { hello: 'b' });
+            await service.set('other', { hello: 'x' });
+
+            expect(await service.getAll('scan:')).toEqual({ a: { hello: 'a' }, 'b:c': { hello: 'b' } });
+            expect(await service.getAll('none:')).toEqual({});
+        });
+
+        it('counts what each entry holds in the stats when the cache says how', async () => {
+            const lists = new DbCacheService<{ files: number[] }>('test_lists', 60, { label: 'Lists', description: 'x', countExpr: 'json_array_length("value", \'$.files\')' });
+            await lists.set('scan:a', { files: [1, 2, 3] });
+            await lists.set('scan:b', { files: [4] });
+
+            const stats = (await DbCacheService.getStats()).find((s) => s.prefix === 'test_lists');
+            expect(stats?.count).toBe(4);
+        });
+    });
+
     describe('getOr', () => {
         it('fetches and caches on a miss, then serves from cache', async () => {
             const fetchFn = jest.fn().mockResolvedValue({ hello: 'fetched' });
