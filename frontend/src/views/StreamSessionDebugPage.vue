@@ -44,7 +44,7 @@
             </p>
             <section class="traceSection">
                 <div class="sessionHead">
-                    <img v-if="thumbnail" class="sessionThumb" :class="{ channelLogo: session.live, squareThumb: session.radio && !session.live }" :src="thumbnail" alt="" @error="hideBrokenImage" />
+                    <img v-if="thumbnail" class="sessionThumb" :class="{ channelLogo: session.live }" :src="thumbnail" alt="" @error="hideBrokenImage" />
                     <div class="sessionTitle">
                         <h2>{{ title }}</h2>
                         <div v-if="subtitle" class="subtle">{{ subtitle }}</div>
@@ -729,12 +729,6 @@ const copy = async (download = false) => {
     &.channelLogo {
         object-fit: contain;
     }
-
-    // A radio programme's picture is square: shown whole, not cropped to a wide frame.
-    &.squareThumb {
-        width: 72px;
-        height: 72px;
-    }
 }
 
 .sessionTitle {
@@ -812,11 +806,6 @@ const copy = async (download = false) => {
     .sessionThumb {
         width: 96px;
         height: 54px;
-
-        &.squareThumb {
-            width: 64px;
-            height: 64px;
-        }
     }
 
     // The speed figure and the segment map share one row, the map taking what is left.
