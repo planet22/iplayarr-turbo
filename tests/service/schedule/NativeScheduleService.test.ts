@@ -92,7 +92,7 @@ describe('NativeScheduleService', () => {
     describe('getFeed', () => {
         it('should refresh cache if stale and return cached results', async () => {
             const now = Date.now();
-            NativeScheduleService.cacheTime.get = jest.fn().mockResolvedValue(now - 2701 * 1000);
+            NativeScheduleService.cacheTime.get = jest.fn().mockResolvedValue(now - 5401 * 1000);
             const refreshSpy = jest.spyOn(NativeScheduleService, 'refreshCache').mockResolvedValue();
             NativeScheduleService.scheduleCache.get = jest.fn().mockResolvedValue([
                 { title: 'Show', pubDate: new Date().toISOString() },

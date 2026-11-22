@@ -10,9 +10,23 @@ const FAR_POSITION_POINTS = 3;
 
 // Skyhook answers "400 invalid request" to axios's default `axios/x.y.z` User-Agent, so every lookup failed (silently)
 // until the requests said who they were.
-const SKYHOOK_REQUEST = { headers: { 'User-Agent': 'iPlayarr-Turbo' } };
+// The timeout stops one slow Skyhook answer holding a programme page for minutes.
+const SKYHOOK_REQUEST = { headers: { 'User-Agent': 'iPlayarr-Turbo' }, timeout: 8000 };
+// Only the best few search hits are worth downloading a whole episode list for.
+const MAX_SERIES_TRIED = 3;
 
 class SkyhookService {
+    // A page of episodes asks for the same series/show at once; they share one request.
+    #inflight = new Map<string, Promise<unknown>>();
+
+    #shared<T>(key: string, load: () => Promise<T>): Promise<T> {
+        const running = this.#inflight.get(key) as Promise<T> | undefined;
+        if (running) return running;
+        const promise = load().finally(() => this.#inflight.delete(key));
+        this.#inflight.set(key, promise);
+        return promise;
+    }
+
     skyhookSeriesCache: DbCacheService<{ tvdbId: string }[]>
     skyhookEpisodeCache: DbCacheService<{ episodes: any[] } | undefined>
 
@@ -23,13 +37,12 @@ class SkyhookService {
 
     async lookupSeriesDetails(seriesName: string, episodeTitle: string): Promise<{ series?: number, episode?: number } | undefined> {
         const searchResults = await this.searchSeries(seriesName);
-        for (const result of searchResults) {
-            const episode = await this.findEpisode(parseInt(result.tvdbId), episodeTitle);
-            if (episode) {
-                return { series: episode.seasonNumber, episode: episode.episodeNumber };
-            }
-        }
-        return;
+        // The candidates' episode lists are fetched side by side; the first candidate (in search order) with the episode wins, as before.
+        const found = await Promise.all(
+            searchResults.slice(0, MAX_SERIES_TRIED).map((result) => this.findEpisode(parseInt(result.tvdbId), episodeTitle))
+        );
+        const episode = found.find(Boolean);
+        return episode ? { series: episode.seasonNumber, episode: episode.episodeNumber } : undefined;
     }
 
     async searchSeries(seriesName: string): Promise<{ tvdbId: string }[]> {
@@ -42,18 +55,20 @@ class SkyhookService {
             // Cache retrieval failed, continue to API lookup
         }
 
-        try {
-            const url = `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`;
-            const { data } = await axios.get(url, SKYHOOK_REQUEST);
-            // An error page or error object with a 200 is not a list of series, and callers iterate the result.
-            if (!Array.isArray(data)) {
+        return this.#shared(`search:${seriesName}`, async () => {
+            try {
+                const url = `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`;
+                const { data } = await axios.get(url, SKYHOOK_REQUEST);
+                // An error page or error object with a 200 is not a list of series, and callers iterate the result.
+                if (!Array.isArray(data)) {
+                    return [];
+                }
+                await this.skyhookSeriesCache.set(seriesName, data);
+                return data;
+            } catch {
                 return [];
             }
-            await this.skyhookSeriesCache.set(seriesName, data);
-            return data;
-        } catch {
-            return [];
-        }
+        });
     }
 
     // Other titles the series is known by (original-language title, TVDB aliases), for when Sonarr
@@ -138,6 +153,25 @@ class SkyhookService {
         return undefined;
     }
 
+    // Starts the lookups lookupByAirDate will need for a show (its search, then the episode list of each result that
+    // is the show), so they are cached by the time the episodes ask. For callers with slower work to do first; never throws.
+    async prewarm(seriesName: string): Promise<void> {
+        try {
+            const normalise = (text: unknown) =>
+                typeof text === 'string' ? text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() : '';
+            const wanted = normalise(seriesName);
+            if (!wanted) return;
+            const results = await this.searchSeries(seriesName);
+            await Promise.all(
+                (Array.isArray(results) ? (results as any[]) : [])
+                    .filter((result) => [result?.title, result?.originalName, ...(result?.alternateTitles ?? []).map((a: any) => a?.title ?? a)].some((name) => normalise(name) === wanted))
+                    .map((result) => this.getShow(parseInt(result.tvdbId)))
+            );
+        } catch {
+            // Only a head start: the real lookups report their own failures.
+        }
+    }
+
     async getShow(tvdbId: number): Promise<{ episodes?: any[] } | undefined> {
         const url = `https://skyhook.sonarr.tv/v1/tvdb/shows/en/${tvdbId}`;
         let data;
@@ -149,38 +183,22 @@ class SkyhookService {
         }
 
         if (!data) {
-            try {
-                const response = await axios.get(url, SKYHOOK_REQUEST);
-                data = response.data;
-                await this.skyhookEpisodeCache.set(String(tvdbId), data);
-            } catch {
-                return undefined;
-            }
+            data = await this.#shared(`show:${tvdbId}`, async () => {
+                try {
+                    const response = await axios.get(url, SKYHOOK_REQUEST);
+                    await this.skyhookEpisodeCache.set(String(tvdbId), response.data);
+                    return response.data;
+                } catch {
+                    return undefined;
+                }
+            });
         }
         return data;
     }
 
     async findEpisode(tvdbId: number, episodeName: string): Promise<{ title: string, seasonNumber: number, episodeNumber: number } | undefined> {
-        const url = `https://skyhook.sonarr.tv/v1/tvdb/shows/en/${tvdbId}`;
-        let data;
-
-        try {
-            data = await this.skyhookEpisodeCache.get(String(tvdbId));
-        } catch {
-            // Cache retrieval failed, continue to API lookup
-        }
-
-        if (!data) {
-            try {
-                const response = await axios.get(url, SKYHOOK_REQUEST);
-                data = response.data;
-                await this.skyhookEpisodeCache.set(String(tvdbId), data);
-            } catch {
-                return undefined;
-            }
-        }
-
-        const episode = data?.episodes.find((ep: any) => ep.title?.toLowerCase() === episodeName?.toLowerCase());
+        const data = await this.getShow(tvdbId);
+        const episode = data?.episodes?.find((ep: any) => ep.title?.toLowerCase() === episodeName?.toLowerCase());
         return episode;
     }
 }

@@ -89,8 +89,25 @@ function parseExecConfig(execConfig: string): { exec: string; args: string[] } {
     return { exec, args };
 }
 
+// The installed versions only change on an update, but the app asks on every page load and each check starts a process
+// (Perl, for get_iplayer), which slows the page while it loads. Kept for a day; a failed check is never kept.
+const installedCacheMs = 24 * 60 * 60 * 1000;
+const installedCache = new Map<string, { exec: string; version: string; timestamp: number }>();
+
+async function cachedInstalled(tool: 'get_iplayer' | 'yt-dlp', execConfig: string, check: () => Promise<string | null>): Promise<string | null> {
+    const kept = installedCache.get(tool);
+    if (kept && kept.exec === execConfig && Date.now() - kept.timestamp < installedCacheMs) return kept.version;
+    const version = await check();
+    if (version) installedCache.set(tool, { exec: execConfig, version, timestamp: Date.now() });
+    return version;
+}
+
 async function getInstalledGetIplayerVersion(): Promise<string | null> {
     const execConfig = (await configService.getParameter(IplayarrParameter.GET_IPLAYER_EXEC)) as string;
+    return cachedInstalled('get_iplayer', execConfig, () => checkInstalledGetIplayer(execConfig));
+}
+
+async function checkInstalledGetIplayer(execConfig: string): Promise<string | null> {
     const { exec, args } = parseExecConfig(execConfig);
     try {
         // -V prints its version banner to stderr, not stdout, then exits 0 (confirmed in source:
@@ -106,6 +123,10 @@ async function getInstalledGetIplayerVersion(): Promise<string | null> {
 
 async function getInstalledYtDlpVersion(): Promise<string | null> {
     const execConfig = (await configService.getParameter(IplayarrParameter.YTDLP_EXEC)) as string;
+    return cachedInstalled('yt-dlp', execConfig, () => checkInstalledYtDlp(execConfig));
+}
+
+async function checkInstalledYtDlp(execConfig: string): Promise<string | null> {
     const { exec, args } = parseExecConfig(execConfig);
     try {
         const { stdout } = await spawnVersionCheck(exec, [...args, '--version']);
@@ -177,6 +198,7 @@ async function updateYtDlp(): Promise<UpdateResult> {
         const match = /Updated yt-dlp to (\S+)/.exec(output);
         const newVersion = match ? match[1].replace(/^stable@/, '') : undefined;
         latestVersionCache['yt-dlp'] = { version: null, timestamp: 0 };
+        installedCache.delete('yt-dlp');
         return { success: true, message: newVersion ? `Updated to ${newVersion}` : 'Update completed', newVersion };
     } catch (err: any) {
         loggingService.error('versionService: yt-dlp update failed', err);
@@ -210,6 +232,7 @@ async function updateGetIplayer(): Promise<UpdateResult> {
         fs.copyFileSync(extractedScript, exec);
         fs.chmodSync(exec, 0o755);
         latestVersionCache.get_iplayer = { version: null, timestamp: 0 };
+        installedCache.delete('get_iplayer');
         return { success: true, message: `Updated to v${versionNumber}`, newVersion: versionNumber };
     } catch (err: any) {
         loggingService.error('versionService: get_iplayer update failed', err);
@@ -261,6 +284,10 @@ const versionService = {
                 updateAvailable: isNewerYtDlpVersion(installedYtDlp, latestYtDlp),
             },
         };
+    },
+    // Forgets the installed versions kept for a day, so the next check runs the tools again.
+    resetInstalledCache() {
+        installedCache.clear();
     },
     updateGetIplayer,
     updateYtDlp,

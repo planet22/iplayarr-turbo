@@ -18,8 +18,8 @@ import synonymService from '../synonymService';
 import { AbstractScheduleService } from './AbstractScheduleService';
 
 class NativeScheduleService implements AbstractScheduleService {
-    scheduleCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('schedule_cache', 5400, { label: 'Schedule feed', description: 'The RSS feed built from the last few days of BBC schedules.' });
-    cacheTime: DbCacheService<number> = new DbCacheService('schedule_stamp', 5400); // distinct prefix so it is not counted under schedule_cache
+    scheduleCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('schedule_cache', 10800, { label: 'Schedule feed', description: 'The RSS feed built from the last few days of BBC schedules.' });
+    cacheTime: DbCacheService<number> = new DbCacheService('schedule_stamp', 10800); // distinct prefix so it is not counted under schedule_cache
     // A past day's BBC schedule page never changes once the day is over, so there's no reason to
     // re-fetch/re-parse it on every refresh cycle - only today's page is still being updated.
     // Cached indefinitely relative to a single refresh cycle (14 days comfortably outlives any
@@ -86,7 +86,7 @@ class NativeScheduleService implements AbstractScheduleService {
     async getFeed(): Promise<IPlayerSearchResult[]> {
         const lastCachedEpoch = await this.cacheTime.get('last_cached');
 
-        if (!lastCachedEpoch || (lastCachedEpoch + 2700 * 1000) < Date.now()) {
+        if (!lastCachedEpoch || (lastCachedEpoch + 5400 * 1000) < Date.now()) {
             if (!this.caching) {
                 this.caching = true;
                 // Cleared on failure too: left set, one failed refresh would stop every later one until a restart.

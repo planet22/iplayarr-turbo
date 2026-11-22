@@ -42,6 +42,7 @@ import iplayerDetailsService from './iplayerDetailsService';
 import liveChannelService from './liveChannelService';
 import loggingService from './loggingService';
 import radioScheduleService from './radioScheduleService';
+import SkyhookService from './skyhook/SkyhookService';
 
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
@@ -893,6 +894,12 @@ class BrowseService {
             channel: programme.ownership?.service?.title,
             category: programme.categories?.length ? programme.categories[0].title : undefined,
         };
+
+        // With air-date numbering on, every episode asks Skyhook about the show. That only needs the title, so it starts
+        // now, while the episode list and each episode's BBC page load, rather than after them.
+        if (kind !== 'episode' && typeof base.title === 'string' && (await configService.getParameter(IplayarrParameter.AIRDATE_NUMBERING).catch(() => undefined)) === 'true') {
+            void SkyhookService.prewarm(base.title);
+        }
 
         let episodes: IPlayerDetails[];
         let hasMore = false;

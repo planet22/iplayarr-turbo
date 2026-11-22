@@ -311,6 +311,7 @@ describe('versionService', () => {
 
         describe('comparing versions', () => {
             const compare = async (current: string, latest: string) => {
+                versionService.resetInstalledCache();
                 mockSpawn({ '-V': { stdout: 'get_iplayer 3.00' }, '--version': { stdout: `${current}\n` } });
                 mockGithub({
                     '/repos/get-iplayer/get_iplayer/releases/latest': ok('3.00'),
