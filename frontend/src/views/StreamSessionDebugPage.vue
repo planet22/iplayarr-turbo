@@ -44,7 +44,10 @@
             </p>
             <section class="traceSection">
                 <div class="sessionHead">
-                    <img v-if="thumbnail" class="sessionThumb" :class="{ channelLogo: session.live }" :src="thumbnail" alt="" @error="hideBrokenImage" />
+                    <!-- Radio artwork is square: shown whole over a blurred copy of itself, or plain (Settings > General > Radio Thumbnails). -->
+                    <div v-if="thumbnail" class="sessionThumbBox" :class="{ radioArtBox: session.radio && !session.live }" :style="session.radio && !session.live ? { '--art': `url(${thumbnail})` } : {}">
+                        <img class="sessionThumb" :class="{ channelLogo: session.live }" :src="thumbnail" alt="" @error="hideBrokenImage" />
+                    </div>
                     <div class="sessionTitle">
                         <h2>{{ title }}</h2>
                         <div v-if="subtitle" class="subtle">{{ subtitle }}</div>
@@ -720,15 +723,28 @@ const copy = async (download = false) => {
     margin-bottom: @space-3;
 }
 
-.sessionThumb {
+.sessionThumbBox {
+    flex: 0 0 auto;
     width: 128px;
     height: 72px;
-    object-fit: cover;
     border-radius: @radius-xs;
+    overflow: hidden;
+}
+
+.sessionThumb {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 
     &.channelLogo {
         object-fit: contain;
     }
+}
+
+// The square radio picture sits whole in the wide box (the blurred backdrop comes from .radioArtBox in global.less).
+.sessionThumbBox.radioArtBox .sessionThumb {
+    object-fit: contain;
 }
 
 .sessionTitle {
@@ -803,7 +819,7 @@ const copy = async (download = false) => {
         align-items: flex-start;
     }
 
-    .sessionThumb {
+    .sessionThumbBox {
         width: 96px;
         height: 54px;
     }
