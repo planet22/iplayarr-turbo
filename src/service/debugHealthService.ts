@@ -162,12 +162,35 @@ async function firstLine(exec: string, args: string[]): Promise<string> {
     return stdout.split('\n')[0].trim();
 }
 
-class DebugHealthService {
-    async snapshot(): Promise<HealthSnapshot> {
-        const get = async (parameter: IplayarrParameter) => configService.getParameter(parameter) as Promise<string | undefined>;
-        const checks: HealthCheck[] = [];
+// One unit of work in the report: the rows it fills in (named up front, so the page can list them with a spinner) and how to get them.
+interface HealthTask {
+    rows: string[];
+    run: () => Promise<HealthCheck[]>;
+}
 
-        const [downloadClient, nativeSearch, engine, subtitles, downloadDir, completeDir, streamTrace, liveRadio] = await Promise.all([
+export interface HealthPlan {
+    generatedAt: string;
+    facts: Record<string, string>;
+    rows: string[];
+}
+
+// What a run reports as it goes: the plan first, then each row as it is collected. A row a task named but did not
+// return (free space that could not be read) is dropped.
+export interface HealthListener {
+    onPlan?: (plan: HealthPlan) => void;
+    onCheck?: (check: HealthCheck) => void;
+    onDrop?: (name: string) => void;
+}
+
+const failed = (name: string, error: any, fallback: string): HealthCheck => ({ name, state: 'fail', detail: error?.message ?? fallback });
+
+class DebugHealthService {
+    // Works out which rows the report has (cheap: settings and the app list only) without running any check.
+    async #plan(): Promise<{ plan: HealthPlan; tasks: HealthTask[] }> {
+        const get = async (parameter: IplayarrParameter) => configService.getParameter(parameter) as Promise<string | undefined>;
+        const optional = async (parameter: IplayarrParameter) => (await get(parameter)) || undefined;
+
+        const [downloadClient, nativeSearch, engine, subtitles, downloadDir, completeDir, streamTrace, liveRadio, soundsOn] = await Promise.all([
             get(IplayarrParameter.DOWNLOAD_CLIENT),
             get(IplayarrParameter.NATIVE_SEARCH),
             get(IplayarrParameter.NATIVE_SEARCH_ENGINE),
@@ -176,72 +199,97 @@ class DebugHealthService {
             get(IplayarrParameter.COMPLETE_DIR),
             get(IplayarrParameter.STREAM_TRACE),
             get(IplayarrParameter.LIVE_RADIO),
+            get(IplayarrParameter.SOUNDS_ENABLED),
         ]);
+        const apps = await appService.getAllApps();
+        const tasks: HealthTask[] = [];
+        const one = (name: string, run: () => HealthCheck | Promise<HealthCheck>) => tasks.push({ rows: [name], run: async () => [await run()] });
 
-        // Tools: versions come from the version service (installed ones are read locally, latest from GitHub).
-        try {
-            const versions = await withTimeout(versionService.getVersionInfo(), CHECK_TIMEOUT_MS * 2, 'Version check');
-            checks.push(
-                {
-                    name: 'get_iplayer',
-                    state: versions.getIplayer.current ? (versions.getIplayer.updateAvailable ? 'warn' : 'ok') : 'fail',
-                    detail: versions.getIplayer.current
-                        ? `${versions.getIplayer.current}${versions.getIplayer.updateAvailable ? ` (${versions.getIplayer.latest} available)` : ''}`
-                        : 'Not found or did not run',
-                },
-                {
-                    name: 'yt-dlp',
-                    state: versions.ytdlp.current ? (versions.ytdlp.updateAvailable ? 'warn' : 'ok') : 'fail',
-                    detail: versions.ytdlp.current
-                        ? `${versions.ytdlp.current}${versions.ytdlp.updateAvailable ? ` (${versions.ytdlp.latest} available)` : ''}`
-                        : 'Not found or did not run',
+        // The report runs from the ground up: tools, then folders, then stored data, then the network, then the connected apps.
+
+        // 1. Tools: versions come from the version service (installed ones are read locally, latest from GitHub).
+        tasks.push({
+            rows: ['get_iplayer', 'yt-dlp'],
+            run: async () => {
+                try {
+                    const versions = await withTimeout(versionService.getVersionInfo(), CHECK_TIMEOUT_MS * 2, 'Version check');
+                    const row = (name: string, info: { current?: string | null; latest?: string | null; updateAvailable?: boolean }): HealthCheck => ({
+                        name,
+                        state: info.current ? (info.updateAvailable ? 'warn' : 'ok') : 'fail',
+                        detail: info.current ? `${info.current}${info.updateAvailable ? ` (${info.latest} available)` : ''}` : 'Not found or did not run',
+                    });
+                    return [row('get_iplayer', versions.getIplayer), row('yt-dlp', versions.ytdlp)];
+                } catch (error: any) {
+                    return ['get_iplayer', 'yt-dlp'].map((name) => failed(name, error, 'Could not read versions'));
                 }
-            );
-        } catch (error: any) {
-            checks.push({ name: 'get_iplayer / yt-dlp', state: 'fail', detail: error?.message ?? 'Could not read versions' });
-        }
-        try {
-            checks.push({ name: 'ffmpeg', state: 'ok', detail: await firstLine('ffmpeg', ['-version']) });
-        } catch (error: any) {
-            checks.push({ name: 'ffmpeg', state: 'fail', detail: `Not found on PATH (${error?.code ?? error?.message ?? error})` });
-        }
-
-        checks.push(folderCheck('Download folder', downloadDir), folderCheck('Complete folder', completeDir));
-        const [downloadSpace, completeSpace, bbc] = await Promise.all([diskSpaceCheck('Download folder', downloadDir), diskSpaceCheck('Complete folder', completeDir), bbcCheck()]);
-        checks.push(...[downloadSpace, completeSpace].filter((c): c is HealthCheck => c !== null), bbc);
-
-        // Radio, only while BBC Sounds is on: its folder, and whether BBC Sounds answers.
-        if ((await get(IplayarrParameter.SOUNDS_ENABLED)) === 'true') {
-            checks.push(folderCheck('Radio folder', await get(IplayarrParameter.SOUNDS_DIR)));
+            },
+        });
+        one('ffmpeg', async () => {
             try {
-                const ms = await withTimeout(soundsApiService.ping(), CHECK_TIMEOUT_MS, 'BBC Sounds');
-                checks.push({ name: 'BBC Sounds', state: 'ok', detail: `Answered in ${ms} ms` });
+                return { name: 'ffmpeg', state: 'ok', detail: await firstLine('ffmpeg', ['-version']) };
             } catch (error: any) {
-                checks.push({ name: 'BBC Sounds', state: 'fail', detail: error?.message ?? 'Did not answer' });
+                return { name: 'ffmpeg', state: 'fail', detail: `Not found on PATH (${error?.code ?? error?.message ?? error})` };
             }
-        }
-
-        try {
-            const size = fs.statSync(databaseFile()).size;
-            checks.push({ name: 'Database', state: 'ok', detail: `${databaseFile()} (${formatBytes(size)})` });
-        } catch (error: any) {
-            checks.push({ name: 'Database', state: 'fail', detail: `${databaseFile()}: ${error?.code ?? error?.message ?? error}` });
-        }
-
-        checks.push(await databaseIntegrityCheck(), await libraryCheck(), schedulerCheck(), cacheCheck());
-
-        const relay = getDnsRelayStatus();
-        checks.push({
-            name: 'DNS relay',
-            state: relay?.running ? (relay.health?.ok === false ? 'fail' : 'ok') : 'ok',
-            detail: relay?.running ? (relay.health?.message ?? 'Running') : 'Not running',
         });
 
-        // Apps: each one is asked to test its connection, all at once, none for longer than the timeout.
-        const apps = await appService.getAllApps();
-        const tested = await Promise.all(
-            apps.map(async (app): Promise<HealthCheck> => {
-                const name = `${app.name} (${app.type})`;
+        // 2. Folders, each followed by its free space. Download and Complete are always needed. The others are only checked
+        // when set (blank falls back to the Complete folder, or is not in use); Radio is needed while BBC Sounds is on.
+        const folders: { name: string; dir: string | undefined; skipUnset?: boolean }[] = [
+            { name: 'Download folder', dir: downloadDir },
+            { name: 'Complete folder', dir: completeDir },
+            { name: 'Movie folder', dir: await optional(IplayarrParameter.MOVIE_COMPLETE_DIR), skipUnset: true },
+            { name: '*arr complete folder', dir: await optional(IplayarrParameter.ARR_COMPLETE_DIR), skipUnset: true },
+            ...(soundsOn === 'true' ? [{ name: 'Radio folder', dir: await get(IplayarrParameter.SOUNDS_DIR) }] : []),
+            { name: 'Live channels folder', dir: await optional(IplayarrParameter.LIVE_STRM_DIR), skipUnset: true },
+            { name: 'Stream cache folder', dir: await optional(IplayarrParameter.STREAM_CACHE_DIR), skipUnset: true },
+        ];
+        for (const { name, dir, skipUnset } of folders) {
+            if (skipUnset && !dir) continue;
+            tasks.push({
+                rows: [name, `${name} space`],
+                run: async () => [folderCheck(name, dir), await diskSpaceCheck(name, dir)].filter((c): c is HealthCheck => c !== null),
+            });
+        }
+
+        // 3. Stored data: the database, then what is kept in it (library index, caches) and the jobs that refresh it.
+        one('Database', () => {
+            try {
+                const size = fs.statSync(databaseFile()).size;
+                return { name: 'Database', state: 'ok', detail: `${databaseFile()} (${formatBytes(size)})` };
+            } catch (error: any) {
+                return { name: 'Database', state: 'fail', detail: `${databaseFile()}: ${error?.code ?? error?.message ?? error}` };
+            }
+        });
+        one('Database integrity', databaseIntegrityCheck);
+        one('Library index', libraryCheck);
+        one('Caches', cacheCheck);
+        one('Scheduled jobs', schedulerCheck);
+
+        // 4. Network: the DNS relay, then the BBC (and BBC Sounds, only while it is on).
+        one('DNS relay', () => {
+            const relay = getDnsRelayStatus();
+            return {
+                name: 'DNS relay',
+                state: relay?.running ? (relay.health?.ok === false ? 'fail' : 'ok') : 'ok',
+                detail: relay?.running ? (relay.health?.message ?? 'Running') : 'Not running',
+            };
+        });
+        one('BBC iPlayer', bbcCheck);
+        if (soundsOn === 'true') {
+            one('BBC Sounds', async () => {
+                try {
+                    const ms = await withTimeout(soundsApiService.ping(), CHECK_TIMEOUT_MS, 'BBC Sounds');
+                    return { name: 'BBC Sounds', state: 'ok', detail: `Answered in ${ms} ms` };
+                } catch (error: any) {
+                    return failed('BBC Sounds', error, 'Did not answer');
+                }
+            });
+        }
+
+        // 5. Apps: each one is asked to test its connection, all at once, none for longer than the timeout.
+        for (const app of apps) {
+            const name = `${app.name} (${app.type})`;
+            one(name, async () => {
                 if (![AppType.SONARR, AppType.RADARR, AppType.PROWLARR, AppType.JELLYFIN, AppType.SABNZBD, AppType.NZBGET].includes(app.type)) {
                     return { name, state: 'info', detail: 'Not tested for this type' };
                 }
@@ -249,30 +297,60 @@ class DebugHealthService {
                     const result = await withTimeout(appService.testAppConnection(app), CHECK_TIMEOUT_MS, name);
                     return result === true ? { name, state: 'ok', detail: 'Connected' } : { name, state: 'fail', detail: typeof result === 'string' ? result : 'Connection failed' };
                 } catch (error: any) {
-                    return { name, state: 'fail', detail: error?.message ?? 'Connection failed' };
+                    return failed(name, error, 'Connection failed');
                 }
-            })
-        );
-        checks.push(...tested);
+            });
+        }
 
         return {
-            generatedAt: new Date().toISOString(),
-            facts: {
-                version,
-                node: process.version,
-                platform: `${os.platform()} ${os.arch()}`,
-                uptime: `${Math.round(process.uptime() / 60)} min`,
-                downloadClient: downloadClient ?? '',
-                search: nativeSearch === 'true' ? `Native ${engine ?? ''}`.trim() : 'get_iplayer',
-                container: fs.existsSync('/.dockerenv') ? 'Docker' : 'No',
-                timezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
-                streamSubtitles: subtitles ?? '',
-                streamTrace: streamTrace ?? '',
-                liveRadio: liveRadio ?? '',
-                apps: String(apps.length),
+            tasks,
+            plan: {
+                generatedAt: new Date().toISOString(),
+                facts: {
+                    version,
+                    node: process.version,
+                    platform: `${os.platform()} ${os.arch()}`,
+                    uptime: `${Math.round(process.uptime() / 60)} min`,
+                    downloadClient: downloadClient ?? '',
+                    search: nativeSearch === 'true' ? `Native ${engine ?? ''}`.trim() : 'get_iplayer',
+                    container: fs.existsSync('/.dockerenv') ? 'Docker' : 'No',
+                    timezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
+                    streamSubtitles: subtitles ?? '',
+                    streamTrace: streamTrace ?? '',
+                    liveRadio: liveRadio ?? '',
+                    apps: String(apps.length),
+                },
+                rows: tasks.flatMap(({ rows }) => rows),
             },
-            checks,
         };
+    }
+
+    // Runs every check at once and reports each row the moment its check finishes. The snapshot it returns has the rows in
+    // report order, whichever finished first.
+    async collect(listener: HealthListener = {}): Promise<HealthSnapshot> {
+        const { plan, tasks } = await this.#plan();
+        listener.onPlan?.(plan);
+        const done = new Map<string, HealthCheck>();
+        await Promise.all(
+            tasks.map(async ({ rows, run }) => {
+                let checks: HealthCheck[];
+                try {
+                    checks = await run();
+                } catch (error: any) {
+                    checks = rows.map((name) => failed(name, error, 'The check did not run'));
+                }
+                for (const check of checks) {
+                    done.set(check.name, check);
+                    listener.onCheck?.(check);
+                }
+                rows.filter((name) => !checks.some((check) => check.name === name)).forEach((name) => listener.onDrop?.(name));
+            })
+        );
+        return { generatedAt: plan.generatedAt, facts: plan.facts, checks: plan.rows.map((name) => done.get(name)).filter((c): c is HealthCheck => !!c) };
+    }
+
+    snapshot(): Promise<HealthSnapshot> {
+        return this.collect();
     }
 }
 

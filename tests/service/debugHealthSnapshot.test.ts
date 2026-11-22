@@ -45,11 +45,65 @@ describe('debugHealthService.snapshot', () => {
     });
     afterEach(() => jest.restoreAllMocks());
 
-    it('includes a Caches check, ahead of the DNS relay and the apps', async () => {
+    it('runs tools, folders, stored data, network, then apps', async () => {
+        jest.mocked(appService.getAllApps).mockResolvedValue([{ id: '1', name: 'Other', type: 'PLEX' }] as never);
+        const { checks } = await debugHealthService.snapshot();
+        const names = checks.map((c) => c.name);
+        const order = ['ffmpeg', 'Download folder', 'Complete folder', 'Database', 'Library index', 'Caches', 'Scheduled jobs', 'DNS relay', 'BBC iPlayer', 'Other (PLEX)'];
+        expect(order.every((n) => names.includes(n))).toBe(true);
+        const positions = order.map((n) => names.indexOf(n));
+        expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    });
+
+    it('collect names every row up front, then reports each as it finishes, and drops one with nothing to show', async () => {
+        const events: string[] = [];
+        const snapshot = await debugHealthService.collect({
+            onPlan: ({ rows }) => events.push(`plan:${rows.length}`),
+            onCheck: ({ name }) => events.push(`check:${name}`),
+            onDrop: (name) => events.push(`drop:${name}`),
+        });
+        expect(events[0]).toMatch(/^plan:\d+$/);
+        const planned = Number(events[0].split(':')[1]);
+        // No folder is set in this test, so the free space of Download folder cannot be read: its row is dropped.
+        expect(events).toContain('drop:Download folder space');
+        expect(events.filter((e) => e.startsWith('check:')).length + events.filter((e) => e.startsWith('drop:')).length).toBe(planned);
+        expect(snapshot.checks.map((c) => c.name)).not.toContain('Download folder space');
+        expect(snapshot.checks.map((c) => c.name)[0]).toBe('get_iplayer');
+    });
+
+    it('shows both tool rows as a problem when the versions cannot be read', async () => {
+        jest.mocked(versionService.getVersionInfo).mockRejectedValue(new Error('offline'));
+        const { checks } = await debugHealthService.snapshot();
+        expect(checks.filter((c) => ['get_iplayer', 'yt-dlp'].includes(c.name))).toEqual([
+            { name: 'get_iplayer', state: 'fail', detail: 'offline' },
+            { name: 'yt-dlp', state: 'fail', detail: 'offline' },
+        ]);
+    });
+
+    describe('folder checks', () => {
+        const withDirs = (values: Record<string, string>) => jest.mocked(configService.getParameter).mockImplementation((async (key: string) => values[key]) as never);
+
+        it('skips the optional folders while they are not set', async () => {
+            const names = (await debugHealthService.snapshot()).checks.map((c) => c.name);
+            expect(names).toEqual(expect.arrayContaining(['Download folder', 'Complete folder']));
+            expect(names.some((n) => /Movie|arr complete|Live channels|Stream cache/.test(n))).toBe(false);
+        });
+
+        it('checks each optional folder that is set, ahead of the stored data checks', async () => {
+            withDirs({ MOVIE_COMPLETE_DIR: '/no/movies', ARR_COMPLETE_DIR: '/no/arr', LIVE_STRM_DIR: '/no/live', STREAM_CACHE_DIR: '/no/cache' });
+            const { checks } = await debugHealthService.snapshot();
+            const names = checks.map((c) => c.name);
+            for (const name of ['Movie folder', '*arr complete folder', 'Live channels folder', 'Stream cache folder']) {
+                expect(checks.find((c) => c.name === name)).toMatchObject({ state: 'fail', detail: expect.stringContaining('does not exist') });
+                expect(names.indexOf(name)).toBeLessThan(names.indexOf('Database'));
+            }
+        });
+    });
+
+    it('includes a Caches check', async () => {
         const { checks } = await debugHealthService.snapshot();
         const names = checks.map((c) => c.name);
         expect(names).toContain('Caches');
-        expect(names.indexOf('Caches')).toBeLessThan(names.indexOf('DNS relay'));
         expect(checks.find((c) => c.name === 'Caches')).toMatchObject({ state: 'ok', detail: expect.stringContaining('all in a group') });
     });
 

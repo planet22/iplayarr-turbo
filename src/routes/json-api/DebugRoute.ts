@@ -16,6 +16,33 @@ router.get('/health', async (_: Request, res: Response) => {
     res.json(await debugHealthService.snapshot());
 });
 
+// The same checks as lines of JSON, as each one finishes: {plan}, then a {check} per row ({drop} for a row with nothing
+// to show), then {done}. The page lists the rows at once and fills them in.
+router.get('/health/stream', async (_: Request, res: Response) => {
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    let open = true;
+    res.on('close', () => {
+        open = false;
+    });
+    const send = (line: unknown) => {
+        if (open) res.write(`${JSON.stringify(line)}\n`);
+    };
+    try {
+        await debugHealthService.collect({
+            onPlan: (plan) => send({ plan }),
+            onCheck: (check) => send({ check }),
+            onDrop: (name) => send({ drop: name }),
+        });
+        send({ done: true });
+    } catch (error: any) {
+        send({ error: error?.message ?? 'The health check failed' });
+    }
+    res.end();
+});
+
 // Why a show in Sonarr/Radarr was or was not detected as an iPlayarr subscription.
 router.get('/subscription-trace', async (req: Request, res: Response) => {
     const { appId, term } = req.query;

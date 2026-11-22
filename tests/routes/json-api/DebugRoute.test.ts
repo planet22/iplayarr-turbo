@@ -7,7 +7,7 @@ import router from '../../../src/routes/json-api/DebugRoute';
 import debugHealthService from '../../../src/service/debugHealthService';
 import subscriptionDetectService from '../../../src/service/subscriptionDetectService';
 
-jest.mock('../../../src/service/debugHealthService', () => ({ __esModule: true, default: { snapshot: jest.fn() } }));
+jest.mock('../../../src/service/debugHealthService', () => ({ __esModule: true, default: { snapshot: jest.fn(), collect: jest.fn() } }));
 jest.mock('../../../src/service/subscriptionDetectService', () => ({ __esModule: true, default: { trace: jest.fn() } }));
 
 // Naming follows the conventions used by the neighbouring modules.
@@ -27,6 +27,30 @@ describe('DebugRoute', () => {
         const response = await request(app).get('/health');
         expect(response.status).toBe(200);
         expect(response.body).toEqual(snapshot);
+    });
+
+    it('GET /health/stream sends the plan, each check, a drop and then done, as lines of JSON', async () => {
+        (debugHealthService.collect as jest.Mock).mockImplementation(async (listener) => {
+            listener.onPlan({ generatedAt: 'now', facts: {}, rows: ['ffmpeg', 'Complete folder space'] });
+            listener.onCheck({ name: 'ffmpeg', state: 'ok', detail: 'x' });
+            listener.onDrop('Complete folder space');
+        });
+        const response = await request(app).get('/health/stream');
+        expect(response.status).toBe(200);
+        expect(response.headers['content-type']).toContain('application/x-ndjson');
+        const lines = response.text.trim().split('\n').map((line) => JSON.parse(line));
+        expect(lines).toEqual([
+            { plan: { generatedAt: 'now', facts: {}, rows: ['ffmpeg', 'Complete folder space'] } },
+            { check: { name: 'ffmpeg', state: 'ok', detail: 'x' } },
+            { drop: 'Complete folder space' },
+            { done: true },
+        ]);
+    });
+
+    it('GET /health/stream ends with an error line when the collection fails', async () => {
+        (debugHealthService.collect as jest.Mock).mockRejectedValue(new Error('no config'));
+        const response = await request(app).get('/health/stream');
+        expect(JSON.parse(response.text.trim())).toEqual({ error: 'no config' });
     });
 
     it('GET /subscription-trace needs an app and a term', async () => {
